@@ -1,0 +1,8 @@
+ALPHA LOG "D:/work/plant-code/e3d-io-noun-descriptor/evidence/runtime-uda-probe.log" OVER
+$P RUNTIME-UDA-PROBE-ALIVE
+import 'RuntimeUdaExport'
+!e = object RUNTIMEUDAEXPORT()
+!res = !e.ExportRuntimeUdas('BRAN', 'D:/work/plant-code/e3d-io-noun-descriptor/evidence/runtime-bran-udas.json')
+$P RUNTIME-UDA-RESULT $!res
+$P RUNTIME-UDA-PROBE-DONE
+ALPHA LOG END

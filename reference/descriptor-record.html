@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>参考卡 · noun 描述符记录</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="kicker">Reference · E3D 3.1</p>
+  <h1>noun 描述符记录</h1>
+  <p class="standfirst">从 <code>*vir.dat</code> 的一个字节，到元素记录里的一个值。查阅用，不是读物。</p>
+</header>
+
+<h2>1 · 一条描述符的十个 dword</h2>
+
+<div class="dwords">
+  <div class="idx">+0</div><div class="name">hash <em>属性的 db1 hash</em></div>
+  <div class="idx">+1</div><div class="name">stride <em>本条记录在 payload 里的长度，≥ 10</em></div>
+  <div class="idx">+2</div><div class="name">storage_type_code <em>存储族，见 §4</em></div>
+  <div class="idx">+3</div><div class="name">logical_count <em>数组上限；≤ 1 表示标量</em></div>
+  <div class="idx grp-c">+4</div><div class="name grp-c">compact.storage_words</div>
+  <div class="idx grp-c">+5</div><div class="name grp-c">compact.encoded_location</div>
+  <div class="idx grp-c">+6</div><div class="name grp-c">compact.flags</div>
+  <div class="idx grp-w">+7</div><div class="name grp-w">wide.storage_words</div>
+  <div class="idx grp-w">+8</div><div class="name grp-w">wide.encoded_location</div>
+  <div class="idx grp-w">+9</div><div class="name grp-w">wide.flags</div>
+</div>
+
+<p><code>stride &gt; 10</code> 时，第 10 个 dword 之后的部分进 <code>tail</code>，含义未定。</p>
+
+<h2>2 · encoded_location 的位切分</h2>
+
+<pre><code>bit 31                    20 19                     0
+    +-----------------------+------------------------+
+    |   bool bit index      |      word offset       |
+    +-----------------------+------------------------+
+      raw &gt;&gt; 20               raw &amp; 0x000FFFFF</code></pre>
+
+<table>
+  <tr><th>取值</th><th>含义</th></tr>
+  <tr><td class="mono">word offset &gt; 0</td><td>属性住在 implicit 区第 <em>n</em> 个字</td></tr>
+  <tr><td class="mono">word offset == 0</td><td><strong>不在 implicit 区</strong>——去 explicit 尾巴按 hash 找。这是有效状态，不是缺数据</td></tr>
+  <tr><td class="mono">bool bit index</td><td>仅 <code>storage_type_code</code> 为 5 或 9 时有意义；&gt; 31 视为越界</td></tr>
+</table>
+
+<h2>3 · compact 还是 wide</h2>
+
+<pre><code>format_word = implicit_data[word 10]
+layout = (format_word &amp; 0x2000_0000) ? WIDE : COMPACT</code></pre>
+
+<div class="trap">
+  <strong>选错不会报错。</strong>compact 用 f32、wide 用 f64，两列的 word offset 从第一个
+  浮点属性开始就会岔开，而且越往后差得越多。BRAN 的 HBOR 在 compact 列是 33 字、wide 列是 45 字。
+  读到的是别人的字节，不是异常。
+</div>
+
+<p>两列要么都有位置、要么都是 0。全库 35734 条描述符里，compact 与 wide 的非零 offset 数量完全相等。</p>
+
+<h2>4 · storage_type_code 分派</h2>
+
+<p>下表是 <code>src/record/descriptor.rs</code> 实际走的分支。<code>def</code> 指 <code>attlib.dat</code> ATGTDF 里的语义定义。</p>
+
+<table>
+  <tr><th class="mono">code</th><th>解码方式</th><th>BRAN 上的例子</th></tr>
+  <tr><td class="mono">5, 9</td><td>打包 BOOL，取 <code>(word &gt;&gt; bit) &amp; 1</code></td><td>BUIL SHOP LHEA LTAI</td></tr>
+  <tr><td class="mono">2, 6</td><td>Real。<code>logical_count ≤ 1</code> 标量，否则 <code>[count][值…]</code></td><td>HBOR TBOR / HPOS HDIR</td></tr>
+  <tr><td class="mono">4, 8, 16, 17</td><td>RefNo（2 字），数组时 <code>[count][RefNo…]</code></td><td>HREF MATR PSPE HSTU</td></tr>
+  <tr><td class="mono">3, 7, 10, 14, 15</td><td>无 <code>def</code> 时按裸字读；单字则尝试 db1 反哈希成文本</td><td>HCON → <code>BOXI</code>, SPAMAP</td></tr>
+  <tr><td class="mono">其他</td><td>回落到 <code>def.data_type</code> 分派；没有 <code>def</code> 就是 <code>MetadataMissing</code></td><td>—</td></tr>
+</table>
+
+<p class="sidenote">全库实测的位置覆盖率：type 2 最高 68.4%，type 8 / 15 / 18 / 19 是 0.0%。
+定长的数值、引用、布尔住 implicit 区；变长文本和大数组一律不住。</p>
+
+<h2>5 · 数组的字节形状</h2>
+
+<pre><code>wide 下的 type 6，logical_count = 3，storage_words = 7：
+
+  +0   count            (= 3)
+  +1   v0 低 32 位   \
+  +2   v0 高 32 位   /  Fortran 字交换：拼的时候两半对调
+  +3   v1 低
+  +4   v1 高
+  +5   v2 低
+  +6   v2 高
+
+1 + 3 × 2 = 7 —— 和描述符声明的 storage_words 对得上。</code></pre>
+
+<p>实测：BRAN 的 HPOS 在 word 14–15 存 <code>1EB851EC 40C0B345</code>，
+对调后 <code>0x40C0B3451EB851EC</code> = <strong>8550.54</strong>。不对调算出来是垃圾数。</p>
+
+<h2>6 · 元素记录头</h2>
+
+<div class="dwords">
+  <div class="idx">+0</div><div class="name">impl_len_words <em>implicit 区总字数</em></div>
+  <div class="idx">+1</div><div class="name">refno.word0</div>
+  <div class="idx">+2</div><div class="name">refno.word1</div>
+  <div class="idx">+3</div><div class="name">noun_hash <em>用它去 *vir.dat 查描述符表</em></div>
+  <div class="idx">+4</div><div class="name">owner.word0</div>
+  <div class="idx">+5</div><div class="name">owner.word1</div>
+  <div class="idx">+6</div><div class="name">…+9 <em>无描述符认领。实测 +6 / +8 等于本记录所在页号</em></div>
+  <div class="idx">+10</div><div class="name">format word <em>见 §3</em></div>
+  <div class="idx">+11</div><div class="name">起，描述符管辖区</div>
+</div>
+
+<div class="trap">
+  <strong>writeback 禁区。</strong>word 6–9 不属于任何属性，形状像两组
+  <code>(页号, 打包地址)</code>，疑似 Dabacon 的版本簿记。改它们等于改数据库的骨架。
+</div>
+
+<h2>7 · <code>*vir.dat</code> 容器</h2>
+
+<table>
+  <tr><th>层</th><th>规则</th></tr>
+  <tr><td>页</td><td>2048 字节 = 512 个大端 u32（Fortran <code>"DB,BL 512"</code>）</td></tr>
+  <tr><td>page 0</td><td><code>[0]</code> magic 必须是 6；<code>[2]</code> 库类型 hash；<code>[5]</code> noun 数；<code>[7]</code> child 数组首 token</td></tr>
+  <tr><td>child 条目</td><td>7 dword：<code>hash</code> + 三组 <code>(token, size)</code>。<strong>按 hash 排序</strong>，二分查找</td></tr>
+  <tr><td>分块读</td><td>每页前 511 个字是数据，第 512 个字是下一页的 Fortran token（1-based）</td></tr>
+  <tr><td>noun payload</td><td><code>[1]</code><code>[2]</code> 回显 noun hash；<code>[9]</code> 描述符条数；<code>[14]</code> 起按 stride 走</td></tr>
+  <tr><td>校验位</td><td><code>[11] == 14 + Σstride</code>。游走跑飞了当场发现</td></tr>
+</table>
+
+<p>token 是 1-based：<code>page_no = token - 1</code>。</p>
+
+<p class="sidenote">校验位实测：WORL <code>14 + 7×10 = 84</code>，盘上 <code>0x54</code>；
+BRAN <code>14 + 1074 = 1088</code>，盘上 <code>0x440</code>。两个 noun 独立对上。</p>
+
+<h3>已核对过的真实地址（本机 shadow 副本）</h3>
+
+<table>
+  <tr><th>东西</th><th class="mono">文件字节</th></tr>
+  <tr><td>desvir.dat · WORL payload 起点</td><td class="mono">0x00080000</td></tr>
+  <tr><td>desvir.dat · WORL 的 UPDT 描述符</td><td class="mono">0x00080088</td></tr>
+  <tr><td>desvir.dat · BRAN payload 起点</td><td class="mono">0x00160800</td></tr>
+  <tr><td>desvir.dat · BRAN 的 SHOP 描述符</td><td class="mono">0x00160978</td></tr>
+  <tr><td>desvir.dat · BRAN 的 HPOS 描述符</td><td class="mono">0x001609C8</td></tr>
+  <tr><td>desvir.dat · BRAN 的 HBOR 描述符</td><td class="mono">0x00160C38</td></tr>
+  <tr><td>ams8000_0001 · BRAN 24384/23257 记录头</td><td class="mono">0x00756AD0</td></tr>
+</table>
+
+<h2>8 · 三层数据源分工</h2>
+
+<table>
+  <tr><th>问题</th><th>问谁</th></tr>
+  <tr><td>这个属性在记录里第几个字、占几个字</td><td class="mono">*vir.dat</td></tr>
+  <tr><td>这个 hash 叫什么、报表名、语义类型</td><td class="mono">attlib.dat</td></tr>
+  <tr><td>顺序、pseudo、默认值探针、isUda</td><td class="mono">逻辑目录 JSON</td></tr>
+  <tr><td>这个具体元素的值</td><td class="mono">数据库文件</td></tr>
+</table>
+
+<div class="trap">
+  <strong>key 必须是 <code>(db_type, noun_hash)</code>。</strong>96 个 noun 出现在多个库里，
+  其中 41 个在不同库里布局不同。<code>WORL</code> 在 20 个库里有 20 套布局。
+</div>
+
+<div class="footer">
+  <h3>相关</h3>
+  <nav>
+    <a href="../lessons/0001-descriptor-ten-dwords.html">课 0001 · 十个 dword</a>
+    <a href="../lessons/0002-compact-vs-wide-layouts.html">课 0002 · 两套布局</a>
+    <a href="../GLOSSARY.md">术语表</a>
+    <a href="../MISSION.md">Mission</a>
+  </nav>
+</div>
+
+</div>
+</body>
+</html>

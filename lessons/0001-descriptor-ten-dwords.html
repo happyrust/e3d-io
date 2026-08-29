@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>课 0001 · 从一块字节到一个值</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="kicker">Lesson 0001 · E3D 3.1 noun 描述符</p>
+  <h1>从一块字节到一个值</h1>
+  <p class="standfirst">全程只看真实字节。每一段十六进制都标了它在磁盘上的确切位置，你可以自己打开文件核对。</p>
+</header>
+
+<div class="mission-tie">
+  <strong>为什么先学这个。</strong>你的 noun map 里每一行，都是从下面这四十个字节里抄出来的。
+  这一层如果只是"看懂了"而没有"能自己读"，后面所有覆盖率统计都建在别人的结论上。
+  全库 35734 条描述符形状完全一样——读通一条，全部通用。
+</div>
+
+<h2>一 · 磁盘上真实的四十个字节</h2>
+
+<p>打开 <code>E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat</code>，跳到文件字节
+<code>0x00080088</code>。这是 <code>WORL</code> 的第 3 条描述符，属性叫 <code>UPDT</code>：</p>
+
+<pre><code>00080088  00 0E 2A D6  00 00 00 0A  00 00 00 07  00 00 00 04
+00080098  00 00 00 05  00 00 00 0B  00 00 00 01  00 00 00 05
+000800A8  00 00 00 0B  00 00 00 00</code></pre>
+
+<p>四字节一组，<strong>大端</strong>。十组，就是十个 dword。含义按位置固定：</p>
+
+<div class="dwords">
+  <div class="idx">+0</div><div class="name">00 0E 2A D6 = 928470 <em>属性 hash</em></div>
+  <div class="idx">+1</div><div class="name">00 00 00 0A = 10 <em>stride，本条记录自己多长</em></div>
+  <div class="idx">+2</div><div class="name">00 00 00 07 = 7 <em>storage_type_code</em></div>
+  <div class="idx">+3</div><div class="name">00 00 00 04 = 4 <em>logical_count</em></div>
+  <div class="idx grp-c">+4</div><div class="name grp-c">00 00 00 05 = 5 <em>compact 占几个字</em></div>
+  <div class="idx grp-c">+5</div><div class="name grp-c">00 00 00 0B = 11 <em>compact 的位置</em></div>
+  <div class="idx grp-c">+6</div><div class="name grp-c">00 00 00 01 = 1 <em>compact flags</em></div>
+  <div class="idx grp-w">+7</div><div class="name grp-w">00 00 00 05 = 5 <em>wide 占几个字</em></div>
+  <div class="idx grp-w">+8</div><div class="name grp-w">00 00 00 0B = 11 <em>wide 的位置</em></div>
+  <div class="idx grp-w">+9</div><div class="name grp-w">00 00 00 00 = 0 <em>wide flags</em></div>
+</div>
+
+<p class="sidenote">选这一条不是随便挑的。有一份从运行中的 <code>core.dll</code> 内存里 dump 出来的
+描述符表，<code>UPDT</code> 那行写着 <code>[928470,10,7,4,5,11,1,5,11,0]</code>——
+跟你上面读到的十个数，一个不差。</p>
+
+<p>注意 <code>+6</code> 是 1 而 <code>+9</code> 是 0。两列连 flags 都能不一样，
+所以 map 的一行必须<strong>两套都存</strong>。</p>
+
+<div class="trap">
+  <strong>stride 不是元素记录里的步长。</strong>它是这条描述符在 payload 字节流里的长度，
+  用来走到下一条描述符——这里是 10，所以下一条从 <code>0x000800B0</code> 开始。
+  真实模板的 stride 是 10、11、12、13、48 混着来的。拿它当元素槽位步长用过一次，只在假模板上碰巧对。
+</div>
+
+<h2>练习 1 · 换一条，你来读</h2>
+
+<p>同一个文件，字节 <code>0x00160978</code>。这是 <code>BRAN</code> 的 <code>SHOP</code> 属性：</p>
+
+<pre><code>00160978  00 0D 15 C3  00 00 00 0A  00 00 00 05  00 00 00 01
+00160988  00 00 00 01  00 10 00 0C  00 00 00 00  00 00 00 01
+00160998  00 10 00 0C  00 00 00 00</code></pre>
+
+<div class="exercise" data-exercise data-pass="对了。现在这四十个字节对你是一句话，不是一堆数。">
+  <p class="exercise-label">Exercise</p>
+  <div class="fields">
+    <div class="field">
+      <label>storage_type_code</label>
+      <input data-answer="5" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>logical_count</label>
+      <input data-answer="1" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>wide 下占几个字</label>
+      <input data-answer="1" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>wide 的 encoded_location（写十六进制）</label>
+      <input data-answer="0x0010000C|1048588" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+  </div>
+  <button class="btn" data-check>检查</button>
+  <button class="btn ghost" data-reveal>看答案</button>
+  <p class="verdict"></p>
+</div>
+
+<h2>二 · 两个字段挤在一个字里，在字节上是看得见的</h2>
+
+<p>刚才那个 <code>00 10 00 0C</code> 有点奇怪：位置怎么会是一百多万？因为它是两个字段拼的。</p>
+
+<pre><code>bit 31                    20 19                     0
+    +-----------------------+------------------------+
+    |   bool bit index      |      word offset       |
+    +-----------------------+------------------------+
+      raw &gt;&gt; 20               raw &amp; 0x000FFFFF
+
+00 10 00 0C
+   ^^         高位这个 1 = bit index
+         ^^   低位这个 C = word offset 12</code></pre>
+
+<p><code>SHOP</code> 的 <code>storage_type_code</code> 是 5，也就是<strong>打包布尔</strong>——
+好几个属性挤在同一个 32 位字里，靠位号区分。BRAN 一共有七个这样的布尔，
+word offset 全是 12，位号 0 到 6：</p>
+
+<table>
+  <tr><th>bit</th><th class="mono">0</th><th class="mono">1</th><th class="mono">2</th><th class="mono">3</th><th class="mono">4</th><th class="mono">5</th><th class="mono">6</th></tr>
+  <tr><td>属性</td><td class="mono">BUIL</td><td class="mono">SHOP</td><td class="mono">LHEA</td><td class="mono">LTAI</td><td class="mono">DETA</td><td class="mono">LSTR</td><td class="mono">LISS</td></tr>
+</table>
+
+<h2>三 · 切换到元素记录</h2>
+
+<p>换一个文件：<code>D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001</code>，
+字节 <code>0x00756AD0</code>。这是一条真实的 BRAN 元素记录：</p>
+
+<pre><code>00756AD0  00 00 00 56  00 00 5F 40  00 00 5A D9  00 0C 55 1C   w0..w3
+00756AE0  00 00 5F 40  00 00 5A B9  00 00 0E AD  00 24 20 01   w4..w7
+00756AF0  00 00 0E AD  00 21 40 01  20 08 00 12  00 00 00 00   w8..w11
+00756B00  00 00 00 0C  00 00 00 03  1E B8 51 EC  40 C0 B3 45   w12..w15</code></pre>
+
+<table>
+  <tr><th class="mono">w</th><th>字节</th><th>含义</th></tr>
+  <tr><td class="mono">0</td><td class="mono">00 00 00 56</td><td>implicit 区 86 个字</td></tr>
+  <tr><td class="mono">1–2</td><td class="mono">00 00 5F 40 / 00 00 5A D9</td><td>RefNo 24384/23257</td></tr>
+  <tr><td class="mono">3</td><td class="mono">00 0C 55 1C</td><td>noun hash → BRAN。<strong>拿它去 desvir 查描述符表</strong></td></tr>
+  <tr><td class="mono">4–5</td><td class="mono">00 00 5F 40 / 00 00 5A B9</td><td>owner</td></tr>
+  <tr><td class="mono">6–9</td><td class="mono">00 00 0E AD …</td><td>无描述符认领。<code>0x0EAD</code> = 3757 = 本记录所在页号</td></tr>
+  <tr><td class="mono">10</td><td class="mono">20 08 00 12</td><td><strong>format word</strong></td></tr>
+</table>
+
+<p>format word 的第一个字节是 <code>0x20</code>，二进制 <code>0010 0000</code>。
+最高的那个 1 落在整个 32 位字的第 29 位，正好是 <code>0x20000000</code>。
+所以这条记录用 <strong>wide</strong> 布局。<em>肉眼看第一个字节就够了。</em></p>
+
+<div class="trap">
+  <strong>选错不报错。</strong><code>HBOR</code> 的两列位置分别是 33 和 45。
+  差 12 个字，读出来是个能通过所有边界检查的浮点数——只是不是 HBOR。
+</div>
+
+<h2>练习 2 · 顺着描述符跳过去，把值读出来</h2>
+
+<p>这是 <code>desvir.dat</code> 字节 <code>0x00160C38</code>，BRAN 的 <code>HBOR</code> 描述符：</p>
+
+<pre><code>00160C38  00 0D AE DC  00 00 00 0A  00 00 00 02  00 00 00 01
+00160C48  00 00 00 01  00 00 00 21  00 00 00 00  00 00 00 02
+00160C58  00 00 00 2D  00 00 00 00</code></pre>
+
+<p>注意 <code>+5</code> 是 <code>0x21</code>、<code>+8</code> 是 <code>0x2D</code>——
+compact 和 wide 岔开了，就在相邻的两组字节上。</p>
+
+<p>元素记录里，字节 <code>0x00756B84</code> 起是这样：</p>
+
+<pre><code>00756B84  00 00 00 00  40 49 00 00  00 00 00 00  40 49 00 00   w45..w48</code></pre>
+
+<div class="exercise" data-exercise data-pass="这就是完整的一条链路：format word 选列 → 描述符给地址 → 字交换拼 f64。">
+  <p class="exercise-label">Exercise</p>
+  <div class="fields">
+    <div class="field">
+      <label>format word 是 20 08 00 12，用哪一列？</label>
+      <input data-answer="wide" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>那 HBOR 的 word offset 是几（十进制）</label>
+      <input data-answer="45|0x2D" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>它占几个字</label>
+      <input data-answer="2" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>把 w45 w46 按字交换拼起来，f64 的值是多少</label>
+      <input data-answer="50|50.0" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+  </div>
+  <button class="btn" data-check>检查</button>
+  <button class="btn ghost" data-reveal>看答案</button>
+  <p class="verdict"></p>
+</div>
+
+<p>最后一问的算法：盘上是 <code>(低 32 位, 高 32 位)</code>，要<strong>对调</strong>再拼。
+w45 = <code>00000000</code>（低），w46 = <code>40490000</code>（高），
+拼成 <code>0x4049000000000000</code>。指数 <code>0x404</code> = 1028，减去偏置 1023 得 2⁵，
+尾数 <code>0x9000…</code> ≈ 1.5625，<code>1.5625 × 32 = 50</code>。</p>
+
+<div class="trap">
+  <strong>不对调会怎样。</strong>直接拼成 <code>0x0000000040490000</code>，
+  得到 <code>5.3e-315</code>——一个次正规数。它不会 panic、不会报错，就是个假值。
+  README 里 <code>NXTR</code> 那段示例输出里的 <code>UNIT = RealArray([2.12e-313, 1e-323])</code>
+  就是这类东西的味道。
+</div>
+
+<h2>练习 3 · 打包布尔</h2>
+
+<p>回到元素记录的 w12：<code>00 00 00 0C</code>。<code>0x0C</code> = 二进制 <code>1100</code>。</p>
+
+<div class="exercise" data-exercise data-pass="对。一个字节告诉你七个属性的值。">
+  <p class="exercise-label">Exercise</p>
+  <div class="fields">
+    <div class="field">
+      <label>LHEA 在 bit 2，它是 true 还是 false</label>
+      <input data-answer="true" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>SHOP 在 bit 1 呢</label>
+      <input data-answer="false" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>七个布尔里一共有几个 true</label>
+      <input data-answer="2" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+  </div>
+  <button class="btn" data-check>检查</button>
+  <button class="btn ghost" data-reveal>看答案</button>
+  <p class="verdict"></p>
+</div>
+
+<h2>四 · 数组长什么样</h2>
+
+<p>w13 起是 <code>HPOS</code>，描述符说它 <code>storage_type_code=6</code>、
+<code>logical_count=3</code>、wide 下占 7 个字。字节：</p>
+
+<pre><code>w13  00 00 00 03    count = 3
+w14  1E B8 51 EC  \
+w15  40 C0 B3 45  /  对调 -> 0x40C0B3451EB851EC = 8550.54
+w16  C2 8F 5C 29  \
+w17  40 CB 76 35  /  对调 -> 0x40CB7635C28F5C29 = 14060.42
+w18  00 00 00 00  \
+w19  40 A6 A8 00  /  对调 -> 0x40A6A80000000000 = 2900.0</code></pre>
+
+<p><code>1 + 3 × 2 = 7</code>，和描述符声明的 <code>storage_words</code> 严丝合缝。
+count 字既是数据也是校验：它必须 ≤ <code>logical_count</code>，不然就是解错了列或者跑飞了。</p>
+
+<h2>小测</h2>
+
+<div class="quiz-q">
+  <p>1 · 一条描述符的 word offset 是 0，说明什么？</p>
+  <div class="opts">
+    <button class="opt" data-correct>这个属性不在 implicit 区，值要去 explicit 尾巴找</button>
+    <button class="opt">这个属性尚未被解析器支持，需要补上对应解码分支</button>
+    <button class="opt">这个属性的描述符已经损坏，应当跳过并记一条警告</button>
+  </div>
+  <p class="feedback">全库 35734 条描述符里 77.5% 是这个状态。它是常态——
+  变长文本和大数组本来就不住 implicit 区。BRAN 的 NAME 就是这样，值在尾巴里。</p>
+</div>
+
+<div class="quiz-q">
+  <p>2 · <code>stride</code> 量的是谁的长度？</p>
+  <div class="opts">
+    <button class="opt">属性自己在元素记录里占的 dword 数</button>
+    <button class="opt" data-correct>描述符自己在 payload 里占的 dword 数</button>
+    <button class="opt">数组里每个元素各自占用的 dword 数</button>
+  </div>
+  <p class="feedback">属性在元素记录里占多少，看 <code>storage_words</code>。
+  HBOR 的 stride 是 10，storage_words 是 2——两个完全不同的东西。</p>
+</div>
+
+<div class="quiz-q">
+  <p>3 · 你的 noun map 该用什么当 key？</p>
+  <div class="opts">
+    <button class="opt">noun_hash 单独一个就已经足够</button>
+    <button class="opt" data-correct>db_type 加 noun_hash 组成的复合键</button>
+    <button class="opt">noun 名字的大写字符串形式即可</button>
+  </div>
+  <p class="feedback">96 个 noun 出现在多个库里，其中 41 个布局不同。
+  <code>WORL</code> 在 20 个库里有 20 套布局，<code>MNUM</code> 有 5 套。</p>
+</div>
+
+<h2>回到 Mission · map 的一行至少要有这些</h2>
+
+<table>
+  <tr><th>字段</th><th>字节来源</th><th>为什么不能省</th></tr>
+  <tr><td class="mono">db_type</td><td>文件头 word 2</td><td>41 个 noun 跨库布局不同</td></tr>
+  <tr><td class="mono">noun_hash</td><td>child 条目 +0</td><td>名字可能重复，hash 才是身份</td></tr>
+  <tr><td class="mono">hash</td><td>描述符 +0</td><td>属性身份</td></tr>
+  <tr><td class="mono">storage_type_code</td><td>+2</td><td>决定走哪个解码分支</td></tr>
+  <tr><td class="mono">logical_count</td><td>+3</td><td>区分标量与数组，且是 count 字的上界校验</td></tr>
+  <tr><td class="mono">compact 三件套</td><td>+4 +5 +6</td><td>f32 记录走这列</td></tr>
+  <tr><td class="mono">wide 三件套</td><td>+7 +8 +9</td><td>f64 记录走这列。两列都要存</td></tr>
+  <tr><td class="mono">ordinal</td><td>遍历序</td><td>描述符顺序本身是信息，重排就丢了</td></tr>
+</table>
+
+<p>顺手一个自检：payload 的 <code>word 11</code> 等于 <code>14 + 所有 stride 之和</code>。
+WORL 是 <code>14 + 7×10 = 84</code>，磁盘上写的就是 <code>0x54</code>；
+BRAN 是 <code>14 + 1074 = 1088</code>，磁盘上是 <code>0x440</code>。
+两个 noun 独立对上——拿它当解析后的校验位，游走跑飞了当场就能发现。</p>
+
+<div class="footer">
+  <h3>一手来源</h3>
+  <p>这套格式没有公开文档，最高信任度的来源是二进制本身。优先读这一份：</p>
+  <p><a href="file:///D:/work/plant-code/pdms-io-fork-engine-v2/docs/ida-3.1-structures.md"><code>pdms-io-fork-engine-v2/docs/ida-3.1-structures.md</code> §14</a>
+  —— 描述符表的完整证据链，逐条指回 <code>sub_5AFA740</code>（文件头与分块读）、
+  <code>sub_5AF6AB0</code>（二分查找）、<code>sub_5B03900</code>（payload 游走）。
+  看代码之前先看它，你会知道每个常量是从哪一行反汇编来的。</p>
+
+  <h3>相关</h3>
+  <nav>
+    <a href="0002-compact-vs-wide-layouts.html">课 0002 · 两套布局，和为什么长度骗人</a>
+    <a href="../reference/descriptor-record.html">参考卡 · 描述符记录</a>
+    <a href="../GLOSSARY.md">术语表</a>
+    <a href="../MISSION.md">Mission</a>
+    <a href="../RESOURCES.md">Resources</a>
+  </nav>
+
+  <div class="ask">
+    上面每一段十六进制都标了文件字节地址，随手拿任何十六进制编辑器都能核对——请真的核对一次，
+    自己看见比读到管用。想换个 noun 再走一遍，告诉我 noun 名字，我把它的字节段给你。
+  </div>
+</div>
+
+</div>
+<script src="../assets/widgets.js"></script>
+</body>
+</html>

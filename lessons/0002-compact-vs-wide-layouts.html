@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>课 0002 · 两套布局，和为什么长度骗人</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<style>
+  figure { margin: 0 0 1.8rem; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption {
+    font-size: 0.8rem; line-height: 1.5; color: var(--ink-soft);
+    margin-top: 0.55rem; text-align: center;
+  }
+  .wide-fig { margin-left: calc(-1 * clamp(0rem, 6vw, 5rem)); margin-right: calc(-1 * clamp(0rem, 6vw, 5rem)); }
+  .takeaway {
+    border-left: 3px solid var(--good); background: var(--good-soft);
+    padding: 0.9rem 1.1rem; margin: 0 0 1.6rem; font-size: 0.94rem;
+  }
+  .takeaway strong { color: var(--good); }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 0.8rem; }
+  .key { font-family: var(--mono); font-size: 0.74rem; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="masthead">
+  <p class="kicker">Lesson 0002 · E3D 3.1 noun 描述符</p>
+  <h1>两套布局，和为什么长度骗人</h1>
+  <p class="standfirst">课 0001 里 <code>format word</code> 的第 29 位只是一个待解释的位。这一课把它坐实成一条硬约束：两套 offset 必须都存，而且没有任何办法从记录长度反推该用哪套。</p>
+</header>
+
+<div class="mission-tie">
+  <strong>为什么现在学这个。</strong>Mission 要求你能说出 map「在哪些类型上一定是对的、哪些地方是已知空洞」。
+  compact 这一列到今天为止是<em>纯理论</em>——过去所有对拍用的库恰好 100% 是 wide，
+  所以这一列从来没被考过。这一课把它考了：实测有个库 41.5% 是 compact。
+</div>
+
+<h2>一 · 一分钟复习</h2>
+
+<p>课 0001 已经确认：描述符 <code>+4..+6</code> 是 compact 三件套、<code>+7..+9</code> 是 wide 三件套，
+元素记录第 10 个字的第 29 位选哪一套。这里不重讲，只放一张对照图当锚点。</p>
+
+<figure class="wide-fig">
+<svg viewBox="0 0 760 300" role="img" aria-label="SPCO 的 compact 与 wide 两种字节摆法对比">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b8780"/>
+    </marker>
+  </defs>
+
+  <rect x="250" y="8" width="260" height="42" rx="6" fill="#fdfcf9" stroke="#8b8780" stroke-width="1.5"/>
+  <text x="380" y="26" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="12" fill="#1b1a17">记录第 10 个字 · bit 29</text>
+  <text x="380" y="42" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#55524b">这一个 bit 决定下面走哪一行</text>
+  <path d="M310,50 L180,72" stroke="#8b8780" stroke-width="1.2" fill="none" marker-end="url(#ar)"/>
+  <path d="M450,50 L580,72" stroke="#8b8780" stroke-width="1.2" fill="none" marker-end="url(#ar)"/>
+  <text x="232" y="66" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="11" fill="#2c4a63">= 0</text>
+  <text x="528" y="66" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="11" fill="#8a3324">= 1</text>
+
+  <text x="16" y="110" font-family="SF Mono,Consolas,monospace" font-size="13" font-weight="bold" fill="#2c4a63">compact</text>
+  <text x="16" y="126" font-family="Georgia,serif" font-size="11" fill="#55524b">实数 4 字节</text>
+  <rect x="120" y="92" width="437" height="40" rx="3" fill="#f2f7fb" stroke="#2c4a63" stroke-width="1.5"/>
+  <line x1="215" y1="92" x2="215" y2="132" stroke="#2c4a63" stroke-width="1"/>
+  <line x1="272" y1="92" x2="272" y2="132" stroke="#2c4a63" stroke-width="1"/>
+  <line x1="329" y1="92" x2="329" y2="132" stroke="#2c4a63" stroke-width="1"/>
+  <line x1="443" y1="92" x2="443" y2="132" stroke="#2c4a63" stroke-width="1"/>
+  <text x="167" y="117" text-anchor="middle" font-family="Georgia,serif" font-size="11" fill="#1b1a17">头 6 字</text>
+  <text x="243" y="117" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#1b1a17">INT</text>
+  <text x="300" y="117" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#1b1a17">INT</text>
+  <text x="386" y="112" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#1b1a17">REAL</text>
+  <text x="386" y="125" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#55524b">1 字</text>
+  <text x="500" y="112" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#1b1a17">REAL</text>
+  <text x="500" y="125" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#55524b">1 字</text>
+  <text x="570" y="117" font-family="SF Mono,Consolas,monospace" font-size="13" font-weight="bold" fill="#2c4a63">23 字</text>
+  <text x="663" y="117" font-family="Georgia,serif" font-size="12" fill="#55524b">×3,332 条</text>
+
+  <text x="16" y="200" font-family="SF Mono,Consolas,monospace" font-size="13" font-weight="bold" fill="#8a3324">wide</text>
+  <text x="16" y="216" font-family="Georgia,serif" font-size="11" fill="#55524b">实数 8 字节</text>
+  <rect x="120" y="182" width="475" height="40" rx="3" fill="#fbf5f2" stroke="#8a3324" stroke-width="1.5"/>
+  <line x1="215" y1="182" x2="215" y2="222" stroke="#8a3324" stroke-width="1"/>
+  <line x1="272" y1="182" x2="272" y2="222" stroke="#8a3324" stroke-width="1"/>
+  <line x1="329" y1="182" x2="329" y2="222" stroke="#8a3324" stroke-width="1"/>
+  <line x1="462" y1="182" x2="462" y2="222" stroke="#8a3324" stroke-width="1"/>
+  <text x="167" y="207" text-anchor="middle" font-family="Georgia,serif" font-size="11" fill="#1b1a17">头 6 字</text>
+  <text x="243" y="207" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#1b1a17">INT</text>
+  <text x="300" y="207" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#1b1a17">INT</text>
+  <text x="395" y="202" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#1b1a17">REAL</text>
+  <text x="395" y="215" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#8a3324">2 字</text>
+  <text x="528" y="202" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#1b1a17">REAL</text>
+  <text x="528" y="215" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#8a3324">2 字</text>
+  <text x="608" y="207" font-family="SF Mono,Consolas,monospace" font-size="13" font-weight="bold" fill="#8a3324">25 字</text>
+  <text x="663" y="207" font-family="Georgia,serif" font-size="12" fill="#55524b">×8,526 条</text>
+
+  <path d="M329,140 L329,174" stroke="#8b8780" stroke-width="1" stroke-dasharray="3 3"/>
+  <path d="M443,140 L462,174" stroke="#8b8780" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="380" y="256" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#55524b">实数一变宽，它后面每一个属性的位置都跟着往后挪</text>
+  <text x="380" y="278" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#1b1a17">所以两套 offset 是「一路岔开」，不是差一个常数</text>
+</svg>
+<figcaption>同一个 <code>SPCO</code>，同一个库 <code>ams7000_0001</code>。两种摆法各占一部分记录。</figcaption>
+</figure>
+
+<h2>二 · 岔开有三种方式</h2>
+
+<p>「wide 比 compact 靠后几个字」是错的直觉。三种分叉都真实存在，下面三条都是
+<code>template.rs</code> 里钉住的真实描述符：</p>
+
+<figure class="wide-fig">
+<svg viewBox="0 0 760 210" role="img" aria-label="compact 与 wide 分叉的三种方式">
+  <g font-family="Georgia,serif">
+    <text x="10" y="18" font-size="13" font-weight="bold" fill="#1b1a17">① 同位置，不同宽</text>
+    <text x="10" y="36" font-size="11" fill="#55524b">storage_type_code 2 · 一个 REAL</text>
+    <rect x="10" y="46" width="52" height="26" fill="#f2f7fb" stroke="#2c4a63" stroke-width="1.5"/>
+    <text x="36" y="63" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#2c4a63">@11 w1</text>
+    <rect x="10" y="80" width="104" height="26" fill="#fbf5f2" stroke="#8a3324" stroke-width="1.5"/>
+    <text x="62" y="97" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#8a3324">@11 w2</text>
+    <text x="10" y="126" font-size="11" fill="#8b8780">起点一样，长度翻倍</text>
+
+    <text x="260" y="18" font-size="13" font-weight="bold" fill="#1b1a17">② 同宽，不同位置</text>
+    <text x="260" y="36" font-size="11" fill="#55524b">storage_type_code 5 · 打包 BOOL</text>
+    <rect x="260" y="46" width="52" height="26" fill="#f2f7fb" stroke="#2c4a63" stroke-width="1.5"/>
+    <text x="286" y="63" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#2c4a63">@12 w1</text>
+    <rect x="318" y="80" width="52" height="26" fill="#fbf5f2" stroke="#8a3324" stroke-width="1.5"/>
+    <text x="344" y="97" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#8a3324">@13 w1</text>
+    <text x="260" y="126" font-size="11" fill="#8b8780">整整错开一个字，bit index 都是 3</text>
+
+    <text x="510" y="18" font-size="13" font-weight="bold" fill="#1b1a17">③ 两样都不同</text>
+    <text x="510" y="36" font-size="11" fill="#55524b">storage_type_code 6 · logical_count 3</text>
+    <rect x="510" y="46" width="70" height="26" fill="#f2f7fb" stroke="#2c4a63" stroke-width="1.5"/>
+    <text x="545" y="63" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#2c4a63">@14 w4</text>
+    <rect x="600" y="80" width="122" height="26" fill="#fbf5f2" stroke="#8a3324" stroke-width="1.5"/>
+    <text x="661" y="97" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="10" fill="#8a3324">@20 w7</text>
+    <text x="510" y="126" font-size="11" fill="#8b8780">3×1+1 字 vs 3×2+1 字</text>
+
+    <line x1="10" y1="148" x2="750" y2="148" stroke="#e0dcd2" stroke-width="1"/>
+    <text x="10" y="172" font-size="12" fill="#1b1a17">分叉方式不止一种，所以<tspan font-weight="bold">「拿 wide offset 减掉几个字」这类算术还原注定补不齐</tspan>。</text>
+    <text x="10" y="194" font-size="12" fill="#55524b">两套要么都有位置、要么都是 0。0 的意思是「不在 implicit 区」，不是缺数据。</text>
+  </g>
+</svg>
+</figure>
+
+<h2>练习 1 · 从两列数字倒推形状</h2>
+
+<p>只给你上面 ③ 那条的四个数：compact <code>@14 w4</code>、wide <code>@20 w7</code>。</p>
+
+<div class="exercise" data-exercise data-pass="对。宽度差能反推出里面装了几个实数——这是校验描述符没读错位的一个好办法。">
+  <p class="exercise-label">Exercise</p>
+  <div class="fields">
+    <div class="field">
+      <label>这个属性逻辑上是几个实数（提示：还有一个 count 字）</label>
+      <input data-answer="3" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>②里 compact 的 encoded_location 是 0x0030000C，word offset 是几</label>
+      <input data-answer="12|0xC" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>同一个数的 bool bit index 是几</label>
+      <input data-answer="3" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+  </div>
+  <button class="btn" data-check>检查</button>
+  <button class="btn ghost" data-reveal>看答案</button>
+  <p class="verdict"></p>
+</div>
+
+<h2>三 · 实测：compact 不是罕见情况</h2>
+
+<p>2026-08-26 用 <code>tests/record_layout_census.rs</code> 扫了四个 E3D 3.1 的库。
+只统计通过 refno 自证的记录——解出来的 refno 必须等于索引项的 refno，
+且 noun hash 能反查出名字：</p>
+
+<table>
+<thead><tr><th>库</th><th class="num">记录数</th><th class="num" style="color:#8a3324">wide</th><th class="num" style="color:#2c4a63">compact</th><th class="num">混布局 noun</th></tr></thead>
+<tbody>
+<tr><td><code>ams7000_0001</code><br><span class="key">catalogue/spec</span></td><td class="num">336,300</td><td class="num">196,776</td><td class="num"><strong>139,524</strong><br><span class="key">41.5%</span></td><td class="num"><strong>44 / 64</strong></td></tr>
+<tr><td><code>ams7333_0001</code></td><td class="num">199,074</td><td class="num">199,074</td><td class="num">0</td><td class="num">0 / 21</td></tr>
+<tr><td><code>ams1112_0001</code></td><td class="num">70,526</td><td class="num">70,526</td><td class="num">0</td><td class="num">0 / 44</td></tr>
+<tr><td><code>ams8000_0001</code></td><td class="num">26,463</td><td class="num">26,463</td><td class="num">0</td><td class="num">0 / 59</td></tr>
+</tbody>
+</table>
+
+<p class="sidenote">第一版探针没做 refno 自证，满屏 <code>impl_len = 24384</code>——那是把 RefNo 的
+高位字当长度读了。索引叶子里混着别的桶和旧世代的指针，不自证就会把记录头算进长度分布。</p>
+
+<p>三个 DESIGN 侧的库全是 wide，唯独 catalogue 库不是。compact 集中在目录数据里，
+这也解释了为什么它躲过了此前所有对拍——那些对拍用的都是 DESIGN 库。</p>
+
+<div class="trap">
+  <strong>这一课有一处还没走完工作纪律。</strong>「新结论要在第二个独立来源上复现」——
+  上面的普查全部来自磁盘解析这一侧。<code>SPCO</code> 的 23 = 25 − 2 与「两个 f64 塌成 f32」
+  自洽，描述符也预测得出，但那仍是同一侧的证据。
+  真正的第二来源是拿 <code>ams7000_0001</code> 里一条 compact 的 <code>SPCO</code>
+  在 E3D TTY 里 <code>Q ATT</code>，逐属性比值。<strong>那一步还没做。</strong>
+</div>
+
+<div class="trap">
+  <strong>不要把「这两个库里没有」当成「没有」。</strong>ADR-046 写过
+  「这两个库里根本没有 f32 压缩的记录，每条都是足额 f64 布局」，
+  <code>is_f32</code> 分歧 0。<code>ams1112_0001</code> 实测确实 100% wide——
+  那句话对<em>那两个库</em>成立，不能外推。换个库，41.5%。
+</div>
+
+<h2>四 · 为什么按长度猜结构上做不到</h2>
+
+<p>直觉是：wide 记录更长，量一下就知道。<code>SPCO</code> 的 23/25 确实能这么分。
+但那 44 个混布局 noun 里，<strong>34 个的隐式字数在两套布局下一模一样</strong>。</p>
+
+<figure>
+<svg viewBox="0 0 592 176" role="img" aria-label="SCOM 在两种布局下长度相同">
+  <text x="0" y="16" font-family="SF Mono,Consolas,monospace" font-size="13" font-weight="bold" fill="#1b1a17">SCOM</text>
+  <text x="58" y="16" font-family="Georgia,serif" font-size="12" fill="#55524b">共 91,970 条</text>
+
+  <rect x="0" y="34" width="420" height="34" rx="3" fill="#f2f7fb" stroke="#2c4a63" stroke-width="1.5"/>
+  <text x="210" y="56" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="12" fill="#2c4a63">compact · 18 字</text>
+  <text x="434" y="56" font-family="Georgia,serif" font-size="12" fill="#55524b">×23,138</text>
+
+  <rect x="0" y="80" width="420" height="34" rx="3" fill="#fbf5f2" stroke="#8a3324" stroke-width="1.5"/>
+  <text x="210" y="102" text-anchor="middle" font-family="SF Mono,Consolas,monospace" font-size="12" fill="#8a3324">wide · 18 字</text>
+  <text x="434" y="102" font-family="Georgia,serif" font-size="12" fill="#55524b">×68,832</text>
+
+  <path d="M420,34 L420,114" stroke="#8b8780" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="296" y="140" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#1b1a17">一样长。量长度得不到任何信号。</text>
+  <text x="296" y="162" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#55524b">按长度判，只能给这 9 万条一个统一答案 —— 必然对其中一侧全错。</text>
+</svg>
+</figure>
+
+<p>长度真的不同的只有 10 个：<code class="key">BLTP</code> 14/15、<code class="key">CATE</code> 25/26、
+<code class="key">LINE</code> 24/25、<code class="key">NOMINB</code> 13/15、<code class="key">PTCA</code> 44/47、
+<code class="key">SBOL</code> 17/20、<code class="key">SDTE</code> 15/17、<code class="key">SELE</code> 17/20、
+<code class="key">SPCO</code> 23/25、<code class="key">SPEC</code> 24/26。</p>
+
+<div class="takeaway">
+  <strong>所以判据只有一个。</strong>读那个 bit。任何从记录长度出发的判据——包括
+  「<code>template extent</code> vs 实际隐式字数」——在那 34 个 noun 上结构上就做不到，
+  因为两套的 extent 相等。
+</div>
+
+<h2>练习 2 · 拿数字说话</h2>
+
+<div class="exercise" data-exercise data-pass="记住这三个数就够了：41.5%、34/44、9 万条。它们分别回答「有没有」「能不能靠长度」「代价多大」。">
+  <p class="exercise-label">Exercise</p>
+  <div class="fields">
+    <div class="field">
+      <label><code>SCOM</code> 两套布局的字数相差几</label>
+      <input data-answer="0" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label>44 个混布局 noun 里，长度<em>能</em>区分的有几个</label>
+      <input data-answer="10" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+    <div class="field">
+      <label><code>ams7000_0001</code> 里 compact 记录占比（填百分数的整数部分，如 12）</label>
+      <input data-answer="41" inputmode="numeric" autocomplete="off">
+      <span class="mark"></span>
+    </div>
+  </div>
+  <button class="btn" data-check>检查</button>
+  <button class="btn ghost" data-reveal>看答案</button>
+  <p class="verdict"></p>
+</div>
+
+<h2>小测</h2>
+
+<div class="quiz-q">
+  <p>1 · 一条记录的 format word 高位字节是 <code>0x00</code>，该用哪一列？</p>
+  <div class="opts">
+    <button class="opt" data-correct>compact —— bit 29 是 0</button>
+    <button class="opt">wide —— 默认布局就是 wide，除非另有标记</button>
+    <button class="opt">看这条记录的隐式字数够不够 wide 的 extent 再定</button>
+  </div>
+  <p class="feedback">bit 29 是 <code>0x20000000</code>，落在最高那个字节里。
+  <code>0x20</code> → wide，<code>0x00</code> → compact。第三个选项正是这一课要否掉的做法。</p>
+</div>
+
+<div class="quiz-q">
+  <p>2 · 为什么不能用「template extent vs 实际隐式字数」代替这个 bit？</p>
+  <div class="opts">
+    <button class="opt">因为 extent 只对图元 noun 准，对目录 noun 不准</button>
+    <button class="opt" data-correct>因为 34/44 个混布局 noun 两套 extent 相等，长度给不出信号</button>
+    <button class="opt">因为读记录长度比读一个 bit 慢，性能上划不来</button>
+  </div>
+  <p class="feedback">不是精度问题也不是性能问题，是<strong>信息不存在</strong>。
+  <code>SCOM</code> 两套都是 18 字，9 万条记录长度完全一致。</p>
+</div>
+
+<div class="quiz-q">
+  <p>3 · <code>all_attr_info.json</code> 里那个 <code>offset</code> 是哪一套？</p>
+  <div class="opts">
+    <button class="opt">compact —— 旧版本默认按窄布局导出</button>
+    <button class="opt" data-correct>wide —— 导出它的代码读的是 <code>desc[+8]</code></button>
+    <button class="opt">两套按 noun 混着存，取决于导出时抽样到哪种记录</button>
+  </div>
+  <p class="feedback"><code>desc[+7]</code>/<code>desc[+8]</code> 就是 wide 的宽度与位置。
+  当时那份实现从头到尾没意识到 <code>+4..+6</code> 也是一套，所以「5533 个 offset 全对」
+  证明的是「JSON 与 wide 一致」，不是「JSON 完整」。</p>
+</div>
+
+<h2>回到 Mission · 这对 map 的一行意味着什么</h2>
+
+<p>课 0001 的收尾表里写了「compact 三件套」和「wide 三件套」两列都要存。
+这一课给了那句话一个可以引用的理由：</p>
+
+<table>
+  <tr><th>如果只存一套</th><th>后果</th></tr>
+  <tr><td>只存 wide</td><td><code>ams7000_0001</code> 的 139,524 条记录读出来是假值，且不报错</td></tr>
+  <tr><td>只存 compact</td><td>三个 DESIGN 库全军覆没</td></tr>
+  <tr><td>存一套 + 算术还原另一套</td><td>只能补 ① 那种同址异宽；② 的错位和 ③ 的双变补不出来</td></tr>
+  <tr><td>存一套 + 按长度判</td><td>34/44 的混布局 noun 上无信号可用</td></tr>
+</table>
+
+<p>下游那张表如果只有一个 <code>offset</code> 字段，这一课的结论落不了地——
+字段本身就得是两套。</p>
+
+<div class="footer">
+  <h3>一手来源</h3>
+  <p>本课所有数字来自 <code>evidence/20260826-record-layout-census/</code>：四个库的原始输出加
+  <code>verification.md</code>。探针是 <code>tests/record_layout_census.rs</code>，
+  可以自己重跑：</p>
+  <pre><code>$env:E3D_CENSUS_DB='D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7000_0001'
+cargo test --test record_layout_census -- --ignored --nocapture</code></pre>
+  <p>三条分叉样例的描述符数值钉在 <code>src/record/template.rs</code> 的单测里；
+  布局判定在 <code>NounTemplate::layout_from_format_word()</code>。</p>
+
+  <h3>相关</h3>
+  <nav>
+    <a href="0001-descriptor-ten-dwords.html">课 0001 · 从一块字节到一个值</a>
+    <a href="../reference/descriptor-record.html">参考卡 · 描述符记录</a>
+    <a href="../GLOSSARY.md">术语表</a>
+    <a href="../MISSION.md">Mission</a>
+  </nav>
+
+  <div class="ask">
+    普查只跑了四个库。<code>ams000</code> 下还有五百多个，想知道 compact 到底有多广，
+    告诉我，我把探针铺开跑一轮。想看某个具体 noun 两套布局的完整属性表，报名字。
+  </div>
+</div>
+
+</div>
+<script src="../assets/widgets.js"></script>
+</body>
+</html>

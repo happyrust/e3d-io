@@ -1,0 +1,16 @@
+[package]
+name = "e3d-io"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone read-only IO library for E3D 3.1 database files (renamed from e3d-reader 2026-05-11)"
+
+[dependencies]
+thiserror = "2"
+nom = "8"
+e3d-attlib = { path = "../e3d-attlib" }
+serde_json = "1"
+sha2 = "0.10"
+encoding_rs = "0.8.35"
+
+[dev-dependencies]
+tempfile = "3"

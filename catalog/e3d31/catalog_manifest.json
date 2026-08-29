@@ -1,0 +1,24 @@
+{
+  "schema": "e3d-io-noun-catalog/v1",
+  "exported_at": "2026-08-26T14:01:26+08:00",
+  "authority": "live E3D 3.1 AMS read-only export",
+  "noun_layout": {
+    "file": "noun_layout.json",
+    "sha256": "6be73e13342d738c240bbda5241741ae3a069bbf2b90e8bb8cdab167cd7f0915",
+    "nouns": 1933,
+    "attribute_declarations": 22049
+  },
+  "noun_attr_fields": {
+    "file": "noun_attr_fields.json",
+    "sha256": "5c607adec322b6f49bcd065eccf5b80fc4889ce41708c0dab289c84fdbff3bcd",
+    "distinct_attributes": 4271,
+    "field_values": 203454
+  },
+  "descriptor_slots_gate": {
+    "element_budget": 300000,
+    "elements_scanned": 300000,
+    "nouns_observed": 1,
+    "tables_observed": 1,
+    "promoted_as_global_catalog": false
+  }
+}

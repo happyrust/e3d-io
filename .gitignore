@@ -1,0 +1,17 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+.idea/
+.vscode/
+
+# Investigation output, not sources. `evidence/` is 46 MB of run logs, probe
+# JSON and decompiled third-party assemblies; `metadata/` is 25 MB that
+# `e3d-descriptor compile-metadata` regenerates. Both are cheap to reproduce
+# and permanent once they enter history.
+/evidence
+/metadata
+/.context
+
+# Build output of the runtime UDA exporter, rebuilt from its own source.
+tools/e3d/*.dll
+__pycache__/
