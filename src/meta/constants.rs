@@ -35,8 +35,13 @@ pub const PROP_TOTAL_PAGES_ALT: u32 = 11_438_445;
 /// Evidence: doc descriptor offset +16
 pub const PROP_BUCKET_TYPE: u32 = 66_156_832;
 
-/// Default page size in bytes.
-pub const DEFAULT_PAGE_SIZE: u32 = 4096;
+// There is deliberately no default page size here.
+//
+// The constant that stood at this spot was 4096, and every sampled database
+// states 2048 — so the fail-open it backed did not merely guess, it guessed
+// exactly double, and a file that landed on it read every pair of pages as
+// one. The page size now comes from the file or the open fails:
+// `PageSize::from_header_words`.
 
 /// Database files use BIG-ENDIAN byte order (Fortran legacy convention).
 /// All integer fields are read with from_be_bytes, not from_le_bytes.

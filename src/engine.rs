@@ -98,28 +98,17 @@ impl ReadOnlyEngine {
         })
     }
 
-    /// Walk session pages starting from the descriptor's session_page_no.
+    /// Every session, newest first.
+    ///
+    /// Delegates to [`crate::session::walk_chain`] so there is one session
+    /// reader in the crate. The hand-written walk this replaced started from
+    /// the descriptor's `session_page_no` (+0x30) — the *oldest* session — read
+    /// exactly one page, and never followed `last_ses_pgno`: on `ams8000_0001`
+    /// it returned a one-element vector describing session 1 of 264, with no
+    /// error to say so.
     pub fn sessions(&mut self) -> Result<Vec<SessionInfo>, E3dReaderError> {
-        let session_page_no = self.descriptor.session_page_no;
-        if session_page_no == 0 || session_page_no >= self.readable_page_count() {
-            return Ok(vec![]);
-        }
-
-        let page_data = self.read_page(session_page_no)?;
-        if page_data.len() < 24 {
-            return Ok(vec![]);
-        }
-
-        let r = |off: usize| u32::from_be_bytes(page_data[off..off + 4].try_into().unwrap());
-        let info = SessionInfo {
-            session_mark: r(4),
-            db_handle: r(8),
-            session_id: r(12),
-            start_page_no: r(16),
-            end_page_no: r(20),
-        };
-
-        Ok(vec![info])
+        let chain = crate::session::walk_chain(&mut self.cache, &self.descriptor)?;
+        Ok(chain.iter().map(SessionInfo::from).collect())
     }
 
     /// Find the root index page by scanning for index pages with highest level.

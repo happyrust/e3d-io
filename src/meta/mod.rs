@@ -8,14 +8,30 @@ use nom::IResult;
 
 /// Database descriptor parsed from page 0.
 ///
-/// Layout from struct_layouts.json "db_descriptor_page"
+/// Field offsets and the evidence for each are in [`DbDescriptor::parse`].
 #[derive(Debug, Clone)]
 pub struct DbDescriptor {
+    /// Page size in **bytes**. Derived, not stored: the header counts words.
     pub page_size: u32,
+    /// Page size exactly as the header states it, in 4-byte words.
+    pub page_size_words: u32,
+    /// `db_num` at +0x08. Named `db_mark` since before the field was
+    /// identified; the two are the same number.
     pub db_mark: u32,
+    /// Noun of page 0, at +0x04.
+    pub noun: u32,
+    /// Page of the **newest** session, at +0x28. This is the chain tail that
+    /// `open` starts from.
+    pub latest_ses_pgno: u32,
+    /// Extent number of this file, at +0x2C.
+    pub ext_no: u32,
+    /// Page of the **oldest** session, at +0x30 — not the current one. Kept
+    /// under its original name because callers outside this module read it.
     pub session_page_no: u32,
     /// `RefNo::word0` of the database's first extent, i.e. `db_mark + 0x2000`.
     pub primary_extent_ref: u32,
+    /// Page type word at +0x00, 0 for a descriptor page. Named
+    /// `bucket_type_id` before the page header layout was known.
     pub bucket_type_id: u32,
 }
 
@@ -106,9 +122,8 @@ fn parse_file_info(input: &[u8]) -> IResult<&[u8], FileInfo> {
     // first empty slot. A malformed cursor must not fail the open: this field
     // was misread as a page size for a long time and that mistake locked the
     // reader out of 392 of the 448 databases in AvevaMarineSample.
-    let declared_entries = table_end_word
-        .saturating_sub(FileInfo::TABLE_START_WORD)
-        / FileInfo::WORDS_PER_ENTRY;
+    let declared_entries =
+        table_end_word.saturating_sub(FileInfo::TABLE_START_WORD) / FileInfo::WORDS_PER_ENTRY;
     let mut extents = Vec::new();
     for _ in 0..declared_entries {
         if rest.len() < (FileInfo::WORDS_PER_ENTRY as usize) * 4 {
@@ -225,15 +240,63 @@ mod tests {
         ));
     }
 
+    /// Page 0 of `ams8000_0001`, word for word.
+    fn ams8000_page0() -> Vec<u8> {
+        page1(&[
+            0,
+            2,
+            8000,
+            1,
+            1,
+            0,
+            u32::MAX,
+            0,
+            722_578,
+            u32::MAX,
+            8897,
+            1,
+            4,
+            512,
+            16_192,
+        ])
+    }
+
+    #[test]
+    fn descriptor_reads_both_session_pointers_apart() {
+        let desc = DbDescriptor::parse(&ams8000_page0()).unwrap();
+        assert_eq!(desc.db_mark, 8000);
+        assert_eq!(desc.noun, 2);
+        assert_eq!(desc.ext_no, 1);
+        assert_eq!(desc.page_size_words, 512);
+        assert_eq!(desc.page_size, 2048);
+        assert_eq!(desc.primary_extent_ref, 16_192);
+        // +0x28 is the newest session, +0x30 the oldest. Swapping them hands
+        // back the database as it was at session 1.
+        assert_eq!(desc.latest_ses_pgno, 8897);
+        assert_eq!(desc.session_page_no, 4);
+        assert_eq!(
+            desc.latest_session_page(),
+            crate::page::PageId::new(1, 8897)
+        );
+        assert_eq!(desc.first_session_page(), crate::page::PageId::new(1, 4));
+    }
+
+    #[test]
+    fn descriptor_page_size_is_words_and_is_validated() {
+        let mut page = ams8000_page0();
+        page[0x34..0x38].copy_from_slice(&700u32.to_be_bytes());
+        let err = DbDescriptor::parse(&page).unwrap_err();
+        assert!(
+            matches!(err, E3dReaderError::InvalidPage { page_no: 0, .. }),
+            "{err}"
+        );
+    }
+
     #[test]
     fn extent_refs_lists_primary_first() {
-        let descriptor = DbDescriptor {
-            page_size: 2048,
-            db_mark: 8000,
-            session_page_no: 4,
-            primary_extent_ref: 16_192,
-            bucket_type_id: 0,
-        };
+        let mut page0 = ams8000_page0();
+        page0[0x38..0x3C].copy_from_slice(&16_192u32.to_be_bytes());
+        let descriptor = DbDescriptor::parse(&page0).unwrap();
         let info = FileInfo::parse_page1(&page1(&[1, u32::MAX, 5, 24_384, 26_261, 0])).unwrap();
         assert_eq!(info.extent_refs(&descriptor), vec![16_192, 24_384]);
     }
