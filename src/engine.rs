@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::error::E3dReaderError;
-use crate::index::{IndexPageView, SearchResult};
+use crate::index::{IndexCursor, IndexPageView, SearchResult};
 use crate::meta::constants::DATA_PAGE_INDEX;
 use crate::meta::{DbDescriptor, FileInfo};
 use crate::page::cache::PageCache;
 use crate::page::io::PageReader;
-use crate::page::PageHeader;
+use crate::page::{PageHeader, PageId};
 use crate::record::{self, ElementRecordView};
 use crate::refno::RefNo;
 use crate::session::SessionInfo;
@@ -169,41 +169,32 @@ impl ReadOnlyEngine {
     }
 
     /// Search the B+tree index for a RefNo. Returns the index entry if found.
+    ///
+    /// Delegates to [`IndexCursor`], which is the crate's only descent. The
+    /// loop this replaced was a second one: it checked neither that a child
+    /// sits one level below its parent nor that the descent never revisits a
+    /// page, so a tree pointing back at itself span until a depth counter
+    /// stopped it, and a child at the wrong level was followed without comment.
+    /// It also read its own copy of the routing rule, which is how the reader
+    /// this crate replaces ended up navigating one way and building another.
     pub fn search_index(
         &mut self,
         root_page_no: u32,
         target: RefNo,
     ) -> Result<Option<SearchResult>, E3dReaderError> {
-        let mut current_page = root_page_no;
-        let max_depth = 20;
+        let root = PageId::primary(root_page_no);
+        let found = IndexCursor::at_root(&mut self.cache, root)
+            .seek(target)
+            .map_err(|source| E3dReaderError::IndexError {
+                page_no: root_page_no,
+                detail: source.to_string(),
+            })?
+            .found;
 
-        for _ in 0..max_depth {
-            let data = self.cache.get_page(current_page)?;
-            let idx_page = IndexPageView::parse(data).map_err(|_| E3dReaderError::IndexError {
-                page_no: current_page,
-                detail: "failed to parse index page".into(),
-            })?;
-
-            if idx_page.is_leaf() {
-                if let Some(entry) = idx_page.find_in_leaf(target) {
-                    return Ok(Some(SearchResult {
-                        entry: *entry,
-                        leaf_page_no: current_page,
-                    }));
-                }
-                return Ok(None);
-            }
-
-            match idx_page.select_child(target) {
-                Some(child) => current_page = child,
-                None => return Ok(None),
-            }
-        }
-
-        Err(E3dReaderError::IndexError {
-            page_no: current_page,
-            detail: "B+tree depth exceeded maximum".into(),
-        })
+        Ok(found.map(|record| SearchResult {
+            entry: record.entry(),
+            leaf_page_no: record.leaf.page,
+        }))
     }
 
     /// Scan all index pages and collect all indexed RefNos.

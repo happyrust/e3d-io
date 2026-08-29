@@ -1,4 +1,5 @@
 //! B+tree index page decoding: bytes in, structure out. No I/O lives here.
+//! The tree walk that puts pages in order lives in [`cursor`].
 //!
 //! Four shipped implementations read these same bytes three incompatible ways,
 //! and no test could separate them, so the readings below were settled against
@@ -28,11 +29,15 @@
 //! happens even once. `flag` itself is 1 on all 940 694 of them — the corpus
 //! says nothing more about it, so neither does this module.
 
+pub mod cursor;
+
 use std::cmp::Ordering;
 
 use crate::error::E3dReaderError;
 use crate::meta::constants::DATA_PAGE_INDEX;
 use crate::refno::{PageAddress, RefNo};
+
+pub use cursor::{IndexCursor, IndexTreeError, IndexWalk, IndexedRecord, Lookup, RecordLoc};
 
 /// `page_type` of an index page. core.dll checks it in `sub_5B026C0` and fails
 /// with "Page is not a table page".
@@ -147,32 +152,39 @@ impl IndexEntry {
     }
 }
 
-/// A decoded B+tree index page.
+/// A validated index page still sitting in the caller's buffer.
 ///
 /// Header is seven dwords, 28 bytes: `page_type`, `noun`, `level`,
 /// `key_dwords`, `value_dwords`, `reserved`, `free_dwords`. Entries follow,
-/// `key_dwords + value_dwords` dwords each.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IndexPageView {
+/// `key_dwords + value_dwords` dwords each, and are read out one at a time
+/// rather than collected — a descent visits one node per level and wants one
+/// entry from each, so materialising all 126 of them per level is 126 times
+/// the work and an allocation the page layer went out of its way to avoid.
+///
+/// [`IndexPageView`] is the owned form, for callers that do want the whole
+/// page; it is this type plus a `collect`.
+#[derive(Debug, Clone, Copy)]
+pub struct IndexNode<'a> {
+    page: &'a [u8],
     pub page_type: u32,
     pub noun: u32,
     pub level: u32,
-    /// Declared key width. Zero means [`DEFAULT_KEY_DWORDS`]; the field here
-    /// carries the width actually used.
     pub key_dwords: u32,
-    /// Declared value width, defaulted the same way as `key_dwords`.
     pub value_dwords: u32,
     pub reserved: u32,
-    /// Dwords left free after the last live entry, and the only thing that says
-    /// how many entries the page holds. Older code called this `pfno` and threw
-    /// it away.
     pub free_dwords: u32,
-    pub entries: Vec<IndexEntry>,
+    count: usize,
+    stride_bytes: usize,
+    value_offset: usize,
 }
 
-impl IndexPageView {
-    /// Decode a page, saying why if it is not one.
-    pub fn decode(page: &[u8]) -> Result<Self, IndexPageError> {
+impl<'a> IndexNode<'a> {
+    /// Validate a page as an index node, saying why if it is not one.
+    ///
+    /// The only place these bytes are judged. [`IndexPageView::decode`] and the
+    /// tree walk in [`cursor`] both come here, so "is this an index page" has
+    /// one answer.
+    pub fn decode(page: &'a [u8]) -> Result<Self, IndexPageError> {
         if page.len() % DWORD != 0 {
             return Err(IndexPageError::PageNotDwordAligned { len: page.len() });
         }
@@ -233,25 +245,9 @@ impl IndexPageView {
                 stride_dwords,
             });
         }
-        let count = (used_dwords / stride_dwords) as usize;
-
-        let stride_bytes = stride_dwords as usize * DWORD;
-        let value_offset = key_dwords as usize * DWORD;
-        let entries = (0..count)
-            .map(|i| {
-                let key_at = HEADER_DWORDS * DWORD + i * stride_bytes;
-                let value_at = key_at + value_offset;
-                let packed = be32(page, value_at + 4);
-                IndexEntry {
-                    refno: RefNo::new(be32(page, key_at), be32(page, key_at + 4)),
-                    page_no: be32(page, value_at),
-                    offset_words: packed >> OFFSET_SHIFT,
-                    flag: (packed & FLAG_MASK) as u16,
-                }
-            })
-            .collect();
 
         Ok(Self {
+            page,
             page_type,
             noun,
             level,
@@ -259,8 +255,95 @@ impl IndexPageView {
             value_dwords,
             reserved,
             free_dwords,
-            entries,
+            count: (used_dwords / stride_dwords) as usize,
+            stride_bytes: stride_dwords as usize * DWORD,
+            value_offset: key_dwords as usize * DWORD,
         })
+    }
+
+    /// Live entries on this page, as `free_dwords` reports them.
+    pub fn len(&self) -> usize {
+        self.count
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        self.level == 0
+    }
+
+    /// Entry `slot`, or `None` past the live region.
+    pub fn entry(&self, slot: usize) -> Option<IndexEntry> {
+        if slot >= self.count {
+            return None;
+        }
+        let key_at = HEADER_DWORDS * DWORD + slot * self.stride_bytes;
+        let value_at = key_at + self.value_offset;
+        let packed = be32(self.page, value_at + 4);
+        Some(IndexEntry {
+            refno: RefNo::new(be32(self.page, key_at), be32(self.page, key_at + 4)),
+            page_no: be32(self.page, value_at),
+            offset_words: packed >> OFFSET_SHIFT,
+            flag: (packed & FLAG_MASK) as u16,
+        })
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = IndexEntry> + '_ {
+        (0..self.count).map(|slot| self.entry(slot).expect("slot is inside the live region"))
+    }
+
+    pub fn find(&self, target: RefNo) -> Option<IndexEntry> {
+        find_key(self.entries(), target)
+    }
+
+    pub fn leftmost_child(&self) -> Option<u32> {
+        leftmost_child(self.entries())
+    }
+
+    pub fn select_child(&self, target: RefNo) -> Option<u32> {
+        choose_child(self.entries(), target)
+    }
+
+    /// Collect into the owned form.
+    pub fn to_view(&self) -> IndexPageView {
+        IndexPageView {
+            page_type: self.page_type,
+            noun: self.noun,
+            level: self.level,
+            key_dwords: self.key_dwords,
+            value_dwords: self.value_dwords,
+            reserved: self.reserved,
+            free_dwords: self.free_dwords,
+            entries: self.entries().collect(),
+        }
+    }
+}
+
+/// A decoded B+tree index page, entries and all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexPageView {
+    pub page_type: u32,
+    pub noun: u32,
+    pub level: u32,
+    /// Declared key width. Zero means [`DEFAULT_KEY_DWORDS`]; the field here
+    /// carries the width actually used.
+    pub key_dwords: u32,
+    /// Declared value width, defaulted the same way as `key_dwords`.
+    pub value_dwords: u32,
+    pub reserved: u32,
+    /// Dwords left free after the last live entry, and the only thing that says
+    /// how many entries the page holds. Older code called this `pfno` and threw
+    /// it away.
+    pub free_dwords: u32,
+    pub entries: Vec<IndexEntry>,
+}
+
+impl IndexPageView {
+    /// Decode a page, saying why if it is not one.
+    pub fn decode(page: &[u8]) -> Result<Self, IndexPageError> {
+        IndexNode::decode(page).map(|node| node.to_view())
     }
 
     /// [`decode`](Self::decode) with the reason folded into the crate error.
@@ -273,47 +356,94 @@ impl IndexPageView {
     }
 
     pub fn find_in_leaf(&self, target: RefNo) -> Option<&IndexEntry> {
-        self.entries
-            .iter()
-            .find(|entry| !entry.is_start_marker() && entry.refno == target)
+        self.entries.iter().find(|entry| keys_match(entry, target))
     }
 
     /// The left-most child: everything below the first key lives under it.
     pub fn leftmost_child(&self) -> Option<u32> {
-        self.entries
-            .iter()
-            .find(|entry| entry.is_start_marker())
-            .or_else(|| self.entries.first())
-            .map(|entry| entry.page_no)
+        leftmost_child(self.entries.iter().copied())
     }
 
-    /// The child to descend into for `target`.
-    ///
-    /// A key is the least key of the subtree behind it, so the only child that
-    /// can hold `target` is the one behind the greatest key `<= target`. Taking
-    /// the *smallest* key `>= target` instead — what the old comments described
-    /// — misses every element that opens a subtree: on `ams8000_0001` that is
-    /// 6439 of 6605 leaf entries.
+    /// The child to descend into for `target`. See [`choose_child`].
     pub fn select_child(&self, target: RefNo) -> Option<u32> {
-        let mut best: Option<&IndexEntry> = None;
-        for entry in self.entries.iter().filter(|e| !e.is_start_marker()) {
-            if cmp_refno(entry.refno, target) == Ordering::Greater {
-                continue;
-            }
-            if best.map_or(true, |b| {
-                cmp_refno(entry.refno, b.refno) == Ordering::Greater
-            }) {
-                best = Some(entry);
-            }
-        }
-        best.map(|entry| entry.page_no)
-            .or_else(|| self.leftmost_child())
+        choose_child(self.entries.iter().copied(), target)
     }
+}
+
+/// The child to descend into for `target`, and **the only routing rule in the
+/// crate** — point lookup, enumeration and any later two-root differencing all
+/// come here, so a tree built one way cannot be navigated another.
+///
+/// A key is the least key of the subtree behind it, so the only child that can
+/// hold `target` is the one behind the greatest key `<= target`. Taking the
+/// *smallest* key `>= target` instead — what the old comments described —
+/// misses every element that opens a subtree: on `ams8000_0001` that is 6439 of
+/// 6605 leaf entries.
+///
+/// Below the first key the answer is the left-most child, which is the sentinel
+/// entry's; a page with no sentinel falls back to its first entry, which is
+/// what the reader this replaced did.
+pub fn choose_child(entries: impl IntoIterator<Item = IndexEntry>, target: RefNo) -> Option<u32> {
+    let mut best: Option<IndexEntry> = None;
+    let mut leftmost: Option<IndexEntry> = None;
+    for entry in entries {
+        if entry.is_start_marker() {
+            if leftmost.map_or(true, |left| !left.is_start_marker()) {
+                leftmost = Some(entry);
+            }
+            continue;
+        }
+        if leftmost.is_none() {
+            leftmost = Some(entry);
+        }
+        if cmp_refno(entry.refno, target) == Ordering::Greater {
+            continue;
+        }
+        if best.map_or(true, |b| {
+            cmp_refno(entry.refno, b.refno) == Ordering::Greater
+        }) {
+            best = Some(entry);
+        }
+    }
+    best.or(leftmost).map(|entry| entry.page_no)
+}
+
+/// The left-most child: everything below the first key lives under it.
+pub fn leftmost_child(entries: impl IntoIterator<Item = IndexEntry>) -> Option<u32> {
+    let mut first: Option<IndexEntry> = None;
+    for entry in entries {
+        if entry.is_start_marker() {
+            return Some(entry.page_no);
+        }
+        if first.is_none() {
+            first = Some(entry);
+        }
+    }
+    first.map(|entry| entry.page_no)
+}
+
+/// The entry for `target`, if the page holds one.
+///
+/// First match wins. The corpus holds no page with a repeated key, and the
+/// enumeration gate would go red if one appeared, so "first" and "only" are the
+/// same answer here — but the tie-break is core.dll's, which takes the first
+/// sighting of a key and does not consult `flag` to break the tie.
+pub fn find_key(
+    entries: impl IntoIterator<Item = IndexEntry>,
+    target: RefNo,
+) -> Option<IndexEntry> {
+    entries.into_iter().find(|entry| keys_match(entry, target))
+}
+
+/// A real entry for this key: the sentinel's key is a page-local constant, so
+/// it never answers a lookup even if a target happened to equal it.
+fn keys_match(entry: &IndexEntry, target: RefNo) -> bool {
+    !entry.is_start_marker() && entry.refno == target
 }
 
 /// Keys order as an unsigned pair. `word1` is signed elsewhere, but reading it
 /// that way puts pages out of order.
-fn cmp_refno(a: RefNo, b: RefNo) -> Ordering {
+pub fn cmp_refno(a: RefNo, b: RefNo) -> Ordering {
     (a.word0, a.word1).cmp(&(b.word0, b.word1))
 }
 
