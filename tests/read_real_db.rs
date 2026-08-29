@@ -136,11 +136,11 @@ fn parse_index_pages() {
         let data = engine.read_page(page_no).unwrap();
         if let Ok(idx) = IndexPageView::parse(data) {
             println!(
-                "  page {:>5}: level={}, entries={}, pfno={}",
+                "  page {:>5}: level={}, entries={}, free_dwords={}",
                 page_no,
                 idx.level,
                 idx.entries.len(),
-                idx.pfno
+                idx.free_dwords
             );
             if !idx.entries.is_empty() && index_pages.len() < 3 {
                 let first = &idx.entries[0];
