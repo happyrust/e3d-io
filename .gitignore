@@ -1,4 +1,7 @@
 /target
+# Isolated CARGO_TARGET_DIR used when several agents build this crate at once,
+# so a shared target does not hand one of them a stale rlib.
+/target-*
 **/*.rs.bk
 Cargo.lock.bak
 .idea/
