@@ -11,7 +11,7 @@ pub mod session;
 pub mod tty;
 pub mod uda_catalog;
 
-pub use engine::ReadOnlyEngine;
+pub use engine::{ElementScan, ReadOnlyEngine, ScanTier, ScannedElement};
 pub use error::E3dReaderError;
 pub use meta::{DbDescriptor, FileInfo};
 pub use page::{PageHeader, PageType};

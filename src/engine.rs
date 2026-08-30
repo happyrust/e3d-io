@@ -1,14 +1,134 @@
 use std::path::{Path, PathBuf};
 
+use crate::element_name;
 use crate::error::{E3dReaderError, SessionError};
-use crate::index::{IndexCursor, SearchResult};
+use crate::index::{IndexCursor, IndexEntry, SearchResult};
 use crate::meta::{DbDescriptor, FileInfo};
 use crate::page::cache::PageCache;
 use crate::page::io::PageReader;
 use crate::page::{PageHeader, PageId};
+use crate::record::element::ParsedElement;
 use crate::record::{self, ElementRecordView};
 use crate::refno::RefNo;
 use crate::session::{SessionInfo, SessionPage};
+
+/// How much of each element [`ReadOnlyEngine::scan_elements`] reads.
+///
+/// The tiers exist because the price of a whole-database scan is set by what
+/// each element costs: a derived type index needs four header words, a name
+/// index needs one explicit attribute, and only a reference index needs the
+/// record parsed whole.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanTier {
+    /// The eleven-word record header: noun and owner at one page read per
+    /// element, no chain walking.
+    Header,
+    /// The whole record gathered and parsed, and its stored `NAME` kept.
+    Named,
+    /// The whole record gathered, parsed and handed over: members and every
+    /// explicit attribute, reference-valued ones included.
+    Full,
+}
+
+/// One element out of [`ReadOnlyEngine::scan_elements`].
+#[derive(Debug, Clone)]
+pub struct ScannedElement {
+    /// The key the index enumerates — confirmed against the record's own
+    /// header before this struct is handed out.
+    pub refno: RefNo,
+    /// Where the record lives: page number in the tree's extent, and the
+    /// packed word offset an index leaf states.
+    pub page_no: u32,
+    pub offset_words: u32,
+    pub noun_hash: u32,
+    pub owner: RefNo,
+    /// The stored `NAME`, from [`ScanTier::Named`] up. `None` on the many
+    /// elements that store none — a positional display name is a rendering,
+    /// not a stored fact, and a scan hands out stored facts.
+    pub name: Option<String>,
+    /// The parsed record, on [`ScanTier::Full`].
+    pub parsed: Option<ParsedElement>,
+}
+
+/// A streaming pass over every element the selected session indexes.
+///
+/// Yields elements in key order, one `Result` each: a page or record that
+/// cannot be read fails that element and the scan carries on, so the caller
+/// decides whether one bad record poisons the whole pass.
+pub struct ElementScan<'a> {
+    cache: &'a mut PageCache,
+    ext: u16,
+    tier: ScanTier,
+    entries: std::vec::IntoIter<IndexEntry>,
+}
+
+impl ElementScan<'_> {
+    /// How many elements remain, the one about to be yielded included.
+    pub fn remaining(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn read(&mut self, entry: &IndexEntry) -> Result<ScannedElement, E3dReaderError> {
+        let confirm = |stated: RefNo| {
+            if stated == entry.refno {
+                Ok(())
+            } else {
+                Err(E3dReaderError::IndexRecordMismatch {
+                    refno: entry.refno,
+                    page_no: entry.page_no,
+                    byte_offset: entry.offset_words * 2,
+                    found: stated,
+                })
+            }
+        };
+
+        if self.tier == ScanTier::Header {
+            let header = record::read_record_header(
+                self.cache,
+                PageId::new(self.ext, entry.page_no),
+                entry.offset_words,
+            )?;
+            confirm(header.refno)?;
+            return Ok(ScannedElement {
+                refno: entry.refno,
+                page_no: entry.page_no,
+                offset_words: entry.offset_words,
+                noun_hash: header.noun_hash,
+                owner: header.owner,
+                name: None,
+                parsed: None,
+            });
+        }
+
+        let view = record::read_element_record(self.cache, self.ext, entry)?;
+        let parsed = ParsedElement::parse(&view.raw_bytes).map_err(|error| {
+            E3dReaderError::Other(format!("{}: gathered record parses: {error}", entry.refno))
+        })?;
+        confirm(parsed.refno)?;
+        Ok(ScannedElement {
+            refno: entry.refno,
+            page_no: entry.page_no,
+            offset_words: entry.offset_words,
+            noun_hash: parsed.noun_hash,
+            owner: parsed.owner,
+            name: element_name::stored_name(&parsed),
+            parsed: (self.tier == ScanTier::Full).then_some(parsed),
+        })
+    }
+}
+
+impl Iterator for ElementScan<'_> {
+    type Item = Result<ScannedElement, E3dReaderError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let entry = self.entries.next()?;
+        Some(self.read(&entry))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.entries.size_hint()
+    }
+}
 
 /// Read-only engine for E3D 3.1 database files, as of one session.
 pub struct ReadOnlyEngine {
@@ -210,6 +330,36 @@ impl ReadOnlyEngine {
             out.push((found.refno, found.loc.page.page, found.loc.offset_words));
         }
         Ok(out)
+    }
+
+    /// Every element the selected session indexes, read at the chosen depth.
+    ///
+    /// One walk of the live tree names the elements — the same walk
+    /// [`Self::indexed_refnos`] makes, so the two cannot disagree about what
+    /// exists — then each element's pages are read as the iterator is driven.
+    /// Elements arrive in key order. This is the primitive a derived index is
+    /// built from: the file states no index but the RefNo tree, so type, name
+    /// and back-reference lookups all start as one pass over everything.
+    ///
+    /// The entry list is collected up front (24 bytes an element, ~19 MiB for
+    /// the largest corpus file), so the tree is not descended per element and
+    /// the scan's page reads run in tree order.
+    pub fn scan_elements(&mut self, tier: ScanTier) -> Result<ElementScan<'_>, E3dReaderError> {
+        let root = self.session.index_root;
+        let mut entries = Vec::new();
+        for found in IndexCursor::at_root(&mut self.cache, root).walk() {
+            let found = found.map_err(|source| E3dReaderError::IndexError {
+                page_no: root.page,
+                detail: source.to_string(),
+            })?;
+            entries.push(found.entry());
+        }
+        Ok(ElementScan {
+            cache: &mut self.cache,
+            ext: root.ext,
+            tier,
+            entries: entries.into_iter(),
+        })
     }
 
     /// Find an element by RefNo: one descent, then the record it addresses.
