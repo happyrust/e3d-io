@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::error::E3dReaderError;
+use crate::error::{E3dReaderError, SessionError};
 use crate::index::{IndexCursor, SearchResult};
 use crate::meta::{DbDescriptor, FileInfo};
 use crate::page::cache::PageCache;
@@ -34,6 +34,34 @@ impl ReadOnlyEngine {
         path: impl AsRef<Path>,
         cache_capacity: usize,
     ) -> Result<Self, E3dReaderError> {
+        Self::open_selected(path, None, cache_capacity)
+    }
+
+    /// Open as of one named session rather than the newest.
+    ///
+    /// The index is copy-on-write, so a session page carries the root as it
+    /// stood then and opening "at session N" is the choice of which root to
+    /// descend — see [`crate::session`]. A caller pinning a watermark wants
+    /// exactly this: the tree as of the session whose data is known to have
+    /// landed, not whatever the file has grown since.
+    ///
+    /// A session that is not in the chain is an `Err` naming it. Falling back
+    /// to the newest would answer a different question than the one asked, and
+    /// one level up that reads as "the element changed".
+    pub fn open_at(path: impl AsRef<Path>, sesno: u32) -> Result<Self, E3dReaderError> {
+        Self::open_selected(path, Some(sesno), 256)
+    }
+
+    /// The one open path: `open` is this with no session named.
+    ///
+    /// Session selection goes through [`crate::session::walk_chain`], the
+    /// crate's only chain walk, rather than a second resolver written here.
+    /// It costs one page per session step, once per engine.
+    fn open_selected(
+        path: impl AsRef<Path>,
+        sesno: Option<u32>,
+        cache_capacity: usize,
+    ) -> Result<Self, E3dReaderError> {
         let path = path.as_ref();
         let reader = PageReader::open(path)?;
         let mut cache = PageCache::new(reader, cache_capacity);
@@ -44,7 +72,23 @@ impl ReadOnlyEngine {
         let page1 = cache.get_page(FileInfo::PAGE_INDEX)?;
         let file_info = FileInfo::parse_page1(page1)?;
 
-        let session = crate::session::latest(&mut cache, &descriptor)?;
+        let session = match sesno {
+            None => crate::session::latest(&mut cache, &descriptor)?,
+            Some(wanted) => {
+                let chain = crate::session::walk_chain(&mut cache, &descriptor)?;
+                let newest = chain.first().map(|page| page.sesno).unwrap_or_default();
+                let oldest = chain.last().map(|page| page.sesno);
+                chain
+                    .into_iter()
+                    .find(|page| page.sesno == wanted)
+                    .ok_or_else(|| SessionError::NoSuchSession {
+                        path: path.to_path_buf(),
+                        requested: wanted,
+                        newest,
+                        oldest,
+                    })?
+            }
+        };
 
         Ok(Self {
             path: path.to_path_buf(),
