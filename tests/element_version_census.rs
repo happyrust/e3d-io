@@ -78,7 +78,7 @@ fn how_often_is_the_answered_copy_not_the_richest() {
             continue;
         }
         let mut engine = ReadOnlyEngine::open(&path).expect("open database");
-        let entries = engine.scan_all_indexed_refnos().expect("scan index");
+        let entries = engine.indexed_refnos().expect("scan index");
 
         for (noun, refno) in rows {
             let locations: Vec<(u32, u32)> = entries

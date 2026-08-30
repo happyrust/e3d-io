@@ -7,7 +7,6 @@ use std::path::Path;
 
 use e3d_attlib::AttlibData;
 use e3d_io::engine::ResolveError;
-use e3d_io::index::IndexPageView;
 use e3d_io::record::atnlog::AttrValue;
 use e3d_io::record::element::ParsedElement;
 use e3d_io::ReadOnlyEngine;
@@ -20,15 +19,7 @@ fn fixtures_present() -> bool {
 }
 
 fn first_indexed_refno(engine: &mut ReadOnlyEngine) -> e3d_io::refno::RefNo {
-    let root = engine.find_index_root().unwrap().expect("root");
-    let data = engine.read_page(root).unwrap().to_vec();
-    let root_view = IndexPageView::parse(&data).expect("parse root");
-    root_view
-        .entries
-        .iter()
-        .find(|e| !e.is_start_marker())
-        .expect("non-marker")
-        .refno
+    engine.indexed_refnos().expect("read the index")[0].0
 }
 
 #[test]

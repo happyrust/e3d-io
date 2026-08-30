@@ -168,31 +168,26 @@ fn find_index_root_and_search() {
 
     let mut engine = ReadOnlyEngine::open(TEST_DB_PATH).expect("failed to open database");
 
-    let root = engine.find_index_root().expect("find_index_root failed");
+    let root = engine.index_root();
     println!("\n=== Index Root ===");
-    println!("  root page: {:?}", root);
+    println!("  session {} root: {root}", engine.session().sesno);
 
-    if let Some(root_page) = root {
-        let data = engine.read_page(root_page).unwrap();
-        let root_view = IndexPageView::parse(data).unwrap();
-        println!("  root level: {}", root_view.level);
-        println!("  root entries: {}", root_view.entries.len());
+    let data = engine.read_page(root.page).unwrap();
+    let root_view = IndexPageView::parse(data).unwrap();
+    println!("  root level: {}", root_view.level);
+    println!("  root entries: {}", root_view.entries.len());
 
-        if let Some(first_non_marker) = root_view.entries.iter().find(|e| !e.is_start_marker()) {
-            let target = first_non_marker.refno;
-            println!("\n  Searching for: {}", target);
-
-            match engine.search_index(root_page, target) {
-                Ok(Some(result)) => {
-                    println!(
-                        "  FOUND: page_no={}, offset_words={}, flag={}",
-                        result.entry.page_no, result.entry.offset_words, result.entry.flag
-                    );
-                }
-                Ok(None) => println!("  NOT FOUND (unexpected for root entry)"),
-                Err(e) => println!("  ERROR: {}", e),
-            }
+    let target = engine.indexed_refnos().expect("read the index")[0].0;
+    println!("\n  Searching for: {}", target);
+    match engine.search_index(target) {
+        Ok(Some(result)) => {
+            println!(
+                "  FOUND: page_no={}, offset_words={}, flag={}",
+                result.entry.page_no, result.entry.offset_words, result.entry.flag
+            );
         }
+        Ok(None) => panic!("an enumerated key must be reachable by lookup"),
+        Err(e) => panic!("  ERROR: {}", e),
     }
 }
 
@@ -204,17 +199,7 @@ fn find_element_end_to_end() {
 
     let mut engine = ReadOnlyEngine::open(TEST_DB_PATH).expect("failed to open database");
 
-    let root = engine.find_index_root().expect("find root");
-    let root_page = root.expect("root should exist");
-    let data = engine.read_page(root_page).unwrap();
-    let root_view = IndexPageView::parse(data).unwrap();
-
-    let target = root_view
-        .entries
-        .iter()
-        .find(|e| !e.is_start_marker())
-        .expect("should have non-marker entries")
-        .refno;
+    let target = engine.indexed_refnos().expect("read the index")[0].0;
 
     println!("\n=== End-to-end Element Read ===");
     println!("  Target RefNo: {}", target);
@@ -250,17 +235,7 @@ fn parse_element_record() {
 
     let mut engine = ReadOnlyEngine::open(TEST_DB_PATH).expect("failed to open database");
 
-    let root = engine.find_index_root().expect("find root");
-    let root_page = root.expect("root should exist");
-    let data = engine.read_page(root_page).unwrap();
-    let root_view = IndexPageView::parse(data).unwrap();
-
-    let target = root_view
-        .entries
-        .iter()
-        .find(|e| !e.is_start_marker())
-        .expect("should have entries")
-        .refno;
+    let target = engine.indexed_refnos().expect("read the index")[0].0;
 
     let view = engine
         .find_element(target)
@@ -301,7 +276,7 @@ fn scan_all_elements() {
 
     let mut engine = ReadOnlyEngine::open(TEST_DB_PATH).expect("failed to open database");
 
-    let all_refs = engine.scan_all_indexed_refnos().expect("scan failed");
+    let all_refs = engine.indexed_refnos().expect("scan failed");
     println!("\n=== Scan All Indexed Elements ===");
     println!("  Total indexed RefNos: {}", all_refs.len());
 
@@ -386,17 +361,7 @@ fn read_element_attributes() {
 
     let mut engine = ReadOnlyEngine::open(TEST_DB_PATH).expect("failed to open database");
 
-    let root = engine.find_index_root().expect("find root");
-    let root_page = root.expect("root should exist");
-    let data = engine.read_page(root_page).unwrap();
-    let root_view = IndexPageView::parse(data).unwrap();
-
-    let target = root_view
-        .entries
-        .iter()
-        .find(|e| !e.is_start_marker())
-        .expect("should have entries")
-        .refno;
+    let target = engine.indexed_refnos().expect("read the index")[0].0;
 
     let view = engine
         .find_element(target)

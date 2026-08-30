@@ -11,7 +11,6 @@
 use std::path::Path;
 
 use e3d_attlib::{AttlibData, AttrDefault};
-use e3d_io::index::IndexPageView;
 use e3d_io::record::atnlog::{
     decode_attribute_by_hash, AttrValue, DEFAULT_HEADER_WORDS, RAW_USE_DEFAULT,
 };
@@ -59,17 +58,15 @@ fn default_pool_substitutes_for_raw_use_default_slot() {
     let mut attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
 
-    let root = engine.find_index_root().unwrap().expect("root");
-    let leaf_data = engine.read_page(root).unwrap().to_vec();
-    let leaf = IndexPageView::parse(&leaf_data).unwrap();
+    let indexed = engine.indexed_refnos().expect("read the index");
 
-    // Find the first leaf entry whose element has at least one slot
-    // that reads RAW_USE_DEFAULT AND maps to an ATGTDF entry. Walk
-    // multiple entries so the test isn't brittle to one element's
+    // Find the first indexed element that has at least one slot which
+    // reads RAW_USE_DEFAULT AND maps to an ATGTDF entry. Walk
+    // multiple elements so the test isn't brittle to one element's
     // schema not happening to default anything.
     let mut found = None;
-    for entry in leaf.entries.iter().filter(|e| !e.is_start_marker()) {
-        let view = match engine.find_element(entry.refno) {
+    for &(refno, _, _) in &indexed {
+        let view = match engine.find_element(refno) {
             Ok(Some(v)) => v,
             _ => continue,
         };
@@ -78,7 +75,7 @@ fn default_pool_substitutes_for_raw_use_default_slot() {
             Err(_) => continue,
         };
         if let Some((hash, pos)) = find_default_sentinel_slot(&parsed, &attlib) {
-            found = Some((entry.refno, hash, pos, parsed));
+            found = Some((refno, hash, pos, parsed));
             break;
         }
     }
@@ -89,7 +86,7 @@ fn default_pool_substitutes_for_raw_use_default_slot() {
             eprintln!(
                 "SKIP: no RAW_USE_DEFAULT slot mapped to an ATGTDF entry \
                  was found in the first {} leaf entries — fixture-specific",
-                leaf.entries.len()
+                indexed.len()
             );
             return;
         }
@@ -148,18 +145,16 @@ fn auto_populated_default_pool_substitutes_on_fixture() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
 
-    let root = engine.find_index_root().unwrap().expect("root");
-    let leaf_data = engine.read_page(root).unwrap().to_vec();
-    let leaf = IndexPageView::parse(&leaf_data).unwrap();
+    let indexed = engine.indexed_refnos().expect("read the index");
 
-    // Walk leaf entries until we find an element with a RAW_USE_DEFAULT
+    // Walk indexed elements until we find one with a RAW_USE_DEFAULT
     // slot whose attr_def carries an auto-populated default. Demand
     // that the decoded value match what `attr_default_to_value(default)`
     // would yield from the attlib's default field — proving the
     // auto-population path end-to-end.
     let mut found = None;
-    for entry in leaf.entries.iter().filter(|e| !e.is_start_marker()) {
-        let view = match engine.find_element(entry.refno) {
+    for &(refno, _, _) in &indexed {
+        let view = match engine.find_element(refno) {
             Ok(Some(v)) => v,
             _ => continue,
         };
@@ -180,7 +175,7 @@ fn auto_populated_default_pool_substitutes_on_fixture() {
             let bytes = &parsed.implicit_data[byte_off..byte_off + 4];
             let raw = u32::from_be_bytes(bytes.try_into().unwrap());
             if raw == RAW_USE_DEFAULT && def.default_value.is_some() {
-                found = Some((entry.refno, def.hash, def.default_value.unwrap(), parsed));
+                found = Some((refno, def.hash, def.default_value.unwrap(), parsed));
                 break;
             }
         }

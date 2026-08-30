@@ -133,7 +133,7 @@ fn report_one_element_per_distinct_stored_value() {
     // entry that decodes as something else. Which copy is current does not
     // matter here — the capture re-reads the element and compares against what
     // E3D prints, so a stale copy can only cost a wasted capture.
-    let mut indexed = engine.scan_all_indexed_refnos().expect("scan index");
+    let mut indexed = engine.indexed_refnos().expect("scan index");
     indexed.sort_by_key(|(refno, page, offset)| (refno.word0, refno.word1, *page, *offset));
 
     // (noun, attribute) -> capture key -> stored values -> the elements.
@@ -311,7 +311,7 @@ fn report_axis_pairs_the_decoder_declines() {
             println!("{db:<16} could not be opened");
             continue;
         };
-        let Ok(indexed) = engine.scan_all_indexed_refnos() else {
+        let Ok(indexed) = engine.indexed_refnos() else {
             println!("{db:<16} index unreadable");
             continue;
         };

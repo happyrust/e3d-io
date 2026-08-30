@@ -41,7 +41,7 @@ fn report_every_sslc_shear_word() {
         .expect("load SSLC template")
         .expect("SSLC template present")
         .clone();
-    let mut indexed = engine.scan_all_indexed_refnos().expect("scan index");
+    let mut indexed = engine.indexed_refnos().expect("scan index");
     indexed.sort_by_key(|(refno, _, _)| (refno.word0, refno.word1));
     indexed.dedup_by_key(|(refno, _, _)| (refno.word0, refno.word1));
 

@@ -1,30 +1,31 @@
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::error::E3dReaderError;
-use crate::index::{IndexCursor, IndexPageView, SearchResult};
-use crate::meta::constants::DATA_PAGE_INDEX;
+use crate::index::{IndexCursor, SearchResult};
 use crate::meta::{DbDescriptor, FileInfo};
 use crate::page::cache::PageCache;
 use crate::page::io::PageReader;
 use crate::page::{PageHeader, PageId};
 use crate::record::{self, ElementRecordView};
 use crate::refno::RefNo;
-use crate::session::SessionInfo;
+use crate::session::{SessionInfo, SessionPage};
 
-/// Read-only engine for E3D 3.1 database files.
+/// Read-only engine for E3D 3.1 database files, as of one session.
 pub struct ReadOnlyEngine {
     cache: PageCache,
     descriptor: DbDescriptor,
     file_info: FileInfo,
     path: PathBuf,
-    index_roots: Option<Vec<(u32, u32)>>,
+    /// The newest session, read once at open. Its index root is the only tree
+    /// this engine descends.
+    session: SessionPage,
 }
 
 impl ReadOnlyEngine {
     /// Open a database file for read-only access.
     ///
-    /// Reads page 0 (descriptor) and page 1 (file info) to initialize metadata.
+    /// Reads page 0 (descriptor), page 1 (file info) and the newest session
+    /// page, which is where the index root comes from.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, E3dReaderError> {
         Self::open_with_cache(path, 256)
     }
@@ -43,12 +44,14 @@ impl ReadOnlyEngine {
         let page1 = cache.get_page(FileInfo::PAGE_INDEX)?;
         let file_info = FileInfo::parse_page1(page1)?;
 
+        let session = crate::session::latest(&mut cache, &descriptor)?;
+
         Ok(Self {
             path: path.to_path_buf(),
             cache,
             descriptor,
             file_info,
-            index_roots: None,
+            session,
         })
     }
 
@@ -111,82 +114,30 @@ impl ReadOnlyEngine {
         Ok(chain.iter().map(SessionInfo::from).collect())
     }
 
-    /// Find the root index page by scanning for index pages with highest level.
-    pub fn find_index_root(&mut self) -> Result<Option<u32>, E3dReaderError> {
-        let roots = self.find_all_index_roots()?;
-        Ok(roots.first().map(|&(pn, _)| pn))
+    /// The session this engine answers as of, and the root it descends from.
+    ///
+    /// One root, taken from the session page, which is where the index root is
+    /// written. The rule this replaces read every page in the file and kept
+    /// the index pages no other index page named — so it found the current
+    /// tree along with every tree left behind by an earlier session, because
+    /// the index is copy-on-write and nothing points at the old ones.
+    pub fn session(&self) -> &SessionPage {
+        &self.session
     }
 
-    /// Find all B+tree root pages (highest level in each independent tree).
-    /// Returns vec of (page_no, level) sorted by level descending.
-    pub fn find_all_index_roots(&mut self) -> Result<Vec<(u32, u32)>, E3dReaderError> {
-        if let Some(roots) = &self.index_roots {
-            return Ok(roots.clone());
-        }
-        let roots = self.discover_index_roots()?;
-        self.index_roots = Some(roots.clone());
-        Ok(roots)
+    pub fn index_root(&self) -> PageId {
+        self.session.index_root
     }
 
-    /// B+tree roots: index pages that no other index page names as a child.
+    /// Find one RefNo in the index of the selected session.
     ///
-    /// Taking only the pages sitting at the file's highest level, as this used
-    /// to, throws away every independent tree whose own root is shallower. In
-    /// `ams1112_0001` that left 33 of the 211 sampled elements with no index
-    /// path at all, so each of their lookups fell back to reading the whole
-    /// file backwards.
-    ///
-    /// Roots are ordered deepest first and then by page number, which is the
-    /// order the previous rule produced for the pages it did return.
-    fn discover_index_roots(&mut self) -> Result<Vec<(u32, u32)>, E3dReaderError> {
-        let total = self.readable_page_count();
-        let mut index_pages: Vec<(u32, u32)> = Vec::new();
-        let mut children: HashSet<u32> = HashSet::new();
-
-        for page_no in 0..total {
-            let data = self.cache.get_page(page_no)?;
-            let Some(hdr) = PageHeader::parse(data) else {
-                continue;
-            };
-            if hdr.type_id != DATA_PAGE_INDEX {
-                continue;
-            }
-            let Ok(idx_page) = IndexPageView::parse(data) else {
-                continue;
-            };
-            if !idx_page.is_leaf() {
-                children.extend(idx_page.entries.iter().map(|entry| entry.page_no));
-            }
-            index_pages.push((page_no, idx_page.level));
-        }
-
-        let mut roots: Vec<(u32, u32)> = index_pages
-            .into_iter()
-            .filter(|(page_no, _)| !children.contains(page_no))
-            .collect();
-        roots.sort_by_key(|&(page_no, level)| (std::cmp::Reverse(level), page_no));
-        Ok(roots)
-    }
-
-    /// Search the B+tree index for a RefNo. Returns the index entry if found.
-    ///
-    /// Delegates to [`IndexCursor`], which is the crate's only descent. The
-    /// loop this replaced was a second one: it checked neither that a child
-    /// sits one level below its parent nor that the descent never revisits a
-    /// page, so a tree pointing back at itself span until a depth counter
-    /// stopped it, and a child at the wrong level was followed without comment.
-    /// It also read its own copy of the routing rule, which is how the reader
-    /// this crate replaces ended up navigating one way and building another.
-    pub fn search_index(
-        &mut self,
-        root_page_no: u32,
-        target: RefNo,
-    ) -> Result<Option<SearchResult>, E3dReaderError> {
-        let root = PageId::primary(root_page_no);
+    /// Delegates to [`IndexCursor`], which is the crate's only descent.
+    pub fn search_index(&mut self, target: RefNo) -> Result<Option<SearchResult>, E3dReaderError> {
+        let root = self.session.index_root;
         let found = IndexCursor::at_root(&mut self.cache, root)
             .seek(target)
             .map_err(|source| E3dReaderError::IndexError {
-                page_no: root_page_no,
+                page_no: root.page,
                 detail: source.to_string(),
             })?
             .found;
@@ -197,116 +148,65 @@ impl ReadOnlyEngine {
         }))
     }
 
-    /// Scan all index pages and collect all indexed RefNos.
-    pub fn scan_all_indexed_refnos(&mut self) -> Result<Vec<(RefNo, u32, u32)>, E3dReaderError> {
-        let total = self.readable_page_count();
-        let mut results = Vec::new();
-
-        for page_no in 0..total {
-            let data = self.cache.get_page(page_no)?;
-            let hdr = match PageHeader::parse(data) {
-                Some(h) => h,
-                None => continue,
-            };
-            if hdr.type_id != DATA_PAGE_INDEX {
-                continue;
-            }
-            if let Ok(idx_page) = IndexPageView::parse(data) {
-                if idx_page.is_leaf() {
-                    for entry in &idx_page.entries {
-                        if !entry.is_start_marker() {
-                            results.push((entry.refno, entry.page_no, entry.offset_words));
-                        }
-                    }
-                }
-            }
+    /// Every RefNo the selected session indexes, in key order.
+    ///
+    /// Walks the one live tree. The scan this replaces read every page in the
+    /// file and took the leaf entries of every index page it found, live or
+    /// not: on the 429-database corpus that is 940 694 entries against the
+    /// 789 831 the live trees hold, so 16% of what it returned was an address
+    /// out of a tree no session can reach.
+    pub fn indexed_refnos(&mut self) -> Result<Vec<(RefNo, u32, u32)>, E3dReaderError> {
+        let root = self.session.index_root;
+        let mut out = Vec::new();
+        for found in IndexCursor::at_root(&mut self.cache, root).walk() {
+            let found = found.map_err(|source| E3dReaderError::IndexError {
+                page_no: root.page,
+                detail: source.to_string(),
+            })?;
+            out.push((found.refno, found.loc.page.page, found.loc.offset_words));
         }
-
-        Ok(results)
+        Ok(out)
     }
 
-    /// Find an element by RefNo: search all B+tree roots, then read the record.
+    /// Find an element by RefNo: one descent, then the record it addresses.
     ///
-    /// A leaf entry is believed only once the record it addresses says the same
-    /// RefNo back. Stale entries outlive the record they were written for:
-    /// `ams1112_0001` indexes 17496/950 from eleven leaves, and ten of them
-    /// address a location that now holds an unrelated element. Returning what
-    /// the index pointed at would answer a lookup with somebody else's data.
+    /// `Ok(None)` means the session does not index that RefNo. A record that
+    /// answers to a different name is an error, not a miss — across the 429
+    /// databases the index was settled on, none of the 789 831 keys does.
+    ///
+    /// Three fallbacks used to sit under this call, and all three were paying
+    /// for the wrong root. It searched every tree in the file, kept the copy
+    /// furthest into it, and if nothing confirmed, read the whole file
+    /// backwards looking for the RefNo as a byte pattern. The eleven leaves
+    /// `ams1112_0001` has for 17496/950, ten of them addressing an unrelated
+    /// element, are ten dead trees and one live one.
     pub fn find_element(
         &mut self,
         refno: RefNo,
     ) -> Result<Option<ElementRecordView>, E3dReaderError> {
-        let roots = self.find_all_index_roots()?;
-
-        // A Dabacon session appends a new version of a record instead of
-        // overwriting the old one, and the index goes on addressing every
-        // version: `ams1112_0001` holds twelve readable copies of SITE 9304/2.
-        // Answering with the first root that confirmed took whichever copy was
-        // indexed first, which is the oldest — the copy it returned for that
-        // SITE was missing the UDA value E3D reports. The record scan below
-        // already reads backwards for exactly this reason; this now agrees
-        // with it and takes the copy furthest into the file.
-        let mut newest: Option<(u32, u32, ElementRecordView)> = None;
-        for &(root_page, _) in &roots {
-            let Ok(Some(result)) = self.search_index(root_page, refno) else {
-                continue;
-            };
-            let at = (result.entry.page_no, result.entry.offset_words);
-            if newest
-                .as_ref()
-                .is_some_and(|(page, offset, _)| (*page, *offset) >= at)
-            {
-                continue;
-            }
-            let Ok(view) = record::read_element_record(&mut self.cache, &result.entry) else {
-                continue;
-            };
-            let Ok(parsed) = record::element::ParsedElement::parse(&view.raw_bytes) else {
-                continue;
-            };
-            if parsed.refno == refno {
-                newest = Some((at.0, at.1, view));
-            }
+        let Some(found) = self.search_index(refno)? else {
+            return Ok(None);
+        };
+        let view = record::read_element_record(&mut self.cache, &found.entry)?;
+        let stated = RefNo::new(
+            u32::from_be_bytes(view.raw_bytes[4..8].try_into().expect("record header")),
+            u32::from_be_bytes(view.raw_bytes[8..12].try_into().expect("record header")),
+        );
+        if stated != refno {
+            return Err(E3dReaderError::IndexRecordMismatch {
+                refno,
+                page_no: found.entry.page_no,
+                byte_offset: found.entry.offset_words * 2,
+                found: stated,
+            });
         }
-        if let Some((_, _, view)) = newest {
-            return Ok(Some(view));
-        }
-
-        self.find_element_by_record_scan(refno)
+        Ok(Some(view))
     }
 
-    /// Last-resort lookup for live/session records that are present in data pages but absent
-    /// from the B+tree leaves exposed by the current file snapshot.
+    /// Read the record at an address the caller already has.
     ///
-    /// Pages and candidates are visited backwards because Dabacon sessions append newer record
-    /// versions later in the file.  A byte-pattern hit is accepted only when it also has a
-    /// plausible element header and the normal record parser confirms the requested RefNo.
-    pub fn find_element_by_record_scan(
-        &mut self,
-        refno: RefNo,
-    ) -> Result<Option<ElementRecordView>, E3dReaderError> {
-        for page_no in (0..self.readable_page_count()).rev() {
-            let candidates = {
-                let page = self.cache.get_page(page_no)?;
-                record_candidate_offsets(page, refno)
-            };
-            for offset_words in candidates.into_iter().rev() {
-                let Ok(view) = self.read_element_direct(refno, page_no, offset_words) else {
-                    continue;
-                };
-                let Ok(parsed) = record::element::ParsedElement::parse(&view.raw_bytes) else {
-                    continue;
-                };
-                if parsed.refno == refno {
-                    return Ok(Some(view));
-                }
-            }
-        }
-        Ok(None)
-    }
-
-    /// Read an element directly given page_no and offset_words (bypassing B+tree search).
-    /// Use when you already have the location from scan_all_indexed_refnos.
+    /// The RefNo is carried into the view unchecked, so a caller probing a
+    /// location can still see which element is really there.
     pub fn read_element_direct(
         &mut self,
         refno: RefNo,
@@ -484,67 +384,6 @@ impl ReadOnlyEngine {
             },
             skipped,
         })
-    }
-}
-
-fn record_candidate_offsets(page: &[u8], target: RefNo) -> Vec<u32> {
-    const MIN_ELEMENT_HEADER_WORDS: u32 = 6;
-    const MAX_IMPLICIT_WORDS: u32 = 16 * 1024;
-    // Public and internal E3D noun identifiers occupy the system-name range;
-    // tiny integers in later extents are page/array fields, not noun hashes.
-    const MIN_NOUN_HASH: u32 = 0x0008_0000;
-
-    if page.len() < 24 {
-        return Vec::new();
-    }
-    let target = target.to_be_bytes();
-    let mut offsets = Vec::new();
-    for start in (0..=page.len() - 24).step_by(4) {
-        if page[start + 4..start + 12] != target {
-            continue;
-        }
-        let implicit_words = u32::from_be_bytes(page[start..start + 4].try_into().unwrap());
-        if !(MIN_ELEMENT_HEADER_WORDS..=MAX_IMPLICIT_WORDS).contains(&implicit_words) {
-            continue;
-        }
-        let noun_hash = u32::from_be_bytes(page[start + 12..start + 16].try_into().unwrap());
-        if noun_hash < MIN_NOUN_HASH {
-            continue;
-        }
-        offsets.push((start / 2) as u32);
-    }
-    offsets
-}
-
-#[cfg(test)]
-mod record_scan_tests {
-    use super::*;
-
-    #[test]
-    fn candidate_scan_rejects_owner_hits_and_keeps_element_headers() {
-        let target = RefNo::new(24383, 73930);
-        let mut page = vec![0u8; 128];
-
-        // An owner/member reference has no plausible implicit-length word immediately before it.
-        page[12..20].copy_from_slice(&target.to_be_bytes());
-
-        // A real element header: impl_len, self RefNo, noun hash, owner RefNo.
-        page[64..68].copy_from_slice(&86u32.to_be_bytes());
-        page[68..76].copy_from_slice(&target.to_be_bytes());
-        page[76..80].copy_from_slice(&0x000C_551Cu32.to_be_bytes());
-        page[80..88].copy_from_slice(&RefNo::new(24383, 73929).to_be_bytes());
-
-        assert_eq!(record_candidate_offsets(&page, target), vec![32]);
-    }
-
-    #[test]
-    fn candidate_scan_rejects_small_page_fields_as_noun_hashes() {
-        let target = RefNo::new(24383, 73930);
-        let mut page = vec![0u8; 64];
-        page[0..4].copy_from_slice(&25u32.to_be_bytes());
-        page[4..12].copy_from_slice(&target.to_be_bytes());
-        page[12..16].copy_from_slice(&5u32.to_be_bytes());
-        assert!(record_candidate_offsets(&page, target).is_empty());
     }
 }
 

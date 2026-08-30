@@ -306,6 +306,17 @@ pub fn walk_chain(
     Ok(out)
 }
 
+/// The newest session, in one page read.
+///
+/// The chain head is where the descriptor says it is; walking to find it, as
+/// [`walk_chain`] does, costs a page per session and answers the same.
+pub fn latest(
+    pages: &mut PageCache,
+    descriptor: &DbDescriptor,
+) -> Result<SessionPage, SessionError> {
+    read_session(pages, descriptor.latest_session_page())
+}
+
 /// The one place a selector becomes a session page.
 ///
 /// Returns the session and how many session pages had to be read to reach it.
@@ -316,7 +327,7 @@ fn resolve(
     path: &Path,
 ) -> Result<(SessionPage, u32), SessionError> {
     let newest_page = descriptor.latest_session_page();
-    let newest = read_session(pages, newest_page)?;
+    let newest = latest(pages, descriptor)?;
     let mut read = 1u32;
 
     let wanted = match want {

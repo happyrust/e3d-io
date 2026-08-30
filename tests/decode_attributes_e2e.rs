@@ -20,7 +20,6 @@
 use std::path::Path;
 
 use e3d_attlib::{db1_hash, is_system_hash, lookup_system_name, AttlibData, AttrDataType};
-use e3d_io::index::IndexPageView;
 use e3d_io::record::element::ParsedElement;
 use e3d_io::ReadOnlyEngine;
 
@@ -50,22 +49,7 @@ fn schema_driven_attribute_decode_first_element() {
 
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("DB must open");
 
-    let root_page = engine
-        .find_index_root()
-        .expect("find root failed")
-        .expect("root must exist");
-
-    let root_view = {
-        let data = engine.read_page(root_page).expect("read root page");
-        IndexPageView::parse(data).expect("parse root index")
-    };
-
-    let target = root_view
-        .entries
-        .iter()
-        .find(|e| !e.is_start_marker())
-        .expect("root must have a non-marker entry")
-        .refno;
+    let target = engine.indexed_refnos().expect("read the index")[0].0;
 
     let view = engine
         .find_element(target)

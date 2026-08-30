@@ -199,6 +199,17 @@ pub enum E3dReaderError {
     #[error("index search failed at page {page_no}: {detail}")]
     IndexError { page_no: u32, detail: String },
 
+    #[error(
+        "the index says {refno} is at page {page_no} byte {byte_offset}, and the record there is \
+         {found}"
+    )]
+    IndexRecordMismatch {
+        refno: crate::refno::RefNo,
+        page_no: u32,
+        byte_offset: u32,
+        found: crate::refno::RefNo,
+    },
+
     #[error("page {page_no} out of range (total {total_pages})")]
     PageOutOfRange { page_no: u32, total_pages: u32 },
 

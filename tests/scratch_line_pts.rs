@@ -43,7 +43,7 @@ fn report_every_line_pts_array() {
         .expect("load LINE template")
         .expect("LINE template present")
         .clone();
-    let mut indexed = engine.scan_all_indexed_refnos().expect("scan index");
+    let mut indexed = engine.indexed_refnos().expect("scan index");
     indexed.sort_by_key(|(refno, _, _)| (refno.word0, refno.word1));
     indexed.dedup_by_key(|(refno, _, _)| (refno.word0, refno.word1));
     println!("indexed elements: {}", indexed.len());

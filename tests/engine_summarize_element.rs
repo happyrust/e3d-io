@@ -5,7 +5,6 @@
 use std::path::Path;
 
 use e3d_attlib::AttlibData;
-use e3d_io::index::IndexPageView;
 use e3d_io::record::atnlog::AttrValue;
 use e3d_io::ReadOnlyEngine;
 
@@ -25,16 +24,7 @@ fn summarize_first_fixture_element() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
 
-    let root = engine.find_index_root().unwrap().expect("root");
-    let target = {
-        let data = engine.read_page(root).unwrap().to_vec();
-        let view = IndexPageView::parse(&data).unwrap();
-        view.entries
-            .iter()
-            .find(|e| !e.is_start_marker())
-            .unwrap()
-            .refno
-    };
+    let target = engine.indexed_refnos().expect("read the index")[0].0;
 
     let summary = engine
         .summarize_element(target, &attlib, 3)

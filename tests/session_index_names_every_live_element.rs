@@ -1,3 +1,12 @@
+//! An element the record scan was written for, found by one descent.
+//!
+//! `find_element` used to end in a whole-file byte scan for the RefNo,
+//! because on this database the roots it searched did not name this BRAN.
+//! Those roots came from reading every page and keeping the index pages no
+//! other index page named, which finds the current tree along with every tree
+//! an earlier session left behind — and answers from whichever sorted first.
+//! The session's own root names it, so the scan has no work left to cover for
+//! and is gone.
 use e3d_attlib::{db1_hash, AttlibData};
 use e3d_io::record::descriptor::{AttributeExtractionStatus, DescriptorValue};
 use e3d_io::record::element::ParsedElement;
@@ -14,30 +23,28 @@ mod common;
 
 const FIXTURES: &[&str] = &[DB, DESVIR, ATTLIB];
 
+/// This BRAN was the fixture for the record scan: it appeared to be missing
+/// from the index, so `find_element` fell back to reading the whole file
+/// backwards looking for its RefNo as a byte pattern. It was never missing.
+/// The reader was searching the wrong trees — every index page in the file
+/// rather than the one the session names — and the scan was covering for it.
 #[test]
-fn finds_live_bran_missing_from_btree_and_decodes_explicit_name() {
+fn the_session_index_names_the_bran_the_record_scan_was_written_for() {
     if common::missing(FIXTURES) {
         return;
     }
     let target = RefNo::new(24383, 73930);
     let mut engine = ReadOnlyEngine::open(DB).expect("open AMS 7999");
-    let indexed = engine
-        .scan_all_indexed_refnos()
-        .expect("scan B+tree leaves");
-    // This element used to be reachable only by scanning records, which is
-    // what made it the fixture for that path. It now also has a leaf entry, so
-    // the lookup below no longer proves the fallback works — say so rather
-    // than fail, and keep the decode assertions, which still hold either way.
-    if indexed.iter().any(|(candidate, _, _)| *candidate == target) {
-        eprintln!(
-            "note: {target} is indexed now, so this run exercises the B+tree path, \
-             not the record scan"
-        );
-    }
+    let indexed = engine.indexed_refnos().expect("read the index");
+    assert!(
+        indexed.iter().any(|(candidate, _, _)| *candidate == target),
+        "{target} is indexed by session {}",
+        engine.session().sesno
+    );
 
     let view = engine
         .find_element(target)
-        .expect("scan fallback")
+        .expect("one descent")
         .expect("BRAN record must be found");
     let parsed = ParsedElement::parse(&view.raw_bytes).expect("parse BRAN record");
     assert_eq!(parsed.refno, target);

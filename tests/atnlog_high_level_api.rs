@@ -8,11 +8,11 @@
 use std::path::Path;
 
 use e3d_attlib::AttlibData;
-use e3d_io::index::IndexPageView;
 use e3d_io::record::atnlog::{
     self, decode_attribute_by_hash, AttrValue, LookupError, DEFAULT_HEADER_WORDS, SYNO_CHAIN_HASH,
 };
 use e3d_io::record::element::ParsedElement;
+use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 
 const DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
@@ -20,6 +20,15 @@ const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat
 
 fn fixtures_present() -> bool {
     Path::new(DB_PATH).exists() && Path::new(ATTLIB_PATH).exists()
+}
+
+/// The first element the current session indexes.
+///
+/// This used to parse the index root as though it were a leaf and take its
+/// first entry, which only worked while the root discovery happened to return
+/// a one-level tree.
+fn first_indexed_refno(engine: &mut ReadOnlyEngine) -> RefNo {
+    engine.indexed_refnos().expect("read the index")[0].0
 }
 
 #[test]
@@ -32,17 +41,7 @@ fn high_level_decode_on_fixture_root_element() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
 
-    let root = engine.find_index_root().unwrap().expect("root");
-    let root_view = {
-        let data = engine.read_page(root).unwrap();
-        IndexPageView::parse(data).expect("parse root")
-    };
-    let target = root_view
-        .entries
-        .iter()
-        .find(|e| !e.is_start_marker())
-        .expect("non-marker")
-        .refno;
+    let target = first_indexed_refno(&mut engine);
 
     let view = engine.find_element(target).unwrap().expect("element");
     let parsed = ParsedElement::parse(&view.raw_bytes).expect("parse element");
@@ -158,17 +157,7 @@ fn lookup_unknown_hash_returns_not_in_attlib() {
     }
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
-    let root = engine.find_index_root().unwrap().expect("root");
-    let root_view = {
-        let data = engine.read_page(root).unwrap();
-        IndexPageView::parse(data).expect("parse root")
-    };
-    let target = root_view
-        .entries
-        .iter()
-        .find(|e| !e.is_start_marker())
-        .unwrap()
-        .refno;
+    let target = first_indexed_refno(&mut engine);
     let view = engine.find_element(target).unwrap().expect("element");
     let parsed = ParsedElement::parse(&view.raw_bytes).expect("parse element");
     // 0x99999999 is in the system hash range but is statistically not in

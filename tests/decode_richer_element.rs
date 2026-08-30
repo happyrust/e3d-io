@@ -29,7 +29,7 @@ fn decode_a_larger_fixture_element() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("DB");
 
-    let refnos = engine.scan_all_indexed_refnos().expect("scan refnos");
+    let refnos = engine.indexed_refnos().expect("scan refnos");
     println!("\n=== Slice 4 step 5 — scan for richer element ===");
     println!("[db] {} indexed refnos", refnos.len());
 

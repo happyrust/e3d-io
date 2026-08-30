@@ -30,7 +30,7 @@ fn print_uda_definition_copies() {
         return;
     }
     let mut engine = ReadOnlyEngine::open(&path).expect("open dictionary");
-    let entries = engine.scan_all_indexed_refnos().expect("scan index");
+    let entries = engine.indexed_refnos().expect("scan index");
     let refno = RefNo::new(13292, 23);
     let answered = engine
         .find_element(refno)
@@ -96,7 +96,7 @@ fn print_disputed_copies() {
         return;
     }
     let mut engine = ReadOnlyEngine::open(&path).expect("open database");
-    let entries = engine.scan_all_indexed_refnos().expect("scan index");
+    let entries = engine.indexed_refnos().expect("scan index");
 
     for (noun, w0, w1, sampled) in WANTED {
         let refno = RefNo::new(*w0, *w1);

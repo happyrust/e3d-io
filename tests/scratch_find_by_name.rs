@@ -25,7 +25,7 @@ fn find_elements_by_name() {
         return;
     }
     let mut engine = ReadOnlyEngine::open(&path).expect("open database");
-    let entries = engine.scan_all_indexed_refnos().expect("scan index");
+    let entries = engine.indexed_refnos().expect("scan index");
     println!("{DB}: {} indexed entries", entries.len());
 
     let name_hash = db1_hash("NAME");

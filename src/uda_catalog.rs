@@ -127,11 +127,15 @@ pub struct UdaDefinitionIssue {
 }
 
 impl UdaCatalog {
-    /// Read all valid, latest `UDA` elements indexed by a Dictionary database.
+    /// Read every `UDA` element the Dictionary database's current session
+    /// indexes.
     ///
-    /// Index leaves can contain duplicate versions and false candidate RefNos.
-    /// Every candidate is therefore reopened through the engine and accepted
-    /// only when the normal element parser confirms both identity and noun.
+    /// The candidate list used to come from every index page in the file, live
+    /// or abandoned, so it carried older copies and RefNos out of trees no
+    /// session reaches; each one was reopened and kept only if the parser
+    /// confirmed its identity and noun. The session's own tree names each
+    /// element once, at the copy that session wrote, so those two filters are
+    /// now checks rather than the mechanism.
     pub fn read(
         dictionary_db: impl AsRef<Path>,
         dicvir: impl AsRef<Path>,
@@ -142,8 +146,8 @@ impl UdaCatalog {
         let mut provider = TemplateProvider::open(dicvir, Some(DICTIONARY_TEMPLATE_TYPE))
             .map_err(|error| format!("open Dictionary descriptors: {error}"))?;
         let mut candidates = engine
-            .scan_all_indexed_refnos()
-            .map_err(|error| format!("scan Dictionary index: {error}"))?
+            .indexed_refnos()
+            .map_err(|error| format!("read the Dictionary index: {error}"))?
             .into_iter()
             .map(|(refno, _, _)| refno)
             .collect::<Vec<_>>();

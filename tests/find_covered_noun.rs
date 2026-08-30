@@ -78,7 +78,7 @@ fn report_attlib_coverage_and_find_decodable_noun() {
     // Now scan the DB for elements whose noun_hash matches one of the
     // covered nouns and report the first hit per noun.
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
-    let refnos = engine.scan_all_indexed_refnos().expect("scan all refnos");
+    let refnos = engine.indexed_refnos().expect("scan all refnos");
 
     println!("\n[db] {} indexed refnos", refnos.len());
 

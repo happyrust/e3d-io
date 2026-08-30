@@ -9,7 +9,6 @@
 use std::path::Path;
 
 use e3d_attlib::{is_system_hash, lookup_system_name, AttlibData};
-use e3d_io::index::IndexPageView;
 use e3d_io::record::atnlog::{self, AttrValue, DEFAULT_HEADER_WORDS};
 use e3d_io::record::element::ParsedElement;
 use e3d_io::ReadOnlyEngine;
@@ -31,17 +30,7 @@ fn decode_first_fixture_element_attributes() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
 
-    let root = engine.find_index_root().unwrap().expect("root");
-    let root_view = {
-        let data = engine.read_page(root).unwrap();
-        IndexPageView::parse(data).expect("parse root")
-    };
-    let target = root_view
-        .entries
-        .iter()
-        .find(|e| !e.is_start_marker())
-        .expect("non-marker")
-        .refno;
+    let target = engine.indexed_refnos().expect("read the index")[0].0;
 
     let view = engine.find_element(target).unwrap().expect("element");
     let parsed = ParsedElement::parse(&view.raw_bytes).expect("parse element");

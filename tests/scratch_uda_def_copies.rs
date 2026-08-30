@@ -22,7 +22,7 @@ fn dump_definition_copies() {
     }
     let path = Path::new(AMS).join("ams5100_0001");
     let mut engine = ReadOnlyEngine::open(&path).expect("open");
-    let entries = engine.scan_all_indexed_refnos().expect("scan");
+    let entries = engine.indexed_refnos().expect("scan");
 
     for refno in [
         RefNo::new(13292, 147), // :3D_SJJD  -> E3D reports C

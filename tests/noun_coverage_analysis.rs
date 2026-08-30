@@ -48,7 +48,7 @@ fn report_per_noun_summarize_quality() {
     let mut engine = ReadOnlyEngine::open(DB_PATH).unwrap();
 
     // Sample a window of RefNos to keep the test fast. We avoid the
-    // full scan_all_indexed_refnos (slow on 9304-page fixtures) and
+    // full indexed_refnos (slow on 9304-page fixtures) and
     // instead probe a small set of plausible RefNos around known
     // hot ones (17496/9621 NXTR, 17496/924 STWALL from prior steps),
     // plus a few neighbours, to surface the noun diversity that's

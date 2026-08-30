@@ -28,7 +28,7 @@ fn print_every_copy() {
         return;
     }
     let mut engine = ReadOnlyEngine::open(&path).expect("open database");
-    let entries = engine.scan_all_indexed_refnos().expect("scan index");
+    let entries = engine.indexed_refnos().expect("scan index");
 
     for (noun, w0, w1) in WANTED {
         let refno = RefNo::new(*w0, *w1);

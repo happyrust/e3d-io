@@ -27,7 +27,6 @@ use std::path::Path;
 
 use e3d_attlib::parser::AttrSource;
 use e3d_attlib::AttlibData;
-use e3d_io::index::IndexPageView;
 use e3d_io::ReadOnlyEngine;
 
 const DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
@@ -106,15 +105,7 @@ fn summarize_element_emits_no_hex_fallback_names() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).unwrap();
     let mut engine = ReadOnlyEngine::open(DB_PATH).unwrap();
 
-    let root = engine.find_index_root().unwrap().unwrap();
-    let leaf_data = engine.read_page(root).unwrap().to_vec();
-    let leaf = IndexPageView::parse(&leaf_data).unwrap();
-    let target = leaf
-        .entries
-        .iter()
-        .find(|e| !e.is_start_marker())
-        .unwrap()
-        .refno;
+    let target = engine.indexed_refnos().unwrap()[0].0;
 
     let summary = engine.summarize_element(target, &attlib, 3).unwrap();
 
