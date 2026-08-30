@@ -97,6 +97,32 @@ const EXPLICIT_SLOT: usize = 24;
 /// Byte offset of the header slot addressing the member list.
 const MEMBERS_SLOT: usize = 32;
 
+/// The first word of every page an element record lives on.
+///
+/// Over the 429-file corpus, the 106 807 pages holding any part of any live
+/// record all state 7, and no index leaf value or block continuation ever
+/// lands on a page that does not
+/// (`docs/evidence/2026-08-30-e3d-io-data-page-header.md`). So a page stating
+/// anything else is refused before a byte of it is believed — a wrong page
+/// number used to be discovered only if the record it happened to describe
+/// failed to parse, or not at all.
+const ELEMENT_PAGE: u32 = 7;
+
+/// The eleven-word header every record starts with, without its blocks.
+///
+/// Everything here is read from the header alone — one page read, no chain
+/// walking — which is what a whole-database scan wants for the fields a
+/// derived index is built from: the noun is word 3, the owner words 4/5.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RecordHeader {
+    /// Length of the implicit region in 4-byte words, the header included.
+    pub implicit_words: u32,
+    /// The RefNo the record states for itself — the caller's to confirm.
+    pub refno: RefNo,
+    pub noun_hash: u32,
+    pub owner: RefNo,
+}
+
 /// Structured view of an element record read from the database.
 #[derive(Debug, Clone)]
 pub struct ElementRecordView {
@@ -138,6 +164,12 @@ pub struct RecordBytes {
 pub enum RecordError {
     #[error("{page} could not be read: {detail}")]
     Unreadable { page: PageId, detail: String },
+
+    #[error(
+        "{page} is not an element data page: its first word is {word0}, and every page an \
+         element record lives on states {ELEMENT_PAGE}"
+    )]
+    NotAnElementPage { page: PageId, word0: u32 },
 
     #[error("{page} holds {len} bytes, so nothing starts at byte {at}")]
     PastEndOfPage { page: PageId, at: usize, len: usize },
@@ -264,27 +296,13 @@ pub fn read_record(
     let at = offset_words as usize * 2;
     let page = page_of(pages, start)?;
 
-    let header = page
-        .get(at..)
-        .filter(|header| header.len() >= HEADER_WORDS as usize * 4)
-        .ok_or(RecordError::PastEndOfPage {
-            page: start,
-            at,
-            len: page.len(),
-        })?;
-    let implicit_words = be32(header, 0);
-    if implicit_words < HEADER_WORDS {
-        return Err(RecordError::NotARecord {
-            page: start,
-            at,
-            first_word: implicit_words,
-        });
-    }
-    let refno = RefNo::new(be32(header, 4), be32(header, 8));
-    let noun_hash = be32(header, 12);
-    let owner = RefNo::new(be32(header, 16), be32(header, 20));
-    let explicit = Address::at(header, EXPLICIT_SLOT);
-    let members = Address::at(header, MEMBERS_SLOT);
+    let (header, explicit, members) = header_at(page, start, at)?;
+    let RecordHeader {
+        implicit_words,
+        refno,
+        noun_hash,
+        owner,
+    } = header;
 
     let implicit_bytes = implicit_words as usize * 4;
     if at + implicit_bytes > page.len() {
@@ -403,6 +421,55 @@ fn gather(
     }
 }
 
+/// Read a record's eleven-word header and nothing else.
+///
+/// One page read, no chain walking: the noun, owner and self-stated RefNo at
+/// the cost of the page they sit on. `read_record` and this decode the header
+/// through the same [`header_at`], so they cannot disagree about it.
+pub fn read_record_header(
+    pages: &mut PageCache,
+    start: PageId,
+    offset_words: u32,
+) -> Result<RecordHeader, RecordError> {
+    let at = offset_words as usize * 2;
+    let page = page_of(pages, start)?;
+    header_at(page, start, at).map(|(header, _, _)| header)
+}
+
+/// Decode the record header at `at`, with the page's bounds respected.
+fn header_at(
+    page: &[u8],
+    page_id: PageId,
+    at: usize,
+) -> Result<(RecordHeader, Option<Address>, Option<Address>), RecordError> {
+    let header = page
+        .get(at..)
+        .filter(|header| header.len() >= HEADER_WORDS as usize * 4)
+        .ok_or(RecordError::PastEndOfPage {
+            page: page_id,
+            at,
+            len: page.len(),
+        })?;
+    let implicit_words = be32(header, 0);
+    if implicit_words < HEADER_WORDS {
+        return Err(RecordError::NotARecord {
+            page: page_id,
+            at,
+            first_word: implicit_words,
+        });
+    }
+    Ok((
+        RecordHeader {
+            implicit_words,
+            refno: RefNo::new(be32(header, 4), be32(header, 8)),
+            noun_hash: be32(header, 12),
+            owner: RefNo::new(be32(header, 16), be32(header, 20)),
+        },
+        Address::at(header, EXPLICIT_SLOT),
+        Address::at(header, MEMBERS_SLOT),
+    ))
+}
+
 /// Read the record an index entry addresses.
 ///
 /// An [`IndexEntry`] carries a bare page number, so `ext` says which file that
@@ -430,11 +497,21 @@ pub fn read_element_record(
     })
 }
 
+/// The page at `page`, if it is a page element records live on.
+///
+/// Every read this module makes comes through here, so the header check
+/// covers the record's own page and every page its block chains continue
+/// onto alike.
 fn page_of(pages: &mut PageCache, page: PageId) -> Result<&[u8], RecordError> {
-    pages.get(page).map_err(|source| RecordError::Unreadable {
+    let data = pages.get(page).map_err(|source| RecordError::Unreadable {
         page,
         detail: source.to_string(),
-    })
+    })?;
+    let word0 = be32(data, 0);
+    if word0 != ELEMENT_PAGE {
+        return Err(RecordError::NotAnElementPage { page, word0 });
+    }
+    Ok(data)
 }
 
 /// The four bytes at `at`, which the caller has already bounds-checked.
@@ -489,6 +566,7 @@ mod tests {
             explicit: (u32, u32),
             members: (u32, u32),
         ) {
+            self.put(page, 0, ELEMENT_PAGE);
             self.words(
                 page,
                 at,
@@ -518,6 +596,7 @@ mod tests {
             cont: (u32, u32),
             payload: &[u32],
         ) {
+            self.put(page, 0, ELEMENT_PAGE);
             let words = block::MIN_WORDS as u32 + payload.len() as u32;
             self.put(page, at, (u32::from(kind) << 16) | words);
             self.words(page, at + 4, &[owner.word0, owner.word1, cont.0, cont.1]);
@@ -638,6 +717,9 @@ mod tests {
     fn an_address_that_holds_no_block_is_an_error_not_a_short_record() {
         let mut db = Db::new(3);
         db.record(1, 8, 12, OWNER, address(2, 4), (0, 0));
+        // Page 2 is an element page with nothing at byte 4 — the dangling
+        // address is the failure here, not the page's type.
+        db.put(2, 0, ELEMENT_PAGE);
 
         let error = read(&db, 1, 4).unwrap_err();
         assert!(
@@ -683,11 +765,48 @@ mod tests {
     #[test]
     fn a_location_that_holds_no_record_says_so() {
         let mut db = Db::new(2);
+        db.put(1, 0, ELEMENT_PAGE);
         db.put(1, 8, 3);
 
         let error = read(&db, 1, 4).unwrap_err();
         assert!(
             matches!(error, RecordError::NotARecord { first_word: 3, .. }),
+            "{error}"
+        );
+    }
+
+    /// **Reverting to an unchecked page read turns this red.** The record on
+    /// the page is perfectly well formed; what is wrong is the page — its
+    /// first word says index tree, and core.dll refuses a page whose header
+    /// is not the one asked for rather than reading records off it.
+    #[test]
+    fn a_page_that_is_not_an_element_page_is_refused_before_its_bytes_are_believed() {
+        let mut db = Db::new(2);
+        db.record(1, 8, 12, OWNER, (0, 0), (0, 0));
+        // The same page re-labelled as a tree page: 5, then the index tree id.
+        db.put(1, 0, 5);
+        db.put(1, 4, 13_387_743);
+
+        let error = read(&db, 1, 4).unwrap_err();
+        assert!(
+            matches!(error, RecordError::NotAnElementPage { word0: 5, .. }),
+            "{error}"
+        );
+        assert!(error.to_string().contains("first word is 5"), "{error}");
+
+        // A chain that leaves the element pages is refused the same way.
+        let mut db = Db::new(3);
+        db.record(1, 8, 12, OWNER, address(2, 4), (0, 0));
+        db.block(2, 4, 1, OWNER, (0, 0), &[0x000A_AFCA, 0x1400_0001]);
+        db.put(2, 0, 5);
+
+        let error = read(&db, 1, 4).unwrap_err();
+        assert!(
+            matches!(
+                error,
+                RecordError::NotAnElementPage { word0: 5, page }
+                    if page == PageId::primary(2)
+            ),
             "{error}"
         );
     }

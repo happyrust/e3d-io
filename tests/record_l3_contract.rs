@@ -182,7 +182,20 @@ fn a_location_that_is_not_a_record_is_refused() {
         return;
     }
     let mut view = DbView::open(AMS8000).expect("sample database opens");
-    // Page 0 is the descriptor; its first word is the page type, which is 0.
+    // Page 0 is the descriptor; its first word is the page type, which is 0 —
+    // refused as the wrong kind of page before its bytes are read as a record.
     let error = read_record(view.pages_mut(), PageId::primary(0), 0).unwrap_err();
-    assert!(error.to_string().contains("no element record"), "{error}");
+    assert!(
+        error.to_string().contains("not an element data page"),
+        "{error}"
+    );
+
+    // The root of the live index tree is a type-5 page and is refused the
+    // same way, by name.
+    let root = view.index_root();
+    let error = read_record(view.pages_mut(), root, 0).unwrap_err();
+    assert!(
+        error.to_string().contains("first word is 5"),
+        "{error}"
+    );
 }
