@@ -96,7 +96,7 @@ fn census_record_layout_by_format_word() {
     let mut no_format_word = 0usize;
 
     for entry in &entries {
-        let Ok(view) = read_element_record(&mut cache, entry) else {
+        let Ok(view) = read_element_record(&mut cache, e3d_io::page::PageId::PRIMARY, entry) else {
             unreadable += 1;
             continue;
         };

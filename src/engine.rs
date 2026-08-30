@@ -187,7 +187,11 @@ impl ReadOnlyEngine {
         let Some(found) = self.search_index(refno)? else {
             return Ok(None);
         };
-        let view = record::read_element_record(&mut self.cache, &found.entry)?;
+        // The entry names a page but not a file. Every page of the descended
+        // tree inherits the root's extent — the rule `RecordLoc` states — so
+        // the root's extent is the entry's.
+        let ext = self.session.index_root.ext;
+        let view = record::read_element_record(&mut self.cache, ext, &found.entry)?;
         let stated = RefNo::new(
             u32::from_be_bytes(view.raw_bytes[4..8].try_into().expect("record header")),
             u32::from_be_bytes(view.raw_bytes[8..12].try_into().expect("record header")),
@@ -205,6 +209,10 @@ impl ReadOnlyEngine {
 
     /// Read the record at an address the caller already has.
     ///
+    /// A bare page number names a page of the primary extent; a caller who
+    /// has an address in another extent has a `PageId` saying so and
+    /// [`record::read_element_record`] takes it directly.
+    ///
     /// The RefNo is carried into the view unchecked, so a caller probing a
     /// location can still see which element is really there.
     pub fn read_element_direct(
@@ -220,7 +228,7 @@ impl ReadOnlyEngine {
             offset_words,
             flag: 0,
         };
-        record::read_element_record(&mut self.cache, &entry)
+        record::read_element_record(&mut self.cache, PageId::PRIMARY, &entry)
     }
 
     /// Resolve an attribute value for an element by RefNo, walking the

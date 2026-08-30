@@ -93,7 +93,7 @@ fn pick_tty_sample_elements() {
     let mut picked: BTreeMap<(u32, bool), Vec<(u32, u32, i32)>> = BTreeMap::new();
 
     for entry in &entries {
-        let Ok(view) = read_element_record(&mut cache, entry) else {
+        let Ok(view) = read_element_record(&mut cache, e3d_io::page::PageId::PRIMARY, entry) else {
             continue;
         };
         let Ok(parsed) = ParsedElement::parse(&view.raw_bytes) else {

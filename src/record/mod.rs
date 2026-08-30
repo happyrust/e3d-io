@@ -405,15 +405,22 @@ fn gather(
 
 /// Read the record an index entry addresses.
 ///
+/// An [`IndexEntry`] carries a bare page number, so `ext` says which file that
+/// number addresses: the extent of the index page that named the entry, which
+/// is the same inheritance rule [`crate::index::RecordLoc`] states. This used
+/// to be hard-coded to the primary extent, which reads every single-extent
+/// database correctly and the wrong file on any other.
+///
 /// The entry's RefNo is carried through unchecked. Whether the record agrees
 /// is L3's caller's question, and the two answers are worth keeping apart: a
 /// key that resolves to somebody else's record is a different fact from a key
 /// that resolves to nothing.
 pub fn read_element_record(
     cache: &mut PageCache,
+    ext: u16,
     entry: &IndexEntry,
 ) -> Result<ElementRecordView, E3dReaderError> {
-    let record = read_record(cache, PageId::primary(entry.page_no), entry.offset_words)?;
+    let record = read_record(cache, PageId::new(ext, entry.page_no), entry.offset_words)?;
     Ok(ElementRecordView {
         refno: entry.refno,
         address: entry.to_page_address(),
@@ -682,6 +689,35 @@ mod tests {
         assert!(
             matches!(error, RecordError::NotARecord { first_word: 3, .. }),
             "{error}"
+        );
+    }
+
+    /// **Reverting to the hard-coded primary extent turns this red.** The
+    /// caller says which file an entry's page number addresses; a stated
+    /// extent that is not open is [`RecordError::Unreadable`] naming it, not a
+    /// quiet read of the same page number in the primary file.
+    #[test]
+    fn an_entry_is_read_from_the_extent_the_caller_names() {
+        use crate::index::IndexEntry;
+
+        let mut db = Db::new(2);
+        db.record(1, 8, 12, OWNER, (0, 0), (0, 0));
+        let (_dir, mut cache) = db.open();
+        let entry = IndexEntry {
+            refno: OWNER,
+            page_no: 1,
+            offset_words: 4,
+            flag: 1,
+        };
+
+        let view = read_element_record(&mut cache, PageId::PRIMARY, &entry)
+            .expect("the primary extent reads");
+        assert_eq!(view.refno, OWNER);
+
+        let error = read_element_record(&mut cache, 2, &entry).unwrap_err();
+        assert!(
+            error.to_string().contains("extent 2"),
+            "the missing extent is named, not redirected: {error}"
         );
     }
 

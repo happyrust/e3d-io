@@ -146,9 +146,10 @@ fn the_reader_hands_over_exactly_what_the_parser_consumes() {
             .collect();
 
         let mut shapes: BTreeMap<usize, usize> = BTreeMap::new();
+        let root_ext = view.index_root().ext;
         let pages = view.pages_mut();
         for entry in &entries {
-            let view = read_element_record(pages, entry).expect("the record reads");
+            let view = read_element_record(pages, root_ext, entry).expect("the record reads");
             let parsed = ParsedElement::parse(&view.raw_bytes).expect("the record parses");
             assert_eq!(
                 parsed.prefix_offset, 0,
