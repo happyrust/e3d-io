@@ -61,6 +61,28 @@ impl DbDescriptor {
         }
         let r = |off: usize| u32::from_be_bytes(data[off..off + 4].try_into().unwrap());
 
+        // Session pages check for type 3 and index pages for type 5; page 0
+        // gets the same courtesy. A file whose first word is not 0 is not a
+        // database opened at the wrong session, it is not this kind of file.
+        let bucket_type_id = r(at::PAGE_TYPE);
+        if PageType::from_raw(bucket_type_id) != PageType::Descriptor {
+            return Err(E3dReaderError::InvalidPage {
+                page_no: Self::PAGE_INDEX,
+                detail: format!("page type {bucket_type_id} is not a descriptor page (type 0)"),
+            });
+        }
+
+        // `extent()` hands this out as a u16 page address. Refusing the
+        // overflow here keeps that conversion infallible, where it used to
+        // fall back to the primary extent without a word.
+        let ext_no = r(at::EXT_NO);
+        if u16::try_from(ext_no).is_err() {
+            return Err(E3dReaderError::InvalidPage {
+                page_no: Self::PAGE_INDEX,
+                detail: format!("ext_no {ext_no} does not fit in a u16 extent number"),
+            });
+        }
+
         let page_size_words = r(at::PAGE_SIZE_WORDS);
         let page_size = PageSize::from_header_words(page_size_words).map_err(|source| {
             E3dReaderError::InvalidPage {
@@ -70,13 +92,13 @@ impl DbDescriptor {
         })?;
 
         Ok(Self {
-            bucket_type_id: r(at::PAGE_TYPE),
+            bucket_type_id,
             noun: r(at::NOUN),
             page_size: page_size.bytes() as u32,
             page_size_words,
             db_mark: r(at::DB_NUM),
             latest_ses_pgno: r(at::LATEST_SES_PGNO),
-            ext_no: r(at::EXT_NO),
+            ext_no,
             session_page_no: r(at::FIRST_SES_PGNO),
             primary_extent_ref: r(at::PRIMARY_EXTENT_REF),
         })
@@ -98,12 +120,15 @@ impl DbDescriptor {
     }
 
     /// This file's extent number, falling back to the primary when the header
-    /// states 0 — which no sampled database does.
+    /// states 0 — which no sampled database does. A value past `u16::MAX` was
+    /// refused by [`DbDescriptor::parse`], so the conversion cannot truncate.
     fn extent(&self) -> u16 {
-        u16::try_from(self.ext_no)
-            .ok()
-            .filter(|&e| e != 0)
-            .unwrap_or(PageId::PRIMARY)
+        let ext = u16::try_from(self.ext_no).expect("validated in DbDescriptor::parse");
+        if ext == 0 {
+            PageId::PRIMARY
+        } else {
+            ext
+        }
     }
 
     /// Page 0 must be a descriptor page.

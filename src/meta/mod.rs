@@ -292,6 +292,34 @@ mod tests {
         );
     }
 
+    /// Page 0 states its own type, and the parser now holds it to that: a
+    /// session page handed in as a descriptor is refused, not reinterpreted.
+    #[test]
+    fn descriptor_page_type_is_validated() {
+        let mut page = ams8000_page0();
+        page[0x00..0x04].copy_from_slice(&3u32.to_be_bytes());
+        let err = DbDescriptor::parse(&page).unwrap_err();
+        assert!(
+            matches!(err, E3dReaderError::InvalidPage { page_no: 0, .. }),
+            "{err}"
+        );
+        assert!(err.to_string().contains("page type 3"), "{err}");
+    }
+
+    /// **Reverting `extent()` to the fallback turns this red.** An `ext_no`
+    /// past `u16::MAX` used to become the primary extent without a word.
+    #[test]
+    fn descriptor_extent_past_u16_is_refused() {
+        let mut page = ams8000_page0();
+        page[0x2C..0x30].copy_from_slice(&0x1_0000u32.to_be_bytes());
+        let err = DbDescriptor::parse(&page).unwrap_err();
+        assert!(
+            matches!(err, E3dReaderError::InvalidPage { page_no: 0, .. }),
+            "{err}"
+        );
+        assert!(err.to_string().contains("65536"), "{err}");
+    }
+
     #[test]
     fn extent_refs_lists_primary_first() {
         let mut page0 = ams8000_page0();

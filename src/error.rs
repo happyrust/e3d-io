@@ -132,6 +132,17 @@ pub enum SessionError {
     #[error("{page} is page type {page_type}, not a session page (type 3)")]
     NotASessionPage { page: PageId, page_type: u32 },
 
+    #[error(
+        "{page} states extent {extno} for its {field} pointer, which does not fit in a u16 \
+         extent number"
+    )]
+    ExtentOutOfRange {
+        page: PageId,
+        /// Which of the page's pointers stated it.
+        field: &'static str,
+        extno: u32,
+    },
+
     #[error("{page} holds {len} bytes, too few for a session page ({need} needed)")]
     PageTooSmall {
         page: PageId,

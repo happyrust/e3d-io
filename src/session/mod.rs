@@ -106,8 +106,16 @@ impl SessionPage {
         }
 
         let last_pgno = r(at::LAST_SES_PGNO);
-        let previous = (!NO_PREVIOUS.contains(&last_pgno))
-            .then(|| address(r(at::LAST_SES_EXTNO), last_pgno, page.ext));
+        let previous = if NO_PREVIOUS.contains(&last_pgno) {
+            None
+        } else {
+            Some(address(
+                page,
+                "previous session",
+                r(at::LAST_SES_EXTNO),
+                last_pgno,
+            )?)
+        };
 
         let mut stamp_words = [0u32; at::STAMP_WORDS];
         for (i, word) in stamp_words.iter_mut().enumerate() {
@@ -119,9 +127,14 @@ impl SessionPage {
             sesno: r(at::SESNO),
             previous,
             reserved_10: r(at::RESERVED_10),
-            end: address(r(at::END_EXTNO), r(at::END_PGNO), page.ext),
-            index_root: address(r(at::INDEX_ROOT_EXTNO), r(at::INDEX_ROOT_PGNO), page.ext),
-            claim: address(r(at::CLAIM_EXTNO), r(at::CLAIM_PGNO), page.ext),
+            end: address(page, "end", r(at::END_EXTNO), r(at::END_PGNO))?,
+            index_root: address(
+                page,
+                "index root",
+                r(at::INDEX_ROOT_EXTNO),
+                r(at::INDEX_ROOT_PGNO),
+            )?,
+            claim: address(page, "claim", r(at::CLAIM_EXTNO), r(at::CLAIM_PGNO))?,
             machine: ascii_field(&data[at::MACHINE..at::COMMENT_LEN]),
             comment: comment(data, r(at::COMMENT_LEN)),
             stamp_words,
@@ -385,13 +398,25 @@ fn read_session(pages: &mut PageCache, page: PageId) -> Result<SessionPage, Sess
 /// A `(pageno, extno)` pair from a session page.
 ///
 /// An extent of 0 means "the same file", which is how every sampled database
-/// writes an address inside its own extent.
-fn address(extno: u32, pageno: u32, fallback_ext: u16) -> PageId {
-    let ext = u16::try_from(extno)
-        .ok()
-        .filter(|&e| e != 0)
-        .unwrap_or(fallback_ext);
-    PageId::new(ext, pageno)
+/// writes an address inside its own extent. An extent that does not fit in a
+/// u16 is refused: falling back to the page's own extent, as this used to,
+/// silently redirects the pointer into a different file, and no caller can
+/// tell a redirected address from a stated one.
+fn address(
+    page: PageId,
+    field: &'static str,
+    extno: u32,
+    pageno: u32,
+) -> Result<PageId, SessionError> {
+    let ext = match extno {
+        0 => page.ext,
+        stated => u16::try_from(stated).map_err(|_| SessionError::ExtentOutOfRange {
+            page,
+            field,
+            extno,
+        })?,
+    };
+    Ok(PageId::new(ext, pageno))
 }
 
 /// NUL-padded printable ASCII, as far as it goes.
@@ -532,6 +557,42 @@ mod tests {
 
         let err = SessionPage::parse(PageId::new(1, 8897), &[0u8; 32]).unwrap_err();
         assert!(matches!(err, SessionError::PageTooSmall { .. }), "{err}");
+    }
+
+    /// **Reverting to the fallback turns this red.** An extent past `u16::MAX`
+    /// used to become the page's own extent, so a corrupt pointer read as a
+    /// valid address in the wrong file.
+    #[test]
+    fn an_extent_past_u16_is_refused_not_redirected() {
+        let mut page = ams8000_latest();
+        page[0x08..0x0C].copy_from_slice(&0x1_0000u32.to_be_bytes());
+        let err = SessionPage::parse(PageId::new(1, 8897), &page).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SessionError::ExtentOutOfRange {
+                    field: "previous session",
+                    extno: 0x1_0000,
+                    ..
+                }
+            ),
+            "{err}"
+        );
+
+        let mut page = ams8000_latest();
+        page[0x20..0x24].copy_from_slice(&u32::MAX.to_be_bytes());
+        let err = SessionPage::parse(PageId::new(1, 8897), &page).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SessionError::ExtentOutOfRange {
+                    field: "index root",
+                    extno: u32::MAX,
+                    ..
+                }
+            ),
+            "{err}"
+        );
     }
 
     #[test]
