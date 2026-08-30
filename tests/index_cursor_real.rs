@@ -357,8 +357,58 @@ fn choosing_a_child_has_one_implementation() {
     );
     assert_eq!(
         comparers.iter().cloned().collect::<Vec<_>>(),
-        vec!["index/mod.rs".to_string()],
+        vec!["index/diff.rs".to_string(), "index/mod.rs".to_string()],
         "key ordering is unsigned in one place; a second comparison is a second tree order"
+    );
+}
+
+/// **Giving the differ a descent of its own turns this red.**
+///
+/// Two-root differencing merges two enumerations rather than routing by key,
+/// so it never calls `choose_child` and the assertion above stays at two
+/// files. What it does share is the step below `choose_child`: deciding that a
+/// page is a node, at which level, and reading its entries. If that step were
+/// copied into `index/diff.rs`, the differ could accept a page the walk
+/// rejects — and then a key present in both trees would come back deleted.
+#[test]
+fn reading_a_page_as_a_node_has_one_implementation() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let sources = rust_sources(&root);
+
+    let mut definitions = Vec::new();
+    let mut callers = BTreeSet::new();
+    let mut decoders = BTreeSet::new();
+    for (path, text) in &sources {
+        let relative = path
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if text.contains("fn read_node") {
+            definitions.push(relative.clone());
+        }
+        if text.contains("read_node(") {
+            callers.insert(relative.clone());
+        }
+        if text.contains("IndexNode::decode(") {
+            decoders.insert(relative);
+        }
+    }
+
+    assert_eq!(
+        definitions,
+        vec!["index/cursor.rs".to_string()],
+        "the page-to-node step must be defined exactly once"
+    );
+    assert_eq!(
+        callers.iter().cloned().collect::<Vec<_>>(),
+        vec!["index/cursor.rs".to_string(), "index/diff.rs".to_string()],
+        "lookup, enumeration and differencing all read a node the same way"
+    );
+    assert_eq!(
+        decoders.iter().cloned().collect::<Vec<_>>(),
+        vec!["index/cursor.rs".to_string(), "index/mod.rs".to_string()],
+        "nothing outside the decoder and the tree walk may turn a page into a node"
     );
 }
 

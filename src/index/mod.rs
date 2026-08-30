@@ -30,6 +30,7 @@
 //! says nothing more about it, so neither does this module.
 
 pub mod cursor;
+pub mod diff;
 
 use std::cmp::Ordering;
 
@@ -38,6 +39,7 @@ use crate::meta::constants::DATA_PAGE_INDEX;
 use crate::refno::{PageAddress, RefNo};
 
 pub use cursor::{IndexCursor, IndexTreeError, IndexWalk, IndexedRecord, Lookup, RecordLoc};
+pub use diff::{DiffTally, IndexDiff, KeyChange, Pruning};
 
 /// `page_type` of an index page. core.dll checks it in `sub_5B026C0` and fails
 /// with "Page is not a table page".
@@ -371,8 +373,14 @@ impl IndexPageView {
 }
 
 /// The child to descend into for `target`, and **the only routing rule in the
-/// crate** — point lookup, enumeration and any later two-root differencing all
-/// come here, so a tree built one way cannot be navigated another.
+/// crate** — a tree built one way cannot be navigated another.
+///
+/// Enumeration ([`cursor::IndexWalk`]) and two-root differencing
+/// ([`diff::IndexDiff`]) take every child in slot order and so never route,
+/// but they read an internal key the same way this does: as the least key of
+/// the subtree behind it. `diff` bounds a subtree by that key to decide it can
+/// be skipped, which is the same claim as the routing below and would fail
+/// with it.
 ///
 /// A key is the least key of the subtree behind it, so the only child that can
 /// hold `target` is the one behind the greatest key `<= target`. Taking the
@@ -469,3 +477,9 @@ pub struct SearchResult {
     pub entry: IndexEntry,
     pub leaf_page_no: u32,
 }
+
+
+
+
+
+

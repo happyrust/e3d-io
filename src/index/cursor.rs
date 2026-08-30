@@ -24,6 +24,11 @@
 //! an error naming it. It is never the empty answer: "no such element" and "I
 //! could not tell" are different facts, and the reader this replaces returned
 //! `None` for both.
+//!
+//! [`read_node`] and [`located`] are `pub(super)` so that
+//! [`crate::index::diff`] merges the same nodes these two paths walk. Widening
+//! them further would let a caller outside the index module build its own
+//! descent, which is the thing this module exists to prevent.
 
 use std::collections::HashSet;
 
@@ -125,6 +130,17 @@ pub enum IndexTreeError {
 
     #[error("the walk has visited {visited} pages, more than the {limit} the file holds")]
     TooManyPages { visited: u32, limit: u32 },
+
+    /// Slot order is key order — `tests/index_cursor_real.rs` holds every
+    /// database in the corpus to it. [`crate::index::diff`] merges two trees
+    /// on that promise and reports it broken rather than merging on regardless
+    /// and quietly calling a key deleted that is simply out of place.
+    #[error("{page} emits {found} after {previous}, so slot order is not key order")]
+    KeyOutOfOrder {
+        page: PageId,
+        previous: RefNo,
+        found: RefNo,
+    },
 }
 
 /// A cursor over the index of one session-pinned view.
@@ -354,9 +370,9 @@ impl Iterator for IndexWalk<'_> {
 }
 
 /// Read and validate one index page. **The only page-to-node step in the
-/// crate**, so lookup and enumeration cannot disagree about what a node is or
-/// which page counts as its child.
-fn read_node<'p>(
+/// crate**, so lookup, enumeration and two-root differencing cannot disagree
+/// about what a node is or which page counts as its child.
+pub(super) fn read_node<'p>(
     pages: &'p mut PageCache,
     page: PageId,
     parent: Option<(PageId, u32)>,
@@ -385,7 +401,8 @@ fn read_node<'p>(
     Ok(node)
 }
 
-fn located(entry: IndexEntry, leaf: PageId) -> IndexedRecord {
+/// The one reading of a leaf value as a record address.
+pub(super) fn located(entry: IndexEntry, leaf: PageId) -> IndexedRecord {
     IndexedRecord {
         refno: entry.refno,
         loc: RecordLoc {
