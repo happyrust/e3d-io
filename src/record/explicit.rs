@@ -1,10 +1,13 @@
 //! Decoder for the member and explicit-attribute blocks following an element's
 //! declared implicit region.
+//!
+//! Works on the bytes [`crate::record::read_record`] gathered, which are one
+//! contiguous record: a block reached through a continuation has already been
+//! spliced in behind the block that named it. So the walk here is contiguous,
+//! and a block that says it continues must be followed by one.
 
+use crate::record::block::{block_at, BlockKind};
 use crate::refno::RefNo;
-
-const MEMBER_FLAG: u16 = 2;
-const EXPLICIT_FLAG: u16 = 1;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExplicitValue {
@@ -32,9 +35,16 @@ pub struct ExplicitAttribute {
 pub struct TailData {
     pub members: Vec<RefNo>,
     pub attributes: Vec<ExplicitAttribute>,
-    /// End of this element within the raw compound record. Bytes after this
-    /// offset may be child element records returned by the same Dabacon slot.
+    /// End of this element in the buffer. With a buffer from
+    /// [`crate::record::read_record`] this is the whole of it.
     pub record_end: usize,
+    /// The last block walked stated a continuation and nothing followed it.
+    ///
+    /// On gathered bytes this cannot happen, so it means the caller assembled
+    /// the buffer itself and stopped short — the rest of the member list or
+    /// attribute stream is missing, and reporting what was found as complete
+    /// is how an element came back with no `NAME`.
+    pub continues_past_end: bool,
 }
 
 pub fn parse_tail(raw: &[u8], start: usize, refno: RefNo) -> TailData {
@@ -44,87 +54,37 @@ pub fn parse_tail(raw: &[u8], start: usize, refno: RefNo) -> TailData {
     };
     let mut cursor = start;
 
-    // One loop over every block the element owns, dispatching on the flag,
-    // rather than "one member block, then explicit blocks". A member list can
-    // arrive in more than one block: BRAN 24383/85432 in the AMS sample has
-    // two (8 words then 7) followed by its explicit stream, and taking only
-    // the first left the loop staring at a member block where it wanted an
-    // explicit one — so it stopped and reported the element as storing no
-    // explicit attributes at all, `NAME` and its UDA value included.
+    // One loop over every block the element owns, dispatching on its kind,
+    // rather than "one member block, then explicit blocks". Both lists split
+    // across blocks: BRAN 24383/85432 in the AMS sample has two member blocks
+    // (8 words then 7) before its explicit stream, and taking only the first
+    // left the loop staring at a member block where it wanted an explicit one
+    // — so it stopped and reported the element as storing no explicit
+    // attributes at all, `NAME` and its UDA value included.
     //
-    // `matching_block` already refuses any block whose owner is not this
-    // element, which is what keeps the walk from running into the next
-    // element's record.
+    // A member list splits mid-RefNo: on that BRAN the first block ends with
+    // the word 24383 and the second begins with 85434, which together are
+    // member 24383/85434. So concatenate the payloads first and decode after.
     let mut member_payload = Vec::new();
     let mut explicit_payload = Vec::new();
-    loop {
-        cursor = skip_markers(raw, cursor);
-        let Some((flag, end)) = matching_block(raw, cursor, refno) else {
+    let mut more_promised = false;
+    while let Some(block) = block_at(raw, cursor, refno) {
+        let Some(payload) = raw.get(block.payload(cursor)) else {
+            more_promised = true;
             break;
         };
-        match flag {
-            // A member list splits the same way an attribute stream does, and
-            // it splits mid-RefNo: on this BRAN the first block ends with the
-            // word 24383 and the second begins with 85434, which together are
-            // member 24383/85434. Concatenate first, decode after.
-            //
-            // The two words after the 12-byte header are not part of the list.
-            // They are usually zero, and the reader used to skip them only
-            // then — but the first block here carries 18010/8193 there, which
-            // is not a member (`old-parse-pdms-db` reads two members for this
-            // element, not three) and was being reported as one.
-            MEMBER_FLAG => {
-                member_payload.extend_from_slice(raw.get(cursor + 20..end).unwrap_or_default())
-            }
-            // Dabacon may split one attribute stream across several flag-1
-            // continuation blocks, including between an attribute header and
-            // its value. Concatenate their payloads before decoding.
-            _ => {
-                let mut payload = &raw[cursor + 12..end];
-                if payload
-                    .get(..8)
-                    .is_some_and(|reserved| reserved.iter().all(|value| *value == 0))
-                {
-                    payload = &payload[8..];
-                }
-                explicit_payload.extend_from_slice(payload);
-            }
+        match block.kind {
+            BlockKind::Members => member_payload.extend_from_slice(payload),
+            BlockKind::Explicit => explicit_payload.extend_from_slice(payload),
         }
-        cursor = end;
+        cursor += block.total_bytes;
+        more_promised = block.continues_at.is_some();
     }
     parse_members(&member_payload, &mut out.members);
     parse_explicit_payload(&explicit_payload, &mut out.attributes);
     out.record_end = cursor;
+    out.continues_past_end = more_promised;
     out
-}
-
-fn matching_block(raw: &[u8], cursor: usize, refno: RefNo) -> Option<(u16, usize)> {
-    let header = raw.get(cursor..cursor + 12)?;
-    let flag = u16::from_be_bytes(header[0..2].try_into().ok()?);
-    if flag != MEMBER_FLAG && flag != EXPLICIT_FLAG {
-        return None;
-    }
-    let words = u16::from_be_bytes(header[2..4].try_into().ok()?) as usize;
-    let bytes = words.checked_mul(4)?;
-    if bytes < 12 {
-        return None;
-    }
-    let end = cursor.checked_add(bytes)?;
-    if end > raw.len() {
-        return None;
-    }
-    let owner = RefNo::new(read_u32(header, 4)?, read_u32(header, 8)?);
-    (owner == refno).then_some((flag, end))
-}
-
-fn skip_markers(raw: &[u8], mut cursor: usize) -> usize {
-    while let Some(word) = raw.get(cursor..cursor + 4).and_then(|b| read_u32(b, 0)) {
-        if word != 0 && word != 7 {
-            break;
-        }
-        cursor += 4;
-    }
-    cursor
 }
 
 /// Decode a member list from the concatenated payloads of one element's member
@@ -142,18 +102,17 @@ fn parse_members(payload: &[u8], out: &mut Vec<RefNo>) {
     }
 }
 
+/// The stream starts where the block's payload starts.
+///
+/// It used to be tried at both 0 and 8, because the payload was taken from
+/// byte 12 of the block and the two words that follow the owner were only
+/// stepped over when they read zero. They are the block's continuation address
+/// ([`crate::record::block`]), always two words, so the payload always begins
+/// at byte 20 and the stream always begins at its start.
 fn parse_explicit_payload(payload: &[u8], out: &mut Vec<ExplicitAttribute>) {
-    let starts = if payload.get(..8).is_some_and(|b| b.iter().all(|v| *v == 0)) {
-        [Some(8usize), Some(0usize)]
-    } else {
-        [Some(0usize), Some(8usize)]
-    };
-    for start in starts.into_iter().flatten() {
-        let mut parsed = Vec::new();
-        if parse_attribute_stream(payload, start, &mut parsed) {
-            out.extend(parsed);
-            return;
-        }
+    let mut parsed = Vec::new();
+    if parse_attribute_stream(payload, 0, &mut parsed) {
+        out.extend(parsed);
     }
 }
 
@@ -277,48 +236,85 @@ fn read_f64(data: &[u8], offset: usize) -> Option<f64> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn parses_reserved_prefix_and_scalar_attributes() {
-        let refno = RefNo::new(10, 20);
-        let mut block = vec![0, 1, 0, 0];
-        block.extend_from_slice(&10u32.to_be_bytes());
-        block.extend_from_slice(&20u32.to_be_bytes());
-        block.extend_from_slice(&[0; 8]);
-        block.extend_from_slice(&0x000A_AFCAu32.to_be_bytes());
-        block.extend_from_slice(&0x1400u16.to_be_bytes());
-        block.extend_from_slice(&1u16.to_be_bytes());
-        block.extend_from_slice(&0u32.to_be_bytes());
-        let words = (block.len() / 4) as u16;
-        block[2..4].copy_from_slice(&words.to_be_bytes());
-        let tail = parse_tail(&block, 0, refno);
-        assert_eq!(tail.attributes.len(), 1);
-        assert_eq!(tail.attributes[0].value, ExplicitValue::Bool(false));
+    const OWNER: RefNo = RefNo {
+        word0: 10,
+        word1: 20,
+    };
+
+    /// `[kind][words][owner][continuation]` and then `payload`.
+    fn block(kind: u16, owner: RefNo, continues_at: (u32, u32), payload: &[u8]) -> Vec<u8> {
+        assert_eq!(payload.len() % 4, 0);
+        let mut out = kind.to_be_bytes().to_vec();
+        out.extend_from_slice(
+            &(((crate::record::block::HEADER_BYTES + payload.len()) / 4) as u16).to_be_bytes(),
+        );
+        out.extend_from_slice(&owner.word0.to_be_bytes());
+        out.extend_from_slice(&owner.word1.to_be_bytes());
+        out.extend_from_slice(&continues_at.0.to_be_bytes());
+        out.extend_from_slice(&continues_at.1.to_be_bytes());
+        out.extend_from_slice(payload);
+        out
     }
 
     #[test]
-    fn parses_attribute_split_between_explicit_continuation_blocks() {
-        let refno = RefNo::new(10, 20);
-        let mut first = vec![0, 1, 0, 7];
-        first.extend_from_slice(&10u32.to_be_bytes());
-        first.extend_from_slice(&20u32.to_be_bytes());
-        first.extend_from_slice(&[0; 8]);
-        first.extend_from_slice(&0x000A_FA16u32.to_be_bytes());
-        first.extend_from_slice(&0x2800u16.to_be_bytes());
-        first.extend_from_slice(&2u16.to_be_bytes());
+    fn parses_scalar_attributes_from_the_block_payload() {
+        let mut payload = 0x000A_AFCAu32.to_be_bytes().to_vec();
+        payload.extend_from_slice(&0x1400u16.to_be_bytes());
+        payload.extend_from_slice(&1u16.to_be_bytes());
+        payload.extend_from_slice(&0u32.to_be_bytes());
 
-        let mut raw = first;
-        raw.extend_from_slice(&7u32.to_be_bytes());
-        let second_start = raw.len();
-        raw.extend_from_slice(&[0, 1, 0, 7]);
-        raw.extend_from_slice(&10u32.to_be_bytes());
-        raw.extend_from_slice(&20u32.to_be_bytes());
-        raw.extend_from_slice(&[0; 8]);
-        raw.extend_from_slice(&4u32.to_be_bytes());
-        raw.extend_from_slice(b"NONE");
-        assert_eq!(raw.len() - second_start, 28);
+        let tail = parse_tail(&block(1, OWNER, (0, 0), &payload), 0, OWNER);
+        assert_eq!(tail.attributes.len(), 1);
+        assert_eq!(tail.attributes[0].value, ExplicitValue::Bool(false));
+        assert!(!tail.continues_past_end);
+    }
 
-        let tail = parse_tail(&raw, 0, refno);
+    /// A stream that splits between an attribute header and its value.
+    ///
+    /// The two blocks arrive back to back because
+    /// [`crate::record::read_record`] splices a continuation in behind the
+    /// block that named it — there is no filler word to step over here, and a
+    /// reader that stepped over one would be guessing.
+    #[test]
+    fn parses_an_attribute_split_between_two_blocks() {
+        let mut head = 0x000A_FA16u32.to_be_bytes().to_vec();
+        head.extend_from_slice(&0x2800u16.to_be_bytes());
+        head.extend_from_slice(&2u16.to_be_bytes());
+
+        let mut tail_payload = 4u32.to_be_bytes().to_vec();
+        tail_payload.extend_from_slice(b"NONE");
+
+        let mut raw = block(1, OWNER, (17, (2 << 12) | 1), &head);
+        raw.extend_from_slice(&block(1, OWNER, (0, 0), &tail_payload));
+
+        let tail = parse_tail(&raw, 0, OWNER);
         assert_eq!(tail.attributes.len(), 1);
         assert_eq!(tail.attributes[0].value, ExplicitValue::Text("NONE".into()));
+        assert_eq!(tail.record_end, raw.len());
+        assert!(!tail.continues_past_end);
+    }
+
+    /// **Reverting to "stop when the next block is not there" turns this
+    /// red.** A block that states a continuation and has none is a buffer that
+    /// was cut short, and the attributes found so far are not all of them.
+    #[test]
+    fn a_promised_continuation_that_is_absent_is_reported() {
+        let mut payload = 0x000A_FA16u32.to_be_bytes().to_vec();
+        payload.extend_from_slice(&0x2800u16.to_be_bytes());
+        payload.extend_from_slice(&2u16.to_be_bytes());
+
+        let tail = parse_tail(&block(1, OWNER, (17, (2 << 12) | 1), &payload), 0, OWNER);
+        assert!(tail.continues_past_end);
+    }
+
+    /// The continuation words are not payload. Read as members they become
+    /// one: BRAN 24383/85432 reported 18010/8193, which is a page address.
+    #[test]
+    fn the_continuation_words_are_not_members() {
+        let mut payload = 10u32.to_be_bytes().to_vec();
+        payload.extend_from_slice(&21u32.to_be_bytes());
+
+        let tail = parse_tail(&block(2, OWNER, (18_010, 0x2001), &payload), 0, OWNER);
+        assert_eq!(tail.members, vec![RefNo::new(10, 21)]);
     }
 }

@@ -54,6 +54,13 @@ impl ParsedElement {
         let impl_end = (prefix + declared_impl_len).min(raw.len());
         let implicit_data = raw[prefix..impl_end].to_vec();
         let tail = parse_tail(raw, impl_end, refno);
+        if tail.continues_past_end {
+            return Err(format!(
+                "record for {refno} ends at {} with a block that says it continues elsewhere: \
+                 these bytes are part of the record, not all of it",
+                tail.record_end
+            ));
+        }
 
         Ok(Self {
             impl_len_words,

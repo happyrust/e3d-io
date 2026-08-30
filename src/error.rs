@@ -94,11 +94,8 @@ impl PageIoError {
 
     /// A read that stopped before the page was full.
     ///
-    /// Deliberately an `UnexpectedEof` `io::Error` rather than a variant of its
-    /// own: that is what `read_exact` produced before positioned reads replaced
-    /// it, and [`crate::record::read_element_record`] classifies a record as
-    /// truncated by matching that exact kind. A new variant here would turn a
-    /// reported truncation into a bare read failure.
+    /// An `UnexpectedEof` `io::Error` rather than a variant of its own, which
+    /// is what `read_exact` produced before positioned reads replaced it.
     pub fn short_read(path: &Path, id: PageId, expected: usize, got: usize) -> Self {
         Self::io(
             path,
@@ -208,13 +205,10 @@ pub enum E3dReaderError {
     #[error("database file too small: expected at least {expected} bytes, got {actual}")]
     FileTooSmall { expected: u64, actual: u64 },
 
-    #[error("element record for {refno} at page {page_no}, byte offset {byte_offset} is truncated: {detail}")]
-    TruncatedRecord {
-        refno: crate::refno::RefNo,
-        page_no: u32,
-        byte_offset: u32,
-        detail: String,
-    },
+    /// Boxed because it is the largest variant by some way and every other
+    /// error would otherwise be carried at its size.
+    #[error(transparent)]
+    Record(Box<crate::record::RecordError>),
 
     #[error("{0}")]
     Other(String),
@@ -233,9 +227,7 @@ impl E3dReaderError {
 ///
 /// `Io` and `FileTooSmall` are re-expressed as the long-standing
 /// [`E3dReaderError`] variants instead of being wrapped, because callers match
-/// on them: `record::read_element_record` reads `Io { source }` and turns
-/// `UnexpectedEof` into a truncated-record report. Wrapping those two would
-/// leave that arm permanently unmatched.
+/// on them.
 impl From<PageIoError> for E3dReaderError {
     fn from(err: PageIoError) -> Self {
         match err {
