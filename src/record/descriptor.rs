@@ -485,6 +485,18 @@ fn decode_value(
             Ok(match def.map(|def| def.data_type) {
                 Some(1) => DescriptorValue::Int(raw as i32),
                 Some(3) => DescriptorValue::Bool(raw != 0),
+                // An angle attribute stored in one word holds hundredths of a
+                // degree: `SCTN.Bangle` writes -9000 where `q att` prints -90,
+                // and `SSLC.Pxbshear` writes 1150 where it prints 11.5. attlib
+                // carries no `ATGTDF` definition for several of these (`BANG`
+                // among them), so its `data_type` cannot decide — the catalog
+                // `ANGL` unit, baked into e3d-attlib, is the only authority that
+                // says to read the word as a signed, centidegree-scaled real
+                // rather than an unsigned word. This mirrors the reading the TTY
+                // reconciliation already accepts for a word-shaped angle.
+                _ if e3d_attlib::is_angle_attr(descriptor.hash) => {
+                    DescriptorValue::Real(f64::from(raw as i32) / 100.0)
+                }
                 _ => DescriptorValue::Word {
                     raw,
                     text: word_name(raw),
@@ -682,6 +694,46 @@ mod tests {
         );
         assert_eq!(got.status, AttributeExtractionStatus::NonImplicit);
         assert_eq!(got.value, None);
+    }
+
+    /// An angle stored in one word is hundredths of a degree. `BANG` has no
+    /// attlib definition, so before the catalog unit was consulted this read
+    /// back as the unsigned word 4294958296; now it is the -90.0 that E3D
+    /// prints. `-9000 as i32 as f64 / 100.0`.
+    #[test]
+    fn a_word_stored_angle_reads_as_scaled_degrees() {
+        let mut words = vec![0u32; 16];
+        words[11] = (-9000i32) as u32;
+        let mut d = descriptor(3, 1, 11, 1);
+        d.hash = e3d_attlib::db1_hash("BANG");
+        let got = extract_attribute(
+            &parsed(&words),
+            &d,
+            None,
+            StorageLayout::Wide,
+            "BANG".into(),
+        );
+        assert_eq!(got.status, AttributeExtractionStatus::Decoded);
+        assert_eq!(got.value, Some(DescriptorValue::Real(-90.0)));
+    }
+
+    /// The scaling is scoped to attributes the catalog marks as angles: a word
+    /// with the same bits but no angle unit stays an unsigned word, because the
+    /// generation chain would otherwise scale a genuine word code.
+    #[test]
+    fn a_word_without_an_angle_unit_stays_a_word() {
+        let mut words = vec![0u32; 16];
+        words[11] = (-9000i32) as u32;
+        let d = descriptor(3, 1, 11, 1);
+        assert!(!e3d_attlib::is_angle_attr(d.hash));
+        let got = extract_attribute(&parsed(&words), &d, None, StorageLayout::Wide, "X".into());
+        assert_eq!(
+            got.value,
+            Some(DescriptorValue::Word {
+                raw: 4_294_958_296,
+                text: word_name(4_294_958_296),
+            })
+        );
     }
 
     /// A storage type outside the fifteen the schema files use is reported,
