@@ -3,12 +3,20 @@
 /// WARNING: These values are specific to E3D 3.1.
 /// E3D 2.10 uses different values (e.g. 7618321 instead of 7618377).
 
-/// Main data page type_id (type 5 subtype for element records).
-/// Evidence: sub_5AFB660: v3[1] == 7618377
+/// The tree identity `sub_5AFB660` checks a type-5 page's second word
+/// against.
+///
+/// NOT the element data pages: element records live on pages whose first
+/// word is 7 (`crate::page::PageType::ElementData`), and no live record part
+/// touches a `(5, 7618377)` page anywhere in the 429-file corpus — every
+/// file holds some, and the live index tree references none of them
+/// (`docs/evidence/2026-08-30-e3d-io-data-page-header.md`). Which tree this
+/// is, and where its root is stated file-side, is an open research item.
 pub const DATA_PAGE_MAIN: u32 = 7_618_377;
 
-/// Index/B+tree page type_id (type 5 subtype for RefNo index).
-/// Evidence: sub_5AEB6B0: sub_5B01340(dbno, 13387743, ...)
+/// The RefNo index tree's identity: the second word of its type-5 pages.
+/// Evidence: sub_5AEB6B0: sub_5B01340(dbno, 13387743, ...), corpus-verified
+/// on 17 295 pages.
 pub const DATA_PAGE_INDEX: u32 = 13_387_743;
 
 /// Property ID: page count query.

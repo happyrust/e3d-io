@@ -207,17 +207,35 @@ pub trait PageSource {
     }
 }
 
-/// Page type enumeration.
+/// What a page's first word says the page is.
 ///
-/// Evidence: E3D_数据库文件架构完整分析.md + struct_layouts.json page_header
+/// Measured over every readable page of the 429-file corpus — 162 446 pages,
+/// `docs/evidence/2026-08-30-e3d-io-data-page-header.md` — the first word is
+/// one of exactly four values, and they mean:
+///
+/// | word 0 | pages | meaning |
+/// |---|---|---|
+/// | 1 | one per file | file info page (page 1) |
+/// | 3 | 1 951 | session page |
+/// | 5 | 46 425 | a B+ tree page; word 1 says which tree |
+/// | 7 | 113 641 | element data — every part of every live record is on one |
+///
+/// The enumeration this replaces also had a `Data = 5`, `Special = 7` and an
+/// `Index = 8`, from a document that predates the measurement: no page of the
+/// corpus states 8, element records do not live on 5, and there is nothing
+/// special about 7 — it is where the elements are.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageType {
     Descriptor,
-    RefArray,
+    FileInfo,
     Session,
-    Data,
-    Special,
-    Index,
+    /// A page of some B+ tree. Word 1 carries the tree's identity — the RefNo
+    /// index states 13 387 743 — and trees other than the index exist: the
+    /// corpus shows 60 distinct word-1 values on its `5` pages.
+    Tree,
+    /// A page element records live on. The index tree's leaf values point at
+    /// these and nothing else, and block chains never leave them.
+    ElementData,
     Unknown(u32),
 }
 
@@ -225,11 +243,10 @@ impl PageType {
     pub fn from_raw(value: u32) -> Self {
         match value {
             0 => Self::Descriptor,
-            1 => Self::RefArray,
+            1 => Self::FileInfo,
             3 => Self::Session,
-            5 => Self::Data,
-            7 => Self::Special,
-            8 => Self::Index,
+            5 => Self::Tree,
+            7 => Self::ElementData,
             other => Self::Unknown(other),
         }
     }
@@ -237,11 +254,10 @@ impl PageType {
     pub fn as_raw(&self) -> u32 {
         match self {
             Self::Descriptor => 0,
-            Self::RefArray => 1,
+            Self::FileInfo => 1,
             Self::Session => 3,
-            Self::Data => 5,
-            Self::Special => 7,
-            Self::Index => 8,
+            Self::Tree => 5,
+            Self::ElementData => 7,
             Self::Unknown(v) => *v,
         }
     }
@@ -256,6 +272,11 @@ impl PageType {
 /// - +12: ext_no (u32)
 /// - +16: page_no (u32)
 /// - +20: bucket_id (u32, low 13 bits significant)
+///
+/// Only the first two words are corpus-verified (see [`PageType`]). The field
+/// names behind +8..+20 come from the same pre-measurement document the old
+/// page types did, and on element pages they do not fit what the probe sees —
+/// treat them as diagnostic labels, not facts.
 #[derive(Debug, Clone)]
 pub struct PageHeader {
     pub page_type: PageType,

@@ -46,8 +46,9 @@ pub struct ExtentSet {
 
 /// How sibling extent files are named, when the primary follows the convention.
 ///
-/// Dabacon files are `<stem>_<extent:04>`, e.g. `ams8000_0001`. Only used to
-/// name the file a [`PageIoError::MissingExtent`] was looking for.
+/// Dabacon files are `<stem>_<extent:04>`, e.g. `ams8000_0001`. Opening a file
+/// that follows it attaches the sibling extents sitting next to it, and it
+/// names the file a [`PageIoError::MissingExtent`] was looking for.
 #[derive(Debug, Clone)]
 struct ExtentNaming {
     dir: PathBuf,
@@ -86,31 +87,61 @@ impl ExtentNaming {
 }
 
 impl ExtentSet {
-    /// Open `path` as the sole extent of a database.
+    /// Open `path` and every sibling extent file named by the convention.
     ///
     /// The extent number comes from the `_NNNN` filename suffix when there is
     /// one, and is [`PageId::PRIMARY`] otherwise — a temporary file with an
-    /// arbitrary name still addresses as extent 1.
+    /// arbitrary name still addresses as extent 1, and gets no siblings.
     fn open_primary(path: &Path) -> Result<Self, PageIoError> {
         let naming = ExtentNaming::detect(path);
         let primary = ExtentNaming::extent_of(path).unwrap_or(PageId::PRIMARY);
         let (extent, words) = open_extent(primary, path)?;
         let page_size = PageSize::from_header_words(words).map_err(|e| e.with_path(path))?;
 
-        Ok(Self {
+        let mut set = Self {
             extents: vec![extent],
             primary,
             page_size,
             naming,
-        })
+        };
+        set.attach_siblings()?;
+        Ok(set)
+    }
+
+    /// Attach the sibling extent files sitting next to the primary.
+    ///
+    /// E3D numbers extents consecutively from 1, so the probe walks the run —
+    /// `_0001`, `_0002`, … — and the first number with no file ends it. A file
+    /// that is in the run but cannot be attached fails the open: it answers to
+    /// the database's naming, so "unreadable extent" is the truth and
+    /// "missing extent" — what a later read would report if it were skipped
+    /// here — is not.
+    ///
+    /// No database of the 429-file corpus has a sibling, so this attaches
+    /// nothing there; the behaviour is pinned by synthetic fixtures.
+    fn attach_siblings(&mut self) -> Result<(), PageIoError> {
+        let Some(naming) = self.naming.clone() else {
+            return Ok(());
+        };
+        for ext in 1..=u16::MAX {
+            if ext == self.primary {
+                continue;
+            }
+            let path = naming.path_for(ext);
+            if !path.is_file() {
+                break;
+            }
+            self.attach(ext, &path)?;
+        }
+        Ok(())
     }
 
     /// Register a further extent file.
     ///
-    /// Cross-extent addressing is not exercised yet; this is the seam that lets
-    /// it be wired in without the resolver ever having to guess. The extent must
-    /// agree with the primary on page size, since a page address means nothing
-    /// otherwise.
+    /// [`Self::open_primary`] calls this for every sibling the naming
+    /// convention finds; it stays public for extents living under names the
+    /// convention cannot predict. The extent must agree with the primary on
+    /// page size, since a page address means nothing otherwise.
     pub fn attach(&mut self, ext: u16, path: impl AsRef<Path>) -> Result<(), PageIoError> {
         let path = path.as_ref();
         let (extent, words) = open_extent(ext, path)?;
@@ -191,6 +222,11 @@ pub struct PageReader {
 
 impl PageReader {
     /// Open a database file and take its page size from the header.
+    ///
+    /// Sibling extent files (`_0002` onward, next to a `_0001`) are attached
+    /// as part of the open, so a page address naming another extent resolves
+    /// without the caller doing anything; an address naming an extent that has
+    /// no file is still [`PageIoError::MissingExtent`].
     ///
     /// Fails when the header's page size field is unusable. The reader this
     /// replaces fell back to 4096 in that case and went on to address every
@@ -369,8 +405,11 @@ mod tests {
         }
     }
 
+    /// **Reverting the open-time sibling probe turns this red.** The second
+    /// extent is never named to the reader; sitting next to the primary under
+    /// the conventional name is what attaches it.
     #[test]
-    fn attached_extent_is_read_from_its_own_file() {
+    fn a_sibling_extent_is_attached_by_the_open_itself() {
         let dir = tempfile::tempdir().unwrap();
         let primary = db_file(dir.path(), "ams1000_0001", 32, 4);
         let second = db_file(dir.path(), "ams1000_0002", 32, 4);
@@ -379,23 +418,77 @@ mod tests {
         bytes[2 * 128] = 0xAB;
         std::fs::write(&second, &bytes).unwrap();
 
-        let mut reader = PageReader::open(&primary).unwrap();
-        reader.attach_extent(2, &second).unwrap();
-
+        let reader = PageReader::open(&primary).unwrap();
         let mut buf = vec![0u8; reader.page_size().bytes()];
         reader.read_into(PageId::new(2, 2), &mut buf).unwrap();
         assert_eq!(buf[0], 0xAB);
+    }
+
+    /// Extents run consecutively, so a gap ends the probe: `_0004` next to a
+    /// primary with no `_0002`/`_0003` is somebody else's file, not extent 4.
+    #[test]
+    fn the_sibling_probe_stops_at_the_first_gap() {
+        let dir = tempfile::tempdir().unwrap();
+        let primary = db_file(dir.path(), "ams1000_0001", 32, 4);
+        db_file(dir.path(), "ams1000_0004", 32, 4);
+
+        let reader = PageReader::open(&primary).unwrap();
+        let mut buf = vec![0u8; reader.page_size().bytes()];
+        let err = reader.read_into(PageId::new(4, 1), &mut buf).unwrap_err();
+        assert!(
+            matches!(err, PageIoError::MissingExtent { ext: 4, .. }),
+            "expected MissingExtent, got {err}"
+        );
+    }
+
+    /// An extent under a name the convention cannot predict is attached by
+    /// hand; the seam stays.
+    #[test]
+    fn an_unconventionally_named_extent_is_attached_by_hand() {
+        let dir = tempfile::tempdir().unwrap();
+        let primary = db_file(dir.path(), "ams1000_0001", 32, 4);
+        let second = db_file(dir.path(), "elsewhere.db", 32, 4);
+        let mut bytes = std::fs::read(&second).unwrap();
+        bytes[1 * 128] = 0xCD;
+        std::fs::write(&second, &bytes).unwrap();
+
+        let mut reader = PageReader::open(&primary).unwrap();
+        reader.attach_extent(2, &second).unwrap();
+        let mut buf = vec![0u8; reader.page_size().bytes()];
+        reader.read_into(PageId::new(2, 1), &mut buf).unwrap();
+        assert_eq!(buf[0], 0xCD);
     }
 
     #[test]
     fn attaching_an_extent_with_another_page_size_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         let primary = db_file(dir.path(), "ams1000_0001", 32, 4);
-        let second = db_file(dir.path(), "ams1000_0002", 64, 4);
+        // Named outside the convention so the open leaves it alone and the
+        // refusal is attach's own.
+        let second = db_file(dir.path(), "other.db", 64, 4);
         let mut reader = PageReader::open(&primary).unwrap();
         let err = reader.attach_extent(2, &second).unwrap_err();
         assert!(
             matches!(err, PageIoError::ExtentPageSizeMismatch { ext: 2, .. }),
+            "expected ExtentPageSizeMismatch, got {err}"
+        );
+    }
+
+    /// A sibling that answers to the database's naming but cannot be attached
+    /// fails the open. Skipping it would let every read that reaches extent 2
+    /// report the file as *missing*, which the person looking at the directory
+    /// can see is false.
+    #[test]
+    fn an_unusable_sibling_fails_the_open_not_the_later_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let primary = db_file(dir.path(), "ams1000_0001", 32, 4);
+        db_file(dir.path(), "ams1000_0002", 64, 4);
+        let err = PageReader::open(&primary).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                E3dReaderError::Page(PageIoError::ExtentPageSizeMismatch { ext: 2, .. })
+            ),
             "expected ExtentPageSizeMismatch, got {err}"
         );
     }
