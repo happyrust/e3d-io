@@ -32,7 +32,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use e3d_io::index::Pruning;
-use e3d_io::index::{DiffTally, IndexCursor, IndexDiff, IndexTreeError, IndexedRecord, KeyChange};
+use e3d_io::index::{
+    DiffDiagnostics, DiffTally, IndexCandidate, IndexCursor, IndexDiff, IndexTreeError,
+    IndexedRecord, KeyChange,
+};
 use e3d_io::page::PageId;
 use e3d_io::session::DbView;
 
@@ -124,7 +127,11 @@ fn sentinel(page_no: u32) -> [u32; 4] {
 }
 
 fn record(key: u32, page_no: u32, offset_words: u32) -> [u32; 4] {
-    [0, key, page_no, (offset_words << 12) | 1]
+    record_with_flag(key, page_no, offset_words, 1)
+}
+
+fn record_with_flag(key: u32, page_no: u32, offset_words: u32, flag: u16) -> [u32; 4] {
+    [0, key, page_no, (offset_words << 12) | u32::from(flag)]
 }
 
 /// Two sessions over one file, sharing two of their three leaves.
@@ -162,6 +169,7 @@ const CACHE_PAGES: usize = 16_384;
 struct Run {
     changes: Vec<KeyChange>,
     tally: DiffTally,
+    diagnostics: DiffDiagnostics,
     pages_read: u64,
 }
 
@@ -177,9 +185,88 @@ fn run_diff(path: &Path, base: PageId, target: PageId, pruning: Pruning) -> Run 
         .expect("both trees walk");
     Run {
         tally: diff.tally(),
+        diagnostics: diff.diagnostics(),
         pages_read: diff.stats().pages_read - before,
         changes,
     }
+}
+
+/// core.dll compares only `(page, offset)` for an element present in both
+/// roots. The packed low bits remain observable, but they are not a fourth
+/// component of the record position and must not invent a modification.
+#[test]
+fn flag_only_drift_is_diagnostic_not_a_modification() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut db = Db::new(8, 2);
+    db.session(1, 7, 3, u32::MAX);
+    db.session(2, 8, 4, 1);
+    db.index(3, 0, &[record_with_flag(100, 6, 20, 1)]);
+    db.index(4, 0, &[record_with_flag(100, 6, 20, 7)]);
+    let path = db.write(dir.path());
+
+    let run = run_diff(
+        &path,
+        PageId::new(1, 3),
+        PageId::new(1, 4),
+        Pruning::Disabled,
+    );
+
+    assert!(run.changes.is_empty());
+    assert_eq!(run.tally.unchanged_compared, 1);
+    assert_eq!(run.diagnostics.flag_only_drifts, 1);
+    let drift = run
+        .diagnostics
+        .first_flag_only_drift
+        .expect("the first flag-only drift is retained for diagnosis");
+    assert_eq!(drift.refno.word1, 100);
+    assert_eq!(drift.position.page, PageId::new(1, 6));
+    assert_eq!(drift.position.offset_words, 20);
+    assert_eq!((drift.base_flag, drift.target_flag), (1, 7));
+}
+
+#[test]
+fn finish_returns_only_a_complete_core_candidate_sequence() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = shared_leaf_db(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    let completed = IndexDiff::new(view.pages_mut(), PageId::new(1, 2), PageId::new(1, 6))
+        .finish()
+        .expect("both roots complete before candidates are returned");
+
+    assert_eq!(
+        completed
+            .changes
+            .iter()
+            .copied()
+            .map(IndexCandidate::refno)
+            .map(|refno| refno.word1)
+            .collect::<Vec<_>>(),
+        vec![100, 150, 160]
+    );
+    assert!(matches!(
+        completed.changes[0],
+        IndexCandidate::Modified { base, target, .. }
+            if base.page == PageId::new(1, 9)
+                && base.offset_words == 60
+                && target.page == PageId::new(1, 11)
+                && target.offset_words == 10
+    ));
+    assert!(matches!(
+        completed.changes[1],
+        IndexCandidate::Deleted { refno, .. } if refno.word1 == 150
+    ));
+    assert!(matches!(
+        completed.changes[2],
+        IndexCandidate::Inserted { refno, .. } if refno.word1 == 160
+    ));
+    assert_eq!(
+        (
+            completed.tally.modified,
+            completed.tally.deleted,
+            completed.tally.inserted
+        ),
+        (1, 1, 1)
+    );
 }
 
 fn key_of(change: &KeyChange) -> u32 {
@@ -383,7 +470,7 @@ fn changes_by_full_enumeration(
     for (key, record) in &base {
         match target.get(key) {
             None => out.push(KeyChange::Deleted(*record)),
-            Some(newer) if newer.loc != record.loc => out.push(KeyChange::Modified {
+            Some(newer) if newer.position() != record.position() => out.push(KeyChange::Modified {
                 base: *record,
                 target: *newer,
             }),

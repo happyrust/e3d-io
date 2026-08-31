@@ -505,8 +505,7 @@ fn compare_tty_value_as(
         }
         DescriptorValue::IntArray(values) => {
             let words: Vec<u32> = values.iter().map(|value| *value as u32).collect();
-            rendered_by_shape(&words)
-                .is_some_and(|text| text.trim().eq_ignore_ascii_case(rendered))
+            rendered_by_shape(&words).is_some_and(|text| text.trim().eq_ignore_ascii_case(rendered))
                 || list_matches_rendering(
                     &values.iter().map(|value| *value as f64).collect::<Vec<_>>(),
                     rendered,
@@ -525,7 +524,9 @@ fn compare_tty_value_as(
         DescriptorValue::WordArray(values) | DescriptorValue::RawWords(values) => {
             // `SDTE.Skey` holds four spaces behind a count of four, which E3D
             // shows as nothing at all.
-            if rendered_by_shape(values).is_some_and(|text| text.trim().eq_ignore_ascii_case(rendered)) {
+            if rendered_by_shape(values)
+                .is_some_and(|text| text.trim().eq_ignore_ascii_case(rendered))
+            {
                 return ValueComparison::Equivalent;
             }
             // Arrays whose storage is not described carry their own length in
@@ -803,7 +804,12 @@ mod tests {
             name: ":TPress".into(),
             rendered_value: "unset".into(),
         }];
-        let rows = reconcile_attlist(&tty, &extraction, &AttributeMetadataCatalog::default(), None);
+        let rows = reconcile_attlist(
+            &tty,
+            &extraction,
+            &AttributeMetadataCatalog::default(),
+            None,
+        );
         assert_eq!(rows[0].source, CompleteAttributeSource::TtyAuthority);
     }
 
@@ -918,7 +924,12 @@ mod tests {
                 }
             })
             .collect::<Vec<_>>();
-        let rows = reconcile_attlist(&tty, &extraction, &AttributeMetadataCatalog::default(), None);
+        let rows = reconcile_attlist(
+            &tty,
+            &extraction,
+            &AttributeMetadataCatalog::default(),
+            None,
+        );
         assert_eq!(rows[0].binary_name.as_deref(), Some("POS"));
         assert_eq!(rows[0].comparison, ValueComparison::Equivalent);
         assert_eq!(rows[1].binary_name.as_deref(), Some("POSF"));
@@ -959,10 +970,7 @@ mod tests {
                     flags: 0,
                 },
                 status: AttributeExtractionStatus::Decoded,
-                value: Some(DescriptorValue::Word {
-                    raw: 0,
-                    text: None,
-                }),
+                value: Some(DescriptorValue::Word { raw: 0, text: None }),
             }],
         };
         let tty = vec![TtyAttributeRow {
@@ -971,8 +979,12 @@ mod tests {
             rendered_value: "0degree".into(),
         }];
 
-        let without =
-            reconcile_attlist(&tty, &extraction, &AttributeMetadataCatalog::default(), None);
+        let without = reconcile_attlist(
+            &tty,
+            &extraction,
+            &AttributeMetadataCatalog::default(),
+            None,
+        );
         assert_eq!(without[0].binary_name, None);
 
         let with = reconcile_attlist(
@@ -1005,7 +1017,8 @@ mod tests {
         names.insert(RefNo::new(15192, 58751), "/MSAAG".to_string());
         names.insert(RefNo::new(15192, 85074), "/MSIDBHP-4-24".to_string());
 
-        let mut ten_slots_two_filled = std::iter::repeat_n(RefNo::new(0, 0), 10).collect::<Vec<_>>();
+        let mut ten_slots_two_filled =
+            std::iter::repeat_n(RefNo::new(0, 0), 10).collect::<Vec<_>>();
         ten_slots_two_filled[0] = RefNo::new(15192, 58748);
         ten_slots_two_filled[1] = RefNo::new(15192, 58751);
         let mut rows = vec![
@@ -1039,10 +1052,7 @@ mod tests {
 
     #[test]
     fn empty_word_slot_agrees_with_a_zero_printed_in_any_unit() {
-        let empty = DescriptorValue::Word {
-            raw: 0,
-            text: None,
-        };
+        let empty = DescriptorValue::Word { raw: 0, text: None };
         for rendered in ["0", "0degree", "0mm", "unset", ""] {
             assert_eq!(
                 compare_tty_value(&empty, rendered),

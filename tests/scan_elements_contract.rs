@@ -134,11 +134,7 @@ fn scannable_db(dir: &Path) -> PathBuf {
             leaf_entry(100, 7, 20),
         ],
     );
-    db.index(
-        4,
-        0,
-        &[leaf_entry(200, 7, 42), leaf_entry(210, 7, 64)],
-    );
+    db.index(4, 0, &[leaf_entry(200, 7, 42), leaf_entry(210, 7, 64)]);
     for (key, page, byte, noun) in [
         (10u32, 6u32, 40usize, 0xAAA1),
         (20, 6, 84, 0xAAA2),
@@ -166,7 +162,10 @@ fn a_scan_yields_what_enumeration_names_in_key_order_with_the_header_fields() {
 
     assert_eq!(
         scanned.iter().map(|e| e.refno).collect::<Vec<_>>(),
-        enumerated.iter().map(|(refno, _, _)| *refno).collect::<Vec<_>>(),
+        enumerated
+            .iter()
+            .map(|(refno, _, _)| *refno)
+            .collect::<Vec<_>>(),
         "the scan and the enumeration are the same walk"
     );
     assert_eq!(

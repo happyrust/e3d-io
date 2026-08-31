@@ -24,6 +24,8 @@ use std::fmt;
 
 use e3d_attlib::{db1_dehash, lookup_system_name};
 
+use crate::record::catalogue_eval::ParamEnv;
+
 /// Word 1 counts fortieths of a unit.
 const COEFFICIENT_SCALE: f64 = 40.0;
 /// The operator whose operands spell a name instead of naming a value.
@@ -63,7 +65,6 @@ impl Operand {
             n => Operand::DesignDimension(-n),
         }
     }
-
 }
 
 impl fmt::Display for Operand {
@@ -219,9 +220,132 @@ pub fn render(words: &[u32]) -> Option<String> {
     decode(words).map(|expression| expression.to_string())
 }
 
+/// Evaluate a decoded tuple to a number, against `env`.
+///
+/// The coefficient multiplies the operand (or the function of the two operands):
+/// `0.7 TIMES PARAM 2` is `0.7 * param(2)`, and `-0.55 TIMES DIFFERENCE PARAM 6
+/// PARAM 10` is `-0.55 * (param(6) - param(10))`.
+///
+/// Returns `None`, never a guess, when the environment cannot answer an operand,
+/// when the tuple spells a [`CatalogueExpression::Named`] name rather than a
+/// value, and when the function is one whose numeric meaning is not yet pinned
+/// against E3D (see [`apply_function`]).
+pub fn evaluate(expression: &CatalogueExpression, env: &dyn ParamEnv) -> Option<f64> {
+    match expression {
+        CatalogueExpression::Scaled {
+            coefficient,
+            operand,
+        } => Some(coefficient * operand_value(operand, env)?),
+        CatalogueExpression::Function {
+            coefficient,
+            name,
+            left,
+            right,
+        } => {
+            let left = operand_value(left, env)?;
+            let right = operand_value(right, env)?;
+            Some(coefficient * apply_function(name, left, right)?)
+        }
+        CatalogueExpression::Named(_) => None,
+    }
+}
+
+/// Decode a tuple straight from its words and evaluate it, if it is one.
+pub fn evaluate_words(words: &[u32], env: &dyn ParamEnv) -> Option<f64> {
+    evaluate(&decode(words)?, env)
+}
+
+fn operand_value(operand: &Operand, env: &dyn ParamEnv) -> Option<f64> {
+    match operand {
+        Operand::Param(n) => env.param(*n),
+        Operand::NegatedParam(n) => env.param(*n).map(|value| -value),
+        Operand::IParam(n) => env.iparam(*n),
+        Operand::Constant(value) => Some(f64::from(*value)),
+        Operand::DesignDimension(id) => env.design_dimension(*id),
+        Operand::Zero => Some(0.0),
+    }
+}
+
+/// The two-operand functions whose numeric meaning is settled.
+///
+/// `SUM` and `DIFFERENCE` are addition and subtraction. The trigonometric
+/// `SINF` / `COSF` / `TANF` carry a second operand whose role E3D has not yet
+/// been made to show — `SINF PARAM 10 PARAM 11` could be any of several things —
+/// so they return `None` until a TTY `Q` reading pins them, rather than a value
+/// that only looks like an answer.
+fn apply_function(name: &str, left: f64, right: f64) -> Option<f64> {
+    match name {
+        "SUM" => Some(left + right),
+        "DIFFERENCE" => Some(left - right),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::record::catalogue_eval::MapParamEnv;
+
+    fn sample_env() -> MapParamEnv {
+        MapParamEnv::new()
+            .with_params([
+                10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 110.0,
+            ])
+            .with_iparams([100.0, 200.0])
+            .set_design_dimension(3, 200.0) // DDRADIUS
+            .set_design_dimension(4, 45.0) // DDANGLE
+            .set_design_dimension(5, 500.0) // DDHEIGHT
+    }
+
+    #[track_caller]
+    fn assert_close(got: Option<f64>, expected: f64) {
+        let got = got.expect("expression evaluates to a number");
+        assert!(
+            (got - expected).abs() < 1e-9,
+            "got {got}, expected {expected}"
+        );
+    }
+
+    /// The same tuples the render test covers, now as numbers against a fixed
+    /// parameter set. Expected values are the arithmetic the rendering spells.
+    #[test]
+    fn evaluates_sampled_tuples_against_a_parameter_environment() {
+        let env = sample_env();
+        assert_close(evaluate_words(&[4, 28, 1, 2, 0], &env), 0.7 * 20.0);
+        assert_close(evaluate_words(&[4, 40, 1, 6, 0], &env), 60.0);
+        assert_close(evaluate_words(&[4, 50, 1, 2, 0], &env), 1.25 * 20.0);
+        assert_close(evaluate_words(&[4, 40, 1, 1005, 0], &env), -50.0);
+        assert_close(evaluate_words(&[4, 40, 1, (-20i32) as u32, 0], &env), 2.0);
+        assert_close(
+            evaluate_words(&[4, (-40i32) as u32, 1, (-870i32) as u32, 0], &env),
+            -87.0,
+        );
+        assert_close(
+            evaluate_words(&[4, 11, 1, (-3i32) as u32, 0], &env),
+            0.275 * 200.0,
+        );
+        assert_close(evaluate_words(&[4, 0, 1, 0, 0], &env), 0.0);
+        assert_close(evaluate_words(&[4, 40, 4, 4, 101], &env), 40.0 + 100.0);
+        assert_close(
+            evaluate_words(&[(-22i32) as u32, 3, 6, 10], &env),
+            -0.55 * (60.0 - 100.0),
+        );
+        assert_close(evaluate_words(&[40, 3, 6, 11], &env), 60.0 - 110.0);
+    }
+
+    /// What it must refuse to number: a spelled name, an out-of-range parameter
+    /// (GATPAR's 223), an operand the environment does not carry, and the trig
+    /// functions whose second operand is not yet pinned against E3D.
+    #[test]
+    fn declines_what_it_cannot_number() {
+        let env = sample_env();
+        assert_eq!(evaluate_words(&[4, 40, 7, 776, 966], &env), None); // NULL
+        assert_eq!(evaluate_words(&[4, 40, 1, 12, 0], &env), None); // PARAM 12, unset
+        assert_eq!(evaluate_words(&[4, 40, 1, (-7i32) as u32, 0], &env), None); // DD#7, unset
+        assert_eq!(evaluate_words(&[40, 5, 10, 11], &env), None); // SINF
+        assert_eq!(evaluate_words(&[40, 6, 10, 11], &env), None); // COSF
+        assert_eq!(evaluate_words(&[40, 2, 2, (-4i32) as u32], &env), None); // TANF
+    }
 
     /// Every distinct tuple the TTY sample produced, against E3D's own text.
     #[test]

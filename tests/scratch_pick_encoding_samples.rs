@@ -201,7 +201,10 @@ fn report_one_element_per_distinct_stored_value() {
     let mut values_tsv = Vec::new();
     for ((noun, attribute), keys) in &seen {
         let values: usize = keys.values().map(BTreeMap::len).sum();
-        println!("\n=== {noun}.{attribute}: {values} distinct values in {} capture groups ===", keys.len());
+        println!(
+            "\n=== {noun}.{attribute}: {values} distinct values in {} capture groups ===",
+            keys.len()
+        );
         for (key, values) in keys {
             println!("  [{key}]");
             let mut first = true;

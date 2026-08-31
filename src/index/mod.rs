@@ -38,8 +38,13 @@ use crate::error::E3dReaderError;
 use crate::meta::constants::DATA_PAGE_INDEX;
 use crate::refno::{PageAddress, RefNo};
 
-pub use cursor::{IndexCursor, IndexTreeError, IndexWalk, IndexedRecord, Lookup, RecordLoc};
-pub use diff::{DiffTally, IndexDiff, KeyChange, Pruning};
+pub use cursor::{
+    IndexCursor, IndexTreeError, IndexWalk, IndexedRecord, Lookup, RecordLoc, RecordPosition,
+};
+pub use diff::{
+    CompletedIndexDiff, DiffDiagnostics, DiffTally, FlagOnlyDrift, IndexCandidate, IndexDiff,
+    KeyChange, Pruning,
+};
 
 /// `page_type` of an index page. core.dll checks it in `sub_5B026C0` and fails
 /// with "Page is not a table page".
@@ -477,9 +482,3 @@ pub struct SearchResult {
     pub entry: IndexEntry,
     pub leaf_page_no: u32,
 }
-
-
-
-
-
-

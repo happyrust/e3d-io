@@ -94,7 +94,11 @@ fn report_where_the_pdistance_formula_lives() {
             let negated = hash.wrapping_neg();
             let label = match hash == key {
                 true => "  <-- PDIS formula".to_string(),
-                false => format!(" (as itself {}, negated {})", name_of(hash), name_of(negated)),
+                false => format!(
+                    " (as itself {}, negated {})",
+                    name_of(hash),
+                    name_of(negated)
+                ),
             };
             let body = match &attribute.value {
                 ExplicitValue::IntArray(words) => annotate(words),

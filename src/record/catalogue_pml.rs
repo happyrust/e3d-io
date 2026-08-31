@@ -25,10 +25,18 @@
 //! Anything this does not fully understand returns `None`. A half-read formula
 //! would be worse than the all-zero tuple it replaces, because it would look
 //! like an answer.
+//!
+//! [`render`] prints the program and [`evaluate_words`] works it out, and both
+//! read the words through the one [`parse`]. Two walkers over the same wire
+//! format drift: the renderer would keep accepting a shape the evaluator had
+//! quietly stopped reading, and the only symptom would be a number going
+//! missing on a formula that still prints.
 
 use std::fmt::Write as _;
 
 use e3d_attlib::{db1_dehash, lookup_system_name};
+
+use crate::record::catalogue_eval::{AttribRef, ParamEnv};
 
 /// Word 0 of the program, before any opcode. Every sampled blob carries it.
 const PROGRAM_MARKER: i32 = 1;
@@ -126,38 +134,185 @@ impl Term {
     }
 }
 
-/// Render the expression stored for an attribute, if this can read all of it.
-pub fn render(words: &[i32]) -> Option<String> {
+/// One step of the reverse-Polish program, as the words state it.
+///
+/// Parsing stops at what the wire says and leaves every reading to the
+/// consumer, so [`render`] and [`evaluate_words`] cannot disagree about which
+/// blobs are programs at all.
+#[derive(Debug, Clone, PartialEq)]
+enum Step {
+    Number(f64),
+    Attribute(Attribute),
+    Operator(i32),
+}
+
+/// An `ATTRIB …` operand, in the three shapes the form names one.
+#[derive(Debug, Clone, PartialEq)]
+struct Attribute {
+    name: String,
+    /// `ATTRIB PARA[…]` takes its subscript off the evaluation stack.
+    subscript_from_stack: bool,
+    /// The second word of `ATTRIB X Y`.
+    qualifier: Option<String>,
+    /// The `OF a OF b` owners, nearest first. Non-empty only for the chain form.
+    owners: Vec<String>,
+}
+
+/// Read the whole program, or nothing.
+fn parse(words: &[i32]) -> Option<Vec<Step>> {
     let program = program_of(words)?;
-    let mut stack: Vec<Term> = Vec::new();
+    let mut steps = Vec::new();
     let mut cursor = 0;
 
     while cursor < program.len() {
-        let consumed = match program[cursor] {
-            OP_PUSH_NUMBER => push_number(&program[cursor..], &mut stack)?,
-            OP_ATTRIBUTE => push_attribute(&program[cursor..], &mut stack)?,
-            OP_NEGATE => {
+        let (step, consumed) = match program[cursor] {
+            OP_PUSH_NUMBER => parse_number(&program[cursor..])?,
+            OP_ATTRIBUTE => parse_attribute(&program[cursor..])?,
+            OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
+            | OP_TAN | OP_ATANT => (Step::Operator(program[cursor]), 1),
+            // An opcode this has never seen used is a program it has not read.
+            _ => return None,
+        };
+        steps.push(step);
+        cursor += consumed;
+    }
+    Some(steps)
+}
+
+/// Render the expression stored for an attribute, if this can read all of it.
+pub fn render(words: &[i32]) -> Option<String> {
+    let mut stack: Vec<Term> = Vec::new();
+
+    for step in parse(words)? {
+        match step {
+            Step::Number(value) => stack.push(Term {
+                text: format_number(value),
+                precedence: PRECEDENCE_ATOM,
+                number: Some(value),
+            }),
+            Step::Attribute(attribute) => {
+                let text = render_attribute(&attribute, &mut stack)?;
+                stack.push(Term::atom(text));
+            }
+            Step::Operator(OP_NEGATE) => {
                 let operand = stack.pop()?;
                 stack.push(Term {
                     text: format!("- {}", operand.nested(PRECEDENCE_NEGATE)),
                     precedence: PRECEDENCE_NEGATE,
                     number: None,
                 });
-                1
             }
-            OP_SIN => apply_function("SIN", &mut stack)?,
-            OP_COS => apply_function("COS", &mut stack)?,
-            OP_TAN => apply_function("TAN", &mut stack)?,
-            OP_ATANT => apply_binary_function("ATANT", &mut stack)?,
-            operator => apply_binary(operator, &mut stack)?,
-        };
-        cursor += consumed;
+            Step::Operator(OP_SIN) => apply_function("SIN", &mut stack)?,
+            Step::Operator(OP_COS) => apply_function("COS", &mut stack)?,
+            Step::Operator(OP_TAN) => apply_function("TAN", &mut stack)?,
+            Step::Operator(OP_ATANT) => apply_binary_function("ATANT", &mut stack)?,
+            Step::Operator(operator) => apply_binary(operator, &mut stack)?,
+        }
     }
 
     match stack.as_slice() {
         [only] => Some(format!("( {} )", only.text)),
         _ => None,
     }
+}
+
+/// Work the program out to a number, against `env`.
+///
+/// Angles are degrees. Three things say so and none of them is a convention
+/// borrowed from elsewhere: `PTAX.Pdistance` holds `ATTRIB PARA[3 ] * TAN ( 27
+/// )`, and 27 radians makes that tangent **negative** — a P point behind the
+/// component it belongs to; the census's other tangents are all the bend
+/// formula `R * TAN ( ANGL / 2 )`, which is degrees wherever it is written; and
+/// [`crate::record::axis_spec`] already reads the rotation angle beside these
+/// as hundredths of a degree.
+///
+/// Returns `None`, never a guess, when the environment cannot answer an
+/// attribute, when the program is one [`parse`] declines, when the stack does
+/// not end on exactly one value, and when the arithmetic leaves the reals (a
+/// division by an unset parameter is a degenerate to report, not an infinity to
+/// pass on). [`OP_ATANT`] declines too — see [`apply_numeric`].
+pub fn evaluate_words(words: &[i32], env: &dyn ParamEnv) -> Option<f64> {
+    let mut stack: Vec<f64> = Vec::new();
+
+    for step in parse(words)? {
+        match step {
+            Step::Number(value) => stack.push(value),
+            Step::Attribute(attribute) => {
+                let subscript = match attribute.subscript_from_stack {
+                    true => Some(stack.pop()?),
+                    false => None,
+                };
+                let owners: Vec<&str> = attribute.owners.iter().map(String::as_str).collect();
+                let reference = AttribRef {
+                    name: &attribute.name,
+                    subscript,
+                    qualifier: attribute.qualifier.as_deref(),
+                    owner_chain: &owners,
+                };
+                stack.push(env.attribute_number(&reference)?);
+            }
+            Step::Operator(operator) => apply_numeric(operator, &mut stack)?,
+        }
+    }
+
+    match stack.as_slice() {
+        [only] if only.is_finite() => Some(*only),
+        _ => None,
+    }
+}
+
+/// Apply one operator to the numeric stack.
+///
+/// `ATANT` is the one opcode with no numeric reading here. Its two arguments
+/// are an ordered pair and which one is the ordinate is not pinned against
+/// E3D; picking wrong does not fail, it returns the complementary angle, and
+/// a P point placed by it would sit at a plausible wrong spot. The census's
+/// `Pdistance` and `Px`/`Py`/`Pz` formulas never reach it, so declining costs
+/// nothing today and admits the gap.
+fn apply_numeric(operator: i32, stack: &mut Vec<f64>) -> Option<()> {
+    let value = match operator {
+        OP_NEGATE => -stack.pop()?,
+        OP_SIN => stack.pop()?.to_radians().sin(),
+        OP_COS => stack.pop()?.to_radians().cos(),
+        OP_TAN => stack.pop()?.to_radians().tan(),
+        OP_ATANT => return None,
+        _ => {
+            let right = stack.pop()?;
+            let left = stack.pop()?;
+            match operator {
+                OP_ADD => left + right,
+                OP_SUBTRACT => left - right,
+                OP_MULTIPLY => left * right,
+                OP_DIVIDE => left / right,
+                _ => return None,
+            }
+        }
+    };
+    stack.push(value);
+    Some(())
+}
+
+/// Spell an operand the way E3D's `Q` does, taking its subscript off the stack.
+fn render_attribute(attribute: &Attribute, stack: &mut Vec<Term>) -> Option<String> {
+    let mut text = format!("ATTRIB {}", attribute.name);
+    if attribute.subscript_from_stack {
+        // The subscript has to be a number, not a formula.
+        let subscript = stack.pop()?.number?;
+        let _ = write!(text, "[{} ]", format_number(subscript));
+    }
+    if let Some(qualifier) = &attribute.qualifier {
+        text.push(' ');
+        text.push_str(qualifier);
+    }
+    for owner in &attribute.owners {
+        let _ = write!(text, " OF {owner}");
+    }
+    // Both sampled chains print a trailing blank before the closing bracket
+    // the caller adds.
+    if !attribute.owners.is_empty() {
+        text.push(' ');
+    }
+    Some(text)
 }
 
 /// Strip the length word and the marker, checking the length as we go.
@@ -172,7 +327,7 @@ fn program_of(words: &[i32]) -> Option<&[i32]> {
     }
 }
 
-fn push_number(words: &[i32], stack: &mut Vec<Term>) -> Option<usize> {
+fn parse_number(words: &[i32]) -> Option<(Step, usize)> {
     let [OP_PUSH_NUMBER, NUMBER_SHAPE, first, second, third, fourth, NUMBER_SHAPE, ..] = words
     else {
         return None;
@@ -183,12 +338,7 @@ fn push_number(words: &[i32], stack: &mut Vec<Term>) -> Option<usize> {
         return None;
     }
     let value = decode_number(*first, *second, *third)?;
-    stack.push(Term {
-        text: format_number(value),
-        precedence: PRECEDENCE_ATOM,
-        number: Some(value),
-    });
-    Some(NUMBER_WORDS)
+    Some((Step::Number(value), NUMBER_WORDS))
 }
 
 fn decode_number(first: i32, second: i32, third: i32) -> Option<f64> {
@@ -218,9 +368,9 @@ fn format_number(value: f64) -> String {
     }
 }
 
-fn push_attribute(words: &[i32], stack: &mut Vec<Term>) -> Option<usize> {
-    if let Some(consumed) = push_owner_chain(words, stack) {
-        return Some(consumed);
+fn parse_attribute(words: &[i32]) -> Option<(Step, usize)> {
+    if let Some(found) = parse_owner_chain(words) {
+        return Some(found);
     }
     let [OP_ATTRIBUTE, ATTRIBUTE_SHAPE, name, first, second, third, end_first, end_second, ..] =
         words
@@ -232,22 +382,31 @@ fn push_attribute(words: &[i32], stack: &mut Vec<Term>) -> Option<usize> {
     }
     let name = name_of(*name)?;
 
-    let text = match ([*first, *second], third) {
-        (SUBSCRIPT_FROM_STACK, 0) => {
-            let subscript = stack.pop()?.number?;
-            let mut text = format!("ATTRIB {name}[");
-            let _ = write!(text, "{} ]", format_number(subscript));
-            text
-        }
+    let attribute = match ([*first, *second], third) {
+        (SUBSCRIPT_FROM_STACK, 0) => Attribute {
+            name,
+            subscript_from_stack: true,
+            qualifier: None,
+            owners: Vec::new(),
+        },
         // The same qualifier words with no second name behind them: the
         // attribute stands on its own. `PTAX.Pdistance` reaches both readings
         // in one formula — `ATTRIB RADI * TAN ( ATTRIB ANGL / 2 )`.
-        (SECOND_NAME_FOLLOWS, 0) => format!("ATTRIB {name}"),
-        (SECOND_NAME_FOLLOWS, qualifier) => format!("ATTRIB {name} {}", name_of(*qualifier)?),
+        (SECOND_NAME_FOLLOWS, 0) => Attribute {
+            name,
+            subscript_from_stack: false,
+            qualifier: None,
+            owners: Vec::new(),
+        },
+        (SECOND_NAME_FOLLOWS, qualifier) => Attribute {
+            name,
+            subscript_from_stack: false,
+            qualifier: Some(name_of(*qualifier)?),
+            owners: Vec::new(),
+        },
         _ => return None,
     };
-    stack.push(Term::atom(text));
-    Some(ATTRIBUTE_WORDS)
+    Some((Step::Attribute(attribute), ATTRIBUTE_WORDS))
 }
 
 /// An attribute reached through its owners: `ATTRIB NAMN OF PSPE OF PIPE `.
@@ -262,8 +421,8 @@ fn push_attribute(words: &[i32], stack: &mut Vec<Term>) -> Option<usize> {
 /// declines rather than dropping the word.
 ///
 /// Both sampled chains print a trailing blank before the closing bracket the
-/// caller adds, which is why the text ends in one.
-fn push_owner_chain(words: &[i32], stack: &mut Vec<Term>) -> Option<usize> {
+/// caller adds, which [`render_attribute`] adds back for a non-empty chain.
+fn parse_owner_chain(words: &[i32]) -> Option<(Step, usize)> {
     let [OP_ATTRIBUTE, ATTRIBUTE_SHAPE_OWNED, name, 1, _, 0, OP_OWNER_CHAIN, length, chain @ ..] =
         words
     else {
@@ -276,21 +435,23 @@ fn push_owner_chain(words: &[i32], stack: &mut Vec<Term>) -> Option<usize> {
     };
     let name = name_of(*name)?;
 
-    let mut text = format!("ATTRIB {name}");
-    let mut named = 0;
+    let mut named = Vec::new();
     for word in owners {
         if *word < NAME_FLOOR {
             continue;
         }
-        let _ = write!(text, " OF {}", name_of(*word)?);
-        named += 1;
+        named.push(name_of(*word)?);
     }
-    if named == 0 {
+    if named.is_empty() {
         return None;
     }
-    text.push(' ');
-    stack.push(Term::atom(text));
-    Some(ATTRIBUTE_WORDS + length)
+    let attribute = Attribute {
+        name,
+        subscript_from_stack: false,
+        qualifier: None,
+        owners: named,
+    };
+    Some((Step::Attribute(attribute), ATTRIBUTE_WORDS + length))
 }
 
 fn name_of(hash: i32) -> Option<String> {
@@ -302,10 +463,10 @@ fn name_of(hash: i32) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
-fn apply_function(name: &str, stack: &mut Vec<Term>) -> Option<usize> {
+fn apply_function(name: &str, stack: &mut Vec<Term>) -> Option<()> {
     let argument = stack.pop()?;
     stack.push(Term::atom(format!("{name} ( {} )", argument.text)));
-    Some(1)
+    Some(())
 }
 
 /// A function of two arguments, the second pushed last.
@@ -313,17 +474,17 @@ fn apply_function(name: &str, stack: &mut Vec<Term>) -> Option<usize> {
 /// The brackets and the comma delimit the arguments already, so neither takes
 /// any of its own: E3D prints `ATANT ( ATTRIB PARA[4 ] , ATTRIB PARA[2 ] -
 /// 1.8 * ATTRIB PARA[7 ] )` with the difference bare.
-fn apply_binary_function(name: &str, stack: &mut Vec<Term>) -> Option<usize> {
+fn apply_binary_function(name: &str, stack: &mut Vec<Term>) -> Option<()> {
     let second = stack.pop()?;
     let first = stack.pop()?;
     stack.push(Term::atom(format!(
         "{name} ( {} , {} )",
         first.text, second.text
     )));
-    Some(1)
+    Some(())
 }
 
-fn apply_binary(operator: i32, stack: &mut Vec<Term>) -> Option<usize> {
+fn apply_binary(operator: i32, stack: &mut Vec<Term>) -> Option<()> {
     let (symbol, precedence) = match operator {
         OP_ADD => ("+", PRECEDENCE_ADDITIVE),
         OP_SUBTRACT => ("-", PRECEDENCE_ADDITIVE),
@@ -349,7 +510,7 @@ fn apply_binary(operator: i32, stack: &mut Vec<Term>) -> Option<usize> {
         precedence,
         number: None,
     });
-    Some(1)
+    Some(())
 }
 
 #[cfg(test)]
@@ -362,19 +523,13 @@ mod tests {
     fn renders_sampled_expressions_the_way_e3d_does() {
         let cases: &[(&[i32], &str)] = &[
             // A bare number, in both of the shapes a number is stored in.
-            (
-                &[9, 1, 101, 6, 24576, 0, 5, 0, 6],
-                "( 24 )",
-            ),
+            (&[9, 1, 101, 6, 24576, 0, 5, 0, 6], "( 24 )"),
             // The scaled shape carries its fraction in word 1. These three
             // are `PTCA.Ptcdirection` angles read back on 2026-08-27.
             (&[9, 1, 101, 6, 30719, 22720, 5, 0, 6], "( 29.999701 )"),
             (&[9, 1, 101, 6, 23039, 22720, 6, 0, 6], "( 44.999401 )"),
             (&[9, 1, 101, 6, 17920, 1664, 6, 0, 6], "( 35.000099 )"),
-            (
-                &[9, 1, 101, 6, 1048576, 0, 1073742851, 0, 6],
-                "( 16 )",
-            ),
+            (&[9, 1, 101, 6, 1048576, 0, 1073742851, 0, 6], "( 16 )"),
             // An attribute subscripted by the number under it on the stack.
             (
                 &[
@@ -484,17 +639,79 @@ mod tests {
             // Trigonometry.
             (
                 &[
-                    34, 1, 101, 6, 1677721, -1717986918, 1073742845, 0, 6, 101, 6, 655360, 0,
-                    1073742850, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 804, 101, 6, 1966080,
-                    0, 1073742851, 0, 6, 902, 804,
+                    34,
+                    1,
+                    101,
+                    6,
+                    1677721,
+                    -1717986918,
+                    1073742845,
+                    0,
+                    6,
+                    101,
+                    6,
+                    655360,
+                    0,
+                    1073742850,
+                    0,
+                    6,
+                    106,
+                    2,
+                    564289,
+                    -1,
+                    -1,
+                    0,
+                    1601,
+                    1701,
+                    804,
+                    101,
+                    6,
+                    1966080,
+                    0,
+                    1073742851,
+                    0,
+                    6,
+                    902,
+                    804,
                 ],
                 "( 0.4 * ATTRIB PARA[13 ] * COS ( 30 ) )",
             ),
             (
                 &[
-                    34, 1, 101, 6, 1677721, -1717986918, 1073742845, 0, 6, 101, 6, 655360, 0,
-                    1073742850, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 804, 101, 6, 1966080,
-                    0, 1073742851, 0, 6, 901, 804,
+                    34,
+                    1,
+                    101,
+                    6,
+                    1677721,
+                    -1717986918,
+                    1073742845,
+                    0,
+                    6,
+                    101,
+                    6,
+                    655360,
+                    0,
+                    1073742850,
+                    0,
+                    6,
+                    106,
+                    2,
+                    564289,
+                    -1,
+                    -1,
+                    0,
+                    1601,
+                    1701,
+                    804,
+                    101,
+                    6,
+                    1966080,
+                    0,
+                    1073742851,
+                    0,
+                    6,
+                    901,
+                    804,
                 ],
                 "( 0.4 * ATTRIB PARA[13 ] * SIN ( 30 ) )",
             ),
@@ -583,7 +800,22 @@ mod tests {
     fn declines_an_owner_chain_it_cannot_read_whole() {
         // A word above the name floor that dehashes to nothing.
         assert_eq!(
-            render(&[14, 1, 106, 4, 74699205, 1, 100, 0, 1602, 4, 2, 0x7FFF_FFFF, 6, 1701]),
+            render(&[
+                14,
+                1,
+                106,
+                4,
+                74699205,
+                1,
+                100,
+                0,
+                1602,
+                4,
+                2,
+                0x7FFF_FFFF,
+                6,
+                1701
+            ]),
             None
         );
         // No owner named at all.
@@ -625,5 +857,141 @@ mod tests {
     fn declines_a_catalogue_tuple() {
         assert_eq!(render(&[4, 40, 1, 2, 0]), None);
         assert_eq!(render(&[28, 1, 2, 0]), None);
+    }
+
+    // ---- evaluation ---------------------------------------------------
+
+    use crate::record::catalogue_eval::MapParamEnv;
+
+    /// The three `PTAX.Pdistance` blobs of the census, and the `PARA` values a
+    /// real 50 mm component carries (`SCOM /ACP1000-TFVL-50`).
+    fn bend_env() -> MapParamEnv {
+        MapParamEnv::new()
+            .set_attribute("PARA[1]", 50.0)
+            .set_attribute("PARA[3]", 3000.0)
+            .set_attribute("PARA[9]", 1.5)
+            .set_attribute("RADI", 100.0)
+            .set_attribute("ANGL", 90.0)
+    }
+
+    /// `ATTRIB PARA[3 ] * TAN ( 27 )`, the shape the whole degree reading rests
+    /// on: 27 radians makes this tangent negative, which would put the P point
+    /// behind its own component.
+    #[test]
+    fn trigonometry_is_in_degrees() {
+        let words = &[
+            26, 1, 101, 6, 524288, 0, 1073742848, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101,
+            6, 1769472, 0, 1073742851, 0, 6, 903, 804,
+        ];
+        assert_eq!(
+            render(words).as_deref(),
+            Some("( ATTRIB PARA[3 ] * TAN ( 27 ) )")
+        );
+        let got = evaluate_words(words, &bend_env()).expect("the census formula evaluates");
+        assert!(
+            (got - 3000.0 * 27f64.to_radians().tan()).abs() < 1e-9,
+            "expected 3000 * tan(27 degrees), got {got}"
+        );
+        assert!(got > 0.0, "27 radians would make this negative, got {got}");
+    }
+
+    /// `ATTRIB RADI * TAN ( ATTRIB ANGL / 2 )` — the bend tangent length, and
+    /// the one formula in the census that reads two bare attributes at once.
+    #[test]
+    fn evaluates_the_bend_tangent_length() {
+        let words = &[
+            28, 1, 106, 2, 711549, 1, 1, 0, 1601, 1701, 106, 2, 773119, 1, 1, 0, 1601, 1701, 101,
+            6, 0, 0, 1073742848, 0, 6, 805, 903, 804,
+        ];
+        // A right-angle bend's tangent length is its radius.
+        let got = evaluate_words(words, &bend_env()).expect("evaluates");
+        assert!((got - 100.0).abs() < 1e-9, "expected 100, got {got}");
+    }
+
+    /// Sum, difference and a subscript taken off the stack, in one program.
+    #[test]
+    fn evaluates_the_shapes_the_census_turns_up() {
+        // `( ATTRIB PARA[5 ] + ATTRIB PARA[4 ] )`
+        let sum = &[
+            33, 1, 101, 6, 20480, 0, 3, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 32768,
+            0, 2, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 802,
+        ];
+        let env = MapParamEnv::new()
+            .set_attribute("PARA[5]", 7.0)
+            .set_attribute("PARA[4]", 5.0);
+        assert_eq!(evaluate_words(sum, &env), Some(12.0));
+
+        // `( 0.5 * ATTRIB PARA[20 ] )`
+        let scaled = &[
+            25, 1, 101, 6, 8192, 0, 1, 0, 6, 101, 6, 20480, 0, 5, 0, 6, 106, 2, 564289, -1, -1, 0,
+            1601, 1701, 804,
+        ];
+        let env = MapParamEnv::new().set_attribute("PARA[20]", 24.0);
+        assert_eq!(evaluate_words(scaled, &env), Some(12.0));
+    }
+
+    /// An attribute the environment cannot answer is an admitted gap, and the
+    /// gap swallows the whole formula rather than standing in for a term.
+    #[test]
+    fn an_unanswered_attribute_takes_the_whole_formula_with_it() {
+        let words = &[
+            33, 1, 101, 6, 20480, 0, 3, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 32768,
+            0, 2, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 802,
+        ];
+        // Only one of the two `PARA` subscripts is registered.
+        let env = MapParamEnv::new().set_attribute("PARA[5]", 7.0);
+        assert_eq!(evaluate_words(words, &env), None);
+        assert!(
+            render(words).is_some(),
+            "it still prints; only the number is missing"
+        );
+    }
+
+    /// `ATANT`'s argument order is not pinned, so it declines rather than
+    /// returning the angle's complement half the time.
+    #[test]
+    fn the_two_argument_arctangent_declines() {
+        let words = &[
+            49, 1, 101, 6, 1048576, 0, 1073742849, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701,
+            101, 6, 0, 0, 1073742848, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 1835008,
+            0, 1073742849, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 802, 907,
+        ];
+        let env = MapParamEnv::new()
+            .set_attribute("PARA[4]", 3.0)
+            .set_attribute("PARA[2]", 4.0)
+            .set_attribute("PARA[7]", 5.0);
+        assert!(render(words).is_some(), "it prints");
+        assert_eq!(evaluate_words(words, &env), None, "but it does not number");
+    }
+
+    /// Dividing by an unset parameter is a degenerate to report, not an
+    /// infinity to hand downstream where it becomes a P point at the horizon.
+    #[test]
+    fn arithmetic_that_leaves_the_reals_declines() {
+        // `( ATTRIB PARA[11 ] / 2 )` with the divisor swapped in as zero.
+        let words = &[
+            25, 1, 101, 6, 393216, 0, 1073742850, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101,
+            6, 0, 0, 0, 0, 6, 805,
+        ];
+        let env = MapParamEnv::new().set_attribute("PARA[11]", 1.0);
+        assert_eq!(render(words).as_deref(), Some("( ATTRIB PARA[11 ] / 0 )"));
+        assert_eq!(evaluate_words(words, &env), None);
+    }
+
+    /// A program neither reader accepts stays rejected by both.
+    #[test]
+    fn the_two_readers_agree_on_what_is_a_program() {
+        let env = MapParamEnv::new().set_attribute("PARA[1]", 1.0);
+        for words in [
+            [8, 1, 101, 6, 24576, 0, 5, 0, 6].as_slice(),
+            [8, 101, 6, 24576, 0, 5, 0, 6].as_slice(),
+            [3, 1, 804].as_slice(),
+            [4, 40, 1, 2, 0].as_slice(),
+            [2, 1].as_slice(),
+            [].as_slice(),
+        ] {
+            assert_eq!(render(words), None, "renders {words:?}");
+            assert_eq!(evaluate_words(words, &env), None, "numbers {words:?}");
+        }
     }
 }

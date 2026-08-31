@@ -51,7 +51,10 @@ mod tests {
     fn renders_sampled_point_lists_the_way_e3d_does() {
         assert_eq!(render(&[0, 3, 1000]).as_deref(), Some("P0 P3"));
         assert_eq!(render(&[1, 100, 2, 1000]).as_deref(), Some("P1 T0 P2"));
-        assert_eq!(render(&[2, 100, 3, 1, 1000]).as_deref(), Some("P2 T0 P3 P1"));
+        assert_eq!(
+            render(&[2, 100, 3, 1, 1000]).as_deref(),
+            Some("P2 T0 P3 P1")
+        );
     }
 
     #[test]

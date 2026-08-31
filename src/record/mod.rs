@@ -43,6 +43,7 @@ pub mod atnlog;
 pub mod attrs;
 pub mod axis_spec;
 pub mod block;
+pub mod catalogue_eval;
 pub mod catalogue_expr;
 pub mod catalogue_pml;
 pub mod descriptor;

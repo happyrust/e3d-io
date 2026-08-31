@@ -10,8 +10,16 @@
 /// word is 7 (`crate::page::PageType::ElementData`), and no live record part
 /// touches a `(5, 7618377)` page anywhere in the 429-file corpus — every
 /// file holds some, and the live index tree references none of them
-/// (`docs/evidence/2026-08-30-e3d-io-data-page-header.md`). Which tree this
-/// is, and where its root is stated file-side, is an open research item.
+/// (`docs/evidence/2026-08-30-e3d-io-data-page-header.md`).
+///
+/// Research item R1 is now closed
+/// (`docs/evidence/2026-08-30-e3d-io-data-table-tree-7618377.md`): this is a
+/// copy-on-write refno-keyed B+tree rooted at the session page's 0x24 word
+/// (the field this crate currently names `SessionPage::claim`), mapping each
+/// **primary element** (the name-bearing, navigable hierarchy nouns —
+/// SITE/ZONE/EQUI/PIPE/BRAN/STRU/… — every live one of them, and none of the
+/// component/primitive/detail nouns beneath them) to `(0, session_number)`.
+/// 429/429 files partition cleanly by noun with no split. `sub_5AFB660` reads it.
 pub const DATA_PAGE_MAIN: u32 = 7_618_377;
 
 /// The RefNo index tree's identity: the second word of its type-5 pages.

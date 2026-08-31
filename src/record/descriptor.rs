@@ -281,13 +281,27 @@ pub fn extract_attribute(
 /// unrelated UDA that happens to land on the negated hash cannot be mistaken
 /// for a formula.
 fn stored_expression(parsed: &ParsedElement, hash: u32) -> Option<String> {
+    crate::record::catalogue_pml::render(stored_expression_words(parsed, hash)?)
+}
+
+/// The words of that expression, for a consumer that needs the number rather
+/// than the text.
+///
+/// [`extract_attribute`] renders the body and keeps only the string, because a
+/// descriptor value is what E3D would print. Evaluating it needs the program
+/// itself: re-parsing `( ATTRIB PARA[5 ] + ATTRIB PARA[4 ] )` back out of the
+/// display text would be a second, weaker reader of a format already read here.
+///
+/// Unlike [`stored_expression`] this does not require the body to decode — the
+/// caller can tell an entry it cannot read from an entry that is not there.
+pub fn stored_expression_words(parsed: &ParsedElement, hash: u32) -> Option<&[i32]> {
     let key = hash.wrapping_neg();
     parsed
         .explicit_attributes
         .iter()
         .find(|attribute| attribute.hash == key)
         .and_then(|attribute| match &attribute.value {
-            ExplicitValue::IntArray(words) => crate::record::catalogue_pml::render(words),
+            ExplicitValue::IntArray(words) => Some(words.as_slice()),
             _ => None,
         })
 }

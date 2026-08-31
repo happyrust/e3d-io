@@ -38,7 +38,7 @@ const OPCODE_BASE: u32 = 20;
 const FIRST_DIRECTION: u32 = 11;
 const DIRECTIONS: &[&str] = &["X", "-X", "Y", "-Y", "Z", "-Z"];
 
-fn direction(code: u32) -> Option<&'static str> {
+fn direction_name(code: u32) -> Option<&'static str> {
     DIRECTIONS
         .get(usize::try_from(code.checked_sub(FIRST_DIRECTION)?).ok()?)
         .copied()
@@ -58,7 +58,7 @@ pub fn render(words: &[u32]) -> Option<String> {
     };
 
     let (first, mut rest) = body.split_first()?;
-    let first = direction(*first)?;
+    let first = direction_name(*first)?;
     // Only a leading reversed axis is announced.
     let mut out = match first.starts_with('-') {
         true => format!("AXIS {first}"),
@@ -73,10 +73,69 @@ pub fn render(words: &[u32]) -> Option<String> {
         rest = rest.get(length..)?;
         let (next, tail) = rest.split_first()?;
         out.push(' ');
-        out.push_str(direction(*next)?);
+        out.push_str(direction_name(*next)?);
         rest = tail;
     }
     rest.is_empty().then_some(out)
+}
+
+fn direction_vector(code: u32) -> Option<[f64; 3]> {
+    Some(match code {
+        11 => [1.0, 0.0, 0.0],
+        12 => [-1.0, 0.0, 0.0],
+        13 => [0.0, 1.0, 0.0],
+        14 => [0.0, -1.0, 0.0],
+        15 => [0.0, 0.0, 1.0],
+        16 => [0.0, 0.0, -1.0],
+        _ => return None,
+    })
+}
+
+/// Evaluate a stored PTCD specification to a unit direction vector.
+///
+/// Core's DORTXT evidence shows opcodes 21/22/23 are one/two/three-axis
+/// direction chains. Each PML expression is an angle in degrees rotating the
+/// current direction toward the next named axis.
+pub fn direction(
+    words: &[u32],
+    env: &dyn crate::record::catalogue_eval::ParamEnv,
+) -> Option<[f64; 3]> {
+    let [declared, leading, HEADER_WORD, opcode, body @ ..] = words else {
+        return None;
+    };
+    if *declared as usize != words.len() || !LEADING_WORDS.contains(leading) {
+        return None;
+    }
+    let turns = usize::try_from(opcode.checked_sub(OPCODE_BASE)?.checked_sub(1)?).ok()?;
+    let (&TERMINATOR, body) = body.split_last()? else {
+        return None;
+    };
+    let (first, mut rest) = body.split_first()?;
+    let mut vector = direction_vector(*first)?;
+    for _ in 0..turns {
+        let length = usize::try_from(*rest.first()?).ok()?;
+        let program = rest.get(..length)?;
+        let program: Vec<i32> = program.iter().map(|word| *word as i32).collect();
+        let angle = crate::record::catalogue_pml::evaluate_words(&program, env)?.to_radians();
+        if !angle.is_finite() {
+            return None;
+        }
+        rest = rest.get(length..)?;
+        let (next, tail) = rest.split_first()?;
+        let next = direction_vector(*next)?;
+        vector = [
+            vector[0] * angle.cos() + next[0] * angle.sin(),
+            vector[1] * angle.cos() + next[1] * angle.sin(),
+            vector[2] * angle.cos() + next[2] * angle.sin(),
+        ];
+        let length = (vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2]).sqrt();
+        if length <= 0.0 || !length.is_finite() {
+            return None;
+        }
+        vector = [vector[0] / length, vector[1] / length, vector[2] / length];
+        rest = tail;
+    }
+    rest.is_empty().then_some(vector)
 }
 
 #[cfg(test)]
@@ -201,5 +260,16 @@ mod tests {
         // A catalogue tuple and a point list must not be claimed here.
         assert_eq!(render(&[4, 40, 1, 2, 0]), None);
         assert_eq!(render(&[0, 3, 1000]), None);
+    }
+
+    #[test]
+    fn evaluates_turns_in_degrees() {
+        let env = crate::record::catalogue_eval::MapParamEnv::new();
+        let words = [16, 5, 2, 22, 11, 9, 1, 101, 6, 23040, 0, 6, 0, 6, 15, 61];
+        let got = direction(&words, &env).expect("X 45 Z");
+        let root_half = 0.5_f64.sqrt();
+        assert!((got[0] - root_half).abs() < 1.0e-12, "{got:?}");
+        assert!(got[1].abs() < 1.0e-12, "{got:?}");
+        assert!((got[2] - root_half).abs() < 1.0e-12, "{got:?}");
     }
 }

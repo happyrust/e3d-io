@@ -48,17 +48,37 @@ use crate::session::DbView;
 /// Every sample database is single-extent, so nothing in the corpus can tell
 /// that apart from taking the extent out of the RefNo — which is why this is
 /// stated rather than decided.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RecordPosition {
+    pub page: PageId,
+    pub offset_words: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RecordLoc {
     pub page: PageId,
     pub offset_words: u32,
     /// Low 12 bits of `packed`. Reads 1 on all 940 694 leaf entries of the
-    /// corpus. It takes no part in routing and none in deciding whether a key
-    /// exists; observing it is all this crate does with it.
+    /// corpus. It takes no part in routing, existence, or core.dll's modified
+    /// classification; observing it is all this crate does with it.
     pub flag: u16,
 }
 
 impl RecordLoc {
+    /// The part of an index value core.dll compares when deciding whether an
+    /// element was modified between two sessions.
+    pub const fn position(self) -> RecordPosition {
+        RecordPosition {
+            page: self.page,
+            offset_words: self.offset_words,
+        }
+    }
+
+    /// The uninterpreted low bits of the packed leaf value.
+    pub const fn raw_flag(self) -> u16 {
+        self.flag
+    }
+
     pub const fn byte_offset(&self) -> u64 {
         self.offset_words as u64 * 2
     }
@@ -74,6 +94,10 @@ pub struct IndexedRecord {
 }
 
 impl IndexedRecord {
+    pub const fn position(self) -> RecordPosition {
+        self.loc.position()
+    }
+
     /// The leaf entry this was read from, for callers still working in entries.
     pub fn entry(&self) -> IndexEntry {
         IndexEntry {

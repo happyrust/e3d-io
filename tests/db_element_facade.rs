@@ -76,7 +76,10 @@ fn identity_and_navigation_agree_with_the_engine() {
     assert!(!type_name.is_empty());
 
     // B. owner 与成员：原序逐项一致
-    let owner = element.owner().unwrap().expect("truth says it has an owner");
+    let owner = element
+        .owner()
+        .unwrap()
+        .expect("truth says it has an owner");
     assert_eq!(owner.refno(), truth.owner);
     assert_eq!(element.member_refnos().unwrap(), truth.members);
     assert_eq!(element.member_count().unwrap(), truth.members.len());
@@ -90,11 +93,11 @@ fn identity_and_navigation_agree_with_the_engine() {
     );
     // member(i) 从 1 起数
     assert!(element.member(0).unwrap().is_none());
-    assert_eq!(element.member(1).unwrap().unwrap().refno(), truth.members[0]);
-    assert!(element
-        .member(truth.members.len() + 1)
-        .unwrap()
-        .is_none());
+    assert_eq!(
+        element.member(1).unwrap().unwrap().refno(),
+        truth.members[0]
+    );
+    assert!(element.member(truth.members.len() + 1).unwrap().is_none());
 
     // 游标一次一个，走完为止
     let mut cursor = element.members().unwrap();
@@ -119,7 +122,9 @@ fn identity_and_navigation_agree_with_the_engine() {
     let first_noun = first.element_type().unwrap();
     let filtered = element.members_of_type(&first_noun).unwrap();
     assert!(!filtered.is_empty());
-    assert!(filtered.iter().any(|member| member.refno() == first.refno()));
+    assert!(filtered
+        .iter()
+        .any(|member| member.refno() == first.refno()));
 }
 
 /// C 组：typed getter 的投影必须与描述符抽取逐属性一致——同形取值相等，
@@ -148,7 +153,11 @@ fn typed_getters_agree_with_descriptor_extraction() {
                 assert_eq!(element.get_bool(name).unwrap(), Some(*expected), "{name}");
             }
             DescriptorValue::Int(expected) => {
-                assert_eq!(element.get_integer(name).unwrap(), Some(*expected), "{name}");
+                assert_eq!(
+                    element.get_integer(name).unwrap(),
+                    Some(*expected),
+                    "{name}"
+                );
                 assert_eq!(
                     element.get_double(name).unwrap(),
                     Some(f64::from(*expected)),
@@ -218,7 +227,11 @@ fn typed_getters_agree_with_descriptor_extraction() {
             }
             // 其余形状走 attribute() 原样出——投影留给消费方
             other => {
-                assert_eq!(element.attribute(name).unwrap().as_ref(), Some(other), "{name}");
+                assert_eq!(
+                    element.attribute(name).unwrap().as_ref(),
+                    Some(other),
+                    "{name}"
+                );
             }
         }
         checked += 1;
@@ -254,7 +267,10 @@ fn name_lookup_round_trips() {
 
     let set = open_set();
     let element = set.element(refno);
-    assert_eq!(element.stored_name().unwrap().as_deref(), Some(name.as_str()));
+    assert_eq!(
+        element.stored_name().unwrap().as_deref(),
+        Some(name.as_str())
+    );
 
     let hits = set.find_named(8000, &name).unwrap();
     assert!(
@@ -283,8 +299,7 @@ fn a_cross_db_reference_jumps_through_the_resolver() {
         }
     }
 
-    let attlib =
-        e3d_attlib::AttlibData::parse_file(ATTLIB).expect("attlib parses");
+    let attlib = e3d_attlib::AttlibData::parse_file(ATTLIB).expect("attlib parses");
     let set = Arc::new(DbSet::with_resolver(Arc::new(attlib), Box::new(Ams5052)));
     set.add_db(desi_pin()).expect("ams8000 opens");
 
@@ -318,10 +333,7 @@ fn a_cross_db_reference_jumps_through_the_resolver() {
     // 门面侧：get_element 给句柄，第一次读时经 resolver 自动开 5052
     assert!(!set.db_numbers().contains(&5052), "还没读就不该开");
     let element = set.element(source);
-    let target = element
-        .get_element(&attr_name)
-        .unwrap()
-        .expect("引用非空");
+    let target = element.get_element(&attr_name).unwrap().expect("引用非空");
     assert_eq!(target.refno(), expected_target);
     assert_eq!(target.db_no(), 5052);
     assert_eq!(target.exists().unwrap(), true, "跨库目标在 5052 的索引里");
@@ -372,8 +384,11 @@ fn the_pinned_session_is_frozen_and_reopenable() {
 
     // 模板文件名派生帮手与真实资产对上
     assert_eq!(
-        template_file_for(std::path::Path::new(r"E:\reverse\e3d\shadow_e3d31_aps_all"), "DESI")
-            .unwrap(),
+        template_file_for(
+            std::path::Path::new(r"E:\reverse\e3d\shadow_e3d31_aps_all"),
+            "DESI"
+        )
+        .unwrap(),
         PathBuf::from(DESVIR)
     );
 }

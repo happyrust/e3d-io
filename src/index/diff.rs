@@ -42,7 +42,7 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 
 use crate::index::cursor::{located, read_node};
-use crate::index::{cmp_refno, IndexTreeError, IndexedRecord};
+use crate::index::{cmp_refno, IndexTreeError, IndexedRecord, RecordPosition};
 use crate::page::cache::PageCache;
 use crate::page::{IoStats, PageId};
 use crate::refno::RefNo;
@@ -57,10 +57,10 @@ pub enum KeyChange {
     Inserted(IndexedRecord),
     /// Both roots index the key and they address different records.
     ///
-    /// Compared on [`crate::index::RecordLoc`], not on the leaf the entry came
-    /// from: rewriting a leaf moves every key on it, and a key that still
-    /// addresses the same record has not changed just because its leaf was
-    /// copied.
+    /// Compared on [`crate::index::RecordPosition`], not on the raw flag or
+    /// the leaf the entry came from: rewriting a leaf moves every key on it,
+    /// and a key that still addresses the same record has not changed just
+    /// because its leaf was copied.
     Modified {
         base: IndexedRecord,
         target: IndexedRecord,
@@ -74,6 +74,79 @@ impl KeyChange {
             Self::Modified { target, .. } => target.refno,
         }
     }
+
+    /// Project the forensic/raw locations onto the tuple core.dll exposes.
+    pub const fn candidate(self) -> IndexCandidate {
+        match self {
+            Self::Deleted(record) => IndexCandidate::Deleted {
+                refno: record.refno,
+                base: record.position(),
+            },
+            Self::Inserted(record) => IndexCandidate::Inserted {
+                refno: record.refno,
+                target: record.position(),
+            },
+            Self::Modified { base, target } => IndexCandidate::Modified {
+                refno: target.refno,
+                base: base.position(),
+                target: target.position(),
+            },
+        }
+    }
+}
+
+/// The three change states exposed by core.dll's index-table comparator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexCandidate {
+    Deleted {
+        refno: RefNo,
+        base: RecordPosition,
+    },
+    Inserted {
+        refno: RefNo,
+        target: RecordPosition,
+    },
+    Modified {
+        refno: RefNo,
+        base: RecordPosition,
+        target: RecordPosition,
+    },
+}
+
+impl IndexCandidate {
+    pub const fn refno(self) -> RefNo {
+        match self {
+            Self::Deleted { refno, .. }
+            | Self::Inserted { refno, .. }
+            | Self::Modified { refno, .. } => refno,
+        }
+    }
+}
+
+/// A raw leaf-flag change that core.dll's index comparator does not classify
+/// as an element modification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FlagOnlyDrift {
+    pub refno: RefNo,
+    pub position: RecordPosition,
+    pub base_flag: u16,
+    pub target_flag: u16,
+}
+
+/// Non-semantic observations made while comparing the two roots.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DiffDiagnostics {
+    pub flag_only_drifts: u64,
+    pub first_flag_only_drift: Option<FlagOnlyDrift>,
+}
+
+/// A completely traversed diff, safe for a caller to apply atomically.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompletedIndexDiff {
+    pub changes: Vec<IndexCandidate>,
+    pub tally: DiffTally,
+    pub diagnostics: DiffDiagnostics,
+    pub io: IoStats,
 }
 
 /// What a run classified, and how much of the two trees it never opened.
@@ -119,6 +192,7 @@ pub struct IndexDiff<'a> {
     target: Enumerator,
     pruning: Pruning,
     tally: DiffTally,
+    diagnostics: DiffDiagnostics,
     failed: bool,
 }
 
@@ -142,6 +216,7 @@ impl<'a> IndexDiff<'a> {
             target: Enumerator::new(target, page_limit),
             pruning,
             tally: DiffTally::default(),
+            diagnostics: DiffDiagnostics::default(),
             failed: false,
         }
     }
@@ -151,8 +226,27 @@ impl<'a> IndexDiff<'a> {
         self.tally
     }
 
+    /// Raw observations that deliberately do not create a [`KeyChange`].
+    pub fn diagnostics(&self) -> DiffDiagnostics {
+        self.diagnostics
+    }
+
     pub fn stats(&self) -> IoStats {
         self.pages.stats()
+    }
+
+    /// Traverse both roots completely before returning any applyable result.
+    pub fn finish(mut self) -> Result<CompletedIndexDiff, IndexTreeError> {
+        let mut changes = Vec::new();
+        while let Some(change) = self.next() {
+            changes.push(change?.candidate());
+        }
+        Ok(CompletedIndexDiff {
+            changes,
+            tally: self.tally,
+            diagnostics: self.diagnostics,
+            io: self.pages.stats(),
+        })
     }
 
     fn step(&mut self) -> Result<Option<KeyChange>, IndexTreeError> {
@@ -234,8 +328,18 @@ impl<'a> IndexDiff<'a> {
                         Ordering::Equal => {
                             self.base.take(base)?;
                             self.target.take(target)?;
-                            if base.loc == target.loc {
+                            if base.position() == target.position() {
                                 self.tally.unchanged_compared += 1;
+                                if base.loc.raw_flag() != target.loc.raw_flag() {
+                                    let drift = FlagOnlyDrift {
+                                        refno: base.refno,
+                                        position: base.position(),
+                                        base_flag: base.loc.raw_flag(),
+                                        target_flag: target.loc.raw_flag(),
+                                    };
+                                    self.diagnostics.flag_only_drifts += 1;
+                                    self.diagnostics.first_flag_only_drift.get_or_insert(drift);
+                                }
                             } else {
                                 self.tally.modified += 1;
                                 return Ok(Some(KeyChange::Modified { base, target }));

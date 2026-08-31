@@ -476,10 +476,7 @@ fn static_default_value(attribute: &CatalogAttribute) -> Option<DescriptorValue>
         // An empty word slot reads as zero, which E3D writes as `0` for some
         // attributes and `unset` for others; `unset` proper belongs to the
         // types that have no slot to be empty.
-        "WORD" => Some(DescriptorValue::Word {
-            raw: 0,
-            text: None,
-        }),
+        "WORD" => Some(DescriptorValue::Word { raw: 0, text: None }),
         "STRING" | "DIRECTION" | "POSITION" | "DATETIME" => Some(DescriptorValue::Unset),
         _ => None,
     }
@@ -746,20 +743,14 @@ mod tests {
         // E3D spells that zero `0` on `NAPP` and `unset` on `QTYPE`.
         assert_eq!(
             static_default_value(&catalog_attribute("WORD", false, false, "i:0")),
-            Some(DescriptorValue::Word {
-                raw: 0,
-                text: None
-            })
+            Some(DescriptorValue::Word { raw: 0, text: None })
         );
         // The default belongs to the type: an attribute the catalog says
         // defaults to `ANY` still reads as an empty slot, because `q att`
         // never printed a declared default for an element storing nothing.
         assert_eq!(
             static_default_value(&catalog_attribute("WORD", false, false, "i:550045")),
-            Some(DescriptorValue::Word {
-                raw: 0,
-                text: None
-            })
+            Some(DescriptorValue::Word { raw: 0, text: None })
         );
         assert_eq!(
             static_default_value(&catalog_attribute("INTEGER", false, false, "i:2")),

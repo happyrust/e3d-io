@@ -48,7 +48,10 @@ fn find_elements_by_name() {
             let ExplicitValue::Text(text) = &attribute.value else {
                 continue;
             };
-            if WANTED.iter().any(|wanted| wanted.eq_ignore_ascii_case(text)) {
+            if WANTED
+                .iter()
+                .any(|wanted| wanted.eq_ignore_ascii_case(text))
+            {
                 hits.insert(format!(
                     "{text}  refno={refno}  noun=0x{:08X} ({})  page={page} offset={offset} \
                      explicit={} members={}",

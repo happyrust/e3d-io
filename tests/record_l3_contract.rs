@@ -194,8 +194,5 @@ fn a_location_that_is_not_a_record_is_refused() {
     // same way, by name.
     let root = view.index_root();
     let error = read_record(view.pages_mut(), root, 0).unwrap_err();
-    assert!(
-        error.to_string().contains("first word is 5"),
-        "{error}"
-    );
+    assert!(error.to_string().contains("first word is 5"), "{error}");
 }

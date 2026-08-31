@@ -83,10 +83,7 @@ fn report_which_chunk_each_default_comes_from() {
                 } else {
                     ("implicit", String::new())
                 };
-                println!(
-                    "{noun}\t{}\t{report}\t{chunk}\t{words}",
-                    name_of(attr.hash)
-                );
+                println!("{noun}\t{}\t{report}\t{chunk}\t{words}", name_of(attr.hash));
             }
         }
     }

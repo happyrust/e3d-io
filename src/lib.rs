@@ -1,5 +1,6 @@
 pub mod attlib_metadata;
 pub mod db_element;
+pub mod db_param_env;
 pub mod element_name;
 pub mod engine;
 pub mod error;
@@ -13,6 +14,7 @@ pub mod tty;
 pub mod uda_catalog;
 
 pub use db_element::{DbElement, DbElementError, DbFilePin, DbFileResolver, DbSet, MemberCursor};
+pub use db_param_env::DbElementParamEnv;
 pub use engine::{ElementScan, ReadOnlyEngine, ScanTier, ScannedElement};
 pub use error::E3dReaderError;
 pub use meta::{DbDescriptor, FileInfo};

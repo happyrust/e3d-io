@@ -29,11 +29,9 @@ fn report_every_line_pts_array() {
         return;
     }
     let attlib = AttlibData::parse_file(&attlib_path).expect("parse attlib");
-    let mut provider = TemplateProvider::open(
-        format!("{SHADOW}\\catvir.dat"),
-        Some(db1_hash("CATA")),
-    )
-    .expect("open catvir");
+    let mut provider =
+        TemplateProvider::open(format!("{SHADOW}\\catvir.dat"), Some(db1_hash("CATA")))
+            .expect("open catvir");
     let mut engine = ReadOnlyEngine::open(DB).expect("open catalogue database");
 
     let line = db1_hash("LINE");
@@ -79,7 +77,9 @@ fn report_every_line_pts_array() {
         };
         let words: Vec<u32> = match value {
             DescriptorValue::IntArray(values) => values.iter().map(|item| *item as u32).collect(),
-            DescriptorValue::WordArray(values) | DescriptorValue::RawWords(values) => values.clone(),
+            DescriptorValue::WordArray(values) | DescriptorValue::RawWords(values) => {
+                values.clone()
+            }
             _ => {
                 *shapes
                     .entry(format!("<{value:?} is not a list>"))

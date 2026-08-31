@@ -26,6 +26,8 @@
 //! distinct pairs. Thirty-five of them were read back from E3D on 2026-08-27
 //! and every one agrees with what this renders.
 
+use crate::record::catalogue_eval::ParamEnv;
+
 const KIND_AXIS: u32 = 1;
 const KIND_NEGATED_AXIS: u32 = 2;
 const KIND_POINT: u32 = 3;
@@ -95,6 +97,94 @@ fn render_payload(payload: &[u32]) -> Option<String> {
         },
         _ => None,
     }
+}
+
+/// The same specification as a unit vector in the component's own frame.
+///
+/// [`render`] prints what E3D prints; this is what geometry needs. A `PTAX`
+/// point sits at `Pdistance` along the direction this returns, so getting it
+/// wrong puts the point on the wrong side of the component — which is why
+/// anything not pinned against E3D returns `None` here rather than a guess.
+///
+/// A census of the 4198 `PTAX` route endpoints in `ams8000_0001` turns up five
+/// payloads: `[2, 1]` (2095, `-X`), `[1, 1]` (1565, `X`), `[15, -4]` (377,
+/// `X DDANGLE -Y`), `[12, -4]` (152, `X DDANGLE Y`) and `[2, 2]` (5, `-Y`),
+/// plus two rotations that state their own angle (`[-24, 4500]`,
+/// `[-21, 4500]`). All of them are covered.
+///
+/// `env` answers the two forms that name their angle instead of stating it:
+/// `DDANGLE` goes to [`ParamEnv::design_dimension`] and `PARAM n` to
+/// [`ParamEnv::param`]. `Pn` — an axis pointing at another P point — needs the
+/// whole point set rather than one attribute, so it is declined here and left
+/// to a caller that has the set.
+pub fn direction(words: &[u32], env: &dyn ParamEnv) -> Option<[f64; 3]> {
+    direction_payload(words, env).or_else(|| match words.split_first() {
+        Some((count, rest)) if *count as usize == rest.len() => direction_payload(rest, env),
+        _ => None,
+    })
+}
+
+fn direction_payload(payload: &[u32], env: &dyn ParamEnv) -> Option<[f64; 3]> {
+    match payload {
+        [axis] => axis_vector(*axis),
+        [kind, value] => match *kind {
+            KIND_AXIS => axis_vector(*value),
+            KIND_NEGATED_AXIS => axis_vector(*value).map(negate),
+            // `P7` names another point of the same set, not a direction.
+            KIND_POINT => None,
+            kind => rotated_vector(kind, *value, env),
+        },
+        _ => None,
+    }
+}
+
+fn axis_vector(value: u32) -> Option<[f64; 3]> {
+    match value {
+        1 => Some([1.0, 0.0, 0.0]),
+        2 => Some([0.0, 1.0, 0.0]),
+        3 => Some([0.0, 0.0, 1.0]),
+        _ => None,
+    }
+}
+
+fn negate(v: [f64; 3]) -> [f64; 3] {
+    [-v[0], -v[1], -v[2]]
+}
+
+/// The `1..6` numbering of `X Y Z -X -Y -Z` as vectors, matching [`PAIR_AXES`].
+fn pair_vector(index: i32) -> Option<[f64; 3]> {
+    let axis = axis_vector(u32::try_from((index - 1) % 3 + 1).ok()?)?;
+    match index {
+        1..=3 => Some(axis),
+        4..=6 => Some(negate(axis)),
+        _ => None,
+    }
+}
+
+/// «from» rotated towards «towards» by the pair's angle.
+///
+/// Both members of every sampled pair are perpendicular, so this is the plain
+/// `from·cos θ + towards·sin θ`. A pair whose two axes are parallel has no
+/// plane to turn in and is declined rather than silently returning `from`.
+fn rotated_vector(kind: u32, value: u32, env: &dyn ParamEnv) -> Option<[f64; 3]> {
+    let (pair, degrees) = match (kind as i32, value as i32) {
+        (pair, hundredths) if pair < 0 => (pair.checked_neg()?, f64::from(hundredths) / 100.0),
+        (pair, DESIGN_ANGLE) if pair > 0 => (pair, env.design_dimension(DESIGN_ANGLE.abs())?),
+        (pair, parameter) if pair > 0 && parameter > 0 => (pair, env.param(parameter)?),
+        _ => return None,
+    };
+    let from = pair_vector(pair / 10)?;
+    let towards = pair_vector(pair % 10)?;
+    let dot = from[0] * towards[0] + from[1] * towards[1] + from[2] * towards[2];
+    if dot.abs() > 1.0e-9 {
+        return None;
+    }
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    Some([
+        from[0] * cos + towards[0] * sin,
+        from[1] * cos + towards[1] * sin,
+        from[2] * cos + towards[2] * sin,
+    ])
 }
 
 #[cfg(test)]

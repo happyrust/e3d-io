@@ -172,7 +172,12 @@ fn main() {
         w2.len(),
         &w2[..w2.len().min(8)]
     );
-    let offsets: Vec<(u32, u64)> = total.min_entry_offset.iter().take(8).map(|(k, v)| (*k, *v)).collect();
+    let offsets: Vec<(u32, u64)> = total
+        .min_entry_offset
+        .iter()
+        .take(8)
+        .map(|(k, v)| (*k, *v))
+        .collect();
     println!("  smallest record byte offsets on a page: {offsets:?}");
 
     println!("\nviolations (live record part on a non-(5,DATA) page):");

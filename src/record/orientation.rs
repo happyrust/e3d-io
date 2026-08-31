@@ -97,7 +97,10 @@ mod tests {
         assert!((y_rise - 0.17651).abs() < 1e-6, "y rise {y_rise}");
 
         let (z_bearing, z_rise) = bearing_and_rise(z);
-        assert!((z_bearing.abs() - 180.0).abs() < 1e-6, "z bearing {z_bearing}");
+        assert!(
+            (z_bearing.abs() - 180.0).abs() < 1e-6,
+            "z bearing {z_bearing}"
+        );
         assert!((z_rise - (90.0 - 0.17651)).abs() < 1e-4, "z rise {z_rise}");
     }
 

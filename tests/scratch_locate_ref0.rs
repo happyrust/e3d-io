@@ -103,10 +103,7 @@ fn locate_the_databases_that_own_each_unresolved_ref0() {
             Some(paths) => {
                 println!("ref0 {wanted}: {} file(s)", paths.len());
                 for path in paths {
-                    println!(
-                        "    {}",
-                        path.strip_prefix(root).unwrap_or(path).display()
-                    );
+                    println!("    {}", path.strip_prefix(root).unwrap_or(path).display());
                 }
             }
             None => println!("ref0 {wanted}: NOT FOUND in any opened database"),

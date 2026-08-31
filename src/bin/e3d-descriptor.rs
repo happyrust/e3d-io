@@ -1377,10 +1377,7 @@ fn type_zero(value: &DescriptorValue) -> DescriptorValue {
         // An empty word slot is not the same as `unset`, and which of the two
         // E3D writes depends on the attribute rather than the value: `NAPP`
         // shows `0` and `QTYPE` shows `unset`, both from a word holding zero.
-        DescriptorValue::Word { .. } => DescriptorValue::Word {
-            raw: 0,
-            text: None,
-        },
+        DescriptorValue::Word { .. } => DescriptorValue::Word { raw: 0, text: None },
         DescriptorValue::Bool(_) => DescriptorValue::Bool(false),
         DescriptorValue::Int(_) => DescriptorValue::Int(0),
         DescriptorValue::Real(_) => DescriptorValue::Real(0.0),

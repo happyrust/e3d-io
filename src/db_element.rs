@@ -29,12 +29,14 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
+use crate::element_name;
 use crate::engine::{ReadOnlyEngine, ResolveError, ScanTier};
 use crate::error::E3dReaderError;
-use crate::record::descriptor::{DescriptorValue, ElementExtraction};
+use crate::record::catalogue_eval::{AttributeNumber, ExpressionForm, ParamEnv};
+use crate::record::descriptor::{stored_expression_words, DescriptorValue, ElementExtraction};
 use crate::record::element::ParsedElement;
 use crate::record::template::TemplateProvider;
-use crate::element_name;
+use crate::record::{catalogue_expr, catalogue_pml};
 use crate::refno::RefNo;
 
 /// 开一个库所需的文件三元组：库文件、该库类型的模板文件、时点。
@@ -575,13 +577,18 @@ impl DbElement {
 
     /// 文本值：`Text` 原文，或字值（`Word`）的反哈希文本。
     pub fn get_string(&self, name: &str) -> Result<Option<String>, DbElementError> {
-        self.project(name, "Text/Word", |value| match value {
-            DescriptorValue::Text(text) => Some(text.clone()),
-            DescriptorValue::Word {
-                text: Some(text), ..
-            } => Some(text.clone()),
-            _ => None,
-        })
+        let Some(value) = self.attribute(name)? else {
+            return Ok(None);
+        };
+        match string_projection(&value) {
+            Some(projected) => Ok(projected),
+            None => Err(DbElementError::TypeMismatch {
+                refno: self.refno,
+                name: name.to_ascii_uppercase(),
+                found: shape_of(&value),
+                wanted: "Text/Word",
+            }),
+        }
     }
 
     pub fn get_integer(&self, name: &str) -> Result<Option<i32>, DbElementError> {
@@ -597,6 +604,77 @@ impl DbElement {
             DescriptorValue::Real(real) => Some(*real),
             DescriptorValue::Int(int) => Some(f64::from(*int)),
             _ => None,
+        })
+    }
+
+    /// 把一个属性读成数，两种目录表达式当场求值。
+    ///
+    /// 目录几何存的常常不是数而是公式。实测 ams8000 路由构件走到的 118 个 P 点，
+    /// `PDIS` 里 33 个是显式流里的 PML 正文、25 个是五词元组，只有 0 个是直存的数。
+    /// [`DbElement::get_double`] 碰上这些会报 `TypeMismatch`——但那不是类型错，
+    /// 是还没求值。
+    ///
+    /// 求值顺序与 [`crate::record::descriptor::extract_attribute`] 一致：
+    /// **显式流里的正文压过槽位**。`BLTP.Bthkness` 这种根本没有隐式槽位的属性
+    /// 照样带公式，先看槽位就会漏掉它。
+    ///
+    /// 属性不在模板里仍然是 `Err`（与 [`DbElement::attribute`] 同口径）；
+    /// 求不出来是 [`AttributeNumber`] 的一个分支，带着原因，不是错误。
+    pub fn get_number(
+        &self,
+        name: &str,
+        env: &dyn ParamEnv,
+    ) -> Result<AttributeNumber, DbElementError> {
+        let extraction = self.extraction()?;
+        let Some(attribute) = extraction
+            .attributes
+            .iter()
+            .find(|attribute| attribute.name.eq_ignore_ascii_case(name))
+        else {
+            return Err(DbElementError::UnknownAttribute {
+                refno: self.refno,
+                noun: noun_name(extraction.noun_hash),
+                name: name.to_string(),
+            });
+        };
+
+        let parsed = self.parsed()?;
+        if let Some(words) = stored_expression_words(&parsed, attribute.hash) {
+            return Ok(match catalogue_pml::evaluate_words(words, env) {
+                Some(value) => AttributeNumber::Evaluated {
+                    value,
+                    form: ExpressionForm::Pml,
+                },
+                None => AttributeNumber::Unresolved {
+                    form: ExpressionForm::Pml,
+                    text: catalogue_pml::render(words),
+                },
+            });
+        }
+
+        Ok(match &attribute.value {
+            None | Some(DescriptorValue::Unset) => AttributeNumber::Unset,
+            Some(DescriptorValue::Real(real)) => AttributeNumber::Stored(*real),
+            // `GATRE` 读整型槽也是给实数。
+            Some(DescriptorValue::Int(int)) => AttributeNumber::Stored(f64::from(*int)),
+            Some(DescriptorValue::RawWords(words)) => {
+                match catalogue_expr::evaluate_words(words, env) {
+                    Some(value) => AttributeNumber::Evaluated {
+                        value,
+                        form: ExpressionForm::Tuple,
+                    },
+                    // 元组解得开却求不出，与「压根不是元组」（`TYPEX: [1, 644065]`
+                    // 这类）分开：前者要补环境，后者本来就没数可读。
+                    None => match catalogue_expr::render(words) {
+                        Some(text) => AttributeNumber::Unresolved {
+                            form: ExpressionForm::Tuple,
+                            text: Some(text),
+                        },
+                        None => AttributeNumber::NotNumeric,
+                    },
+                }
+            }
+            Some(_) => AttributeNumber::NotNumeric,
         })
     }
 
@@ -724,10 +802,8 @@ impl DbElement {
                 .find_element(refno)
                 .map_err(|source| DbElementError::Io { dbno, source })?
                 .ok_or(DbElementError::NotFound { refno, dbno, sesno })?;
-            ParsedElement::parse(&view.raw_bytes).map_err(|detail| DbElementError::Parse {
-                refno,
-                detail,
-            })
+            ParsedElement::parse(&view.raw_bytes)
+                .map_err(|detail| DbElementError::Parse { refno, detail })
         })?;
         Ok(self.parsed.get_or_init(|| Arc::new(parsed)).clone())
     }
@@ -756,10 +832,7 @@ impl DbElement {
                 .extract_parsed_element_with_descriptors(refno, &parsed, &attlib, template)
                 .map_err(|source| DbElementError::Extract { refno, source })
         })?;
-        Ok(self
-            .extraction
-            .get_or_init(|| Arc::new(extraction))
-            .clone())
+        Ok(self.extraction.get_or_init(|| Arc::new(extraction)).clone())
     }
 }
 
@@ -822,9 +895,47 @@ fn shape_of(value: &DescriptorValue) -> String {
     }
 }
 
+/// A zero word is the physical empty/unset representation. E3D renders it as
+/// `0`, `unset`, or an empty string depending on the attribute, so the typed
+/// string projection must return `None`, rather than reporting a false type
+/// mismatch just because there is no dictionary text.
+fn string_projection(value: &DescriptorValue) -> Option<Option<String>> {
+    match value {
+        DescriptorValue::Text(text) => Some(Some(text.clone())),
+        DescriptorValue::Word {
+            text: Some(text), ..
+        } => Some(Some(text.clone())),
+        DescriptorValue::Word { raw: 0, text: None } => Some(None),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zero_word_projects_as_unset_string() {
+        assert_eq!(
+            string_projection(&DescriptorValue::Word { raw: 0, text: None }),
+            Some(None)
+        );
+        assert_eq!(
+            string_projection(&DescriptorValue::Word {
+                raw: 42,
+                text: Some("TOP".into()),
+            }),
+            Some(Some("TOP".into()))
+        );
+        assert_eq!(
+            string_projection(&DescriptorValue::Word {
+                raw: 42,
+                text: None,
+            }),
+            None,
+            "a non-zero unresolved word remains an observable decode gap"
+        );
+    }
 
     /// 未注册且无 resolver 的库：报 `DbNotRegistered`，不猜、不开最新。
     #[test]
