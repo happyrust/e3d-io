@@ -32,8 +32,15 @@ const COEFFICIENT_SCALE: f64 = 40.0;
 const OP_NAME: u32 = 7;
 /// The two words of a spelled name are its hash split by this.
 const NAME_SPLIT: i32 = 1000;
-/// Negative operands that are whole tens are constants in tenths.
+/// Negative operands are constants in tenths (`-95` is 9.5), except the five
+/// keyword slots just below zero — see [`DESIGN_DIMENSION_MAX`].
 const CONSTANT_SCALE: i32 = 10;
+/// Core3D `pplib/DECARG` (0x103C12B8) treats a negative operand whose
+/// magnitude is at most this as a keyword, not a constant: 1 is 0.0, 2 is 1.0,
+/// 3/4/5 read the design element's `RADI` / `ANGL` / `HEIG` (`DDRADIUS`,
+/// `DDANGLE`, `DDHEIGHT`). Everything beyond is `value / -10`, whether or not
+/// it is a whole ten — `-95` is 9.5, `-1875` is 187.5.
+const DESIGN_DIMENSION_MAX: i32 = 5;
 const IPARAM_BASE: i32 = 100;
 const NEGATED_PARAM_BASE: i32 = 1000;
 
@@ -45,11 +52,12 @@ pub enum Operand {
     NegatedParam(i32),
     /// `IPARAM n` — an insulation parameter, stored as 100 + n.
     IParam(i32),
-    /// A literal, stored negated and in tenths: -1250 is 125.
+    /// A literal, stored negated and in tenths; the payload keeps the tenths,
+    /// so `-1250` is `Constant(1250)` and reads as 125, `-95` is 9.5.
     Constant(i32),
-    /// A design-dimension keyword, stored as its negated id. Only the two ids
-    /// the sample exercised are named; the rest keep their number so a reader
-    /// can tell an unrecognised keyword from a wrong one.
+    /// A design-dimension keyword, stored as its negated id (3 `DDRADIUS`,
+    /// 4 `DDANGLE`, 5 `DDHEIGHT`, per DECARG). Other ids keep their number so
+    /// a reader can tell an unrecognised keyword from a wrong one.
     DesignDimension(i32),
     Zero,
 }
@@ -61,7 +69,11 @@ impl Operand {
             n if n >= NEGATED_PARAM_BASE => Operand::NegatedParam(n - NEGATED_PARAM_BASE),
             n if n >= IPARAM_BASE => Operand::IParam(n - IPARAM_BASE),
             n if n > 0 => Operand::Param(n),
-            n if n % CONSTANT_SCALE == 0 => Operand::Constant(-n / CONSTANT_SCALE),
+            // DECARG: `abs(n) > 5` is a constant in tenths; 1 and 2 are the
+            // literal 0 and 1; 3, 4, 5 are the DD keywords.
+            n if -n > DESIGN_DIMENSION_MAX => Operand::Constant(-n),
+            -1 => Operand::Zero,
+            -2 => Operand::Constant(CONSTANT_SCALE),
             n => Operand::DesignDimension(-n),
         }
     }
@@ -73,7 +85,9 @@ impl fmt::Display for Operand {
             Operand::Param(n) => write!(f, "PARAM {n}"),
             Operand::NegatedParam(n) => write!(f, "- PARAM {n}"),
             Operand::IParam(n) => write!(f, "IPARAM {n}"),
-            Operand::Constant(n) => write!(f, "{n}"),
+            Operand::Constant(tenths) => {
+                write!(f, "{}", format_number(f64::from(*tenths) / CONSTANT_SCALE as f64))
+            }
             Operand::DesignDimension(3) => write!(f, "DDRADIUS"),
             Operand::DesignDimension(4) => write!(f, "DDANGLE"),
             Operand::DesignDimension(5) => write!(f, "DDHEIGHT"),
@@ -260,7 +274,7 @@ fn operand_value(operand: &Operand, env: &dyn ParamEnv) -> Option<f64> {
         Operand::Param(n) => env.param(*n),
         Operand::NegatedParam(n) => env.param(*n).map(|value| -value),
         Operand::IParam(n) => env.iparam(*n),
-        Operand::Constant(value) => Some(f64::from(*value)),
+        Operand::Constant(tenths) => Some(f64::from(*tenths) / CONSTANT_SCALE as f64),
         Operand::DesignDimension(id) => env.design_dimension(*id),
         Operand::Zero => Some(0.0),
     }
@@ -341,10 +355,38 @@ mod tests {
         let env = sample_env();
         assert_eq!(evaluate_words(&[4, 40, 7, 776, 966], &env), None); // NULL
         assert_eq!(evaluate_words(&[4, 40, 1, 12, 0], &env), None); // PARAM 12, unset
-        assert_eq!(evaluate_words(&[4, 40, 1, (-7i32) as u32, 0], &env), None); // DD#7, unset
         assert_eq!(evaluate_words(&[40, 5, 10, 11], &env), None); // SINF
         assert_eq!(evaluate_words(&[40, 6, 10, 11], &env), None); // COSF
         assert_eq!(evaluate_words(&[40, 2, 2, (-4i32) as u32], &env), None); // TANF
+    }
+
+    /// The negative side of Core3D `pplib/DECARG` (0x103C12B8): magnitudes
+    /// above five are constants in tenths whatever their last digit, and the
+    /// five slots below are keywords. `/YKS-ABDCEB2-GS` stores its 9.5 mm
+    /// handwheel stem as `PBDM = [40, 1, -95, 0]` and its 8.5 mm hub as
+    /// `PDIA = [40, 1, -85, 0]`; reading those as unresolved `DD#95` / `DD#85`
+    /// dropped the primitives E3D draws.
+    #[test]
+    fn decodes_decarg_negative_operands_as_tenths_or_keywords() {
+        let env = sample_env();
+        assert_close(evaluate_words(&[4, 40, 1, (-95i32) as u32, 0], &env), 9.5);
+        assert_close(evaluate_words(&[4, 40, 1, (-85i32) as u32, 0], &env), 8.5);
+        assert_close(evaluate_words(&[4, 40, 1, (-1875i32) as u32, 0], &env), 187.5);
+        assert_close(evaluate_words(&[4, 40, 1, (-7i32) as u32, 0], &env), 0.7);
+        assert_close(evaluate_words(&[4, 40, 1, (-6i32) as u32, 0], &env), 0.6);
+        assert_close(evaluate_words(&[4, 40, 1, (-20i32) as u32, 0], &env), 2.0);
+        assert_close(evaluate_words(&[4, 40, 1, (-1i32) as u32, 0], &env), 0.0);
+        assert_close(evaluate_words(&[4, 40, 1, (-2i32) as u32, 0], &env), 1.0);
+        assert_close(evaluate_words(&[4, 40, 1, (-3i32) as u32, 0], &env), 200.0); // DDRADIUS
+        assert_close(evaluate_words(&[4, 40, 1, (-4i32) as u32, 0], &env), 45.0); // DDANGLE
+        assert_close(evaluate_words(&[4, 40, 1, (-5i32) as u32, 0], &env), 500.0); // DDHEIGHT
+        assert_eq!(Operand::decode(-95), Operand::Constant(95));
+        assert_eq!(Operand::decode(-1), Operand::Zero);
+        assert_eq!(Operand::decode(-2), Operand::Constant(10));
+        assert_eq!(Operand::decode(-5), Operand::DesignDimension(5));
+        assert_eq!(render(&[40, 1, (-95i32) as u32, 0]).as_deref(), Some("9.5"));
+        assert_eq!(render(&[40, 1, (-870i32) as u32, 0]).as_deref(), Some("87"));
+        assert_eq!(render(&[40, 1, (-4i32) as u32, 0]).as_deref(), Some("DDANGLE"));
     }
 
     /// Every distinct tuple the TTY sample produced, against E3D's own text.
