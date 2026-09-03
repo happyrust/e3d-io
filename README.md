@@ -10,7 +10,8 @@ Reverse-engineered from `core.dll` via IDA Pro; all field offsets and constants 
 - **Attribute decoding**: implicit and explicit scalar/array values, noun descriptors loaded directly from `desvir.dat`, report names loaded directly from `attlib.dat`, and a TTY `ATTLIST` reconciliation path for runtime-composed attributes.
 - **Defaults**: an attribute with nothing stored falls back to the noun's own default record, read from chunks 1 and 2 of the same `*vir.dat` child as the descriptor — the values `core.dll` returns from `sub_5B03B90`.
 - **High-level API**: `engine.extract_element_with_descriptors(refno, &attlib, &mut provider)` returns an `ElementExtraction` carrying one row per descriptor, each with an explicit status.
-- **Not yet**: ATGTDF dedup, multi-extent, writeback.
+- **Session ranges**: `engine.diff_sessions(from, to)` (or `DbView::diff_sessions`) names every RefNo inserted, deleted or rewritten between two retained sessions, `changed_elements` streams the record on each side, and `session::ElementDelta` says which owner / members / explicit attributes / implicit words / descriptor rows differ. `diff_steps` gives the same range one retained session at a time. `SessionSelector::AtOrBefore(n)` snaps a watermark to the newest retained session `<= n`; a session `MERGE CHANGES` removed is otherwise an error naming the retained sessions either side of it.
+- **Not yet**: ATGTDF dedup, multi-extent, writeback, session diffs of the NAME / TYPEX / reverse-reference tables.
 
 `summarize_element` and `resolve_attribute` are deprecated. They locate an
 attribute at word `6 + atgtdf_position - 1`, as though attributes sat in
@@ -109,6 +110,9 @@ Every descriptor produces a row, so nothing is dropped silently. On
 | `ReadOnlyEngine::open(path)` | Open a DB file; auto-detects 4-byte-words `page_size` field |
 | `ReadOnlyEngine::find_element(refno)` | B+tree search across all index roots |
 | `ReadOnlyEngine::extract_element_with_descriptors(refno, attlib, provider)` | One row per descriptor, with status and value |
+| `ReadOnlyEngine::diff_sessions(from, to)` / `diff_steps(from, to)` | Net change between two sessions, or one retained step at a time; `changed_elements(&diff)` streams the records behind it |
+| `session::ElementDelta::of(&changed)` | Owner / members / explicit / implicit-word differences of one changed element; `with_attribute_rows` adds the descriptor-decoded rows |
+| `session::SessionSelector::{Latest, Exact, AtOrBefore}` | How `open_at` and `diff_sessions` name a session |
 | `record::template::TemplateProvider::open(path, expected_type)` | Cached `*vir.dat` reader; loads descriptors and defaults per noun |
 | `record::descriptor::StorageShape::of(code)` | What one element of a storage type looks like |
 | `record::element::ParsedElement::parse(raw_bytes)` | Element record header (impl_len/refno/noun_hash/owner) |

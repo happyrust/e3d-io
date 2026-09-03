@@ -116,9 +116,10 @@ impl PageIoError {
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
     #[error(
-        "{}: no session {requested}; newest is {newest}{}",
+        "{}: no session {requested}; newest is {newest}{}{}",
         .path.display(),
-        show_oldest(.oldest)
+        show_oldest(.oldest),
+        show_neighbours(.nearest_older, .nearest_newer)
     )]
     NoSuchSession {
         path: PathBuf,
@@ -127,7 +128,22 @@ pub enum SessionError {
         /// Oldest session actually reached, or `None` when the request was
         /// already newer than the newest and the chain was never walked.
         oldest: Option<u32>,
+        /// The retained session just below the requested number, when the
+        /// walk passed one. `MERGE CHANGES` leaves holes in the chain —
+        /// `ams7000_0001` keeps sessions 1, 237, 238, 262 and 263 — and a
+        /// caller asking for 200 needs to know the hole runs from 1 to 237 to
+        /// decide what to do about it.
+        nearest_older: Option<u32>,
+        /// The retained session just above the requested number, when there
+        /// is one.
+        nearest_newer: Option<u32>,
     },
+
+    #[error(
+        "{}: session {from} is newer than session {to}, so the range runs backwards",
+        .path.display()
+    )]
+    ReversedRange { path: PathBuf, from: u32, to: u32 },
 
     #[error("{page} is page type {page_type}, not a session page (type 3)")]
     NotASessionPage { page: PageId, page_type: u32 },
@@ -164,6 +180,17 @@ fn show_oldest(oldest: &Option<u32>) -> String {
     match oldest {
         Some(sesno) => format!(" and the chain reaches back to {sesno}"),
         None => String::new(),
+    }
+}
+
+fn show_neighbours(older: &Option<u32>, newer: &Option<u32>) -> String {
+    match (older, newer) {
+        (Some(older), Some(newer)) => {
+            format!("; the retained sessions either side of it are {older} and {newer}")
+        }
+        (Some(older), None) => format!("; the nearest retained session is {older}, below it"),
+        (None, Some(newer)) => format!("; the nearest retained session is {newer}, above it"),
+        (None, None) => String::new(),
     }
 }
 

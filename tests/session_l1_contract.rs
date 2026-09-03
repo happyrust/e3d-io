@@ -205,6 +205,127 @@ fn an_absent_session_is_an_error_naming_it_not_a_fallback() {
     assert!(DbView::open_at(&path, 0).is_err());
 }
 
+/// Five sessions with a hole: 1, 2, 5, 8, 9 — what `MERGE CHANGES` leaves
+/// behind. Newest last, each with its own index root.
+fn holed_db(dir: &Path) -> PathBuf {
+    let mut db = Db::new(5, 1, 8);
+    db.session(1, 1, None, 10);
+    db.session(2, 2, Some(1), 20);
+    db.session(3, 5, Some(2), 50);
+    db.session(4, 8, Some(3), 80);
+    db.session(5, 9, Some(4), 90);
+    db.write(dir)
+}
+
+/// `AtOrBefore(n)` is the newest retained session not past `n`; `Exact(n)`
+/// in a hole is refused and names the sessions either side of the hole.
+#[test]
+fn a_session_in_a_hole_is_refused_exactly_and_snapped_only_on_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = holed_db(dir.path());
+
+    // Inside the hole between 5 and 8.
+    let err = DbView::open_at(&path, SessionSelector::Exact(6)).unwrap_err();
+    match err {
+        E3dReaderError::Session(SessionError::NoSuchSession {
+            requested: 6,
+            newest: 9,
+            oldest: Some(1),
+            nearest_older: Some(5),
+            nearest_newer: Some(8),
+            ..
+        }) => {}
+        other => panic!("expected NoSuchSession naming 5 and 8, got {other}"),
+    }
+    assert!(
+        err.to_string().contains("5 and 8"),
+        "the message must name the hole: {err}"
+    );
+
+    for (asked, resolved, root) in [
+        (6u32, 5u32, 50u32),
+        (7, 5, 50),
+        (5, 5, 50),
+        (8, 8, 80),
+        (100, 9, 90),
+    ] {
+        let view = DbView::open_at(&path, SessionSelector::AtOrBefore(asked)).unwrap();
+        assert_eq!(
+            view.selected_session(),
+            resolved,
+            "AtOrBefore({asked}) is the newest session <= {asked}"
+        );
+        assert_eq!(view.index_root(), PageId::new(1, root));
+    }
+
+    // Nothing at or below 0: refused, and the nearest session is above.
+    let err = DbView::open_at(&path, SessionSelector::AtOrBefore(0)).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            E3dReaderError::Session(SessionError::NoSuchSession {
+                requested: 0,
+                nearest_older: None,
+                nearest_newer: Some(1),
+                ..
+            })
+        ),
+        "{err}"
+    );
+
+    // Above the newest: refused before the chain is walked, and the message
+    // says the newest is the nearest.
+    let err = DbView::open_at(&path, SessionSelector::Exact(50)).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            E3dReaderError::Session(SessionError::NoSuchSession {
+                requested: 50,
+                newest: 9,
+                oldest: None,
+                nearest_older: Some(9),
+                nearest_newer: None,
+                ..
+            })
+        ),
+        "{err}"
+    );
+}
+
+/// `ReadOnlyEngine::open_at` goes through the same resolver, selector and all.
+#[test]
+fn the_engine_opens_at_a_selector_through_the_same_resolver() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = holed_db(dir.path());
+
+    let engine = e3d_io::ReadOnlyEngine::open_at(&path, 8).unwrap();
+    assert_eq!(engine.session().sesno, 8);
+    assert_eq!(engine.index_root(), PageId::new(1, 80));
+
+    let engine = e3d_io::ReadOnlyEngine::open_at(&path, SessionSelector::AtOrBefore(7)).unwrap();
+    assert_eq!(engine.session().sesno, 5);
+
+    let err = match e3d_io::ReadOnlyEngine::open_at(&path, 6) {
+        Ok(engine) => panic!(
+            "session 6 is not on the chain, opened {}",
+            engine.session().sesno
+        ),
+        Err(err) => err,
+    };
+    assert!(
+        matches!(
+            err,
+            E3dReaderError::Session(SessionError::NoSuchSession {
+                requested: 6,
+                nearest_older: Some(5),
+                nearest_newer: Some(8),
+                ..
+            })
+        ),
+        "{err}"
+    );
+}
+
 /// A chain that points back into itself must report, not spin.
 #[test]
 fn a_looping_session_chain_is_reported_rather_than_followed() {
@@ -437,6 +558,53 @@ fn the_engine_reports_the_whole_chain_from_the_newest_session() {
     // The head of the chain points nowhere, and +0x10 was never a start page.
     assert_eq!(sessions.last().unwrap().session_mark, u32::MAX);
     assert_eq!(sessions.first().unwrap().start_page_no, u32::MAX);
+}
+
+/// `ams5100_0001` keeps sessions 1..5 and 27: `MERGE CHANGES` folded 6..26 into
+/// 27. A watermark of 10 therefore resolves to 5 when snapping is asked for,
+/// and is refused with both edges of the hole named when it is not.
+#[test]
+fn a_merged_away_session_of_a_real_database_names_the_hole() {
+    const AMS5100: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001";
+    if common::missing(&[AMS5100]) {
+        return;
+    }
+    let mut view = DbView::open(Path::new(AMS5100)).unwrap();
+    let sesnos: Vec<u32> = view
+        .walk_sessions()
+        .unwrap()
+        .iter()
+        .map(|s| s.sesno)
+        .collect();
+    assert_eq!(
+        sesnos,
+        vec![27, 5, 4, 3, 2, 1],
+        "the chain this test is about"
+    );
+
+    let err = DbView::open_at(Path::new(AMS5100), 10).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            E3dReaderError::Session(SessionError::NoSuchSession {
+                requested: 10,
+                newest: 27,
+                oldest: Some(1),
+                nearest_older: Some(5),
+                nearest_newer: Some(27),
+                ..
+            })
+        ),
+        "{err}"
+    );
+
+    let snapped = DbView::open_at(Path::new(AMS5100), SessionSelector::AtOrBefore(10)).unwrap();
+    assert_eq!(snapped.selected_session(), 5);
+    assert_eq!(
+        snapped.sessions_read(),
+        2,
+        "27 is not <= 10, 5 is: two session pages"
+    );
 }
 
 /// An unreadable header is its own error, not a missing session.

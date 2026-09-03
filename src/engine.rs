@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::element_name;
-use crate::error::{E3dReaderError, SessionError};
+use crate::error::E3dReaderError;
 use crate::index::{IndexCursor, IndexEntry, SearchResult};
 use crate::meta::{DbDescriptor, FileInfo};
 use crate::page::cache::PageCache;
@@ -10,7 +10,7 @@ use crate::page::{PageHeader, PageId};
 use crate::record::element::ParsedElement;
 use crate::record::{self, ElementRecordView};
 use crate::refno::RefNo;
-use crate::session::{SessionInfo, SessionPage};
+use crate::session::{ChangedElements, SessionDiff, SessionInfo, SessionPage, SessionSelector};
 
 /// How much of each element [`ReadOnlyEngine::scan_elements`] reads.
 ///
@@ -154,7 +154,7 @@ impl ReadOnlyEngine {
         path: impl AsRef<Path>,
         cache_capacity: usize,
     ) -> Result<Self, E3dReaderError> {
-        Self::open_selected(path, None, cache_capacity)
+        Self::open_selected(path, SessionSelector::Latest, cache_capacity)
     }
 
     /// Open as of one named session rather than the newest.
@@ -168,18 +168,25 @@ impl ReadOnlyEngine {
     /// A session that is not in the chain is an `Err` naming it. Falling back
     /// to the newest would answer a different question than the one asked, and
     /// one level up that reads as "the element changed".
-    pub fn open_at(path: impl AsRef<Path>, sesno: u32) -> Result<Self, E3dReaderError> {
-        Self::open_selected(path, Some(sesno), 256)
+    ///
+    /// Takes a bare session number or any [`SessionSelector`]:
+    /// `open_at(path, 264)` and `open_at(path, SessionSelector::AtOrBefore(200))`
+    /// both work.
+    pub fn open_at(
+        path: impl AsRef<Path>,
+        at: impl Into<SessionSelector>,
+    ) -> Result<Self, E3dReaderError> {
+        Self::open_selected(path, at.into(), 256)
     }
 
-    /// The one open path: `open` is this with no session named.
+    /// The one open path: `open` is this with [`SessionSelector::Latest`].
     ///
-    /// Session selection goes through [`crate::session::walk_chain`], the
-    /// crate's only chain walk, rather than a second resolver written here.
-    /// It costs one page per session step, once per engine.
+    /// Session selection goes through [`crate::session::resolve`], the crate's
+    /// only resolver, rather than a second one written here. It costs one page
+    /// per session step, once per engine.
     fn open_selected(
         path: impl AsRef<Path>,
-        sesno: Option<u32>,
+        at: SessionSelector,
         cache_capacity: usize,
     ) -> Result<Self, E3dReaderError> {
         let path = path.as_ref();
@@ -192,23 +199,7 @@ impl ReadOnlyEngine {
         let page1 = cache.get_page(FileInfo::PAGE_INDEX)?;
         let file_info = FileInfo::parse_page1(page1)?;
 
-        let session = match sesno {
-            None => crate::session::latest(&mut cache, &descriptor)?,
-            Some(wanted) => {
-                let chain = crate::session::walk_chain(&mut cache, &descriptor)?;
-                let newest = chain.first().map(|page| page.sesno).unwrap_or_default();
-                let oldest = chain.last().map(|page| page.sesno);
-                chain
-                    .into_iter()
-                    .find(|page| page.sesno == wanted)
-                    .ok_or_else(|| SessionError::NoSuchSession {
-                        path: path.to_path_buf(),
-                        requested: wanted,
-                        newest,
-                        oldest,
-                    })?
-            }
-        };
+        let (session, _sessions_read) = crate::session::resolve(&mut cache, &descriptor, at, path)?;
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -291,6 +282,48 @@ impl ReadOnlyEngine {
 
     pub fn index_root(&self) -> PageId {
         self.session.index_root
+    }
+
+    /// What changed between two sessions of this file.
+    ///
+    /// Independent of the session this engine was opened at: the two roots
+    /// come off the chain, not off `self.session`. See
+    /// [`crate::session::diff::diff_between`] for the semantics — a range is
+    /// the net difference of its ends, and `from` must be the older one.
+    pub fn diff_sessions(
+        &mut self,
+        from: impl Into<SessionSelector>,
+        to: impl Into<SessionSelector>,
+    ) -> Result<SessionDiff, E3dReaderError> {
+        crate::session::diff::diff_between(
+            &mut self.cache,
+            &self.descriptor,
+            &self.path,
+            from.into(),
+            to.into(),
+        )
+    }
+
+    /// The same range one retained session at a time. See
+    /// [`crate::session::diff::diff_steps`].
+    pub fn diff_steps(
+        &mut self,
+        from: impl Into<SessionSelector>,
+        to: impl Into<SessionSelector>,
+    ) -> Result<Vec<SessionDiff>, E3dReaderError> {
+        crate::session::diff::diff_steps(
+            &mut self.cache,
+            &self.descriptor,
+            &self.path,
+            from.into(),
+            to.into(),
+        )
+    }
+
+    /// The records behind a diff, read through this engine's cache. See
+    /// [`SessionDiff::elements`].
+    pub fn changed_elements<'a>(&'a mut self, diff: &'a SessionDiff) -> ChangedElements<'a> {
+        diff.elements(&mut self.cache)
     }
 
     /// Find one RefNo in the index of the selected session.
@@ -878,6 +911,9 @@ impl ReadOnlyEngine {
         self.extract_parsed_element_with_descriptors(refno, &parsed, attlib, template)
     }
 
+    /// Decode a record the caller already holds. Delegates to the free
+    /// function [`extract_parsed_element_with_descriptors`]; nothing here needs
+    /// the engine.
     pub fn extract_parsed_element_with_descriptors(
         &self,
         refno: RefNo,
@@ -885,6 +921,51 @@ impl ReadOnlyEngine {
         attlib: &e3d_attlib::AttlibData,
         template: &record::template::NounTemplate,
     ) -> Result<record::descriptor::ElementExtraction, ResolveError> {
+        extract_parsed_element_with_descriptors(refno, parsed, attlib, template)
+    }
+
+    fn summarize_parsed_element_with_template(
+        &self,
+        refno: RefNo,
+        parsed: &record::element::ParsedElement,
+        attlib: &e3d_attlib::AttlibData,
+        template: &record::template::NounTemplate,
+    ) -> Result<ElementSummary, ResolveError> {
+        let extraction = extract_parsed_element_with_descriptors(refno, parsed, attlib, template)?;
+        let noun_hash = extraction.noun_hash;
+        let attributes = extraction
+            .attributes
+            .into_iter()
+            .filter_map(|attr| {
+                let value = descriptor_value_to_attr_value(attr.value?)?;
+                (!is_zero_like(&value)).then_some((attr.name, value))
+            })
+            .collect();
+
+        Ok(ElementSummary {
+            refno,
+            noun_hash,
+            noun_name: e3d_attlib::db1_dehash(noun_hash),
+            implicit_word_count: parsed.impl_len_words.max(0) as u32,
+            attributes,
+        })
+    }
+}
+
+/// Decode every descriptor-backed attribute of a parsed record.
+///
+/// Pure: the record, the schema and the template are all in hand, so no page
+/// is read and no engine is needed. [`ReadOnlyEngine::extract_element_with_descriptors`]
+/// finds and parses the record first and then comes here;
+/// [`crate::session::delta`] comes here with the two records of a changed
+/// element, which it read through a diff rather than through a lookup.
+pub fn extract_parsed_element_with_descriptors(
+    refno: RefNo,
+    parsed: &record::element::ParsedElement,
+    attlib: &e3d_attlib::AttlibData,
+    template: &record::template::NounTemplate,
+) -> Result<record::descriptor::ElementExtraction, ResolveError> {
+    {
         if template.noun_hash != parsed.noun_hash {
             return Err(ResolveError::TemplateNounMismatch {
                 expected: parsed.noun_hash,
@@ -972,34 +1053,6 @@ impl ReadOnlyEngine {
             implicit_word_count: parsed.impl_len_words.max(0) as u32,
             format_word_10,
             layout,
-            attributes,
-        })
-    }
-
-    fn summarize_parsed_element_with_template(
-        &self,
-        refno: RefNo,
-        parsed: &record::element::ParsedElement,
-        attlib: &e3d_attlib::AttlibData,
-        template: &record::template::NounTemplate,
-    ) -> Result<ElementSummary, ResolveError> {
-        let extraction =
-            self.extract_parsed_element_with_descriptors(refno, parsed, attlib, template)?;
-        let noun_hash = extraction.noun_hash;
-        let attributes = extraction
-            .attributes
-            .into_iter()
-            .filter_map(|attr| {
-                let value = descriptor_value_to_attr_value(attr.value?)?;
-                (!is_zero_like(&value)).then_some((attr.name, value))
-            })
-            .collect();
-
-        Ok(ElementSummary {
-            refno,
-            noun_hash,
-            noun_name: e3d_attlib::db1_dehash(noun_hash),
-            implicit_word_count: parsed.impl_len_words.max(0) as u32,
             attributes,
         })
     }
