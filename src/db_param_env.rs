@@ -30,11 +30,18 @@
 //! `24384/24774` 的 `DESP = [0, 0, 1]`——按 `DESP[1]` 读出的通径是 0；它指向的
 //! `SCOM /ACP1000-TFVL-50` 的 `PARA = [50, 30, 3000, 1.5, …]`，按 `PARA[1]`
 //! 读出的是 50，与元件名里的 50 mm 对得上。取 `PARA`。
+//!
+//! 但元组操作数**自己带波段**：Core3D `pplib/DECARG`（0x103C12B8）把 1..50 交给
+//! `PARA`、51..100 减 50 交给 `DESP`、101..200 减 100 交给 `IPAR`（再往上是
+//! `APAR`/`ADES`/`OPAR`/`ODES`，见 [`crate::record::catalogue_expr::ParamArray`]）。
+//! 所以 HVAC 目录 `/RFJFD-BODY.PXLE = [40, 1, 52, 0]` 是 `DESP 2`，问的是设计构件
+//! ——ams7997 的 129 只 DAMP、43 只 MESH 此前全按 `PARAM 52` 去问一格长的 `PARA`，
+//! 体箱整只丢掉。两条读法互不矛盾：`PARAM n` 仍是 `PARA[n]`，只是 52 不是 `PARAM`。
 
 use std::cell::Cell;
 
-use crate::db_element::DbElement;
-use crate::record::catalogue_eval::{AttribRef, AttributeNumber, ParamEnv};
+use crate::db_element::{DbElement, DbElementError};
+use crate::record::catalogue_eval::{AttribRef, AttributeNumber, ParamArray, ParamEnv};
 use crate::record::descriptor::DescriptorValue;
 
 /// 属性求值的递归深度上限。
@@ -54,8 +61,41 @@ const MAX_DEPTH: u32 = 8;
 /// `HLEN`。
 const DESIGN_PROPERTY: &str = "RPRO";
 
+/// `ATTRIB DDES[n]`: the design element's `DESP` with the non-numeric entries
+/// blanked.
+///
+/// Not an attribute either — no noun in `noun_layout.json` declares it — but a
+/// pseudo-attribute Core3D computes on demand (`Core3D.dll` 0x10031CE0, the
+/// `909175` branch): read `DESP` through `GATRAR`, then walk it with `GATPAR`
+/// and zero every entry whose type is `WORD` (623723) or anything other than
+/// `DIST` / `NONE`. HVAC `DESP` arrays interleave dimensions with words
+/// (`UNIPAR` marks which is which), and the CADC HVAC catalogue reads the
+/// connection sizes through this view: `/RFJFD-PA1.PBOR = ( ATTRIB DDES[2 ] +
+/// ATTRIB DDES[3 ] )`, `PWID = ( ATTRIB DDES[2 ] )`.
+const NUMERIC_DESIGN_PARAMS: &str = "DDES";
+/// `UNIPAR`: the per-entry unit/type words that go with `DESP`.
+const DESIGN_PARAM_UNITS: &str = "UNIPAR";
+/// The `WORD` type word `UNIPAR` carries for a non-numeric `DESP` entry.
+const WORD_TYPE: u32 = 623_723;
+/// The `DIST` type word — the one numeric type `DDES` keeps besides `NONE`.
+const DIST_TYPE: u32 = 939_199;
+/// The `NONE` type word.
+const NONE_TYPE: u32 = 640_481;
+
+/// Core catalogue expressions use these design-dimension ids.
+const DESIGN_RADIUS: i32 = 3;
 /// `DDANGLE` 的设计维度编号。见 [`ParamEnv::design_dimension`] 的编号约定。
 const DESIGN_ANGLE: i32 = 4;
+/// `DDHEIGHT` 的设计维度编号（Core3D `pplib/DECARG` 的操作数 `-5` → 设计构件 `HEIG`）。
+const DESIGN_HEIGHT: i32 = 5;
+
+/// Core3D `sellib/ANFIND` (`0x103c8084`) expands numeric selection ranges by
+/// 0.001 at each end before comparing `ANSW <= value <= MAXA`.
+const SELECTION_RANGE_TOLERANCE: f64 = 0.001;
+
+/// A catalogue selection is shallow in the real projects, but malformed data
+/// must not be allowed to loop forever through nested `SELE` records.
+const MAX_SELECTION_DEPTH: usize = 32;
 
 /// `DATA.PURP` 的四种取值，说这一行的值该去哪儿取。
 ///
@@ -82,6 +122,7 @@ mod purpose {
 pub struct DbElementParamEnv {
     design: Option<DbElement>,
     catalogue: Option<DbElement>,
+    insulation: bool,
     depth: Cell<u32>,
 }
 
@@ -100,8 +141,15 @@ impl DbElementParamEnv {
         Self {
             design,
             catalogue,
+            insulation: true,
             depth: Cell::new(0),
         }
+    }
+
+    /// Evaluate a narrow, uninsulated model: every positive `IPARAM n` is 0.
+    pub fn without_insulation(mut self) -> Self {
+        self.insulation = false;
+        self
     }
 
     /// 只有设计构件的环境。`PARAM n` 与 `ATTRIB PARA[i]` 会答不上。
@@ -150,6 +198,46 @@ impl DbElementParamEnv {
         })
     }
 
+    /// `DESP n` / `ATTRIB DESP[n]`：设计构件的第 n 个设计参数，1 起。
+    ///
+    /// 只问设计构件——`DESP` 只声明在设计 noun 上（见模块头那张表），目录件那头
+    /// 没有同名属性可顶。越界给 `None`（`GATPAR` 的 223）。
+    fn design_parameter(&self, index: i32) -> Option<f64> {
+        let index = usize::try_from(index).ok()?.checked_sub(1)?;
+        match self
+            .design
+            .as_ref()?
+            .attribute(ParamArray::Desp.attribute())
+        {
+            Ok(Some(DescriptorValue::RealArray(items))) => items.get(index).copied(),
+            Ok(Some(DescriptorValue::IntArray(items))) => {
+                items.get(index).map(|value| f64::from(*value))
+            }
+            _ => None,
+        }
+    }
+
+    /// `ATTRIB DDES[n]`：见 [`NUMERIC_DESIGN_PARAMS`]。
+    ///
+    /// 类型取 `UNIPAR[n]`；没有 `UNIPAR`、或它比 `DESP` 短，按 Core 的 `NONE` 读
+    /// ——那正是 `GATPAR` 对没登记类型的槽位给出的答复，值原样保留。
+    fn numeric_design_parameter(&self, index: i32) -> Option<f64> {
+        let value = self.design_parameter(index)?;
+        let slot = usize::try_from(index).ok()?.checked_sub(1)?;
+        let unit = match self.design.as_ref()?.attribute(DESIGN_PARAM_UNITS) {
+            Ok(Some(DescriptorValue::RawWords(words) | DescriptorValue::WordArray(words))) => {
+                words.get(slot).copied().unwrap_or(NONE_TYPE)
+            }
+            Ok(Some(DescriptorValue::IntArray(words))) => words
+                .get(slot)
+                .map(|word| *word as u32)
+                .unwrap_or(NONE_TYPE),
+            _ => NONE_TYPE,
+        };
+        let numeric = unit != WORD_TYPE && (unit == DIST_TYPE || unit == NONE_TYPE);
+        Some(if numeric { value } else { 0.0 })
+    }
+
     /// 一个名字在宿主上读成数组，1 起下标。
     ///
     /// `PARA` 与 `DESP` 都是 `DOUBLE` 数组。下标越界给 `None`——`GATPAR` 越界是
@@ -174,6 +262,125 @@ impl DbElementParamEnv {
         None
     }
 
+    /// Resolve the insulation `SCOM` selected by a design element's `ISPE`.
+    ///
+    /// Core3D's `sellib/SELIPC` registers the available selection answers and
+    /// runs `SPSEAR`; `ANFIND` then compares each child record's inclusive
+    /// `ANSW..MAXA` interval with a 0.001 tolerance.  The on-disk tree is:
+    /// `SPEC -> SELE* -> SPCO -> CATR -> SCOM`.
+    fn selected_insulation_component(
+        &self,
+        spec: &DbElement,
+    ) -> Result<Option<DbElement>, DbElementError> {
+        let Some(mut cursor) = self.insulation_type_branch(spec)? else {
+            return Ok(None);
+        };
+
+        for _ in 0..MAX_SELECTION_DEPTH {
+            match cursor.element_type()?.as_str() {
+                "SPCO" => return cursor.get_element("CATR"),
+                "SELE" => {
+                    let Some(next) = self.select_range_child(&cursor)? else {
+                        return Ok(None);
+                    };
+                    cursor = next;
+                }
+                _ => return Ok(None),
+            }
+        }
+        Ok(None)
+    }
+
+    /// `ISPE` specs identify their top-level usage with textual `TANS=INSU`.
+    /// Ignore `TEXT` documentation members.  A unique non-text child is the
+    /// Core-compatible fallback for older specs without that label.
+    fn insulation_type_branch(
+        &self,
+        spec: &DbElement,
+    ) -> Result<Option<DbElement>, DbElementError> {
+        let mut candidates = Vec::new();
+        for child in spec.members()? {
+            if child.element_type()? == "TEXT" {
+                continue;
+            }
+            if word_or_text(&child, "TANS").as_deref() == Some("INSU") {
+                return Ok(Some(child));
+            }
+            candidates.push(child);
+        }
+        Ok((candidates.len() == 1).then(|| candidates.remove(0)))
+    }
+
+    fn select_range_child(
+        &self,
+        selection: &DbElement,
+    ) -> Result<Option<DbElement>, DbElementError> {
+        let Some(question) = word_or_text(selection, "QUES") else {
+            return Ok(None);
+        };
+        let answers = self.selection_answers(&question)?;
+        if answers.is_empty() {
+            return Ok(None);
+        }
+
+        for child in selection.members()? {
+            if child.element_type()? == "TEXT" {
+                continue;
+            }
+            if word_or_text(&child, "TANS").as_deref() == Some("ANY") {
+                return Ok(Some(child));
+            }
+            let Some(minimum) = stored_real(&child, "ANSW")? else {
+                continue;
+            };
+            let maximum = stored_real(&child, "MAXA")?.unwrap_or(minimum);
+            if answers
+                .iter()
+                .any(|answer| selection_range_contains(minimum, maximum, *answer))
+            {
+                return Ok(Some(child));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Selection questions are answered by the design element and then its
+    /// owner chain.  Core's unqualified PBOR path tries every registered bore;
+    /// route containers expose those as HBOR/TBOR, so retain both candidates
+    /// rather than guessing which end the catalogue author meant.
+    fn selection_answers(&self, question: &str) -> Result<Vec<f64>, DbElementError> {
+        let Some(mut cursor) = self.design.clone() else {
+            return Ok(Vec::new());
+        };
+        let names: &[&str] = if question == "PBOR" {
+            &["PBOR", "HBOR", "TBOR"]
+        } else {
+            &[question]
+        };
+        let mut answers = Vec::new();
+        for _ in 0..MAX_SELECTION_DEPTH {
+            for name in names {
+                if !cursor.has_attribute(name)? {
+                    continue;
+                }
+                if let Some(value) = cursor.get_number(name, self)?.value() {
+                    if value.is_finite()
+                        && !answers
+                            .iter()
+                            .any(|seen: &f64| seen.to_bits() == value.to_bits())
+                    {
+                        answers.push(value);
+                    }
+                }
+            }
+            let Some(owner) = cursor.owner()? else {
+                break;
+            };
+            cursor = owner;
+        }
+        Ok(answers)
+    }
+
     /// `ATTRIB RPRO <键>`：在目录件的设计表里按名字查一个量。
     ///
     /// 目录件 `DTRE` → `DTSE`，逐个 `DATA` 成员比 `DKEY`。命中的那行由 `PURP`
@@ -196,25 +403,27 @@ impl DbElementParamEnv {
 
     /// 设计表里命中的那一行怎么读成数。
     ///
-    /// **先认 `PPRO`，再认 `PURP`。** 这一行的 `PPRO` 往往把 `PURP` + `NUMB`
-    /// 指的东西直接写成公式：`RADI` 行是 `PURP=DESP NUMB=1` 且
+    /// **先认 `PPRO`，再认 `PURP`，最后认 `DPRO`。** 这一行的 `PPRO` 往往把
+    /// `PURP` + `NUMB` 指的东西直接写成公式：`RADI` 行是 `PURP=DESP NUMB=1` 且
     /// `PPRO = ( ATTRIB DESP[1 ] )`，`CTLF` 行是 `DESP` / `6` 且
     /// `( ATTRIB DESP[6 ] )`，`APAR` 行是 `DATA` / `1` 且 `( ATTRIB PARA[1 ] )`
     /// ——三行互相印证，也正是这三行让「`NUMB` 就是下标」这条读法立得住。既然
     /// 目录自己写了公式，就用它的，别用我从三行样本里归纳出来的映射。
     /// `PURP` 那条路留给 `PPRO` 是空的那些行（`HEIG` 行就是 `PURP=ATTR` 而
-    /// `PPRO` 空着）。
+    /// `PPRO` 空着）。声明的源都答不上时才轮到 `DPRO`，见 [`Self::row_default`]。
     fn design_property_row(&self, row: &DbElement, key: &str) -> Option<f64> {
         // `PPRO` 挂在这一行上，但要在**外层**环境里求：它写的 `PARA[1]` 是目录件
         // 的参数、`DESP[1]` 是设计构件的参数，都不是这一行自己的。
-        let stated = self.nested(|| match row.get_number("PPRO", self) {
-            Ok(number) => number.value(),
-            Err(_) => None,
-        });
+        let stated = self.row_formula(row, "PPRO");
         if let Some(value) = stated {
             return Some(value);
         }
+        self.design_property_source(row, key)
+            .or_else(|| self.row_default(row))
+    }
 
+    /// `PURP` 指定的取值源。
+    fn design_property_source(&self, row: &DbElement, key: &str) -> Option<f64> {
         match word_text(row, "PURP")?.as_str() {
             purpose::CATALOGUE_PARAM => self.param(whole_number(row, "NUMB")?),
             purpose::DESIGN_PARAM => {
@@ -243,6 +452,34 @@ impl DbElementParamEnv {
             purpose::EXPRESSION => self.ftub_true_length(key),
             _ => None,
         }
+    }
+
+    /// 行上的一个公式属性（`PPRO` / `DPRO`），在**外层**环境里求。
+    fn row_formula(&self, row: &DbElement, name: &str) -> Option<f64> {
+        self.nested(|| match row.get_number(name, self) {
+            Ok(number) => number.value(),
+            Err(_) => None,
+        })
+    }
+
+    /// `DPRO`：这一行的默认值，声明的源（`PPRO` 公式、`PURP` 指的地方）都答不上
+    /// 时才用。
+    ///
+    /// 这一列不是猜的，是目录作者**专为「这台实例没给这个源」写的**。2026-08-31
+    /// 在 ams8000 上把 PTCA 的 `PX`/`PY`/`PZ` 纳入普查后量出来的分界线严丝合缝：
+    /// `CTLF` 行声明 `( ATTRIB DESP[6 ] )` 而 `DPRO=( 0 )`，7529 条引用里凡设计件
+    /// `DESP` 长度 ≥ 6 的全求出、长度 0/3/5 的全卡住；`OUTA`/`OUTB`（声明
+    /// `DESP[4]`/`DESP[5]`，`DPRO=( 1 )`，正负号旗）在长度 5/6 与 0/3 之间同样
+    /// 一刀切。默认值本身可以是公式——`LENL`/`LENR` 行的
+    /// `DPRO=( ATTRIB RPRO YA / 2 )` 还会再提 `RPRO`——所以与 `PPRO` 同一条求值
+    /// 路、同一个深度闸。`DPRO` 自己也空或答不上，照旧 `None`。
+    ///
+    /// 尚欠一笔：E3D 本体在源 unset 时是否也按 `DPRO` 回落，还没拿 RVM 对拍钉死
+    /// （2026-08-31 时 e3d-model 工作树被并发会话改到一半，rvm_compare 编译不过）。
+    /// 在那之前，这条按目录说明书自己的语义立账：说明书写了默认值的地方，读它
+    /// 不是替作者编答案。
+    fn row_default(&self, row: &DbElement) -> Option<f64> {
+        self.row_formula(row, "DPRO")
     }
 
     /// Core/E3D 的 FTUB 派生设计量 `RPRO TLEN`。
@@ -310,6 +547,31 @@ fn word_text(element: &DbElement, name: &str) -> Option<String> {
     }
 }
 
+/// Selection metadata mixes WORD questions (`QUES=TEMP`) with textual answers
+/// (`TANS=INSU`).  Read either representation without applying expression
+/// evaluation to catalogue control records.
+fn word_or_text(element: &DbElement, name: &str) -> Option<String> {
+    match element.attribute(name) {
+        Ok(Some(DescriptorValue::Word {
+            text: Some(value), ..
+        })) => Some(value),
+        Ok(Some(DescriptorValue::Text(value))) => Some(value),
+        _ => None,
+    }
+}
+
+fn stored_real(element: &DbElement, name: &str) -> Result<Option<f64>, DbElementError> {
+    Ok(match element.attribute(name)? {
+        Some(DescriptorValue::Real(value)) => Some(value),
+        Some(DescriptorValue::Int(value)) => Some(f64::from(value)),
+        _ => None,
+    })
+}
+
+fn selection_range_contains(minimum: f64, maximum: f64, answer: f64) -> bool {
+    answer >= minimum - SELECTION_RANGE_TOLERANCE && answer <= maximum + SELECTION_RANGE_TOLERANCE
+}
+
 /// 一个整数属性，不管它存成 word 还是 int。
 fn whole_number(element: &DbElement, name: &str) -> Option<i32> {
     match element.attribute(name) {
@@ -330,29 +592,91 @@ impl ParamEnv for DbElementParamEnv {
         }
     }
 
+    /// 元组操作数各波段（Core3D `pplib/DECARG`）：`PARAM` 问目录件、`DESP` 问设计
+    /// 构件、`IPARAM` 走保温选件；`APARAM`/`ADESP`/`OPARAM`/`ODESP` 四个波段在
+    /// 现有语料（ams1112/7997/8000 + 三目录库）里一次都没出现，没有取证前不答。
+    fn parameter(&self, array: ParamArray, n: i32) -> Option<f64> {
+        match array {
+            ParamArray::Para => self.param(n),
+            ParamArray::Desp => self.design_parameter(n),
+            ParamArray::IPar => self.iparam(n),
+            ParamArray::APar | ParamArray::ADes | ParamArray::OPar | ParamArray::ODes => None,
+        }
+    }
+
     /// `IPARAM n` —— 保温参数。
     ///
-    /// **还没接。** ams8000 的 108 个目录件身上一个 `IPAR` 都没有，路由构件的
-    /// `ISPE`（保温规格引用）实测也全是 Nulref，所以本库里没有一条表达式走得到
-    /// 这里。等有带保温的语料再按它取证；现在返回 `None` 而不是 0——0 会让保温层
-    /// 厚度静默变成没有。
-    fn iparam(&self, _n: i32) -> Option<f64> {
-        None
+    /// Core `exppdms/GTGETP` (`core.dll` 0x51B27D8) 对 IPAR 有一条独立于普通
+    /// PARA/DESP 的规则：请求下标超过现有 IPAR 数量时返回数值 0，而不是 223。
+    /// 无 `ISPE` 属性或 `ISPE` 为 Nulref 都是零个保温参数；这正是无保温目录公式
+    /// `SUM PARAM n IPARAM 1` 应继续求值的情况。
+    ///
+    /// 非空 `ISPE` 按 Core 的 `SPEC -> SELE -> SPCO -> CATR -> SCOM` 路径选件。
+    /// 选不到 SPCO 等价于零个 IPAR；请求任意正下标仍按 GTGETP 的特殊分支返回 0。
+    /// 解析/跨库读取错误则保留为 `None`，不能把数据库缺失伪装成零保温。
+    fn iparam(&self, n: i32) -> Option<f64> {
+        if n <= 0 {
+            return None;
+        }
+        if !self.insulation {
+            return Some(0.0);
+        }
+        let design = self.design.as_ref()?;
+        let has_ispe = design
+            .attribute_names()
+            .ok()?
+            .iter()
+            .any(|name| name == "ISPE");
+        if !has_ispe {
+            return Some(0.0);
+        }
+        let spec = match design.get_element("ISPE") {
+            Ok(None) => return Some(0.0),
+            Ok(Some(spec)) => spec,
+            Err(_) => return None,
+        };
+        let component = match self.selected_insulation_component(&spec) {
+            Ok(Some(component)) => component,
+            Ok(None) => return Some(0.0),
+            Err(_) => return None,
+        };
+        let index = usize::try_from(n).ok()?.checked_sub(1)?;
+        match component.attribute("PARA") {
+            Ok(Some(DescriptorValue::RealArray(items))) => {
+                Some(items.get(index).copied().unwrap_or(0.0))
+            }
+            Ok(Some(DescriptorValue::IntArray(items))) => {
+                Some(items.get(index).map_or(0.0, |value| f64::from(*value)))
+            }
+            Ok(None) => Some(0.0),
+            Ok(Some(_)) | Err(_) => None,
+        }
     }
 
     /// 设计维度关键字（`DDRADIUS` = 3、`DDANGLE` = 4、`DDHEIGHT` = 5）。
     ///
-    /// **只接了 `DDANGLE`，因为只有它拿得到验证。** 它出现在 529 个 `PTAX` 的
+    /// `DDANGLE` 出现在 529 个 `PTAX` 的
     /// `PAXI` 上（`X DDANGLE Y` 152 处、`X DDANGLE -Y` 377 处），落在弯头这类
     /// 有转角的构件上，而弯头两端 P 点轴的夹角**必须等于**设计构件的 `ANGL`
     /// ——这是一条能在真库上逐条核的等式，不是一个说得通的猜测。
     /// [`crate::record::axis_spec::direction`] 求出的轴按这条对过账。
     ///
-    /// `DDRADIUS` / `DDHEIGHT` 仍不接：ams8000 一处都没有，接了既无从验证，
-    /// 又会在将来某份语料上悄悄生效。
+    /// `DDRADIUS` 由 AMS7997 的 `/YKS-AABAABESE120-1PL55` 弯头钉住：它的
+    /// `PTAX.PDIS=[40,2,-3,-4]` 是 `TANF DDRADIUS DDANGLE`，而设计 BEND 明确存有
+    /// `RADI=134, ANGL=90`。Core 用这两个设计维度定位 P1/P2；漏掉半径会让明明
+    /// 存在的 `SCTO.PAAX=P1` 被误报成缺轴。
+    ///
+    /// `DDHEIGHT` 由 ams251142 的变长桥架直段钉住：`CTRAY 2013287686/11`（`HEIG=2955`）
+    /// 的 `SPRE → /SW5/SL3/750/V` 两根侧轨 `SEXT.PHEI=[40,1,-5,0]`，即 `DDHEIGHT`；
+    /// 同一 GMSE 的另一根侧轨 `PZ=( ATTRIB RPRO DISP - ATTRIB HEIG )` 明写读设计构件
+    /// 的 `HEIG`，两条对得上——定长的 `/SW5/SL3/750` 这两格都是 `PARA[10]`（3000）。
+    /// Core3D `pplib/DECARG` 把操作数 `-5` 直接交 `HEIG`（见 e3d-model
+    /// `evidence/20260902-hvac-ctray-census/README.md` 的操作数表）。
     fn design_dimension(&self, id: i32) -> Option<f64> {
         match id {
+            DESIGN_RADIUS => self.number("RADI"),
             DESIGN_ANGLE => self.number("ANGL"),
+            DESIGN_HEIGHT => self.number("HEIG"),
             _ => None,
         }
     }
@@ -373,7 +697,19 @@ impl ParamEnv for DbElementParamEnv {
                     true => subscript as i32,
                     false => return None,
                 };
-                self.indexed(attribute.name, index)
+                // PML writes the insulation form as `ATTRIB IPAR[n]`, while
+                // the compact catalogue tuple writes `IPARAM n`.  They both
+                // reach Core GTGETP's special IPAR branch, including its
+                // no-insulation/out-of-range numeric-zero rule; routing the
+                // former through ordinary array lookup incorrectly produced
+                // `None` for the same expression.
+                if attribute.name == "IPAR" {
+                    self.iparam(index)
+                } else if attribute.name == NUMERIC_DESIGN_PARAMS {
+                    self.numeric_design_parameter(index)
+                } else {
+                    self.indexed(attribute.name, index)
+                }
             }
             (None, Some(qualifier)) => match attribute.name {
                 DESIGN_PROPERTY => self.design_property(qualifier),
@@ -425,6 +761,16 @@ mod tests {
         let env = DbElementParamEnv::new(None, None);
         assert_eq!(env.param(0), None);
         assert_eq!(env.param(-1), None);
+    }
+
+    /// Core3D `ANFIND` widens both range ends by exactly 0.001.  This is
+    /// important at nominal catalogue boundaries such as PBOR 100/100.001.
+    #[test]
+    fn selection_ranges_use_core_anfinds_inclusive_tolerance() {
+        assert!(selection_range_contains(15.0, 100.0, 14.999));
+        assert!(selection_range_contains(15.0, 100.0, 100.001));
+        assert!(!selection_range_contains(15.0, 100.0, 14.9989));
+        assert!(!selection_range_contains(15.0, 100.0, 100.0011));
     }
 
     /// 下标得是整数。`PARA[1.5]` 没有读法，截断成 `PARA[1]` 是编答案。

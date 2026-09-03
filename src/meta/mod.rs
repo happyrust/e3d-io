@@ -20,6 +20,9 @@ pub struct DbDescriptor {
     pub db_mark: u32,
     /// Noun of page 0, at +0x04.
     pub noun: u32,
+    /// db1 hash of the database type name (`DESI`/`CATA`/…), at +0x20.
+    /// [`DbDescriptor::db_type_name`] turns it back into the name.
+    pub db_type_hash: u32,
     /// Page of the **newest** session, at +0x28. This is the chain tail that
     /// `open` starts from.
     pub latest_ses_pgno: u32,
@@ -266,6 +269,8 @@ mod tests {
         let desc = DbDescriptor::parse(&ams8000_page0()).unwrap();
         assert_eq!(desc.db_mark, 8000);
         assert_eq!(desc.noun, 2);
+        assert_eq!(desc.db_type_hash, 722_578);
+        assert_eq!(desc.db_type_name().as_deref(), Some("DESI"));
         assert_eq!(desc.ext_no, 1);
         assert_eq!(desc.page_size_words, 512);
         assert_eq!(desc.page_size, 2048);

@@ -41,17 +41,128 @@ const CONSTANT_SCALE: i32 = 10;
 /// `DDANGLE`, `DDHEIGHT`). Everything beyond is `value / -10`, whether or not
 /// it is a whole ten — `-95` is 9.5, `-1875` is 187.5.
 const DESIGN_DIMENSION_MAX: i32 = 5;
-const IPARAM_BASE: i32 = 100;
-const NEGATED_PARAM_BASE: i32 = 1000;
+/// `- <operand>`: the positive encoding plus this.
+const NEGATED_BASE: i32 = 1000;
+/// `2 TIMES <operand>`: the positive encoding plus this (after the sign).
+const DOUBLED_BASE: i32 = 500;
+/// Above this, the operand is an obstruction band (`OPARAM` / `ODESP`).
+const OBSTRUCTION_BASE: i32 = 300;
+/// Above this (and at most [`OBSTRUCTION_BASE`]), an attached band (`APARAM` / `ADESP`).
+const ATTACHED_BASE: i32 = 200;
+/// Above this (and at most [`ATTACHED_BASE`]), `IPARAM n`.
+const INSULATION_BASE: i32 = 100;
+/// Above this (and at most [`INSULATION_BASE`]), `DESP n`; at most this, `PARAM n`.
+/// The same split separates the `*PARAM` from the `*DESP` half of the attached
+/// and obstruction bands.
+const DESIGN_BASE: i32 = 50;
+
+/// Which parameter array a positive operand indexes.
+///
+/// Core3D `pplib/DECARG` (`Core3D.dll` 0x103C12B8) peels a positive operand
+/// in fixed bands, subtracting each band's base, and hands the remainder to
+/// `GATPAR` together with the array's attribute hash:
+///
+/// | operand | array | attribute (`db1_hash`) |
+/// |---|---|---|
+/// | 1..=50 | `PARAM n` | `PARA` 564289 |
+/// | 51..=100 | `DESP n` | `DESP` 860359 |
+/// | 101..=200 | `IPARAM n` | `IPAR` 886905 |
+/// | 201..=250 | `APARAM n` | `APAR` 886897 |
+/// | 251..=300 | `ADESP n` | `ADES` 909172 |
+/// | 301..=350 | `OPARAM n` | `OPAR` 886911 |
+/// | 351..=500 | `ODESP n` | `ODES` 909186 |
+///
+/// 501..=1000 is the same table with the value doubled, and anything above
+/// 1000 is negated first (both can stack: 1552 is `- 2 TIMES DESP 2`).
+///
+/// The `DESP` band is the one that matters for HVAC: the CADC HVAC catalogue
+/// stores `/RFJFD-BODY.PXLE = [40, 1, 52, 0]`, and E3D sizes that damper body
+/// from the design element's `DESP[2]` (500) — reading it as `PARAM 52` against
+/// the component's one-entry `PARA` was an out-of-range miss on every damper,
+/// mesh and battery in ams7997.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamArray {
+    /// The catalogue component's `PARA`.
+    Para,
+    /// The design element's `DESP`.
+    Desp,
+    /// The insulation component's `PARA` (`IPAR`).
+    IPar,
+    /// `APAR`: the attached component's parameters.
+    APar,
+    /// `ADES`: the attached component's design parameters.
+    ADes,
+    /// `OPAR`: obstruction parameters.
+    OPar,
+    /// `ODES`: obstruction design parameters.
+    ODes,
+}
+
+impl ParamArray {
+    /// The keyword E3D prints for an entry of this array.
+    pub fn keyword(self) -> &'static str {
+        match self {
+            ParamArray::Para => "PARAM",
+            ParamArray::Desp => "DESP",
+            ParamArray::IPar => "IPARAM",
+            ParamArray::APar => "APARAM",
+            ParamArray::ADes => "ADESP",
+            ParamArray::OPar => "OPARAM",
+            ParamArray::ODes => "ODESP",
+        }
+    }
+
+    /// The design-side attribute this array is read from.
+    pub fn attribute(self) -> &'static str {
+        match self {
+            ParamArray::Para => "PARA",
+            ParamArray::Desp => "DESP",
+            ParamArray::IPar => "IPAR",
+            ParamArray::APar => "APAR",
+            ParamArray::ADes => "ADES",
+            ParamArray::OPar => "OPAR",
+            ParamArray::ODes => "ODES",
+        }
+    }
+
+    /// Split a positive operand (sign and doubling already peeled) into its
+    /// array and 1-based index, exactly as `DECARG` does.
+    fn split(raw: i32) -> (Self, i32) {
+        if raw > OBSTRUCTION_BASE {
+            let rest = raw - OBSTRUCTION_BASE;
+            if rest > DESIGN_BASE {
+                (ParamArray::ODes, rest - DESIGN_BASE)
+            } else {
+                (ParamArray::OPar, rest)
+            }
+        } else if raw > ATTACHED_BASE {
+            let rest = raw - ATTACHED_BASE;
+            if rest > DESIGN_BASE {
+                (ParamArray::ADes, rest - DESIGN_BASE)
+            } else {
+                (ParamArray::APar, rest)
+            }
+        } else if raw > INSULATION_BASE {
+            (ParamArray::IPar, raw - INSULATION_BASE)
+        } else if raw > DESIGN_BASE {
+            (ParamArray::Desp, raw - DESIGN_BASE)
+        } else {
+            (ParamArray::Para, raw)
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operand {
-    /// `PARAM n` — the element's nth design parameter.
-    Param(i32),
-    /// `- PARAM n`, stored as 1000 + n.
-    NegatedParam(i32),
-    /// `IPARAM n` — an insulation parameter, stored as 100 + n.
-    IParam(i32),
+    /// A 1-based entry of one of the instance's parameter arrays, with the
+    /// sign and doubling the encoding folds into the operand: `PARAM n`,
+    /// `- PARAM n` (1000 + n), `2 TIMES DESP n` (550 + n), and so on.
+    /// `factor` is one of -2, -1, 1, 2.
+    Param {
+        array: ParamArray,
+        index: i32,
+        factor: i8,
+    },
     /// A literal, stored negated and in tenths; the payload keeps the tenths,
     /// so `-1250` is `Constant(1250)` and reads as 125, `-95` is 9.5.
     Constant(i32),
@@ -63,12 +174,54 @@ pub enum Operand {
 }
 
 impl Operand {
+    /// `PARAM n`, the plain catalogue parameter.
+    pub const fn param(index: i32) -> Self {
+        Operand::Param {
+            array: ParamArray::Para,
+            index,
+            factor: 1,
+        }
+    }
+
+    /// `DESP n`, the design element's parameter.
+    pub const fn desp(index: i32) -> Self {
+        Operand::Param {
+            array: ParamArray::Desp,
+            index,
+            factor: 1,
+        }
+    }
+
+    /// `IPARAM n`, the insulation parameter.
+    pub const fn iparam(index: i32) -> Self {
+        Operand::Param {
+            array: ParamArray::IPar,
+            index,
+            factor: 1,
+        }
+    }
+
     fn decode(raw: i32) -> Self {
         match raw {
             0 => Operand::Zero,
-            n if n >= NEGATED_PARAM_BASE => Operand::NegatedParam(n - NEGATED_PARAM_BASE),
-            n if n >= IPARAM_BASE => Operand::IParam(n - IPARAM_BASE),
-            n if n > 0 => Operand::Param(n),
+            n if n > 0 => {
+                let mut rest = n;
+                let mut factor: i8 = 1;
+                if rest > NEGATED_BASE {
+                    rest -= NEGATED_BASE;
+                    factor = -factor;
+                }
+                if rest > DOUBLED_BASE {
+                    rest -= DOUBLED_BASE;
+                    factor *= 2;
+                }
+                let (array, index) = ParamArray::split(rest);
+                Operand::Param {
+                    array,
+                    index,
+                    factor,
+                }
+            }
             // DECARG: `abs(n) > 5` is a constant in tenths; 1 and 2 are the
             // literal 0 and 1; 3, 4, 5 are the DD keywords.
             n if -n > DESIGN_DIMENSION_MAX => Operand::Constant(-n),
@@ -82,9 +235,19 @@ impl Operand {
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Operand::Param(n) => write!(f, "PARAM {n}"),
-            Operand::NegatedParam(n) => write!(f, "- PARAM {n}"),
-            Operand::IParam(n) => write!(f, "IPARAM {n}"),
+            Operand::Param {
+                array,
+                index,
+                factor,
+            } => {
+                if *factor < 0 {
+                    write!(f, "- ")?;
+                }
+                if factor.abs() == 2 {
+                    write!(f, "2 TIMES ")?;
+                }
+                write!(f, "{} {index}", array.keyword())
+            }
             Operand::Constant(tenths) => {
                 write!(f, "{}", format_number(f64::from(*tenths) / CONSTANT_SCALE as f64))
             }
@@ -271,9 +434,13 @@ pub fn evaluate_words(words: &[u32], env: &dyn ParamEnv) -> Option<f64> {
 
 fn operand_value(operand: &Operand, env: &dyn ParamEnv) -> Option<f64> {
     match operand {
-        Operand::Param(n) => env.param(*n),
-        Operand::NegatedParam(n) => env.param(*n).map(|value| -value),
-        Operand::IParam(n) => env.iparam(*n),
+        Operand::Param {
+            array,
+            index,
+            factor,
+        } => env
+            .parameter(*array, *index)
+            .map(|value| value * f64::from(*factor)),
         Operand::Constant(tenths) => Some(f64::from(*tenths) / CONSTANT_SCALE as f64),
         Operand::DesignDimension(id) => env.design_dimension(*id),
         Operand::Zero => Some(0.0),
@@ -282,15 +449,30 @@ fn operand_value(operand: &Operand, env: &dyn ParamEnv) -> Option<f64> {
 
 /// The two-operand functions whose numeric meaning is settled.
 ///
-/// `SUM` and `DIFFERENCE` are addition and subtraction. The trigonometric
-/// `SINF` / `COSF` / `TANF` carry a second operand whose role E3D has not yet
-/// been made to show — `SINF PARAM 10 PARAM 11` could be any of several things —
-/// so they return `None` until a TTY `Q` reading pins them, rather than a value
-/// that only looks like an answer.
+/// `SUM` and `DIFFERENCE` are addition and subtraction. Core3D `pplib/SPARAM`
+/// (`Core3D.dll` 0x103C4BB4) pins the trigonometric forms: the right operand is
+/// an included angle in degrees, converted with `angle / 114.5915590261646`
+/// (degrees-to-radians plus division by two). Thus the functions are
+/// `left * tan(angle/2)`, `left * sin(angle/2)`, and `left * cos(angle/2)`.
 fn apply_function(name: &str, left: f64, right: f64) -> Option<f64> {
+    let half_angle_radians = right.to_radians() * 0.5;
     match name {
         "SUM" => Some(left + right),
         "DIFFERENCE" => Some(left - right),
+        "TANF" => {
+            let cosine = half_angle_radians.cos();
+            // Core3D SPARAM does not raise or leave the value unset at the
+            // half-angle tangent singularity: it writes numeric zero when the
+            // cosine guard fails.  Returning `None` here used to discard the
+            // whole catalogue primitive instead.
+            Some(if cosine.abs() >= 1.0e-6 {
+                left * half_angle_radians.sin() / cosine
+            } else {
+                0.0
+            })
+        }
+        "SINF" => Some(left * half_angle_radians.sin()),
+        "COSF" => Some(left * half_angle_radians.cos()),
         _ => None,
     }
 }
@@ -347,17 +529,39 @@ mod tests {
         assert_close(evaluate_words(&[40, 3, 6, 11], &env), 60.0 - 110.0);
     }
 
+    #[test]
+    fn evaluates_core_half_angle_trigonometric_functions() {
+        let env = sample_env();
+        assert_close(
+            evaluate_words(&[40, 2, 2, (-4i32) as u32], &env),
+            20.0 * (45.0f64.to_radians() * 0.5).tan(),
+        );
+        assert_close(
+            evaluate_words(&[40, 5, 10, (-4i32) as u32], &env),
+            100.0 * (45.0f64.to_radians() * 0.5).sin(),
+        );
+        assert_close(
+            evaluate_words(&[40, 6, 10, (-4i32) as u32], &env),
+            100.0 * (45.0f64.to_radians() * 0.5).cos(),
+        );
+        assert_eq!(apply_function("TANF", 10.0, 180.0), Some(0.0));
+    }
+
     /// What it must refuse to number: a spelled name, an out-of-range parameter
-    /// (GATPAR's 223), an operand the environment does not carry, and the trig
-    /// functions whose second operand is not yet pinned against E3D.
+    /// (GATPAR's 223), and an operand the environment does not carry.
     #[test]
     fn declines_what_it_cannot_number() {
         let env = sample_env();
         assert_eq!(evaluate_words(&[4, 40, 7, 776, 966], &env), None); // NULL
         assert_eq!(evaluate_words(&[4, 40, 1, 12, 0], &env), None); // PARAM 12, unset
-        assert_eq!(evaluate_words(&[40, 5, 10, 11], &env), None); // SINF
-        assert_eq!(evaluate_words(&[40, 6, 10, 11], &env), None); // COSF
-        assert_eq!(evaluate_words(&[40, 2, 2, (-4i32) as u32], &env), None); // TANF
+        assert_eq!(evaluate_words(&[4, 40, 1, 52, 0], &env), None); // DESP 2, no design element
+
+        // The attached/obstruction bands stay declined until an environment
+        // learns them; a fixture never does.
+        assert_eq!(evaluate_words(&[4, 40, 1, 203, 0], &env), None); // APARAM 3
+        assert_eq!(evaluate_words(&[4, 40, 1, 253, 0], &env), None); // ADESP 3
+        assert_eq!(evaluate_words(&[4, 40, 1, 303, 0], &env), None); // OPARAM 3
+        assert_eq!(evaluate_words(&[4, 40, 1, 353, 0], &env), None); // ODESP 3
     }
 
     /// The negative side of Core3D `pplib/DECARG` (0x103C12B8): magnitudes
@@ -387,6 +591,149 @@ mod tests {
         assert_eq!(render(&[40, 1, (-95i32) as u32, 0]).as_deref(), Some("9.5"));
         assert_eq!(render(&[40, 1, (-870i32) as u32, 0]).as_deref(), Some("87"));
         assert_eq!(render(&[40, 1, (-4i32) as u32, 0]).as_deref(), Some("DDANGLE"));
+    }
+
+    /// The operand bands of Core3D `pplib/DECARG` (0x103C12B8), decoded one
+    /// boundary at a time. The `DESP` band is what the CADC HVAC catalogue
+    /// stores: `/RFJFD-BODY.PXLE = [40, 1, 52, 0]` is `DESP 2`, the damper's
+    /// design width, and used to decode as an out-of-range `PARAM 52`.
+    #[test]
+    fn decodes_every_decarg_operand_band() {
+        let cases: &[(i32, Operand)] = &[
+            (1, Operand::param(1)),
+            (50, Operand::param(50)),
+            (51, Operand::desp(1)),
+            (52, Operand::desp(2)),
+            (100, Operand::desp(50)),
+            (101, Operand::iparam(1)),
+            (200, Operand::iparam(100)),
+            (
+                201,
+                Operand::Param {
+                    array: ParamArray::APar,
+                    index: 1,
+                    factor: 1,
+                },
+            ),
+            (
+                250,
+                Operand::Param {
+                    array: ParamArray::APar,
+                    index: 50,
+                    factor: 1,
+                },
+            ),
+            (
+                251,
+                Operand::Param {
+                    array: ParamArray::ADes,
+                    index: 1,
+                    factor: 1,
+                },
+            ),
+            (
+                300,
+                Operand::Param {
+                    array: ParamArray::ADes,
+                    index: 50,
+                    factor: 1,
+                },
+            ),
+            (
+                301,
+                Operand::Param {
+                    array: ParamArray::OPar,
+                    index: 1,
+                    factor: 1,
+                },
+            ),
+            (
+                350,
+                Operand::Param {
+                    array: ParamArray::OPar,
+                    index: 50,
+                    factor: 1,
+                },
+            ),
+            (
+                351,
+                Operand::Param {
+                    array: ParamArray::ODes,
+                    index: 1,
+                    factor: 1,
+                },
+            ),
+            (
+                500,
+                Operand::Param {
+                    array: ParamArray::ODes,
+                    index: 150,
+                    factor: 1,
+                },
+            ),
+            // 500 + n doubles, 1000 + n negates, and the two stack.
+            (
+                502,
+                Operand::Param {
+                    array: ParamArray::Para,
+                    index: 2,
+                    factor: 2,
+                },
+            ),
+            (
+                552,
+                Operand::Param {
+                    array: ParamArray::Desp,
+                    index: 2,
+                    factor: 2,
+                },
+            ),
+            (
+                1005,
+                Operand::Param {
+                    array: ParamArray::Para,
+                    index: 5,
+                    factor: -1,
+                },
+            ),
+            (
+                1052,
+                Operand::Param {
+                    array: ParamArray::Desp,
+                    index: 2,
+                    factor: -1,
+                },
+            ),
+            (
+                1552,
+                Operand::Param {
+                    array: ParamArray::Desp,
+                    index: 2,
+                    factor: -2,
+                },
+            ),
+        ];
+        for (raw, expected) in cases {
+            assert_eq!(Operand::decode(*raw), *expected, "operand {raw}");
+        }
+    }
+
+    /// `DESP n` numbers against the design element's `DESP`, and the folded
+    /// sign/doubling apply on top of the coefficient.
+    #[test]
+    fn evaluates_design_parameters_and_folded_factors() {
+        let env = sample_env().with_desps([1.0, 500.0, 600.0, 500.0, 600.0, 400.0]);
+        assert_close(evaluate_words(&[4, 40, 1, 52, 0], &env), 500.0); // DESP 2
+        assert_close(evaluate_words(&[4, 40, 1, 56, 0], &env), 400.0); // DESP 6
+        assert_close(evaluate_words(&[4, 20, 1, 53, 0], &env), 0.5 * 600.0); // 0.5 TIMES DESP 3
+        assert_close(evaluate_words(&[4, 40, 1, 552, 0], &env), 2.0 * 500.0); // 2 TIMES DESP 2
+        assert_close(evaluate_words(&[4, 40, 1, 1052, 0], &env), -500.0); // - DESP 2
+        assert_close(evaluate_words(&[4, 40, 1, 1552, 0], &env), -1000.0); // - 2 TIMES DESP 2
+        assert_close(evaluate_words(&[4, 40, 4, 52, 101], &env), 500.0 + 100.0); // SUM DESP 2 IPARAM 1
+        assert_eq!(evaluate_words(&[4, 40, 1, 57, 0], &env), None); // DESP 7, unset
+        assert_eq!(render(&[40, 1, 52, 0]).as_deref(), Some("DESP 2"));
+        assert_eq!(render(&[40, 1, 1052, 0]).as_deref(), Some("- DESP 2"));
+        assert_eq!(render(&[40, 1, 552, 0]).as_deref(), Some("2 TIMES DESP 2"));
     }
 
     /// Every distinct tuple the TTY sample produced, against E3D's own text.

@@ -7,6 +7,7 @@ mod at {
     pub const PAGE_TYPE: usize = 0x00;
     pub const NOUN: usize = 0x04;
     pub const DB_NUM: usize = 0x08;
+    pub const DB_TYPE_HASH: usize = 0x20;
     pub const LATEST_SES_PGNO: usize = 0x28;
     pub const EXT_NO: usize = 0x2C;
     pub const FIRST_SES_PGNO: usize = 0x30;
@@ -29,6 +30,7 @@ impl DbDescriptor {
     /// | +0x00 | page type (0 = descriptor) | 0 |
     /// | +0x04 | noun | 2 |
     /// | +0x08 | db_num | 8000 |
+    /// | +0x20 | db1 hash of the database type name | 722578 (`DESI`) |
     /// | +0x28 | `latest_ses_pgno` — page of the **newest** session | 8897 |
     /// | +0x2C | `ext_no` of this file | 1 |
     /// | +0x30 | `first_ses_pgno` — page of the **oldest** session | 4 |
@@ -97,11 +99,21 @@ impl DbDescriptor {
             page_size: page_size.bytes() as u32,
             page_size_words,
             db_mark: r(at::DB_NUM),
+            db_type_hash: r(at::DB_TYPE_HASH),
             latest_ses_pgno: r(at::LATEST_SES_PGNO),
             ext_no,
             session_page_no: r(at::FIRST_SES_PGNO),
             primary_extent_ref: r(at::PRIMARY_EXTENT_REF),
         })
+    }
+
+    /// The database type name (`DESI`, `CATA`, …), dehashed from +0x20.
+    ///
+    /// `None` when the word does not decode as a db1 name. The aios reader
+    /// (`old-parse-pdms-db::parse_file_basic_info`) reads the same word with
+    /// the same guard, so the two stacks agree on what a file claims to be.
+    pub fn db_type_name(&self) -> Option<String> {
+        e3d_attlib::db1_dehash(self.db_type_hash)
     }
 
     /// Page size as the unit-carrying type. Prefer it over the byte field.

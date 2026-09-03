@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::element_name;
 use crate::error::E3dReaderError;
+use crate::index::reference::ReferenceTable;
 use crate::index::{IndexCursor, IndexEntry, SearchResult};
 use crate::meta::{DbDescriptor, FileInfo};
 use crate::page::cache::PageCache;
@@ -10,7 +11,9 @@ use crate::page::{PageHeader, PageId};
 use crate::record::element::ParsedElement;
 use crate::record::{self, ElementRecordView};
 use crate::refno::RefNo;
-use crate::session::{ChangedElements, SessionDiff, SessionInfo, SessionPage, SessionSelector};
+use crate::session::{
+    ChangedElements, SessionDiff, SessionInfo, SessionPage, SessionSelector, TableRoot,
+};
 
 /// How much of each element [`ReadOnlyEngine::scan_elements`] reads.
 ///
@@ -324,6 +327,48 @@ impl ReadOnlyEngine {
     /// [`SessionDiff::elements`].
     pub fn changed_elements<'a>(&'a mut self, diff: &'a SessionDiff) -> ChangedElements<'a> {
         diff.elements(&mut self.cache)
+    }
+
+    /// The named trees this session points at, beyond the refno index.
+    ///
+    /// See [`crate::index::reference`]: most of them are reverse-reference
+    /// tables, one per reference attribute.
+    pub fn tables(&self) -> &[TableRoot] {
+        &self.session.tables
+    }
+
+    /// One reverse-reference table of the selected session, or `None` when the
+    /// session names no table by that hash.
+    ///
+    /// `name_hash` is `db1_hash("SPRE")` and the like — the reference
+    /// attribute, not the `SPBREF`-style pseudo-attribute that reads it back.
+    pub fn reference_table(&mut self, name_hash: u32) -> Option<ReferenceTable<'_>> {
+        let root = self.session.table_root(name_hash)?;
+        Some(ReferenceTable::at_root(&mut self.cache, root, name_hash))
+    }
+
+    /// Everything **in this database** that references `target` through
+    /// `name_hash`.
+    ///
+    /// An absent table answers empty: a database that never wrote through this
+    /// attribute has no referrers to report, which is the same fact. A table
+    /// that is there and cannot be read is an `Err`, never an empty answer.
+    ///
+    /// This is one database's half of the answer. `DB_MDB::findElements` runs
+    /// the same search over every database of a type and unions the results,
+    /// because a table is stored in the *referring* database — see the module
+    /// note on [`crate::index::reference`].
+    pub fn referrers_of(
+        &mut self,
+        name_hash: u32,
+        target: RefNo,
+    ) -> Result<Vec<RefNo>, E3dReaderError> {
+        let Some(mut table) = self.reference_table(name_hash) else {
+            return Ok(Vec::new());
+        };
+        table
+            .referrers_of(target)
+            .map_err(|source| E3dReaderError::Other(source.to_string()))
     }
 
     /// Find one RefNo in the index of the selected session.

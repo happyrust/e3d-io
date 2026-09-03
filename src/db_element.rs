@@ -114,6 +114,19 @@ pub enum DbElementError {
     },
     #[error("从 {start} 上溯 owner 链在 {at} 转回头了，没到根")]
     OwnerCycle { start: RefNo, at: RefNo },
+    /// E3D 现算的伪属性（`POS`/`ORI` 在电缆桥架件上、`DDES` 之类）没算出来。
+    ///
+    /// 与 [`DbElementError::UnknownAttribute`] 分开：属性在字典里**有**、只是
+    /// 值不在记录里而要按别处的数据推——推不出来是数据关系断了（`POSREF`
+    /// 指空、路径没有点），不是模板缺字段。Core 那头对应的是 `getAtt` 返回
+    /// false 并往 `MR_Message` 里塞一条编号错误。
+    #[error("元素 {refno}（{noun}）的伪属性 {name} 现算失败: {detail}")]
+    PseudoAttribute {
+        refno: RefNo,
+        noun: String,
+        name: String,
+        detail: String,
+    },
     #[error("DbSet 里的锁被另一个线程的 panic 毒化了")]
     Poisoned,
 }
@@ -211,6 +224,25 @@ impl DbSet {
             }
         })?;
         Ok(Self::new(Arc::new(attlib)))
+    }
+
+    /// Parse an attribute library and attach an on-demand cross-database resolver.
+    ///
+    /// Production model generation uses this instead of preloading every catalogue
+    /// file.  The resolver owns project/MDB selection, including same-dbnum files
+    /// from different projects; `DbSet` only freezes the selected file on first use.
+    pub fn with_attlib_file_and_resolver(
+        attlib_path: impl AsRef<Path>,
+        resolver: Box<dyn DbFileResolver>,
+    ) -> Result<Self, DbElementError> {
+        let attlib_path = attlib_path.as_ref();
+        let attlib = e3d_attlib::AttlibData::parse_file(attlib_path).map_err(|error| {
+            DbElementError::Open {
+                file: attlib_path.to_path_buf(),
+                detail: format!("parse attlib: {error}"),
+            }
+        })?;
+        Ok(Self::with_resolver(Arc::new(attlib), resolver))
     }
 
     /// 开一个库并按**文件自报**的库号（描述符 `db_mark`）登记。

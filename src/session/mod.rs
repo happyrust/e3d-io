@@ -54,6 +54,11 @@ mod at {
     /// Comment length, counted in 4-byte words.
     pub const COMMENT_LEN: usize = 0xA0;
     pub const COMMENT_TEXT: usize = 0xA4;
+    /// How many named tables the directory that follows declares.
+    pub const TABLE_COUNT: usize = 0x31C;
+    /// `(name_hash, root_pgno, root_extno)` triples, [`TABLE_COUNT`] of them.
+    pub const TABLE_DIR: usize = 0x320;
+    pub const TABLE_ENTRY_BYTES: usize = 12;
     /// Everything through the comment length word must be present.
     pub const MIN_BYTES: usize = COMMENT_TEXT;
 }
@@ -63,6 +68,36 @@ mod at {
 /// `ams8000_0001` page 4 is session 1 and states `0xFFFFFFFF`. Page 0 is the
 /// descriptor and can never be a session page, so 0 ends the chain too.
 const NO_PREVIOUS: [u32; 2] = [u32::MAX, 0];
+
+/// One named B+tree the session page points at.
+///
+/// A dabacon file holds more than the refno index. Two trees have dedicated
+/// pointers — the index at +0x1C and `CLAIM` at +0x24 — and the rest are listed
+/// in a directory at +0x31C, each named by the base-27 hash of its name and
+/// rooted at a `(pgno, extno)` pair. Across the 543-file corpus every one of
+/// the 2071 directory entries points at a type-5 page whose own second header
+/// word repeats the name hash, and every stated extent is 1.
+///
+/// The names that turn up are `NAME`, `TYPEX`, `SPAMAP`, the UDA tables — and,
+/// one table per reference attribute, `SPRE` / `CATR` / `PRTREF` / `GOBREF` /
+/// … : those are the reverse-reference tables core.dll searches through
+/// `DB_RefTableIterator::startSearch(dbno, attId, targetRef, handle)`, where
+/// `attId` picks the table and `targetRef` is the key. See
+/// [`crate::index::reference`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TableRoot {
+    /// Base-27 hash of the table's name, the same hash the table's own pages
+    /// carry in their second header word.
+    pub name_hash: u32,
+    pub root: PageId,
+}
+
+impl TableRoot {
+    /// The table's name, when the hash decodes as a base-27 name.
+    pub fn name(&self) -> Option<String> {
+        e3d_attlib::db1_dehash(self.name_hash)
+    }
+}
 
 /// One session page: what the database looked like when that session closed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,6 +118,11 @@ pub struct SessionPage {
     pub index_root: PageId,
     /// Claim page, +0x24 / +0x28.
     pub claim: PageId,
+    /// **The other trees as of this session**, +0x31C count and +0x320 entries.
+    ///
+    /// Copy-on-write like the index root, so these roots are session-pinned
+    /// too: a view opened at session N sees that session's reference tables.
+    pub tables: Vec<TableRoot>,
     /// Machine that closed the session, +0x7C, NUL-padded ASCII.
     pub machine: String,
     /// Session comment, +0xA4, length at +0xA0 counted in 4-byte words.
@@ -143,11 +183,62 @@ impl SessionPage {
                 r(at::INDEX_ROOT_PGNO),
             )?,
             claim: address(page, "claim", r(at::CLAIM_EXTNO), r(at::CLAIM_PGNO))?,
+            tables: table_directory(page, data)?,
             machine: ascii_field(&data[at::MACHINE..at::COMMENT_LEN]),
             comment: comment(data, r(at::COMMENT_LEN)),
             stamp_words,
         })
     }
+
+    /// Root of the named table as of this session.
+    ///
+    /// `name_hash` is the base-27 hash of the table name — `db1_hash("SPRE")`
+    /// for the table of everything referencing through `SPRE`.
+    pub fn table_root(&self, name_hash: u32) -> Option<PageId> {
+        self.tables
+            .iter()
+            .find(|table| table.name_hash == name_hash)
+            .map(|table| table.root)
+    }
+}
+
+/// The named-table directory at +0x31C.
+///
+/// A declared count that would run past the page is refused rather than
+/// truncated: the count and the entries are the same fact stated twice, and a
+/// reader that trims one of them is inventing a directory the file does not
+/// state.
+///
+/// A page that ends before +0x31C has no directory to state — the offset is
+/// past the page the file's own header sized. Every dabacon page of the
+/// 543-file corpus is 2048 bytes, so this arm belongs to the synthetic
+/// 256-byte fixtures in `tests/extent_attach_contract.rs` and not to any real
+/// database.
+fn table_directory(page: PageId, data: &[u8]) -> Result<Vec<TableRoot>, SessionError> {
+    if data.len() < at::TABLE_COUNT + 4 {
+        return Ok(Vec::new());
+    }
+    let r = |off: usize| u32::from_be_bytes(data[off..off + 4].try_into().unwrap());
+    let count = r(at::TABLE_COUNT) as usize;
+    let need = at::TABLE_DIR + count * at::TABLE_ENTRY_BYTES;
+    if need > data.len() {
+        return Err(SessionError::TableDirectoryOverflow {
+            page,
+            count: count as u32,
+            need,
+            len: data.len(),
+        });
+    }
+
+    let mut tables = Vec::with_capacity(count);
+    for slot in 0..count {
+        let at = at::TABLE_DIR + slot * at::TABLE_ENTRY_BYTES;
+        tables.push(TableRoot {
+            name_hash: r(at),
+            root: address(page, "table root", r(at + 8), r(at + 4))?,
+        });
+    }
+    Ok(tables)
 }
 
 /// Which session a caller wants.
@@ -323,6 +414,16 @@ impl DbView {
     /// Root of the index as of [`DbView::selected_session`].
     pub fn index_root(&self) -> PageId {
         self.session.index_root
+    }
+
+    /// The named tables as of [`DbView::selected_session`].
+    pub fn tables(&self) -> &[TableRoot] {
+        &self.session.tables
+    }
+
+    /// Root of one named table as of [`DbView::selected_session`].
+    pub fn table_root(&self, name_hash: u32) -> Option<PageId> {
+        self.session.table_root(name_hash)
     }
 
     pub fn session(&self) -> &SessionPage {

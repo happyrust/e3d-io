@@ -141,6 +141,47 @@ pub fn direction(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::record::catalogue_eval::MapParamEnv;
+
+    /// AMS7999 `/NPDG03-A` P9 stores `X ( ATTRIB DESP[2] ) Z` in this exact
+    /// opcode-22 byte sequence.  A zero design parameter is still a resolved
+    /// zero-degree turn, not an unresolved direction.
+    #[test]
+    fn evaluates_ams7999_desp_point_direction() {
+        let words = [
+            24,
+            5,
+            2,
+            22,
+            11,
+            17,
+            1,
+            101,
+            6,
+            0,
+            0,
+            1_073_742_848,
+            0,
+            0,
+            106,
+            2,
+            860_359,
+            u32::MAX,
+            u32::MAX,
+            0,
+            1601,
+            1701,
+            15,
+            61,
+        ];
+        let env = MapParamEnv::new().set_attribute("DESP[2]", 0.0);
+        let program: Vec<i32> = words[5..22].iter().map(|word| *word as i32).collect();
+        assert_eq!(
+            crate::record::catalogue_pml::render(&program).as_deref(),
+            Some("( ATTRIB DESP[2 ] )")
+        );
+        assert_eq!(direction(&words, &env), Some([1.0, 0.0, 0.0]));
+    }
 
     /// Both `Ptcdirection` rows of the 2026-08-26 TTY sample and the shapes
     /// the 2026-08-27 capture added, against E3D's own text.

@@ -31,6 +31,8 @@ use crate::record::catalogue_eval::ParamEnv;
 const KIND_AXIS: u32 = 1;
 const KIND_NEGATED_AXIS: u32 = 2;
 const KIND_POINT: u32 = 3;
+/// Core3D `NAXIS` stores a reversed point axis as `1000 + point_number`.
+const NEGATED_POINT_BASE: u32 = 1000;
 /// The one named angle the census turns up, on seven different pairs.
 const DESIGN_ANGLE: i32 = -4;
 
@@ -92,6 +94,9 @@ fn render_payload(payload: &[u32]) -> Option<String> {
         [kind, value] => match *kind {
             KIND_AXIS => axis_letter(*value).map(String::from),
             KIND_NEGATED_AXIS => axis_letter(*value).map(|letter| format!("-{letter}")),
+            KIND_POINT if *value >= NEGATED_POINT_BASE => {
+                Some(format!("-P{}", *value - NEGATED_POINT_BASE))
+            }
             KIND_POINT => Some(format!("P{value}")),
             kind => rotated_axes(kind, *value),
         },
@@ -206,10 +211,12 @@ mod tests {
             (&[2, 3, 5], "P5"),
             (&[2, 3, 7], "P7"),
             (&[2, 3, 30], "P30"),
+            (&[2, 3, 1005], "-P5"),
             // the same specifications with the count already stripped off
             (&[2, 1], "-X"),
             (&[2, 2], "-Y"),
             (&[3, 7], "P7"),
+            (&[3, 1005], "-P5"),
         ];
         for (words, expected) in cases {
             assert_eq!(render(words).as_deref(), Some(*expected), "{words:?}");

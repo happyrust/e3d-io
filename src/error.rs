@@ -166,6 +166,16 @@ pub enum SessionError {
         need: usize,
     },
 
+    #[error(
+        "{page} declares {count} named tables, which would need {need} bytes of a {len}-byte page"
+    )]
+    TableDirectoryOverflow {
+        page: PageId,
+        count: u32,
+        need: usize,
+        len: usize,
+    },
+
     #[error("{page} could not be read: {detail}")]
     Unreadable { page: PageId, detail: String },
 

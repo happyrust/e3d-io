@@ -50,11 +50,17 @@ const OP_DIVIDE: i32 = 805;
 const OP_SIN: i32 = 901;
 const OP_COS: i32 = 902;
 const OP_TAN: i32 = 903;
+/// Inverse sine. PCLA point axes use it to derive both Pz and Ptcdirection.
+const OP_ASIN: i32 = 904;
 /// Two-argument arctangent. `PTCA.Ptcdirection` turns through one.
 const OP_ATANT: i32 = 907;
 
 /// `101` is followed by this word, then four words of number, then it again.
 const NUMBER_SHAPE: i32 = 6;
+/// Most captured numbers repeat [`NUMBER_SHAPE`] after the payload, while
+/// dimensionless stack operands used as array subscripts end in zero.  Core's
+/// PTCD programs use both forms (`... 0 6` for angles, `... 0 0` for DESP[n]).
+const NUMBER_ENDS: [i32; 2] = [0, NUMBER_SHAPE];
 const NUMBER_WORDS: usize = 7;
 /// `106` is followed by this word, a name, three words of qualifier and two
 /// closing words.
@@ -169,7 +175,7 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             OP_PUSH_NUMBER => parse_number(&program[cursor..])?,
             OP_ATTRIBUTE => parse_attribute(&program[cursor..])?,
             OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
-            | OP_TAN | OP_ATANT => (Step::Operator(program[cursor]), 1),
+            | OP_TAN | OP_ASIN | OP_ATANT => (Step::Operator(program[cursor]), 1),
             // An opcode this has never seen used is a program it has not read.
             _ => return None,
         };
@@ -205,6 +211,7 @@ pub fn render(words: &[i32]) -> Option<String> {
             Step::Operator(OP_SIN) => apply_function("SIN", &mut stack)?,
             Step::Operator(OP_COS) => apply_function("COS", &mut stack)?,
             Step::Operator(OP_TAN) => apply_function("TAN", &mut stack)?,
+            Step::Operator(OP_ASIN) => apply_function("ASIN", &mut stack)?,
             Step::Operator(OP_ATANT) => apply_binary_function("ATANT", &mut stack)?,
             Step::Operator(operator) => apply_binary(operator, &mut stack)?,
         }
@@ -275,6 +282,7 @@ fn apply_numeric(operator: i32, stack: &mut Vec<f64>) -> Option<()> {
         OP_SIN => stack.pop()?.to_radians().sin(),
         OP_COS => stack.pop()?.to_radians().cos(),
         OP_TAN => stack.pop()?.to_radians().tan(),
+        OP_ASIN => stack.pop()?.asin().to_degrees(),
         OP_ATANT => return None,
         _ => {
             let right = stack.pop()?;
@@ -328,13 +336,12 @@ fn program_of(words: &[i32]) -> Option<&[i32]> {
 }
 
 fn parse_number(words: &[i32]) -> Option<(Step, usize)> {
-    let [OP_PUSH_NUMBER, NUMBER_SHAPE, first, second, third, fourth, NUMBER_SHAPE, ..] = words
-    else {
+    let [OP_PUSH_NUMBER, NUMBER_SHAPE, first, second, third, fourth, end, ..] = words else {
         return None;
     };
     // The fourth word is zero throughout the sample. Reading a formula whose
     // meaning turns on a word this has never seen used would be a guess.
-    if *fourth != 0 {
+    if *fourth != 0 || !NUMBER_ENDS.contains(end) {
         return None;
     }
     let value = decode_number(*first, *second, *third)?;
@@ -893,6 +900,25 @@ mod tests {
             "expected 3000 * tan(27 degrees), got {got}"
         );
         assert!(got > 0.0, "27 radians would make this negative, got {got}");
+    }
+
+    /// PCLA /1XP19 uses `ASIN(PARA[10] / PARA[2])` in the implicit Pz and
+    /// Ptcdirection programs of points P11..P14. Opcode 904 therefore returns
+    /// degrees, matching the forward trigonometric operators.
+    #[test]
+    fn inverse_sine_is_rendered_and_evaluated_in_degrees() {
+        let words = &[
+            34, 1, 101, 6, 262144, 0, 1073742850, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101,
+            6, 0, 0, 1073742848, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 805, 904,
+        ];
+        let env = MapParamEnv::new()
+            .set_attribute("PARA[10]", 3.0)
+            .set_attribute("PARA[2]", 6.0);
+        assert_eq!(
+            render(words).as_deref(),
+            Some("( ASIN ( ATTRIB PARA[10 ] / ATTRIB PARA[2 ] ) )")
+        );
+        assert!((evaluate_words(words, &env).unwrap() - 30.0).abs() < 1.0e-12);
     }
 
     /// `ATTRIB RADI * TAN ( ATTRIB ANGL / 2 )` — the bend tangent length, and

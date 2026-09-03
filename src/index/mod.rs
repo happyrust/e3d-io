@@ -31,6 +31,7 @@
 
 pub mod cursor;
 pub mod diff;
+pub mod reference;
 
 use std::cmp::Ordering;
 
@@ -45,6 +46,7 @@ pub use diff::{
     CompletedIndexDiff, DiffDiagnostics, DiffTally, FlagOnlyDrift, IndexCandidate, IndexDiff,
     KeyChange, Pruning,
 };
+pub use reference::{ReferenceEntry, ReferenceTable, ReferenceTableError, ReferenceWalk};
 
 /// `page_type` of an index page. core.dll checks it in `sub_5B026C0` and fails
 /// with "Page is not a table page".

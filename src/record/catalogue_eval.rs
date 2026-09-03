@@ -23,6 +23,8 @@
 
 use std::collections::HashMap;
 
+pub use crate::record::catalogue_expr::ParamArray;
+
 /// An attribute an expression reads, in the shapes the PML form names one.
 ///
 /// `ATTRIB PARA[5]` is `{ name: "PARA", subscript: Some(5.0), .. }`;
@@ -74,6 +76,21 @@ pub trait ParamEnv {
     fn param(&self, n: i32) -> Option<f64>;
     /// `IPARAM n` — the n-th insulation parameter, 1-based.
     fn iparam(&self, n: i32) -> Option<f64>;
+    /// An entry of any of the parameter arrays the tuple form can name
+    /// (`PARAM` / `DESP` / `IPARAM` / `APARAM` / `ADESP` / `OPARAM` / `ODESP`,
+    /// see [`ParamArray`]), 1-based.
+    ///
+    /// `PARAM` and `IPARAM` route to the two dedicated methods so an existing
+    /// environment keeps answering them; every other array is declined until
+    /// the environment says otherwise — a live element knows where its `DESP`
+    /// is, a fixture does not.
+    fn parameter(&self, array: ParamArray, n: i32) -> Option<f64> {
+        match array {
+            ParamArray::Para => self.param(n),
+            ParamArray::IPar => self.iparam(n),
+            _ => None,
+        }
+    }
     /// A design-dimension keyword, by its id (`DDRADIUS` = 3, `DDANGLE` = 4,
     /// `DDHEIGHT` = 5; others keep their number).
     fn design_dimension(&self, id: i32) -> Option<f64>;
@@ -165,6 +182,7 @@ impl AttributeNumber {
 #[derive(Debug, Default, Clone)]
 pub struct MapParamEnv {
     params: Vec<f64>,
+    desps: Vec<f64>,
     iparams: Vec<f64>,
     design_dimensions: HashMap<i32, f64>,
     attributes: HashMap<String, f64>,
@@ -178,6 +196,12 @@ impl MapParamEnv {
     /// The design parameters, in order: index 0 answers `PARAM 1`.
     pub fn with_params(mut self, params: impl IntoIterator<Item = f64>) -> Self {
         self.params = params.into_iter().collect();
+        self
+    }
+
+    /// The design element's `DESP`, in order: index 0 answers `DESP 1`.
+    pub fn with_desps(mut self, desps: impl IntoIterator<Item = f64>) -> Self {
+        self.desps = desps.into_iter().collect();
         self
     }
 
@@ -236,6 +260,15 @@ impl ParamEnv for MapParamEnv {
 
     fn iparam(&self, n: i32) -> Option<f64> {
         nth(&self.iparams, n)
+    }
+
+    fn parameter(&self, array: ParamArray, n: i32) -> Option<f64> {
+        match array {
+            ParamArray::Para => self.param(n),
+            ParamArray::Desp => nth(&self.desps, n),
+            ParamArray::IPar => self.iparam(n),
+            _ => None,
+        }
     }
 
     fn design_dimension(&self, id: i32) -> Option<f64> {
