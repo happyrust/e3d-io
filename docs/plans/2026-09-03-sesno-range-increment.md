@@ -1,6 +1,6 @@
 # 计划：按 sesno 区间提取增量更新内容
 
-状态：Plannotator 评审通过（2026-09-03 16:41，`{"decision":"approved"}`，无批注；§5 五问按计划默认值执行）→ P0–P7 已全部落地，验收 §4 七条全部通过
+状态：Plannotator 评审通过（2026-09-03 16:41，`{"decision":"approved"}`，无批注；§5 五问按计划默认值执行）→ P0–P7 已全部落地，验收 §4 七条全部通过（§4.1 的页预算口径于 2026-09-03 复核时修正为「树差读页 ≤ 10，链回走另计」——原句按字面不成立，实测见 §4 脚注）
 日期：2026-09-03
 影响仓库：`vendor/e3d-io`（本仓库）；消费方为 gen-model / 下游同步工具，本计划不改它们
 
@@ -38,7 +38,7 @@
 
 ### 1.2 区间 diff 的规模与成本
 
-| 库 | 区间 | del / ins / mod | 读页 | 备注 |
+| 库 | 区间 | del / ins / mod | 读页（仅树差） | 备注 |
 |---|---|---|---|---|
 | ams8000（18 MB，6605 键） | 263→264 | 0 / 0 / 2 | 6（全树 111） | |
 | ams8000 | 250→264 | 0 / 12 / 4 | 10 | |
@@ -221,13 +221,15 @@ P0 独立可先合。P1→P2→P3→P4 串行；P5 依赖 P3（`--content`）与
 
 ## 4. 验收
 
-1. `DbView::open(ams8000).diff_sessions(250, 264)` 返回 tally `{deleted:0, inserted:12, modified:4}`，`stats().pages_read` 增量 ≤ 10。
+1. `DbView::open(ams8000).diff_sessions(250, 264)` 返回 tally `{deleted:0, inserted:12, modified:4}`；树差读页（`IndexDiff` 只读两树不共享的页）≤ 10，链回走另计——`resolve_pair` 从最新会话沿链回走到 `from`，每回退一个会话 1 页，不在这 10 页里。[^p41]
 2. `diff_sessions(AtOrBefore(200), Latest)` 在 ams7000 上解析到 `from.sesno == 1`，并在结果里能看到这一点。
 3. `diff_sessions(Exact(200), Latest)` 在 ams7000 上报 `NoSuchSession{requested:200, nearest_older:Some(1), nearest_newer:Some(237)}`。
 4. ams5052 163→189 `elements()` 里 `relocated_only == true` 恰好 1 条。
 5. 4 个样例库：`diff_sessions(a,b)` 键集 ⊆ `diff_steps(a,b)` 键集之并。
 6. `cargo test` 全绿，含 `session_l1_contract`。
 7. `e3d-descriptor sessions --db ams7000` 打出 5 行，sesno 为 1,237,238,262,263。
+
+[^p41]: 原句写的是「`stats().pages_read` 增量 ≤ 10」，2026-09-03 复核时按字面实测不成立：`DbView::open(ams8000)` 后 `diff_sessions(250, 264)` 的 `pages_read` 增量是 **41** = 链回走 31 页（会话 281 → 250，每会话 1 页）+ 树差 10 页；`open_at(264)` 后再 diff 是 24 = 14 + 10。§1.2 表里的「读页 10」从一开始就只算了 `IndexDiff`，验收句子把它写成了整次调用的预算。树差那 10 页守住了；链回走的价格随 `newest - from` 线性增长，是链表结构的固有成本，要压它只能让 `DbView` 缓存一次走过的链（`diff_steps` 目前同一次调用走链两次：`resolve_pair` 与 `walk_chain`），另立计划。这条目前没有自动化测试守着，`tests/session_diff_real.rs` 只在「同一会话两端」的合成用例上断言了 `pages_read` 增量为 0。
 
 ---
 
