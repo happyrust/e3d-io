@@ -10,6 +10,9 @@ use e3d_io::record::element::ParsedElement;
 use e3d_io::record::template::{NounTemplate, StorageLayout, TemplateProvider};
 use e3d_io::record::template_file::TemplateFile;
 use e3d_io::refno::RefNo;
+use e3d_io::session::{
+    ChangeKind, ChangedElement, DbView, ElementDelta, SessionDiff, SessionSelector,
+};
 use e3d_io::tty::{
     apply_reference_names, parse_attlist_capture, reconcile_attlist, CompleteAttributeRow,
     CompleteAttributeSource, ValueComparison,
@@ -51,6 +54,22 @@ fn run() -> Result<(), String> {
     }
     if command == "emit-uda-table" {
         let summary = emit_uda_table(&options)?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    if command == "sessions" {
+        let summary = sessions_command(&options)?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    if command == "diff" {
+        let summary = diff_command(&options)?;
         println!(
             "{}",
             serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
@@ -1240,6 +1259,312 @@ fn source_name(source: CompleteAttributeSource) -> &'static str {
     }
 }
 
+/// `sessions --db PATH`: the retained session chain, newest first.
+///
+/// The chain is what a range can be cut at. `MERGE CHANGES` leaves holes —
+/// `ams7000_0001` keeps 1, 237, 238, 262 and 263 of its 263 sessions — and a
+/// caller choosing `--from` needs to see them before `diff` refuses a number
+/// that is not there.
+fn sessions_command(options: &HashMap<String, String>) -> Result<Value, String> {
+    let db = required(options, "db")?;
+    let mut view = DbView::open(db).map_err(|e| format!("open database {db}: {e}"))?;
+    let chain = view
+        .walk_sessions()
+        .map_err(|e| format!("walk the session chain of {db}: {e}"))?;
+    let db_type = db_type_name(&mut view);
+    let descriptor = view.descriptor();
+    Ok(json!({
+        "db": db,
+        "db_num": descriptor.db_mark,
+        "db_type": db_type,
+        "newest": chain.first().map(|s| s.sesno),
+        "oldest": chain.last().map(|s| s.sesno),
+        "retained": chain.len(),
+        "sessions": chain.iter().map(session_json).collect::<Vec<_>>(),
+    }))
+}
+
+/// The database type (`DESI`, `CATA`, …): the db1 hash at +0x20 of page 0,
+/// which is what says which `*vir.dat` decodes this file's records.
+fn db_type_name(view: &mut DbView) -> Option<String> {
+    let page0 = view.pages_mut().get_page(0).ok()?;
+    let hash = u32::from_be_bytes(page0.get(0x20..0x24)?.try_into().ok()?);
+    db1_dehash(hash)
+}
+
+fn session_json(session: &e3d_io::session::SessionPage) -> Value {
+    json!({
+        "sesno": session.sesno,
+        "page": session.page.page,
+        "previous_page": session.previous.map(|p| p.page),
+        "index_root": session.index_root.page,
+        "end_page": session.end.page,
+        "machine": session.machine,
+        "comment": session.comment,
+        "stamp_words": session.stamp_words,
+    })
+}
+
+/// `diff --db PATH --from N [--to N] [--at-or-before on] [--steps on]
+/// [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type T]]`.
+///
+/// Without `--content` the output is the key set with record addresses,
+/// which is what the index says and costs only index pages. `--content on`
+/// reads every changed record on the side(s) it exists on and adds the
+/// template-free delta; with `--desvir` and `--attlib` the delta also carries
+/// the descriptor-decoded attribute rows. `--limit` caps how many changes get
+/// content, because one range of `ams7000_0001` is 69 076 of them.
+fn diff_command(options: &HashMap<String, String>) -> Result<Value, String> {
+    let db = required(options, "db")?;
+    let snap = on_off(options, "at-or-before")?;
+    let selector = |name: &str| -> Result<Option<SessionSelector>, String> {
+        options
+            .get(name)
+            .map(|value| {
+                let sesno = value
+                    .parse::<u32>()
+                    .map_err(|e| format!("--{name} takes a session number: {e}"))?;
+                Ok(if snap {
+                    SessionSelector::AtOrBefore(sesno)
+                } else {
+                    SessionSelector::Exact(sesno)
+                })
+            })
+            .transpose()
+    };
+    let from = selector("from")?.ok_or("missing --from")?;
+    let to = selector("to")?.unwrap_or(SessionSelector::Latest);
+    let steps = on_off(options, "steps")?;
+    let content = on_off(options, "content")?;
+    let limit = options
+        .get("limit")
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .map_err(|e| format!("--limit takes a count: {e}"))
+        })
+        .transpose()?
+        .unwrap_or(usize::MAX);
+
+    let mut view = DbView::open_at_with_cache(db, SessionSelector::Latest, 16_384)
+        .map_err(|e| format!("open database {db}: {e}"))?;
+
+    let mut provider = match (options.get("desvir"), options.get("attlib")) {
+        (Some(desvir), Some(attlib_path)) => {
+            let template_type = options
+                .get("template-type")
+                .map(|value| parse_noun(value))
+                .transpose()?
+                .unwrap_or(DESIGN_TEMPLATE_TYPE);
+            let attlib = AttlibData::parse_file(attlib_path)?;
+            let provider = TemplateProvider::open(desvir, Some(template_type))
+                .map_err(|e| format!("open descriptor template: {e}"))?;
+            Some((attlib, provider))
+        }
+        (None, None) => None,
+        _ => return Err("--desvir and --attlib go together".into()),
+    };
+
+    if steps {
+        let steps = view
+            .diff_steps(from, to)
+            .map_err(|e| format!("diff {db}: {e}"))?;
+        let mut out = Vec::with_capacity(steps.len());
+        for step in &steps {
+            out.push(diff_json(
+                &mut view,
+                step,
+                content,
+                limit,
+                provider.as_mut(),
+            )?);
+        }
+        return Ok(json!({
+            "db": db,
+            "steps": out,
+        }));
+    }
+
+    let diff = view
+        .diff_sessions(from, to)
+        .map_err(|e| format!("diff {db}: {e}"))?;
+    let mut out = diff_json(&mut view, &diff, content, limit, provider.as_mut())?;
+    out["db"] = json!(db);
+    Ok(out)
+}
+
+fn diff_json(
+    view: &mut DbView,
+    diff: &SessionDiff,
+    content: bool,
+    limit: usize,
+    mut templates: Option<&mut (AttlibData, TemplateProvider)>,
+) -> Result<Value, String> {
+    let tally = diff.tally();
+    let mut changes = Vec::with_capacity(diff.changes().len().min(limit));
+    if content {
+        for element in view.changed_elements(diff).take(limit) {
+            let element = element.map_err(|e| format!("read a changed record: {e}"))?;
+            let mut delta = ElementDelta::of(&element).map_err(|e| e.to_string())?;
+            if let Some((attlib, provider)) = templates.as_deref_mut() {
+                delta.with_attribute_rows(attlib, provider);
+            }
+            changes.push(changed_element_json(&element, &delta));
+        }
+    } else {
+        for change in diff.changes().iter().take(limit) {
+            changes.push(candidate_json(*change));
+        }
+    }
+    Ok(json!({
+        "from": session_json(&diff.from),
+        "to": session_json(&diff.to),
+        "tally": {
+            "deleted": tally.deleted,
+            "inserted": tally.inserted,
+            "modified": tally.modified,
+            "unchanged_compared": tally.unchanged_compared,
+            "shared_subtrees_pruned": tally.shared_subtrees_pruned,
+        },
+        "flag_only_drifts": diff.index.diagnostics.flag_only_drifts,
+        "changes_total": diff.changes().len(),
+        "changes_listed": changes.len(),
+        "changes": changes,
+    }))
+}
+
+fn position_json(position: e3d_io::index::RecordPosition) -> Value {
+    json!({
+        "ext": position.page.ext,
+        "page": position.page.page,
+        "offset_words": position.offset_words,
+    })
+}
+
+fn candidate_json(change: e3d_io::index::IndexCandidate) -> Value {
+    use e3d_io::index::IndexCandidate;
+    match change {
+        IndexCandidate::Inserted { refno, target } => json!({
+            "refno": refno.to_string(),
+            "kind": "inserted",
+            "after": position_json(target),
+        }),
+        IndexCandidate::Deleted { refno, base } => json!({
+            "refno": refno.to_string(),
+            "kind": "deleted",
+            "before": position_json(base),
+        }),
+        IndexCandidate::Modified {
+            refno,
+            base,
+            target,
+        } => json!({
+            "refno": refno.to_string(),
+            "kind": "modified",
+            "before": position_json(base),
+            "after": position_json(target),
+        }),
+    }
+}
+
+fn record_side_json(
+    view: &e3d_io::record::ElementRecordView,
+    parsed: Option<&ParsedElement>,
+) -> Value {
+    let mut out = json!({
+        "page": view.page_no,
+        "byte_offset": view.byte_offset,
+        "bytes": view.raw_bytes.len(),
+    });
+    if let Some(parsed) = parsed {
+        out["noun"] = json!(db1_dehash(parsed.noun_hash));
+        out["noun_hash"] = json!(parsed.noun_hash);
+        out["owner"] = json!(parsed.owner.to_string());
+        out["members"] = json!(parsed.members.len());
+        out["explicit_attributes"] = json!(parsed.explicit_attributes.len());
+    }
+    out
+}
+
+fn changed_element_json(element: &ChangedElement, delta: &ElementDelta) -> Value {
+    let relocated_only = matches!(
+        element.kind,
+        ChangeKind::Modified {
+            relocated_only: true
+        }
+    );
+    let refnos = |list: &[RefNo]| list.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let mut delta_json = json!({
+        "owner": delta.owner.map(|o| json!({"before": o.before.to_string(), "after": o.after.to_string()})),
+        "members_added": refnos(&delta.members_added),
+        "members_removed": refnos(&delta.members_removed),
+        "members_reordered": delta.members_reordered,
+        "explicit_changed": delta.explicit_changed.iter().map(|c| json!({
+            "hash": c.hash,
+            "name": c.name,
+            "before": c.before.as_ref().map(explicit_value_json),
+            "after": c.after.as_ref().map(explicit_value_json),
+        })).collect::<Vec<_>>(),
+        "implicit_words_changed": delta.implicit_words_changed.iter().map(|c| json!({
+            "word": c.word,
+            "before": c.before,
+            "after": c.after,
+        })).collect::<Vec<_>>(),
+    });
+    if let Some(rows) = &delta.attribute_rows {
+        delta_json["attribute_rows"] = rows
+            .iter()
+            .map(|row| {
+                json!({
+                    "name": row.name,
+                    "before": row.before.as_ref().map(value_json),
+                    "after": row.after.as_ref().map(value_json),
+                    "before_status": row.before_status.as_ref().map(status_json),
+                    "after_status": row.after_status.as_ref().map(status_json),
+                })
+            })
+            .collect();
+    }
+    if let Some(reason) = &delta.attribute_rows_unavailable {
+        delta_json["attribute_rows_unavailable"] = json!(reason);
+    }
+    json!({
+        "refno": element.refno.to_string(),
+        "kind": element.kind.name(),
+        "relocated_only": relocated_only,
+        "noun": delta.noun_name,
+        "before": element.before.as_ref().map(|v| record_side_json(v, delta.before.as_ref())),
+        "after": element.after.as_ref().map(|v| record_side_json(v, delta.after.as_ref())),
+        "delta": delta_json,
+    })
+}
+
+fn explicit_value_json(value: &e3d_io::record::explicit::ExplicitValue) -> Value {
+    use e3d_io::record::explicit::ExplicitValue;
+    match value {
+        ExplicitValue::Integer(v) => json!(v),
+        ExplicitValue::Real(v) => json!(v),
+        ExplicitValue::Bool(v) => json!(v),
+        ExplicitValue::Text(v) => json!(v),
+        ExplicitValue::RefNo(v) => json!(v.to_string()),
+        ExplicitValue::IntArray(v) => json!(v),
+        ExplicitValue::RealArray(v) => json!(v),
+        ExplicitValue::RefNoArray(v) => {
+            json!(v.iter().map(ToString::to_string).collect::<Vec<_>>())
+        }
+        ExplicitValue::RawWords(v) => json!({"words": v}),
+    }
+}
+
+/// An `on`/`off` option, absent meaning off.
+fn on_off(options: &HashMap<String, String>, name: &str) -> Result<bool, String> {
+    match options.get(name).map(String::as_str) {
+        None | Some("off") => Ok(false),
+        Some("on") => Ok(true),
+        Some(other) => Err(format!("--{name} takes on or off, got {other}")),
+    }
+}
+
 fn parse_options(args: impl Iterator<Item = String>) -> Result<HashMap<String, String>, String> {
     let mut out = HashMap::new();
     let mut args = args.peekable();
@@ -1771,7 +2096,7 @@ fn layout_name(layout: StorageLayout) -> &'static str {
 }
 
 fn usage() -> String {
-    "usage:\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH --desvir DICVIR --template-type DICT --attlib PATH [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
+    "usage:\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH --desvir DICVIR --template-type DICT --attlib PATH [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
         .into()
 }
 
