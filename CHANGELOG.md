@@ -21,6 +21,7 @@
 
 ### Changed
 
+- `tests/session_l1_contract.rs` no longer states which session `ams8000_0001` is at. It said 264 and latest page 8897; the sample database is live — E3D had written it to 281 and 9277 — and two assertions were red for it. The session number and both descriptor pointers are now compared with the bytes at their offsets, and the chain checks (newest first, strictly descending, ending at 1) hold on a merged file too.
 - Tests that read the installed E3D fixtures now check for them at runtime instead of carrying `#[ignore]`. `#[ignore]` hid four failing assertions behind a green `cargo test`, two of which this changelog lists as regressions. Only the three whole-file scans that take about a minute each stay ignored.
 - `summarize_element` and `resolve_attribute` are deprecated: they address attributes at word `6 + atgtdf_position - 1`, where `core.dll` uses the descriptor's own `encoded_location & 0xFFFFF`. The README quick start now uses `extract_element_with_descriptors`.
 - `ReadOnlyEngine::open` now initializes `FileInfo` from page 1 metadata instead of synthesizing it from the descriptor.

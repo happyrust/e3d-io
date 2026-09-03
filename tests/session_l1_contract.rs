@@ -25,6 +25,8 @@ const SESNO: u64 = 0x0C;
 const INDEX_ROOT_PGNO: u64 = 0x1C;
 /// Descriptor word holding the newest session's page.
 const LATEST_SES_PGNO: u64 = 0x28;
+/// Descriptor word holding the oldest session's page.
+const FIRST_SES_PGNO: u64 = 0x30;
 /// Descriptor word holding the page size, in 4-byte words.
 const PAGE_SIZE_WORDS: u64 = 0x34;
 
@@ -42,6 +44,42 @@ fn raw_word(path: &Path, offset: u64) -> u32 {
 
 fn raw_session_word(path: &Path, page_bytes: u64, page: u32, at: u64) -> u32 {
     raw_word(path, u64::from(page) * page_bytes + at)
+}
+
+/// The newest session number as the bytes state it: the `sesno` word of the
+/// page the descriptor's `latest_ses_pgno` names.
+///
+/// The sample databases are live — E3D keeps writing sessions to them
+/// (`ams8000_0001` went from 264 to 281 between two runs of this file) — so a
+/// session number written into an assertion is a number that will be wrong.
+fn newest_sesno_on_disk(path: &Path) -> u32 {
+    let page_bytes = u64::from(raw_word(path, PAGE_SIZE_WORDS)) * 4;
+    raw_session_word(path, page_bytes, raw_word(path, LATEST_SES_PGNO), SESNO)
+}
+
+/// Sessions run newest first, strictly descending, and end at the head of the
+/// chain — which is what a walk has to show whether or not the file has been
+/// merged (a merged file keeps fewer sessions than its newest `sesno`).
+fn assert_well_formed_chain(sesnos: &[u32], newest: u32) {
+    assert_eq!(
+        sesnos.first().copied(),
+        Some(newest),
+        "chain starts at the newest session"
+    );
+    assert!(
+        sesnos.windows(2).all(|pair| pair[0] > pair[1]),
+        "sesno must strictly descend along the chain: {sesnos:?}"
+    );
+    assert_eq!(
+        sesnos.last().copied(),
+        Some(1),
+        "chain reaches back to session 1"
+    );
+    assert!(
+        sesnos.len() <= newest as usize,
+        "{} sessions on a chain whose newest sesno is {newest}",
+        sesnos.len()
+    );
 }
 
 // ---------------------------------------------------------------- synthetic
@@ -330,12 +368,17 @@ fn an_older_session_descends_the_root_that_session_recorded() {
     let page_bytes = u64::from(raw_word(path, PAGE_SIZE_WORDS)) * 4;
 
     let latest = DbView::open(path).unwrap();
-    assert_eq!(latest.selected_session(), 264, "ams8000_0001 is at 264");
+    let newest = newest_sesno_on_disk(path);
+    assert_eq!(
+        latest.selected_session(),
+        newest,
+        "ams8000_0001 opens at the session its header names"
+    );
 
     let earlier_page = latest
         .session()
         .previous
-        .expect("session 264 has a predecessor");
+        .expect("the newest session has a predecessor");
     let earlier_sesno = raw_session_word(path, page_bytes, earlier_page.page, SESNO);
     let earlier_root = raw_session_word(path, page_bytes, earlier_page.page, INDEX_ROOT_PGNO);
 
@@ -359,9 +402,8 @@ fn an_older_session_descends_the_root_that_session_recorded() {
     // And the whole chain walks without a cycle or a break.
     let mut walker = DbView::open(path).unwrap();
     let chain = walker.walk_sessions().unwrap();
-    assert_eq!(chain.len(), 264, "sesno 264 should mean 264 sessions");
-    assert_eq!(chain.first().unwrap().sesno, 264);
-    assert_eq!(chain.last().unwrap().sesno, 1);
+    let sesnos: Vec<u32> = chain.iter().map(|page| page.sesno).collect();
+    assert_well_formed_chain(&sesnos, newest);
     assert_eq!(chain.last().unwrap().previous, None);
 }
 
@@ -390,8 +432,8 @@ fn the_engine_reports_the_whole_chain_from_the_newest_session() {
         view.selected_session(),
         "the chain must start at the newest session, not the oldest"
     );
-    assert_eq!(sessions.len(), view.selected_session() as usize);
-    assert_eq!(sessions.last().unwrap().session_id, 1);
+    let sesnos: Vec<u32> = sessions.iter().map(|info| info.session_id).collect();
+    assert_well_formed_chain(&sesnos, newest_sesno_on_disk(Path::new(AMS8000)));
     // The head of the chain points nowhere, and +0x10 was never a start page.
     assert_eq!(sessions.last().unwrap().session_mark, u32::MAX);
     assert_eq!(sessions.first().unwrap().start_page_no, u32::MAX);
@@ -458,13 +500,25 @@ fn the_descriptor_reports_both_session_pointers() {
     if common::missing(FIXTURES) {
         return;
     }
-    let view = DbView::open(Path::new(AMS8000)).unwrap();
+    let path = Path::new(AMS8000);
+    let view = DbView::open(path).unwrap();
     let desc: &DbDescriptor = view.descriptor();
     assert_eq!(desc.db_mark, 8000);
     assert_eq!(desc.page_size, 2048);
     assert_eq!(desc.page_size_words, 512);
-    assert_eq!(desc.latest_ses_pgno, 8897);
-    assert_eq!(desc.session_page_no, 4, "+0x30 is the oldest session");
+    // Both pointers are compared with the bytes at their offsets rather than
+    // with numbers: the newest session's page moves every time E3D writes a
+    // session to this file (8897 when this test was written, 9277 by now).
+    assert_eq!(
+        desc.latest_ses_pgno,
+        raw_word(path, LATEST_SES_PGNO),
+        "+0x28 is the newest session"
+    );
+    assert_eq!(
+        desc.session_page_no,
+        raw_word(path, FIRST_SES_PGNO),
+        "+0x30 is the oldest session"
+    );
     assert_ne!(
         desc.latest_ses_pgno, desc.session_page_no,
         "the two pointers are not interchangeable"
