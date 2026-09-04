@@ -80,15 +80,33 @@ e3d-descriptor describe --schema schema\e3d31 --noun BRAN
 That fills `--desvir`, `--attlib`, `--dicvir`, `--catalog-layout` and
 `--catalog-fields`; an explicit flag still wins. The 3.1 pack carries its own
 copies of the 20 `*vir.dat` and `attlib.dat` in `schema\e3d31\binaries\`, and
-they are committed, so a fresh clone runs the line above with nothing
-installed. They are AVEVA installation files: do not publish this repository
-outside the parties already licensed for that installation. A machine that
-wants its own installation instead points `$E3D31_SCHEMA_DIR` at it — the pack
-looks in that variable first, then `schema\e3d31\binaries\`, then a
-`binaries.root` its manifest records, and names every place it looked when it
-finds none.
+they are committed, so the line above needs no AVEVA installation and no
+environment variable — only the sibling checkout named under Building. They
+are AVEVA installation files: do not publish this repository outside the
+parties already licensed for that installation. A machine that wants its own
+installation instead points `$E3D31_SCHEMA_DIR` at it — the pack looks in that
+variable first, then `schema\e3d31\binaries\`, then a `binaries.root` its
+manifest records, and names every place it looked when it finds none.
 `schema/README.md` covers adding a release; `e3d_io::SchemaPack` is the same
 resolution from Rust.
+
+## Building
+
+`Cargo.toml` names `e3d-attlib` by path, `../e3d-attlib`, so the two
+repositories are checked out side by side:
+
+```powershell
+git clone <host>/e3d-attlib
+git clone <host>/e3d-io
+cd e3d-io; cargo test
+```
+
+The path dependency rather than a git or registry one is deliberate: seven
+downstream crates — `e3d-model`, its five verify variants, and `gen-model` —
+depend on `e3d-io` and `e3d-attlib` both, both by path. If this crate reached
+`e3d-attlib` any other way each of them would build two `e3d-attlib` crates in
+one graph, and the `AttlibData` they hand to an `e3d-io` call would be a
+different type from the one it takes.
 
 Rows are labelled `catalog_and_descriptor`, `catalog_only`, or
 `descriptor_only`. Only the descriptor side supplies physical storage
