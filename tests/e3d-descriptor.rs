@@ -7,6 +7,7 @@ const DESIGN_DB: &str =
     r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001";
 const CATA_DB: &str =
     r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7351_0001";
+const SYST_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\amssys";
 const REFERENCE_DB: &str =
     r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5053_0001";
 const DICTIONARY_DBS: &[&str] = &[
@@ -17,6 +18,7 @@ const DICTIONARY_DBS: &[&str] = &[
 const DESVIR: &str = common::DESVIR;
 const CATVIR: &str = common::CATVIR;
 const DICVIR: &str = common::DICVIR;
+const SYSVIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/sysvir.dat");
 const ATTLIB: &str = common::ATTLIB;
 
 #[test]
@@ -190,4 +192,51 @@ fn dictionary_runtime_attributes_match_the_e3d_tty_capture() {
         assert_eq!(row["binary_status"]["kind"], "runtime_derived");
         assert_eq!(row["binary_status"]["evaluator"], evaluator);
     }
+}
+
+#[test]
+fn system_world_attributes_match_the_e3d_tty_capture() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let tty = manifest.join("tests/fixtures/worl_24575_3_attlist_tty.log");
+    let catalog = manifest.join("schema/e3d31/catalog");
+    let required = [SYST_DB, SYSVIR, DICVIR, ATTLIB]
+        .into_iter()
+        .chain(DICTIONARY_DBS.iter().copied());
+    if required.into_iter().any(|path| !Path::new(path).exists()) || !tty.exists() {
+        return;
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_e3d-descriptor"))
+        .args(["extract-complete", "--db", SYST_DB])
+        .args(["--desvir", SYSVIR, "--attlib", ATTLIB])
+        .args(["--refno", "24575/3", "--template-type", "SYST"])
+        .arg("--tty-log")
+        .arg(&tty)
+        .arg("--catalog-layout")
+        .arg(catalog.join("noun_layout.json"))
+        .arg("--catalog-fields")
+        .arg(catalog.join("noun_attr_fields.json"))
+        .args(["--reference-db-list", SYST_DB, "--uda", "on"])
+        .args(["--dictionary-db-list", &DICTIONARY_DBS.join(";")])
+        .args(["--dicvir", DICVIR])
+        .output()
+        .expect("run complete SYST descriptor comparison");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("parse SYST comparison JSON");
+    assert_eq!(report["tty_row_count"], 5);
+    assert_eq!(report["tty_unique_count"], 5);
+    assert_eq!(report["deferred_uda_row_count"], 0);
+    assert_eq!(report["omitted_row_count"], 0);
+    assert_eq!(report["comparison_counts"]["equivalent"], 5);
+    assert!(report["attributes"]
+        .as_array()
+        .expect("attribute rows")
+        .iter()
+        .all(|row| row["comparison"] == "equivalent"));
 }
