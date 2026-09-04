@@ -140,23 +140,29 @@ pub fn reconcile_attlist(
     metadata: &AttributeMetadataCatalog,
     catalog: Option<&NounCatalog>,
 ) -> Vec<CompleteAttributeRow> {
-    let mut by_report_name: HashMap<String, &ExtractedAttribute> = HashMap::new();
+    let mut system_by_report_name: HashMap<String, &ExtractedAttribute> = HashMap::new();
+    let mut uda_by_report_name: HashMap<String, &ExtractedAttribute> = HashMap::new();
     for attribute in &extraction.attributes {
-        by_report_name.insert(attribute.name.to_ascii_lowercase(), attribute);
+        let names = if attribute.name.starts_with(':') {
+            &mut uda_by_report_name
+        } else {
+            &mut system_by_report_name
+        };
+        names.insert(attribute.name.to_ascii_lowercase(), attribute);
         if attribute.name.starts_with(':') {
-            by_report_name.insert(
+            names.insert(
                 attribute.name.trim_start_matches(':').to_ascii_lowercase(),
                 attribute,
             );
         }
         if let Some(report_name) = metadata.report_name(attribute.hash) {
-            by_report_name.insert(report_name.to_ascii_lowercase(), attribute);
+            names.insert(report_name.to_ascii_lowercase(), attribute);
         }
         // Last, so the exported query text outranks the name recovered by
         // walking the attlib record: where the two disagree it is the recovery
         // that has picked up an editor label.
         if let Some(heading) = catalog.and_then(|catalog| catalog.query_heading(attribute.hash)) {
-            by_report_name.insert(heading.to_ascii_lowercase(), attribute);
+            names.insert(heading.to_ascii_lowercase(), attribute);
         }
     }
 
@@ -203,21 +209,23 @@ pub fn reconcile_attlist(
                     binary_value,
                 };
             }
-            let Some(binary) = by_report_name
-                .get(&key)
-                .or_else(|| {
-                    (!key.starts_with(':'))
-                        .then(|| by_report_name.get(key.trim_start_matches(':')))
-                        .flatten()
-                })
-                .or_else(|| {
-                    TTY_HEADING_ALIASES
-                        .iter()
-                        .filter(|(heading, _)| *heading == key)
-                        .flat_map(|(_, system_names)| system_names.iter())
-                        .find_map(|system_name| by_report_name.get(*system_name))
-                })
-            else {
+            let matched = if key.starts_with(':') {
+                uda_by_report_name
+                    .get(&key)
+                    .or_else(|| uda_by_report_name.get(key.trim_start_matches(':')))
+            } else {
+                system_by_report_name
+                    .get(&key)
+                    .or_else(|| {
+                        TTY_HEADING_ALIASES
+                            .iter()
+                            .filter(|(heading, _)| *heading == key)
+                            .flat_map(|(_, system_names)| system_names.iter())
+                            .find_map(|system_name| system_by_report_name.get(*system_name))
+                    })
+                    .or_else(|| uda_by_report_name.get(&key))
+            };
+            let Some(binary) = matched else {
                 return CompleteAttributeRow {
                     ordinal: tty.ordinal,
                     name: tty.name.clone(),
@@ -811,6 +819,56 @@ mod tests {
             None,
         );
         assert_eq!(rows[0].source, CompleteAttributeSource::TtyAuthority);
+    }
+
+    #[test]
+    fn system_heading_outranks_a_same_named_colon_uda() {
+        let attribute = |hash: u32, name: &str, value: DescriptorValue| ExtractedAttribute {
+            hash,
+            name: name.into(),
+            storage_type_code: 16,
+            semantic_type_code: None,
+            semantic_size: None,
+            layout: StorageLayout::Wide,
+            storage: StorageDescriptor {
+                storage_words: 2,
+                location: EncodedLocation { raw: 1 },
+                flags: 0,
+            },
+            status: AttributeExtractionStatus::Decoded,
+            value: Some(value),
+        };
+        let extraction = ElementExtraction {
+            refno: RefNo::new(24383, 71313),
+            owner: RefNo::new(0, 0),
+            noun_hash: 821683,
+            noun_name: Some("SCTN".into()),
+            implicit_word_count: 45,
+            format_word_10: 0,
+            layout: StorageLayout::Wide,
+            attributes: vec![
+                attribute(
+                    643429,
+                    "Spref",
+                    DescriptorValue::RefNo(RefNo::new(23984, 110872)),
+                ),
+                attribute(1, ":SPREF", DescriptorValue::RefNo(RefNo::new(0, 0))),
+            ],
+        };
+        let tty = vec![TtyAttributeRow {
+            ordinal: 0,
+            name: "Spref".into(),
+            rendered_value: "23984/110872".into(),
+        }];
+
+        let rows = reconcile_attlist(
+            &tty,
+            &extraction,
+            &AttributeMetadataCatalog::default(),
+            None,
+        );
+        assert_eq!(rows[0].binary_name.as_deref(), Some("Spref"));
+        assert_eq!(rows[0].comparison, ValueComparison::Equivalent);
     }
 
     #[test]
