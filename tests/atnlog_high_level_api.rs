@@ -24,17 +24,20 @@ fn fixtures_present() -> bool {
     Path::new(DB_PATH).exists() && Path::new(ATTLIB_PATH).exists()
 }
 
-/// The first element the current session indexes.
+/// The first NXTR the current session indexes: `17496/72444` on this fixture.
 ///
 /// This used to parse the index root as though it were a leaf and take its
 /// first entry, which only worked while the root discovery happened to return
-/// a one-level tree.
-fn first_indexed_refno(engine: &mut ReadOnlyEngine) -> RefNo {
-    engine.indexed_refnos().expect("read the index")[0].0
+/// a one-level tree; then it took the first indexed element outright, which
+/// on this fixture is the WORL `9304/0`, four non-zero attributes and none of
+/// the NXTR shape the other fixture tests decode. Same element as they use.
+fn first_nxtr(engine: &mut ReadOnlyEngine) -> RefNo {
+    common::first_element_of_noun(engine, common::NXTR_HASH)
+        .expect("the fixture indexes at least one NXTR")
 }
 
 #[test]
-fn high_level_decode_on_fixture_root_element() {
+fn high_level_decode_on_fixture_nxtr_element() {
     if !fixtures_present() {
         eprintln!("SKIP: fixtures not present");
         return;
@@ -43,7 +46,7 @@ fn high_level_decode_on_fixture_root_element() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
 
-    let target = first_indexed_refno(&mut engine);
+    let target = first_nxtr(&mut engine);
 
     let view = engine.find_element(target).unwrap().expect("element");
     let parsed = ParsedElement::parse(&view.raw_bytes).expect("parse element");
@@ -159,7 +162,7 @@ fn lookup_unknown_hash_returns_not_in_attlib() {
     }
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
-    let target = first_indexed_refno(&mut engine);
+    let target = first_nxtr(&mut engine);
     let view = engine.find_element(target).unwrap().expect("element");
     let parsed = ParsedElement::parse(&view.raw_bytes).expect("parse element");
     // 0x99999999 is in the system hash range but is statistically not in
