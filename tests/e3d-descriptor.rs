@@ -15,6 +15,14 @@ const DICTIONARY_DBS: &[&str] = &[
     r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000\acp7006_0001",
     r"D:\AVEVA\Projects\E3D3.1\SCB\scb000\scb6002_0001",
 ];
+const ALL_DICTIONARY_DBS: &[&str] = &[
+    r"D:\AVEVA\Projects\E3D3.1\SCB\scb000\scb6002_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000\acp7043_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000\acp7006_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000\acp7323_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5101_0001",
+];
 const DESVIR: &str = common::DESVIR;
 const CATVIR: &str = common::CATVIR;
 const DICVIR: &str = common::DICVIR;
@@ -77,6 +85,52 @@ fn bran_binary_and_dictionary_attributes_match_the_e3d_tty_capture() {
             .iter()
             .all(|row| row["comparison"] == "equivalent")
     );
+}
+
+#[test]
+fn all_plant_udas_match_the_e3d_tty_weld_capture() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let tty = manifest.join("tests/fixtures/weld_24383_73931_attlist_tty.log");
+    let catalog = manifest.join("schema/e3d31/catalog");
+    let required = [DESIGN_DB, REFERENCE_DB, DESVIR, DICVIR, ATTLIB]
+        .into_iter()
+        .chain(ALL_DICTIONARY_DBS.iter().copied());
+    if required.into_iter().any(|path| !Path::new(path).exists()) || !tty.exists() {
+        return;
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_e3d-descriptor"))
+        .args(["extract-complete", "--db", DESIGN_DB])
+        .args(["--desvir", DESVIR, "--attlib", ATTLIB])
+        .args(["--refno", "24383/73931", "--template-type", "DESI"])
+        .arg("--tty-log")
+        .arg(&tty)
+        .arg("--catalog-layout")
+        .arg(catalog.join("noun_layout.json"))
+        .arg("--catalog-fields")
+        .arg(catalog.join("noun_attr_fields.json"))
+        .args(["--reference-db-list", REFERENCE_DB, "--uda", "on"])
+        .args(["--dictionary-db-list", &ALL_DICTIONARY_DBS.join(";")])
+        .args(["--dicvir", DICVIR])
+        .output()
+        .expect("run complete WELD descriptor comparison");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("parse WELD comparison JSON");
+    assert_eq!(report["tty_row_count"], 92);
+    assert_eq!(report["deferred_uda_row_count"], 0);
+    assert_eq!(report["omitted_row_count"], 0);
+    assert_eq!(report["comparison_counts"]["equivalent"], 92);
+    assert!(report["attributes"]
+        .as_array()
+        .expect("attribute rows")
+        .iter()
+        .all(|row| row["comparison"] == "equivalent"));
 }
 
 #[test]

@@ -26,6 +26,8 @@ use crate::{ReadOnlyEngine, RefNo};
 
 pub const DICTIONARY_TEMPLATE_TYPE: u32 = 0x000E_272F;
 pub const UDA_NOUN_HASH: u32 = 0x0008_1F4B;
+/// Physical pseudo noun used by DICT ELEL to select every plant element.
+pub const ALL_PLANT_PSEUDO_NOUN_HASH: u32 = 855_442;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UdaDefinition {
@@ -73,6 +75,7 @@ pub enum UdaDefaultResolution {
 impl UdaDefinition {
     pub fn applies_to(&self, noun_hash: u32) -> bool {
         self.applicable_nouns.contains(&noun_hash)
+            || self.applicable_nouns.contains(&ALL_PLANT_PSEUDO_NOUN_HASH)
     }
 
     pub fn resolve_default(&self) -> UdaDefaultResolution {
@@ -524,6 +527,10 @@ mod tests {
         assert_eq!(definition.key, 398_835_873);
         assert_eq!(definition.value_type.as_deref(), Some("REAL"));
         assert!(definition.applies_to(808_220));
+        assert!(!definition.applies_to(e3d_attlib::db1_hash("WELD")));
+        let mut all_plant_definition = definition.clone();
+        all_plant_definition.applicable_nouns = vec![ALL_PLANT_PSEUDO_NOUN_HASH];
+        assert!(all_plant_definition.applies_to(e3d_attlib::db1_hash("WELD")));
         assert!(definition.default_is_defined);
         assert_eq!(definition.default_real, Some(0.0));
         assert_eq!(
