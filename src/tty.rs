@@ -77,9 +77,7 @@ pub fn parse_attlist_capture(input: &str) -> Result<Vec<TtyAttributeRow>, String
         if value_line.starts_with("ZZA ") || value_line == "NOUN-ATTLIST-END" {
             return Err(format!("TTY value line missing after {name}"));
         }
-        let mut rendered_value = value_line
-            .strip_prefix(&name)
-            .map(str::trim_start)
+        let mut rendered_value = strip_exact_heading(value_line, &name)
             .unwrap_or(value_line)
             .to_string();
         // A value too long for one line simply continues on the next, with
@@ -107,6 +105,15 @@ pub fn parse_attlist_capture(input: &str) -> Result<Vec<TtyAttributeRow>, String
         return Err("TTY ATTLIST capture contains no ZZA rows".into());
     }
     Ok(rows)
+}
+
+fn strip_exact_heading<'a>(line: &'a str, heading: &str) -> Option<&'a str> {
+    let rest = line.strip_prefix(heading)?;
+    match rest.chars().next() {
+        None => Some(rest),
+        Some(ch) if ch.is_whitespace() => Some(rest.trim_start()),
+        Some(_) => None,
+    }
 }
 
 /// TTY headings that neither `attlib` nor the catalog's query text answers.
@@ -255,7 +262,9 @@ pub fn reconcile_attlist(
             let comparison = binary
                 .value
                 .as_ref()
-                .map(|value| compare_tty_value_as(value, &tty.rendered_value, unit))
+                .map(|value| {
+                    compare_extracted_tty_value(&binary.name, value, &tty.rendered_value, unit)
+                })
                 .unwrap_or(ValueComparison::MissingBinaryValue);
             CompleteAttributeRow {
                 ordinal: tty.ordinal,
@@ -270,6 +279,21 @@ pub fn reconcile_attlist(
             }
         })
         .collect()
+}
+
+fn compare_extracted_tty_value(
+    name: &str,
+    value: &DescriptorValue,
+    rendered: &str,
+    unit: StoredUnit,
+) -> ValueComparison {
+    if name.eq_ignore_ascii_case("IMPSTC")
+        && matches!(value, DescriptorValue::Int(0))
+        && rendered.eq_ignore_ascii_case("undefined")
+    {
+        return ValueComparison::Equivalent;
+    }
+    compare_tty_value_as(value, rendered, unit)
 }
 
 pub fn apply_reference_names(
@@ -739,23 +763,29 @@ fn parse_direction(value: &str) -> Option<[f64; 3]> {
     if let [single] = tokens[..] {
         return compass_axis(single);
     }
-    let [start, angle, end] = tokens[..] else {
+    let Some(start) = tokens.first() else {
         return None;
     };
-    // `N 32 W` and `W 10 S` are the same construction: start at one axis and
-    // swing the given angle towards a perpendicular one.
-    let angle = parse_leading_number(angle)?.to_radians();
-    let start = compass_axis(start)?;
-    let end = compass_axis(end)?;
-    let perpendicular = start.iter().zip(end).map(|(a, b)| a * b).sum::<f64>().abs() < 1e-9;
-    if !perpendicular {
+    if tokens.len() < 3 || tokens.len() % 2 == 0 {
         return None;
     }
-    Some([
-        start[0] * angle.cos() + end[0] * angle.sin(),
-        start[1] * angle.cos() + end[1] * angle.sin(),
-        start[2] * angle.cos() + end[2] * angle.sin(),
-    ])
+    // `W 5 S 0.0083 D` first turns five degrees from west towards south,
+    // then tilts that horizontal direction 0.0083 degrees down.
+    let mut direction = compass_axis(start)?;
+    for pair in tokens[1..].chunks_exact(2) {
+        let angle = parse_leading_number(pair[0])?.to_radians();
+        let end = compass_axis(pair[1])?;
+        let dot = direction.iter().zip(end).map(|(a, b)| a * b).sum::<f64>();
+        if dot.abs() >= 1e-9 {
+            return None;
+        }
+        direction = [
+            direction[0] * angle.cos() + end[0] * angle.sin(),
+            direction[1] * angle.cos() + end[1] * angle.sin(),
+            direction[2] * angle.cos() + end[2] * angle.sin(),
+        ];
+    }
+    Some(direction)
 }
 
 /// The two axis directions in `Y is W 10 S and Z is N 10 W`.
@@ -779,6 +809,13 @@ mod tests {
         assert_eq!(rows[0].rendered_value, "/A");
         assert_eq!(rows[1].name, ":X");
         assert_eq!(rows[2].rendered_value, "1");
+    }
+
+    #[test]
+    fn parser_does_not_strip_a_longer_returned_heading() {
+        let capture = "NOUN-ATTLIST-BEGIN\nZZA :Room\n:Roomfloor unset\nNOUN-ATTLIST-END\n";
+        let rows = parse_attlist_capture(capture).unwrap();
+        assert_eq!(rows[0].rendered_value, ":Roomfloor unset");
     }
 
     #[test]
@@ -875,6 +912,17 @@ mod tests {
     fn compares_e3d_position_and_direction_renderings_to_binary_vectors() {
         assert_eq!(
             compare_tty_value(
+                &DescriptorValue::RealArray(vec![
+                    -0.9961946877019986,
+                    -0.08715574183867308,
+                    -0.00014442599510043695,
+                ]),
+                "W 5 S 0.0083 D",
+            ),
+            ValueComparison::Equivalent
+        );
+        assert_eq!(
+            compare_tty_value(
                 &DescriptorValue::RealArray(vec![-3118.12, -8969.2, 333.6]),
                 "W 3118.12mm S 8969.2mm U 333.6mm",
             ),
@@ -909,6 +957,28 @@ mod tests {
             compare_tty_value(
                 &DescriptorValue::RealArray(vec![7036.2, -21611.8, 3200.0]),
                 "E 7040mm S 21612mm U 3200mm",
+            ),
+            ValueComparison::Mismatch
+        );
+    }
+
+    #[test]
+    fn impstc_integer_default_is_rendered_as_undefined() {
+        assert_eq!(
+            compare_extracted_tty_value(
+                "IMPSTC",
+                &DescriptorValue::Int(0),
+                "Undefined",
+                StoredUnit::Unknown,
+            ),
+            ValueComparison::Equivalent
+        );
+        assert_eq!(
+            compare_extracted_tty_value(
+                "OTHER",
+                &DescriptorValue::Int(0),
+                "Undefined",
+                StoredUnit::Unknown,
             ),
             ValueComparison::Mismatch
         );
