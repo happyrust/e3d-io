@@ -78,6 +78,25 @@ fn run() -> Result<(), String> {
         );
         return Ok(());
     }
+    if command == "header" {
+        let db = required(&options, "db")?;
+        let engine = ReadOnlyEngine::open(db).map_err(|e| format!("open database: {e}"))?;
+        let descriptor = engine.descriptor();
+        let summary = json!({
+            "db": db,
+            "dbnum": descriptor.db_mark,
+            "db_type": descriptor.db_type_name(),
+            "db_type_hash": descriptor.db_type_hash,
+            "latest_ses_pgno": descriptor.latest_ses_pgno,
+            "extent": descriptor.ext_no,
+            "page_size": descriptor.page_size,
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
     let desvir = required(&options, "desvir")?;
     let attlib_path = required(&options, "attlib")?;
     let attlib = AttlibData::parse_file(attlib_path)?;
