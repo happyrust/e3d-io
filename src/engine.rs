@@ -1017,9 +1017,6 @@ pub fn extract_parsed_element_with_descriptors(
                 actual: template.noun_hash,
             });
         }
-        if template.attrs.is_empty() {
-            return Err(ResolveError::TemplateEmpty(parsed.noun_hash));
-        }
         if !template.is_authoritative() {
             return Err(ResolveError::TemplateNotAuthoritative(parsed.noun_hash));
         }
@@ -1187,6 +1184,38 @@ fn explicit_value_to_descriptor_value(
 #[cfg(test)]
 mod explicit_semantic_tests {
     use super::*;
+
+    #[test]
+    fn authoritative_zero_attribute_noun_extracts_as_empty() {
+        let noun_hash = 0x000B_FA34;
+        let parsed = record::element::ParsedElement {
+            impl_len_words: 6,
+            refno: RefNo::new(24_575, 13),
+            noun_hash,
+            owner: RefNo::new(24_575, 1),
+            prefix_offset: 0,
+            implicit_data: vec![0; 24],
+            members: Vec::new(),
+            explicit_attributes: Vec::new(),
+            record_end: 24,
+            total_size: 24,
+        };
+
+        let extraction = extract_parsed_element_with_descriptors(
+            parsed.refno,
+            &parsed,
+            &e3d_attlib::AttlibData::default(),
+            &record::template::NounTemplate::new(noun_hash),
+        )
+        .expect("an authoritative zero-attribute template is a complete description");
+
+        assert_eq!(extraction.noun_hash, noun_hash);
+        assert_eq!(extraction.noun_name.as_deref(), Some("DTWL"));
+        assert_eq!(extraction.implicit_word_count, 6);
+        assert_eq!(extraction.format_word_10, 0);
+        assert!(extraction.attributes.is_empty());
+    }
+
     #[test]
     fn explicit_integer_uses_word_storage_semantics_without_attlib_definition() {
         let value = explicit_value_to_descriptor_value(
