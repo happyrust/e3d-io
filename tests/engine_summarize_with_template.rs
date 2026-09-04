@@ -22,11 +22,12 @@ use std::path::Path;
 use e3d_attlib::{db1_dehash, AttlibData};
 use e3d_io::engine::ResolveError;
 use e3d_io::record::template::NounTemplate;
-use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 
-const DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
-const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+const DB_PATH: &str = common::TEST_FILE_DB;
+const ATTLIB_PATH: &str = common::TEST_FILE_ATTLIB;
+
+mod common;
 
 fn fixtures_present() -> bool {
     Path::new(DB_PATH).exists() && Path::new(ATTLIB_PATH).exists()
@@ -44,13 +45,15 @@ fn summarize_with_template_runs_on_nxtr() {
     }
     let attlib = AttlibData::parse_file(ATTLIB_PATH).unwrap();
     let mut engine = ReadOnlyEngine::open(DB_PATH).unwrap();
-    let refno = RefNo::new(17496, 9621);
+    let nxtr_hash = common::NXTR_HASH;
+    let refno = common::first_element_of_noun(&mut engine, nxtr_hash)
+        .expect("the fixture indexes at least one NXTR");
+    println!("[fixture] first NXTR in the index: {refno}");
 
-    // NXTR (0x000DBF71) is not in ATGTSX on this fixture — build a
-    // small manual template from the global ATGTDF defs as a stand-in
-    // (mimics what the DB-file loader would produce when it eventually
-    // reads the real per-noun layout).
-    let nxtr_hash = 0x000DBF71;
+    // NXTR is not in ATGTSX on this fixture — build a small manual
+    // template from the global ATGTDF defs as a stand-in (mimics what
+    // the DB-file loader would produce when it eventually reads the
+    // real per-noun layout).
     let template = NounTemplate::from_attlib_noun_map(&attlib, nxtr_hash).unwrap_or_else(|| {
         // Stand-in: take the first 30 unique-ATGTDF attrs as the
         // template body, all single-word stride. This mirrors what
@@ -93,43 +96,18 @@ fn compare_template_vs_atgtdf_paths_on_atgtsx_noun() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).unwrap();
     let mut engine = ReadOnlyEngine::open(DB_PATH).unwrap();
 
-    // Probe a few known refnos and find one whose noun has an ATGTSX
-    // template entry on the fixture.
-    let candidates = [
-        RefNo::new(17496, 9621),
-        RefNo::new(17496, 924),
-        RefNo::new(17496, 13591),
-        RefNo::new(17496, 100),
-        RefNo::new(17496, 1000),
-        RefNo::new(17496, 5000),
-        RefNo::new(17496, 10000),
-    ];
-    let mut found: Option<(RefNo, u32, NounTemplate)> = None;
-    for refno in &candidates {
-        let view = match engine.find_element(*refno) {
-            Ok(Some(v)) => v,
-            _ => continue,
-        };
-        let parsed = match e3d_io::record::element::ParsedElement::parse(&view.raw_bytes) {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
-        if let Some(t) = NounTemplate::from_attlib_noun_map(&attlib, parsed.noun_hash) {
-            found = Some((*refno, parsed.noun_hash, t));
-            break;
-        }
-    }
-
-    let (refno, noun_hash, template) = match found {
-        Some(x) => x,
-        None => {
-            eprintln!(
-                "SKIP: none of the candidate refnos hit a noun with an ATGTSX template \
-                 (NXTR/STWALL etc. are not in ATGTSX on this fixture)"
-            );
-            return;
-        }
+    // The first element in the index whose noun has an ATGTSX entry on
+    // this fixture — SUBS, and only SUBS, here. This used to try seven
+    // hand-picked RefNos and skip when none of them was one, which on
+    // every fixture to hand was always.
+    let Some((refno, noun_hash)) = common::first_element_with_noun(&mut engine, |noun| {
+        NounTemplate::from_attlib_noun_map(&attlib, noun).is_some()
+    }) else {
+        eprintln!("SKIP: no indexed element has a noun with an ATGTSX template on this fixture");
+        return;
     };
+    let template = NounTemplate::from_attlib_noun_map(&attlib, noun_hash)
+        .expect("the noun was picked for having an ATGTSX template");
 
     let noun_name = db1_dehash(noun_hash).unwrap_or_else(|| format!("0x{noun_hash:08X}"));
     println!(

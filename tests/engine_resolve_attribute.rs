@@ -9,17 +9,22 @@ use e3d_attlib::AttlibData;
 use e3d_io::engine::ResolveError;
 use e3d_io::record::atnlog::AttrValue;
 use e3d_io::record::element::ParsedElement;
+use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 
-const DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
-const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+const DB_PATH: &str = common::TEST_FILE_DB;
+const ATTLIB_PATH: &str = common::TEST_FILE_ATTLIB;
+
+mod common;
 
 fn fixtures_present() -> bool {
     Path::new(DB_PATH).exists() && Path::new(ATTLIB_PATH).exists()
 }
 
-fn first_indexed_refno(engine: &mut ReadOnlyEngine) -> e3d_io::refno::RefNo {
-    engine.indexed_refnos().expect("read the index")[0].0
+/// The first NXTR the index states: `17496/72444` on this fixture.
+fn first_nxtr(engine: &mut ReadOnlyEngine) -> RefNo {
+    common::first_element_of_noun(engine, common::NXTR_HASH)
+        .expect("the fixture indexes at least one NXTR")
 }
 
 #[test]
@@ -31,11 +36,13 @@ fn resolve_attribute_returns_direct_value_when_present() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
 
-    let target = first_indexed_refno(&mut engine);
+    let target = first_nxtr(&mut engine);
     println!("[fixture] element refno={}", target);
 
-    // DEPEND is known to be a non-zero Real on the NXTR fixture element
-    // (see Slice 4 step 4 progress: DEPEND -> Real(50.625)).
+    // DEPEND reads as a non-zero Real on the first NXTR of this fixture
+    // (Real(-180.0) on 17496/72444). Not on every NXTR: the fourth in
+    // RefNo order, 17496/72561, reads 0.0 — so the element is the first
+    // one, not any one.
     let depend_hash = e3d_attlib::db1_hash("DEPEND");
     println!("[query] DEPEND hash = 0x{:08X}", depend_hash);
 
@@ -60,7 +67,7 @@ fn resolve_attribute_returns_zero_when_chain_empty() {
     }
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
-    let target = first_indexed_refno(&mut engine);
+    let target = first_nxtr(&mut engine);
 
     // SIZE is known to read as Bool(false) on this element (see step 4
     // step 5 fixture decode log). It's also known to NOT have a SYNO
@@ -88,7 +95,7 @@ fn resolve_attribute_errors_on_unknown_hash() {
     }
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
-    let target = first_indexed_refno(&mut engine);
+    let target = first_nxtr(&mut engine);
 
     // 0xDEADBEEF is statistically not in the fixture's ATGTDF table.
     let err = engine.resolve_attribute(target, 0xDEADBEEF, &attlib, 2);
@@ -106,7 +113,7 @@ fn resolve_attribute_caps_chain_depth() {
     }
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
-    let target = first_indexed_refno(&mut engine);
+    let target = first_nxtr(&mut engine);
 
     // With max_chain_depth=0, no chain walking is performed even if the
     // direct slot is zero. The result is whatever direct returned.

@@ -1,8 +1,9 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
 
-const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+mod common;
+
+const ATTLIB_PATH: &str = common::ATTLIB;
 const PAGE_SIZE: usize = 2048;
 const DELIMITER: u32 = 0xFFFFFFFF;
 
@@ -12,8 +13,7 @@ fn r32(data: &[u8], off: usize) -> u32 {
 
 #[test]
 fn scan_attlib_pages() {
-    if !Path::new(ATTLIB_PATH).exists() {
-        eprintln!("SKIP: attlib.dat not found");
+    if common::missing(&[ATTLIB_PATH]) {
         return;
     }
 

@@ -14,9 +14,10 @@
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
 
-const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+mod common;
+
+const ATTLIB_PATH: &str = common::ATTLIB;
 const PAGE_SIZE: usize = 2048;
 const HASH_MIN: u32 = 0x0008_1BF2;
 const HASH_MAX: u32 = 0x171F_AD39;
@@ -27,8 +28,7 @@ fn r32(buf: &[u8], off: usize) -> u32 {
 
 #[test]
 fn locate_atgtdf_pages() {
-    if !Path::new(ATTLIB_PATH).exists() {
-        eprintln!("SKIP: attlib.dat missing");
+    if common::missing(&[ATTLIB_PATH]) {
         return;
     }
 

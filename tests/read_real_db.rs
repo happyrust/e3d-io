@@ -5,7 +5,9 @@ use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 use std::path::Path;
 
-const TEST_DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
+const TEST_DB_PATH: &str = common::TEST_FILE_DB;
+
+mod common;
 
 fn skip_if_missing() -> bool {
     if !Path::new(TEST_DB_PATH).exists() {

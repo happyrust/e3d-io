@@ -8,15 +8,17 @@ use e3d_attlib::AttlibData;
 use e3d_io::record::atnlog::AttrValue;
 use e3d_io::ReadOnlyEngine;
 
-const DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
-const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+const DB_PATH: &str = common::TEST_FILE_DB;
+const ATTLIB_PATH: &str = common::TEST_FILE_ATTLIB;
+
+mod common;
 
 fn fixtures_present() -> bool {
     Path::new(DB_PATH).exists() && Path::new(ATTLIB_PATH).exists()
 }
 
 #[test]
-fn summarize_first_fixture_element() {
+fn summarize_first_nxtr_element() {
     if !fixtures_present() {
         eprintln!("SKIP: fixtures not present");
         return;
@@ -24,7 +26,8 @@ fn summarize_first_fixture_element() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).expect("parse attlib");
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
 
-    let target = engine.indexed_refnos().expect("read the index")[0].0;
+    let target = common::first_element_of_noun(&mut engine, common::NXTR_HASH)
+        .expect("the fixture indexes at least one NXTR");
 
     let summary = engine
         .summarize_element(target, &attlib, 3)
@@ -61,7 +64,11 @@ fn summarize_first_fixture_element() {
     }
 
     assert!(summary.refno == target, "refno mismatch");
-    assert!(summary.noun_hash != 0, "noun_hash should be non-zero");
+    assert_eq!(
+        summary.noun_hash,
+        common::NXTR_HASH,
+        "the summary should name the noun the element was picked for"
+    );
     assert!(
         summary.attributes.len() >= 5,
         "expected at least 5 decoded non-zero attrs, got {}",

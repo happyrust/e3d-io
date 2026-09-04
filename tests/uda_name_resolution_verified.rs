@@ -29,8 +29,10 @@ use e3d_attlib::parser::AttrSource;
 use e3d_attlib::AttlibData;
 use e3d_io::ReadOnlyEngine;
 
-const DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
-const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+const DB_PATH: &str = common::TEST_FILE_DB;
+const ATTLIB_PATH: &str = common::TEST_FILE_ATTLIB;
+
+mod common;
 
 fn fixtures_present() -> bool {
     Path::new(DB_PATH).exists() && Path::new(ATTLIB_PATH).exists()

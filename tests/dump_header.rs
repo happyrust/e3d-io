@@ -2,7 +2,9 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-const TEST_DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
+const TEST_DB_PATH: &str = common::TEST_FILE_DB;
+
+mod common;
 
 #[test]
 fn dump_raw_header() {

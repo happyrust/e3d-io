@@ -2,9 +2,9 @@
 
 //! Slice 4 step 14 — multi-noun coverage analysis for `summarize_element`.
 //!
-//! Scans the first N indexed RefNos on the fixture, groups one sample
-//! element per noun_hash, runs `summarize_element` on each, and prints
-//! a per-noun table of:
+//! Walks the fixture's index once, takes the first element of every
+//! noun as its sample, runs `summarize_element` on each, and prints a
+//! per-noun table of:
 //!
 //! * implicit word count
 //! * non-zero decoded attributes
@@ -27,11 +27,14 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use e3d_attlib::{db1_dehash, AttlibData};
-use e3d_io::index::IndexPageView;
+use e3d_io::engine::ScanTier;
+use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 
-const DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
-const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+const DB_PATH: &str = common::TEST_FILE_DB;
+const ATTLIB_PATH: &str = common::TEST_FILE_ATTLIB;
+
+mod common;
 
 fn fixtures_present() -> bool {
     Path::new(DB_PATH).exists() && Path::new(ATTLIB_PATH).exists()
@@ -47,45 +50,26 @@ fn report_per_noun_summarize_quality() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).unwrap();
     let mut engine = ReadOnlyEngine::open(DB_PATH).unwrap();
 
-    // Sample a window of RefNos to keep the test fast. We avoid the
-    // full indexed_refnos (slow on 9304-page fixtures) and
-    // instead probe a small set of plausible RefNos around known
-    // hot ones (17496/9621 NXTR, 17496/924 STWALL from prior steps),
-    // plus a few neighbours, to surface the noun diversity that's
-    // actually reachable via the engine.find_element fast path.
-    use e3d_io::refno::RefNo;
-    let probe_set: Vec<RefNo> = {
-        let mut v = Vec::new();
-        // Known hot RefNos from earlier sessions.
-        v.push(RefNo::new(17496, 9621));
-        v.push(RefNo::new(17496, 924));
-        v.push(RefNo::new(17496, 13591));
-        // Probe nearby ranges to catch a wider noun spread.
-        for w in [1, 100, 1000, 5000, 10000, 12000, 15000, 17000] {
-            v.push(RefNo::new(17496, w));
-        }
-        v
-    };
-
+    // One sample per noun: the first element of it the index states, in
+    // RefNo order, with the noun's whole population counted alongside.
+    // The header tier reads one page per element, so the full database
+    // goes by in under a second. This used to probe eleven hand-picked
+    // RefNos instead, and every one named an element no fixture to hand
+    // indexes — the table came out empty.
     let mut samples_per_noun: HashMap<u32, RefNo> = HashMap::new();
     let mut refno_count_per_noun: HashMap<u32, usize> = HashMap::new();
-    let mut probed = 0usize;
-    for refno in &probe_set {
-        probed += 1;
-        let view = match engine.find_element(*refno) {
-            Ok(Some(v)) => v,
-            _ => continue,
-        };
-        let parsed = match e3d_io::record::element::ParsedElement::parse(&view.raw_bytes) {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
-        samples_per_noun.entry(parsed.noun_hash).or_insert(*refno);
-        *refno_count_per_noun.entry(parsed.noun_hash).or_insert(0) += 1;
+    let mut all_refnos_count = 0usize;
+    for element in engine
+        .scan_elements(ScanTier::Header)
+        .expect("walk the index")
+    {
+        let element = element.expect("read an indexed element's header");
+        all_refnos_count += 1;
+        samples_per_noun
+            .entry(element.noun_hash)
+            .or_insert(element.refno);
+        *refno_count_per_noun.entry(element.noun_hash).or_insert(0) += 1;
     }
-    let all_refnos_count = probed;
-    // Keep IndexPageView import alive for future expansion.
-    let _ = IndexPageView::parse;
 
     println!(
         "\n=== Per-noun coverage analysis ({} unique nouns from {} probed refnos) ===",

@@ -25,12 +25,11 @@ use std::path::Path;
 use e3d_attlib::{db1_dehash, AttlibData};
 use e3d_io::record::template::NounTemplate;
 use e3d_io::record::template_file::TemplateFile;
-use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 
 const DESVIR_PATH: &str = common::DESVIR;
-const DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
-const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+const DB_PATH: &str = common::TEST_FILE_DB;
+const ATTLIB_PATH: &str = common::TEST_FILE_ATTLIB;
 
 mod common;
 
@@ -38,8 +37,7 @@ mod common;
 /// `desvir.dat` header word 2).
 const DESIGN_TEMPLATE_TYPE: u32 = 0x000B0692;
 
-/// NXTR noun hash. Matches the fixture element at RefNo(17496, 9621).
-const NXTR_HASH: u32 = 0x000DBF71;
+const NXTR_HASH: u32 = common::NXTR_HASH;
 
 fn desvir_present() -> bool {
     Path::new(DESVIR_PATH).exists()
@@ -173,7 +171,9 @@ fn engine_summarize_nxtr_with_real_template_vs_legacy() {
     );
 
     let mut engine = ReadOnlyEngine::open(DB_PATH).expect("open DB");
-    let refno = RefNo::new(17496, 9621);
+    let refno = common::first_element_of_noun(&mut engine, NXTR_HASH)
+        .expect("the fixture indexes at least one NXTR");
+    println!("[fixture] first NXTR in the index: {refno}");
 
     let via_template = engine
         .summarize_element_with_template(refno, &attlib, &template)

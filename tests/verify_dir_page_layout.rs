@@ -15,9 +15,10 @@
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::Path;
 
-const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+mod common;
+
+const ATTLIB_PATH: &str = common::ATTLIB;
 const PAGE_SIZE: usize = 2048;
 
 fn r32(buf: &[u8], off: usize) -> u32 {
@@ -26,8 +27,7 @@ fn r32(buf: &[u8], off: usize) -> u32 {
 
 #[test]
 fn dump_dir_page_words() {
-    if !Path::new(ATTLIB_PATH).exists() {
-        eprintln!("SKIP: attlib.dat missing");
+    if common::missing(&[ATTLIB_PATH]) {
         return;
     }
 
@@ -74,6 +74,6 @@ fn dump_dir_page_words() {
 
     // Sanity: ATGTDF start should be one of the diagnostic candidates
     // (page 1740 or page 2). Print a hint.
-    println!("\n[hint] Diagnostic locator earlier found ATGTDF-shaped pages at");
-    println!("       page 2 (63-run) and page 1740 (88-run).");
+    println!("\n[hint] find_atgtdf_pages reports ATGTDF-shaped pages at 2");
+    println!("       (63-run) and 2167 (93-run) for the pack's attlib.");
 }

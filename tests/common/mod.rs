@@ -13,6 +13,10 @@
 
 use std::path::Path;
 
+use e3d_io::engine::ScanTier;
+use e3d_io::refno::RefNo;
+use e3d_io::ReadOnlyEngine;
+
 /// The 3.1 schema pack that ships in this repository, and the installation
 /// files it carries.
 ///
@@ -40,6 +44,24 @@ pub const ATTLIB: &str = pack_binary!("attlib.dat");
 pub const CATVIR: &str = pack_binary!("catvir.dat");
 pub const DICVIR: &str = pack_binary!("dicvir.dat");
 
+/// The sample DESIGN database and the `attlib.dat` that belongs beside it, in
+/// the sibling `plant-io` checkout.
+///
+/// Neither can move into the schema pack: the database is 99 MB of project
+/// data, and `attlib.dat` carries that project's UDA definitions, so it is
+/// project-scoped where the pack is release-scoped. The pack's own
+/// [`ATTLIB`] holds a different UDA set — pairing it with this database
+/// resolves UDA hashes against the wrong table.
+///
+/// These were spelled `pdms-io-fork` until that checkout was renamed, which
+/// left every test that named it skipping on a path nothing writes to.
+pub const TEST_FILE_DB: &str = r"D:\work\plant-code\plant-io\test-file\ams1112_0001";
+pub const TEST_FILE_ATTLIB: &str = r"D:\work\plant-code\plant-io\test-file\attlib.dat";
+
+/// NXTR, the noun the element-decoding tests on [`TEST_FILE_DB`] are written
+/// against. The database indexes 1156 of them.
+pub const NXTR_HASH: u32 = 0x000DBF71;
+
 /// True when any fixture is absent, after printing which. Call it as the first
 /// line of a test and return.
 pub fn missing(paths: &[&str]) -> bool {
@@ -53,4 +75,31 @@ pub fn missing(paths: &[&str]) -> bool {
     }
     eprintln!("skipped: fixtures not installed: {}", absent.join(", "));
     true
+}
+
+/// The first element, in RefNo order, whose noun `wanted` accepts — its RefNo
+/// and noun hash — or `None` when the session indexes no such element.
+///
+/// The tests that call this used to name `17496/9621`: the NXTR that stood
+/// first in the fixture of the day, and an element no database on this machine
+/// indexes now, so every one of them failed on `ElementNotFound` the moment
+/// the fixture path was made to resolve. The index is where an element's
+/// existence is stated, so the element is asked of it. The header tier reads
+/// one page per element, and the scan stops at the first hit.
+pub fn first_element_with_noun(
+    engine: &mut ReadOnlyEngine,
+    mut wanted: impl FnMut(u32) -> bool,
+) -> Option<(RefNo, u32)> {
+    engine
+        .scan_elements(ScanTier::Header)
+        .expect("walk the session's index")
+        .map(|element| element.expect("read an indexed element's header"))
+        .find(|element| wanted(element.noun_hash))
+        .map(|element| (element.refno, element.noun_hash))
+}
+
+/// The first element of `noun_hash` in RefNo order. See
+/// [`first_element_with_noun`].
+pub fn first_element_of_noun(engine: &mut ReadOnlyEngine, noun_hash: u32) -> Option<RefNo> {
+    first_element_with_noun(engine, |noun| noun == noun_hash).map(|(refno, _)| refno)
 }
