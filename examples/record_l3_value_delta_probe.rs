@@ -44,7 +44,7 @@ use e3d_io::refno::RefNo;
 use e3d_io::session::DbView;
 
 const AMS_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
-const CATALOG: &str = "catalog/e3d31";
+const CATALOG: &str = "schema/e3d31/catalog";
 
 /// Elements of an array rendered in full; the rest is covered by the digest.
 ///

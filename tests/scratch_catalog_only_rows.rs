@@ -27,7 +27,9 @@ use e3d_io::record::template::TemplateProvider;
 use e3d_io::{ReadOnlyEngine, RefNo};
 
 const AMS: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
-const SHADOW: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all";
+mod common;
+
+const SHADOW: &str = common::SCHEMA_BINARIES;
 
 /// `(database, template file, template type, refno, noun, catalog attribute)`
 /// for every row the sample reports as missing.
@@ -183,9 +185,10 @@ fn report_why_the_missing_rows_have_no_descriptor() {
     let attlib = AttlibData::parse_file(&attlib_path).expect("parse attlib");
     let metadata =
         AttributeMetadataCatalog::parse_file(&attlib_path, &attlib).expect("attlib metadata");
-    let layout = std::fs::read_to_string("catalog/e3d31/noun_layout.json").expect("read layout");
+    let layout =
+        std::fs::read_to_string("schema/e3d31/catalog/noun_layout.json").expect("read layout");
     let fields =
-        std::fs::read_to_string("catalog/e3d31/noun_attr_fields.json").expect("read fields");
+        std::fs::read_to_string("schema/e3d31/catalog/noun_attr_fields.json").expect("read fields");
     let catalog = NounCatalog::parse(&layout, &fields).expect("parse catalog");
 
     for (db, vir, template_type, word0, word1, noun, attribute) in CASES {

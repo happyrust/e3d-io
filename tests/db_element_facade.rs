@@ -5,8 +5,8 @@
 //! 期望值全部从原语现场推导，不写死 refno，语料升级重排时测试跟着走。
 //!
 //! 语料：AvevaMarineSample 的 ams8000（DESI，18 MB）与 ams5052（CATA，跨库
-//! 引用的实测目标库，gen-model 侧 92 跳对拍就是这一对）。模板资产在
-//! `E:\reverse\e3d\shadow_e3d31_aps_all`。缺文件按仓里惯例跳过并说明。
+//! 引用的实测目标库，gen-model 侧 92 跳对拍就是这一对）。模板资产在仓内的
+//! `schema/e3d31/binaries/`（见 `tests/common`）。缺文件按仓里惯例跳过并说明。
 
 mod common;
 
@@ -19,9 +19,9 @@ use e3d_io::{ReadOnlyEngine, ScanTier};
 
 const AMS8000: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001";
 const AMS5052: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5052_0001";
-const ATTLIB: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\attlib.dat";
-const DESVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat";
-const CATVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\catvir.dat";
+const ATTLIB: &str = common::ATTLIB;
+const DESVIR: &str = common::DESVIR;
+const CATVIR: &str = common::CATVIR;
 
 const FIXTURES: [&str; 5] = [AMS8000, AMS5052, ATTLIB, DESVIR, CATVIR];
 
@@ -384,11 +384,7 @@ fn the_pinned_session_is_frozen_and_reopenable() {
 
     // 模板文件名派生帮手与真实资产对上
     assert_eq!(
-        template_file_for(
-            std::path::Path::new(r"E:\reverse\e3d\shadow_e3d31_aps_all"),
-            "DESI"
-        )
-        .unwrap(),
+        template_file_for(std::path::Path::new(common::SCHEMA_BINARIES), "DESI").unwrap(),
         PathBuf::from(DESVIR)
     );
 }

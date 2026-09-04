@@ -28,9 +28,11 @@ use e3d_io::record::template_file::TemplateFile;
 use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 
-const DESVIR_PATH: &str = r"D:\AVEVA\Everything3D3.1\desvir.dat";
+const DESVIR_PATH: &str = common::DESVIR;
 const DB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001";
 const ATTLIB_PATH: &str = r"D:\work\plant-code\pdms-io-fork\test-file\attlib.dat";
+
+mod common;
 
 /// Template type id of the DESIGN DB schema file (from IDA evidence:
 /// `desvir.dat` header word 2).

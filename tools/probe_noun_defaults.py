@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from probe_default_chunks import TemplateFile, descriptors  # noqa: E402
+from probe_default_chunks import SCHEMA_BINARIES, TemplateFile, descriptors  # noqa: E402
 
 HASH_BASE = 0x81BF1
 UDA_BASE = 0x171FAD39
@@ -52,7 +52,7 @@ def hash_name(name):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else r"E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat"
+    path = sys.argv[1] if len(sys.argv) > 1 else SCHEMA_BINARIES / "desvir.dat"
     noun = sys.argv[2] if len(sys.argv) > 2 else "BRAN"
     tf = TemplateFile(path)
     _tt, kids = tf.children()

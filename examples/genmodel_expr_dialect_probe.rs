@@ -30,9 +30,14 @@ use e3d_io::record::descriptor::DescriptorValue;
 use e3d_io::record::template::TemplateProvider;
 use e3d_io::ReadOnlyEngine;
 
-const ATTLIB: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\attlib.dat";
-const CATVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\catvir.dat";
-const DESVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat";
+// Same schema pack the tests read, so a probe and the test it is chasing
+// cannot end up on two different installations.
+#[path = "../tests/common/mod.rs"]
+mod common;
+
+const ATTLIB: &str = common::ATTLIB;
+const CATVIR: &str = common::CATVIR;
+const DESVIR: &str = common::DESVIR;
 const AMS: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
 
 fn main() {

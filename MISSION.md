@@ -17,7 +17,7 @@
 
 - 唯一权威是二进制与 IDA 证据，不接受"看起来像"的推断；每个结论要能指回具体字节或具体反汇编
 - 现有代码 `e3d-io` 已经跑通读路径，学习要贴着这份代码走，不另起炉灶
-- 手上的实物：`E:\reverse\e3d\shadow_e3d31_aps_all\*vir.dat`（20 个）、`attlib.dat`、
+- 手上的实物：`schema/e3d31/binaries/` 里的 `*vir.dat`（20 个）与 `attlib.dat`、
   AMS 样例库、以及一份只覆盖 WORL 的 live 内存 dump
 
 ## Out of scope

@@ -16,7 +16,9 @@ use e3d_attlib::{db1_dehash, db1_hash, lookup_system_name, AttlibData};
 use e3d_io::attlib_metadata::AttributeMetadataCatalog;
 use e3d_io::record::template::TemplateProvider;
 
-const SHADOW: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all";
+mod common;
+
+const SHADOW: &str = common::SCHEMA_BINARIES;
 
 /// Every noun the 2026-08-26 TTY sample covers, by template file.
 const GROUPS: &[(&str, &str, &[&str])] = &[

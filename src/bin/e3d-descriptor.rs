@@ -10,6 +10,7 @@ use e3d_io::record::element::ParsedElement;
 use e3d_io::record::template::{NounTemplate, StorageLayout, TemplateProvider};
 use e3d_io::record::template_file::TemplateFile;
 use e3d_io::refno::RefNo;
+use e3d_io::schema::SchemaPack;
 use e3d_io::session::{
     ChangeKind, ChangedElement, DbView, ElementDelta, SessionDiff, SessionSelector,
 };
@@ -35,7 +36,8 @@ fn main() {
 fn run() -> Result<(), String> {
     let mut args = env::args().skip(1);
     let command = args.next().ok_or_else(usage)?;
-    let options = parse_options(args)?;
+    let mut options = parse_options(args)?;
+    apply_schema_pack(&mut options)?;
     if command == "compile-metadata" {
         let summary = compile_metadata(&options)?;
         println!(
@@ -1587,6 +1589,77 @@ fn required<'a>(options: &'a HashMap<String, String>, name: &str) -> Result<&'a 
         .ok_or_else(|| format!("missing --{name}"))
 }
 
+/// Fill the release-bound paths from a schema pack, when one is named.
+///
+/// `--schema PATH` opens that pack directly; `--schema-root PATH
+/// --e3d-version ID` opens `PATH/ID`. Neither is required and nothing changes
+/// when neither is given.
+///
+/// An explicit flag always wins, so a one-off file needs no pack edit. Only
+/// the files the pack actually has are filled in: a pack that carries no
+/// `dicvir.dat` leaves `--dicvir` alone rather than failing a command that was
+/// never going to read UDAs.
+///
+/// Which `*vir.dat` `--desvir` gets follows `--template-type`, because that
+/// flag already says which database type is being read — `--template-type
+/// DICT` is how `list-uda` asks for `dicvir.dat`.
+fn apply_schema_pack(options: &mut HashMap<String, String>) -> Result<(), String> {
+    let pack = match (options.get("schema"), options.get("schema-root")) {
+        (Some(_), Some(_)) => return Err("use either --schema or --schema-root, not both".into()),
+        (Some(path), None) => SchemaPack::open(path),
+        (None, Some(root)) => {
+            let version = required(options, "e3d-version")
+                .map_err(|_| "--schema-root needs --e3d-version".to_string())?;
+            SchemaPack::open_version(root, version)
+        }
+        (None, None) => {
+            if options.contains_key("e3d-version") {
+                return Err("--e3d-version needs --schema-root".into());
+            }
+            return Ok(());
+        }
+    }
+    .map_err(|e| format!("open schema pack: {e}"))?;
+
+    let db_type = options
+        .get("template-type")
+        .cloned()
+        .unwrap_or_else(|| "DESI".into());
+    if !options.contains_key("desvir") {
+        let path = pack
+            .template(&db_type)
+            .map_err(|e| format!("resolve --desvir from schema pack: {e}"))?;
+        options.insert("desvir".into(), display_path(&path));
+    }
+    if !options.contains_key("attlib") {
+        let path = pack
+            .attlib()
+            .map_err(|e| format!("resolve --attlib from schema pack: {e}"))?;
+        options.insert("attlib".into(), display_path(&path));
+    }
+    if !options.contains_key("dicvir") {
+        if let Ok(path) = pack.template("DICT") {
+            options.insert("dicvir".into(), display_path(&path));
+        }
+    }
+    for (flag, path) in [
+        ("catalog-layout", pack.noun_layout()),
+        ("catalog-fields", pack.noun_attr_fields()),
+    ] {
+        if options.contains_key(flag) {
+            continue;
+        }
+        if let Some(path) = path.filter(|path| path.is_file()) {
+            options.insert(flag.into(), display_path(&path));
+        }
+    }
+    Ok(())
+}
+
+fn display_path(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
 /// Whether to read UDA values at all.
 ///
 /// Off by default: a UDA's value is stored in a dictionary database, and which
@@ -2096,7 +2169,7 @@ fn layout_name(layout: StorageLayout) -> &'static str {
 }
 
 fn usage() -> String {
-    "usage:\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH --desvir DICVIR --template-type DICT --attlib PATH [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
+    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; an\n  explicit flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH --desvir DICVIR --template-type DICT --attlib PATH [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
         .into()
 }
 

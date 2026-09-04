@@ -23,8 +23,8 @@ use e3d_io::ReadOnlyEngine;
 
 const AMS: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
 const DB: &str = "ams7000_0001";
-const LAYOUT: &str = "catalog/e3d31/noun_layout.json";
-const FIELDS: &str = "catalog/e3d31/noun_attr_fields.json";
+const LAYOUT: &str = "schema/e3d31/catalog/noun_layout.json";
+const FIELDS: &str = "schema/e3d31/catalog/noun_attr_fields.json";
 
 /// `(element, what E3D printed)`.
 const CASES: &[(u32, u32, &str)] = &[

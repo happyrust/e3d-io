@@ -33,10 +33,15 @@ const AMS_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
 const DESIGN_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001";
 const CATALOGUE_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams6100_0001";
 const DICTIONARY_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001";
-const ATTLIB: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\attlib.dat";
-const DESVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat";
-const DICVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\dicvir.dat";
-const CATVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\catvir.dat";
+// Same schema pack the tests read, so a probe and the test it is chasing
+// cannot end up on two different installations.
+#[path = "../tests/common/mod.rs"]
+mod common;
+
+const ATTLIB: &str = common::ATTLIB;
+const DESVIR: &str = common::DESVIR;
+const DICVIR: &str = common::DICVIR;
+const CATVIR: &str = common::CATVIR;
 const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
 
 fn main() {

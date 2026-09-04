@@ -2,6 +2,10 @@
 ///
 /// WARNING: These values are specific to E3D 3.1.
 /// E3D 2.10 uses different values (e.g. 7618321 instead of 7618377).
+///
+/// The release-bound ones are also carried on [`crate::schema::E3D31`], which
+/// is where a second release would add its own; the values live here so the
+/// read path can reach them without a schema pack being open.
 
 /// The tree identity `sub_5AFB660` checks a type-5 page's second word
 /// against.

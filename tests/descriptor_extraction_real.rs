@@ -9,8 +9,8 @@ use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 
 const DEFAULT_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001";
-const DEFAULT_DESVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat";
-const DEFAULT_ATTLIB: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\attlib.dat";
+const DEFAULT_DESVIR: &str = common::DESVIR;
+const DEFAULT_ATTLIB: &str = common::ATTLIB;
 const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
 
 mod common;

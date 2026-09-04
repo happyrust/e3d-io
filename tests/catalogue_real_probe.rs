@@ -19,10 +19,12 @@ use e3d_io::record::descriptor::DescriptorValue;
 use e3d_io::record::{catalogue_expr, catalogue_pml};
 use e3d_io::{ReadOnlyEngine, ScanTier};
 
+mod common;
+
 const AMS1112: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams1112_0001";
-const ATTLIB: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\attlib.dat";
-const DESVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat";
-const CATVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\catvir.dat";
+const ATTLIB: &str = common::ATTLIB;
+const DESVIR: &str = common::DESVIR;
+const CATVIR: &str = common::CATVIR;
 
 const AMS_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
 const ACP_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000";

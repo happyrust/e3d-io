@@ -26,7 +26,9 @@ use e3d_io::record::template::TemplateProvider;
 use e3d_io::ReadOnlyEngine;
 
 const AMS: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
-const SHADOW: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all";
+mod common;
+
+const SHADOW: &str = common::SCHEMA_BINARIES;
 const MANIFEST_OUT: &str = r"D:\work\plant-code\e3d-io-noun-descriptor\evidence\20260827-encoding-samples\sample-angles.tsv";
 
 /// How a capture set is thinned. One TTY reading per group is enough; the

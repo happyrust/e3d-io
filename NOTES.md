@@ -22,8 +22,9 @@
 
 | 东西 | 路径 |
 |---|---|
-| 20 个 schema 文件 | `E:\reverse\e3d\shadow_e3d31_aps_all\*vir.dat` |
-| attlib | `E:\reverse\e3d\shadow_e3d31_aps_all\attlib.dat` |
+| 20 个 schema 文件 + attlib | `schema\e3d31\binaries\`（仓内，已提交进 git；原件在 `E:\reverse\e3d\shadow_e3d31_aps_all`） |
+| 引用它们的写法 | `--schema schema\e3d31`，不用再写绝对路径，见 `schema/README.md` |
+| 换机器 / 换一套安装 | `$env:E3D31_SCHEMA_DIR` 指到那套安装目录，它比 pack 自带的先被找到 |
 | 样例库（小，18 MB） | `D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001` |
 | 样例库（大，104 MB） | `D:\work\plant-code\pdms-io-fork\test-file\ams1112_0001` |
 | 常用元素 | BRAN `24384/23257`，NXTR `17496/9621` |
@@ -34,7 +35,12 @@
 ## 坑（已踩过，别再踩）
 
 - `--noun WORLD` 查不到。hash 算的是**短名** `WORL`。catalog 里的 `short` 字段才是拿来算 hash 的那个。
-- `D:\AVEVA\Everything3D3.1\desvir.dat` 不存在，测试里那个常量是旧路径。实际用 `E:\reverse\...`。
+- `D:\AVEVA\Everything3D3.1\desvir.dat` 这台机器上没有。schema 文件一律走 `schema\e3d31\binaries\`，
+  Rust 侧从 `tests/common` 取 `DESVIR` / `ATTLIB` / `CATVIR` / `DICVIR`，Python 侧从
+  `probe_default_chunks` 取 `SCHEMA_BINARIES`；别再往测试里写绝对路径。
+- `D:\work\plant-code\pdms-io-fork\test-file\`（`ams1112_0001` + 那份 `attlib.dat`）也不在这台机器上。
+  引用它的十几个测试打一行 `SKIP` 就 return，`cargo test` 照样报 ok——**它们现在一个断言都没跑**。
+  这一族是样例库不是 schema，pack 补不了。
 - `differing_layout_nouns` 的计数会因为算不算空模板而差几个（41 vs 39）。引用数字时要说明口径。
 - 写 PowerShell 探针时，函数里 `return $bytes` 会被**展开成 Object[]**——4.8 MB 的
   `byte[]` 变成四百多万个装箱对象，后面每次按 `[byte[]]` 传参又要转换一次，脚本直接卡死。

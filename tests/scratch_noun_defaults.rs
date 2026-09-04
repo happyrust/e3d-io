@@ -7,7 +7,9 @@
 use e3d_attlib::{db1_dehash, db1_hash, lookup_system_name};
 use e3d_io::record::template::TemplateProvider;
 
-const SHADOW: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all";
+mod common;
+
+const SHADOW: &str = common::SCHEMA_BINARIES;
 /// `(template file, db type, nouns)`. The first group is where `Nappflag`
 /// disagrees; the rest carry the other template defaults the TTY sample can
 /// judge, right ones and wrong ones together.

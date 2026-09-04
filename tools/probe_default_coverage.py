@@ -8,11 +8,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from probe_default_chunks import TemplateFile, descriptors  # noqa: E402
+from probe_default_chunks import SCHEMA_BINARIES, TemplateFile, descriptors  # noqa: E402
 
 
 def main():
-    root = Path(sys.argv[1] if len(sys.argv) > 1 else r"E:\reverse\e3d\shadow_e3d31_aps_all")
+    root = Path(sys.argv[1]) if len(sys.argv) > 1 else SCHEMA_BINARIES
     files = sorted(p for p in root.glob("*vir.dat"))
 
     grand = {"triples": 0, "implicit_default": 0, "explicit_default": 0, "none": 0, "implicit_resident": 0, "implicit_no_chunk1": 0}

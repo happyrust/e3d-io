@@ -7,11 +7,11 @@ use e3d_io::uda_catalog::{UdaCatalog, UdaDefaultResolution};
 use e3d_io::ReadOnlyEngine;
 
 const DICTIONARY_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001";
-const DICVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\dicvir.dat";
-const ATTLIB: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\attlib.dat";
+const DICVIR: &str = common::DICVIR;
+const ATTLIB: &str = common::ATTLIB;
 const BRAN: u32 = 808_220;
 const DESIGN_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001";
-const DESVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat";
+const DESVIR: &str = common::DESVIR;
 const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
 
 mod common;

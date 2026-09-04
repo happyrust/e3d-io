@@ -8,8 +8,8 @@ use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 
 const DEFAULT_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001";
-const DEFAULT_DESVIR: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat";
-const DEFAULT_ATTLIB: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all\attlib.dat";
+const DEFAULT_DESVIR: &str = common::DESVIR;
+const DEFAULT_ATTLIB: &str = common::ATTLIB;
 const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
 
 mod common;
@@ -92,7 +92,7 @@ fn bran_catalog_defaults_match_e3d_tty_default_classes() {
     let mut extraction = engine
         .extract_element_with_descriptors(RefNo::new(24383, 73930), &attlib, &mut provider)
         .expect("extract BRAN 24383/73930");
-    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("catalog/e3d31");
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/e3d31/catalog");
     let catalog = NounCatalog::read(
         root.join("noun_layout.json"),
         root.join("noun_attr_fields.json"),
@@ -154,7 +154,7 @@ fn bran_runtime_derived_defaults_match_design_pluggers() {
     let mut extraction = engine
         .extract_element_with_descriptors(RefNo::new(24383, 73930), &attlib, &mut provider)
         .expect("extract BRAN 24383/73930");
-    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("catalog/e3d31");
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/e3d31/catalog");
     let catalog = NounCatalog::read(
         root.join("noun_layout.json"),
         root.join("noun_attr_fields.json"),

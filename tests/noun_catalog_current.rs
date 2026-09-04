@@ -5,7 +5,7 @@ use e3d_io::noun_catalog::NounCatalog;
 
 #[test]
 fn checked_in_e3d31_catalog_parses_with_exported_counts_and_order() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("catalog/e3d31");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/e3d31/catalog");
     let catalog = NounCatalog::read(
         root.join("noun_layout.json"),
         root.join("noun_attr_fields.json"),

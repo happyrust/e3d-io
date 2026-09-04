@@ -49,7 +49,7 @@ their persisted `NAME` values. The complete report compares typed binary values
 to the TTY rendering, including units, positions, directions, WORD values, and
 named references, and reports per-row `equivalent`/mismatch status.
 
-The checked-in `catalog/e3d31` live export can optionally add the complete
+The checked-in `schema/e3d31/catalog` live export can optionally add the complete
 public noun order and every exported `DbAttributeField` value to descriptor
 reports without becoming a parsing dependency:
 
@@ -58,9 +58,37 @@ e3d-descriptor describe `
   --desvir path\to\desvir.dat `
   --attlib path\to\attlib.dat `
   --noun BRAN `
-  --catalog-layout catalog\e3d31\noun_layout.json `
-  --catalog-fields catalog\e3d31\noun_attr_fields.json
+  --catalog-layout schema\e3d31\catalog\noun_layout.json `
+  --catalog-fields schema\e3d31\catalog\noun_attr_fields.json
 ```
+
+## Schema packs
+
+Everything bound to an E3D release — the installation's `*vir.dat` and
+`attlib.dat`, and the catalog export taken beside them — lives under
+`schema/<release>/`. None of those files states its own release, so mixing two
+is silent: the descriptors decide the word offsets, and the wrong ones read
+plausible numbers out of the wrong words. One directory per release is what
+makes the mix hard to express.
+
+Every command accepts a pack in place of the individual path flags:
+
+```powershell
+e3d-descriptor describe --schema schema\e3d31 --noun BRAN
+```
+
+That fills `--desvir`, `--attlib`, `--dicvir`, `--catalog-layout` and
+`--catalog-fields`; an explicit flag still wins. The 3.1 pack carries its own
+copies of the 20 `*vir.dat` and `attlib.dat` in `schema\e3d31\binaries\`, and
+they are committed, so a fresh clone runs the line above with nothing
+installed. They are AVEVA installation files: do not publish this repository
+outside the parties already licensed for that installation. A machine that
+wants its own installation instead points `$E3D31_SCHEMA_DIR` at it — the pack
+looks in that variable first, then `schema\e3d31\binaries\`, then a
+`binaries.root` its manifest records, and names every place it looked when it
+finds none.
+`schema/README.md` covers adding a release; `e3d_io::SchemaPack` is the same
+resolution from Rust.
 
 Rows are labelled `catalog_and_descriptor`, `catalog_only`, or
 `descriptor_only`. Only the descriptor side supplies physical storage

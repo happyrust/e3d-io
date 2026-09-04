@@ -20,7 +20,9 @@ use e3d_io::record::template::TemplateProvider;
 use e3d_io::refno::RefNo;
 use e3d_io::ReadOnlyEngine;
 
-const SHADOW: &str = r"E:\reverse\e3d\shadow_e3d31_aps_all";
+mod common;
+
+const SHADOW: &str = common::SCHEMA_BINARIES;
 const AMS: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
 
 /// Every sampled element whose TTY output holds a PML expression.

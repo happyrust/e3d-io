@@ -16,8 +16,14 @@ Use them with:
 
 ```text
 e3d-descriptor describe ... \
-  --catalog-layout catalog/e3d31/noun_layout.json \
-  --catalog-fields catalog/e3d31/noun_attr_fields.json
+  --catalog-layout schema/e3d31/catalog/noun_layout.json \
+  --catalog-fields schema/e3d31/catalog/noun_attr_fields.json
+```
+
+or let the pack supply both:
+
+```text
+e3d-descriptor describe --schema schema/e3d31 ...
 ```
 
 The companion descriptor-slot live scan reached its full 300,000-element

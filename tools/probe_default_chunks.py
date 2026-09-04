@@ -15,6 +15,11 @@ PAGE_BYTES = 2048
 PAGE_WORDS = 512
 CHUNK_DATA_WORDS = 511
 
+# The 3.1 schema pack shipped in this repository, which the other probes import
+# rather than each naming an installation of their own. `binaries/` is
+# committed, so a clone has the files; `schema/README.md` covers the rest.
+SCHEMA_BINARIES = Path(__file__).resolve().parents[1] / "schema" / "e3d31" / "binaries"
+
 
 class TemplateFile:
     def __init__(self, path):
@@ -78,7 +83,7 @@ def descriptors(payload):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else r"E:\reverse\e3d\shadow_e3d31_aps_all\desvir.dat"
+    path = sys.argv[1] if len(sys.argv) > 1 else SCHEMA_BINARIES / "desvir.dat"
     tf = TemplateFile(path)
     template_type, kids = tf.children()
     print(f"file={Path(path).name} template_type={template_type} children={len(kids)}")

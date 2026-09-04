@@ -8,11 +8,12 @@ Cargo.lock.bak
 .vscode/
 
 # Investigation output, not sources. `evidence/` is 46 MB of run logs, probe
-# JSON and decompiled third-party assemblies; `metadata/` is 25 MB that
-# `e3d-descriptor compile-metadata` regenerates. Both are cheap to reproduce
-# and permanent once they enter history.
+# JSON and decompiled third-party assemblies; a pack's `metadata/` is 25 MB
+# that `e3d-descriptor compile-metadata` regenerates. Both are cheap to
+# reproduce and permanent once they enter history.
 /evidence
 /metadata
+schema/*/metadata/
 /.context
 
 # Build output of the runtime UDA exporter, rebuilt from its own source.

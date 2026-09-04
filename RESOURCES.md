@@ -18,8 +18,11 @@
   IDA 导出的原始反汇编与结构布局。文档和它冲突时，以它为准。
   **用于**：核对常量（`DATA_PAGE_MAIN = 7618377`、`DATA_PAGE_INDEX = 13387743` 等）。
 
-- `E:\reverse\e3d\shadow_e3d31_aps_all\*vir.dat`（20 个文件）
-  实物。任何关于布局的断言都应该能在这里当场验证。
+- `schema/e3d31/binaries/*vir.dat`（20 个文件，外加 `attlib.dat`）
+  实物，从 `E:\reverse\e3d\shadow_e3d31_aps_all` 拷进仓内的 3.1 pack；测试、examples 和
+  `tools/probe_*.py` 都指这里，不写绝对路径。已提交进 git，clone 下来就能跑；
+  是 AVEVA 安装文件，别把这个仓库发到没授权的地方。
+  任何关于布局的断言都应该能在这里当场验证。
   **用于**：全量统计、跨库比对、反例查找。
 
 - `src/record/{template_file,template,descriptor,explicit}.rs`
