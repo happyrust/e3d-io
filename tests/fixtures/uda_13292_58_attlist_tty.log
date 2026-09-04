@@ -1,0 +1,100 @@
+MCP-BEGIN
+UDA /FQ56/UDASUP/VISIBLE
+NOUN-ALL-ATTRIBUTES-BEGIN
+/FQ56/UDASUP/VISIBLE
+Ref =13292/58
+Type UDA
+NOUN-ATTLIST-BEGIN
+ZZA Name
+Name /FQ56/UDASUP/VISIBLE
+ZZA Type
+Type UDA
+ZZA Lock
+Lock false
+ZZA Owner
+Owner /FQ56/UDASUP/SPECS
+ZZA Description
+Description Spec Visibility for AppWare
+ZZA Ukey
+Ukey 642951962
+ZZA Ablength
+Ablength 7
+ZZA Utype
+Utype LOG
+ZZA Ulength
+Ulength 1
+ZZA DefaultLocation
+DefaultLocation unset
+ZZA DefaultAtt
+DefaultAtt unset
+ZZA DefaultExpression
+DefaultExpression unset
+ZZA Uunits
+Uunits NONE
+ZZA TUNIt
+TUNIt NONE
+ZZA Oldkey
+Oldkey 415688623
+ZZA Udacpy
+Udacpy Nulref
+ZZA Rptxt
+Rptxt Spec Visible
+ZZA Elelist
+Elelist SPEC
+ZZA Reflist
+Reflist unset
+ZZA Dflt
+Dflt FALSE
+ZZA Ucat
+Ucat unset
+ZZA Upseud
+Upseud false
+ZZA Uprote
+Uprote false
+ZZA Uhide
+Uhide false
+ZZA UNODUPLICATES
+UNODUPLICATES false
+ZZA Uteams
+Uteams unset
+ZZA Uhyper
+Uhyper false
+ZZA Uconn
+Uconn false
+ZZA Udpend
+Udpend unset
+ZZA Udpsfg
+Udpsfg unset
+ZZA Udpsfs
+Udpsfs unset
+ZZA Udpvpa
+Udpvpa unset
+ZZA Udtabl
+Udtabl false
+ZZA ULVOpt
+ULVOpt false
+ZZA ULVType
+ULVType 0
+ZZA Udname
+Udname VISIBLE
+ZZA PrEdit
+PrEdit unset
+ZZA PrConv
+PrConv unset
+ZZA Ucases
+Ucases false
+ZZA Uclone
+Uclone false
+ZZA UVVFER
+UVVFER unset
+ZZA UMinlength
+UMinlength 0
+ZZA USHVV
+USHVV Nulref
+ZZA LngVariant
+LngVariant false
+ZZA Cancopy
+Cancopy true
+NOUN-ATTLIST-END
+NOUN-ALL-ATTRIBUTES-END
+MCP-END

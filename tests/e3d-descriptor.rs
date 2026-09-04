@@ -131,3 +131,63 @@ fn cata_binary_and_dictionary_attributes_match_the_e3d_tty_capture() {
         .iter()
         .all(|row| row["comparison"] == "equivalent"));
 }
+
+#[test]
+fn dictionary_runtime_attributes_match_the_e3d_tty_capture() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let tty = manifest.join("tests/fixtures/uda_13292_58_attlist_tty.log");
+    let catalog = manifest.join("schema/e3d31/catalog");
+    let dictionary_db = DICTIONARY_DBS[0];
+    if [dictionary_db, DICVIR, ATTLIB]
+        .into_iter()
+        .any(|path| !Path::new(path).exists())
+        || !tty.exists()
+    {
+        return;
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_e3d-descriptor"))
+        .args(["extract-complete", "--db", dictionary_db])
+        .args(["--desvir", DICVIR, "--attlib", ATTLIB])
+        .args(["--refno", "13292/58", "--template-type", "DICT"])
+        .arg("--tty-log")
+        .arg(&tty)
+        .arg("--catalog-layout")
+        .arg(catalog.join("noun_layout.json"))
+        .arg("--catalog-fields")
+        .arg(catalog.join("noun_attr_fields.json"))
+        .args(["--reference-db-list", dictionary_db])
+        .output()
+        .expect("run complete DICT descriptor comparison");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("parse DICT comparison JSON");
+    assert_eq!(report["tty_row_count"], 45);
+    assert_eq!(report["tty_unique_count"], 45);
+    assert_eq!(report["deferred_uda_row_count"], 0);
+    assert_eq!(report["omitted_row_count"], 0);
+    assert_eq!(report["comparison_counts"]["equivalent"], 45);
+    assert!(report["attributes"]
+        .as_array()
+        .expect("attribute rows")
+        .iter()
+        .all(|row| row["comparison"] == "equivalent"));
+    for (name, evaluator) in [
+        ("TUNIt", "uda_default_unit_falls_back_to_dimension"),
+        ("Udname", "uda_name_from_element_name"),
+    ] {
+        let row = report["attributes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["name"] == name)
+            .unwrap_or_else(|| panic!("missing {name}"));
+        assert_eq!(row["binary_status"]["kind"], "runtime_derived");
+        assert_eq!(row["binary_status"]["evaluator"], evaluator);
+    }
+}

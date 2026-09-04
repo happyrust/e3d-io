@@ -13,7 +13,7 @@ use std::path::Path;
 use serde_json::{Map, Value};
 
 use crate::record::descriptor::{
-    AttributeExtractionStatus, DescriptorValue, ElementExtraction, StorageShape,
+    AttributeExtractionStatus, DescriptorValue, ElementExtraction, ExtractedAttribute, StorageShape,
 };
 use crate::record::template::{NounTemplate, TemplateAttr};
 use crate::refno::RefNo;
@@ -337,6 +337,59 @@ impl NounCatalog {
         let Some(noun) = self.noun(extraction.noun_hash) else {
             return 0;
         };
+        if noun.short_name == "UDA" {
+            let default_unit = text_value(extraction, "UUNI");
+            let uda_name = text_value(extraction, "NAME").and_then(|name| {
+                name.rsplit('/')
+                    .find(|part| !part.is_empty())
+                    .map(str::to_owned)
+            });
+            let mut resolved = 0;
+            if let Some(default_unit) = default_unit {
+                for extracted in &mut extraction.attributes {
+                    if extracted.name == "TUNI"
+                        && matches!(
+                            extracted.status,
+                            AttributeExtractionStatus::NonImplicit
+                                | AttributeExtractionStatus::CatalogDefault
+                        )
+                    {
+                        extracted.value = Some(DescriptorValue::Text(default_unit.clone()));
+                        extracted.status = AttributeExtractionStatus::RuntimeDerived {
+                            evaluator: "uda_default_unit_falls_back_to_dimension".into(),
+                        };
+                        resolved += 1;
+                    }
+                }
+            }
+            if !extraction
+                .attributes
+                .iter()
+                .any(|attribute| attribute.name == "UDNA")
+            {
+                if let (Some(value), Some(catalog)) = (
+                    uda_name,
+                    noun.attrs.iter().find(|attribute| attribute.name == "UDNA"),
+                ) {
+                    let descriptor = TemplateAttr::single_word(catalog.hash);
+                    extraction.attributes.push(ExtractedAttribute {
+                        hash: catalog.hash,
+                        name: catalog.name.clone(),
+                        storage_type_code: descriptor.storage_type_code,
+                        semantic_type_code: Some(catalog.type_code),
+                        semantic_size: Some(catalog.max_size),
+                        layout: extraction.layout,
+                        storage: descriptor.storage(extraction.layout),
+                        status: AttributeExtractionStatus::RuntimeDerived {
+                            evaluator: "uda_name_from_element_name".into(),
+                        },
+                        value: Some(DescriptorValue::Text(value)),
+                    });
+                    resolved += 1;
+                }
+            }
+            return resolved;
+        }
         if noun.short_name != "BRAN" {
             return 0;
         }
@@ -439,6 +492,17 @@ fn positive_real(extraction: &ElementExtraction, name: &str) -> bool {
         .iter()
         .find(|attribute| attribute.name == name)
         .is_some_and(|attribute| is_positive_real(attribute.value.as_ref()))
+}
+
+fn text_value(extraction: &ElementExtraction, name: &str) -> Option<String> {
+    extraction
+        .attributes
+        .iter()
+        .find(|attribute| attribute.name == name)
+        .and_then(|attribute| match attribute.value.as_ref() {
+            Some(DescriptorValue::Text(value)) => Some(value.clone()),
+            _ => None,
+        })
 }
 
 fn is_positive_real(value: Option<&DescriptorValue>) -> bool {
