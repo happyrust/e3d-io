@@ -98,6 +98,10 @@ fn every_atgtix_hash_resolves_to_readable_name() {
 
 /// End-to-end: `summarize_element` on the NXTR fixture element returns
 /// attribute names that are all human-readable (no `0x????` fallback).
+///
+/// The element is the first NXTR the index states, `17496/72444` here. This
+/// took `indexed_refnos()[0]` for a while, which on this fixture is the WORL
+/// `9304/0` — four attributes, and not the element the line above names.
 #[test]
 fn summarize_element_emits_no_hex_fallback_names() {
     if !fixtures_present() {
@@ -107,7 +111,8 @@ fn summarize_element_emits_no_hex_fallback_names() {
     let attlib = AttlibData::parse_file(ATTLIB_PATH).unwrap();
     let mut engine = ReadOnlyEngine::open(DB_PATH).unwrap();
 
-    let target = engine.indexed_refnos().unwrap()[0].0;
+    let target = common::first_element_of_noun(&mut engine, common::NXTR_HASH)
+        .expect("the fixture indexes at least one NXTR");
 
     let summary = engine.summarize_element(target, &attlib, 3).unwrap();
 
