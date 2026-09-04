@@ -32,7 +32,14 @@ use e3d_io::ReadOnlyEngine;
 const AMS_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
 const DESIGN_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001";
 const CATALOGUE_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams6100_0001";
-const DICTIONARY_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001";
+const DICTIONARY_DBS: &[&str] = &[
+    r"D:\AVEVA\Projects\E3D3.1\SCB\scb000\scb6002_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000\acp7043_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000\acp7006_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000\acp7323_0001",
+    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5101_0001",
+];
 // Same schema pack the tests read, so a probe and the test it is chasing
 // cannot end up on two different installations.
 #[path = "../tests/common/mod.rs"]
@@ -629,7 +636,10 @@ fn short(text: &str) -> String {
 /// Do the Dictionary UDAs materialise onto Design elements, and does OLDKEY
 /// matter in practice?
 fn uda(db: PathBuf) {
-    for path in [ATTLIB, DICVIR, DESVIR, DICTIONARY_DB] {
+    for path in [ATTLIB, DICVIR, DESVIR]
+        .into_iter()
+        .chain(DICTIONARY_DBS.iter().copied())
+    {
         if !Path::new(path).exists() {
             println!("missing fixture {path}");
             return;
@@ -637,10 +647,16 @@ fn uda(db: PathBuf) {
     }
     let attlib = e3d_attlib::AttlibData::parse_file(ATTLIB).expect("parse attlib");
     let started = Instant::now();
-    let catalog = UdaCatalog::read(DICTIONARY_DB, DICVIR, &attlib).expect("read Dictionary UDAs");
+    let mut catalog = UdaCatalog::default();
+    for dictionary in DICTIONARY_DBS {
+        catalog.merge_in_order(
+            UdaCatalog::read(dictionary, DICVIR, &attlib).expect("read Dictionary UDAs"),
+        );
+    }
     let read_ms = started.elapsed().as_secs_f64() * 1e3;
     println!(
-        "dictionary={DICTIONARY_DB} definitions={} issues={} read={read_ms:.0} ms",
+        "dictionaries={} definitions={} issues={} read={read_ms:.0} ms",
+        DICTIONARY_DBS.len(),
         catalog.definitions().len(),
         catalog.issues().len()
     );
@@ -667,6 +683,7 @@ fn uda(db: PathBuf) {
     let mut materialised = 0usize;
     let mut via_old_key = 0usize;
     let mut extract_failed = 0usize;
+    let mut explicit_samples = Vec::new();
     let mut per_noun: BTreeMap<u32, usize> = BTreeMap::new();
     let old_keys: HashSet<u32> = catalog
         .definitions()
@@ -674,7 +691,7 @@ fn uda(db: PathBuf) {
         .filter_map(|d| d.old_key)
         .collect();
 
-    for (refno, _, _) in keys.iter().step_by((keys.len() / 3000).max(1)) {
+    for (refno, _, _) in &keys {
         let Ok(view) = engine.find_element(*refno) else {
             continue;
         };
@@ -700,12 +717,24 @@ fn uda(db: PathBuf) {
             if carries_old {
                 via_old_key += 1;
             }
+            if explicit_samples.len() < 20
+                && extraction.attributes.iter().any(|attribute| {
+                    attribute.name.starts_with(':')
+                        && matches!(
+                            attribute.status,
+                            e3d_io::record::descriptor::AttributeExtractionStatus::DecodedExplicit
+                        )
+                })
+            {
+                explicit_samples.push(refno.to_string());
+            }
         }
     }
     println!("sampled elements with at least one UDA: {elements_with_uda}");
     println!("UDA values materialised: {materialised}");
     println!("sampled elements storing a value under an OLDKEY hash: {via_old_key}");
     println!("descriptor extraction failed on: {extract_failed}");
+    println!("explicit UDA sample: {}", explicit_samples.join(","));
     println!("nouns carrying UDAs: {:?}", top_nouns(&per_noun, 12));
 }
 
