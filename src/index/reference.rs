@@ -156,7 +156,9 @@ pub enum ReferenceTableError {
         value_dwords: u32,
     },
 
-    #[error("free_dwords is {free_dwords} on {page} but only {usable_dwords} dwords follow the header")]
+    #[error(
+        "free_dwords is {free_dwords} on {page} but only {usable_dwords} dwords follow the header"
+    )]
     FreeSpaceOutOfRange {
         page: PageId,
         free_dwords: u32,
@@ -315,8 +317,7 @@ fn decode(page: PageId, data: &[u8], name_hash: u32) -> Result<Node, ReferenceTa
     // carries `(pgno, extno)` after its key, whatever the leaf holds — the same
     // asymmetry the refno index has, where the leaf value is a record address
     // and the internal value is a child address.
-    if key_dwords != REFERENCE_KEY_DWORDS
-        || (level == 0 && value_dwords != REFERENCE_VALUE_DWORDS)
+    if key_dwords != REFERENCE_KEY_DWORDS || (level == 0 && value_dwords != REFERENCE_VALUE_DWORDS)
     {
         return Err(ReferenceTableError::NotAReferenceTable {
             page,
@@ -518,7 +519,11 @@ impl<'a> ReferenceWalk<'a> {
         }
     }
 
-    fn read(&mut self, page: PageId, parent: Option<(PageId, u32)>) -> Result<Node, ReferenceTableError> {
+    fn read(
+        &mut self,
+        page: PageId,
+        parent: Option<(PageId, u32)>,
+    ) -> Result<Node, ReferenceTableError> {
         if !self.visited.insert(page) {
             return Err(ReferenceTableError::Cycle {
                 revisited: page,
@@ -695,7 +700,10 @@ mod tests {
         let bytes = page(
             0,
             SPRE,
-            &[[13_244, 108_564, 24_384, 2952], [13_244, 108_564, 24_384, 2962]],
+            &[
+                [13_244, 108_564, 24_384, 2952],
+                [13_244, 108_564, 24_384, 2962],
+            ],
             &[],
         );
         let node = decode(PageId::new(1, 683), &bytes, SPRE).unwrap();
@@ -785,7 +793,11 @@ mod tests {
             node.route(ReferenceEntry::lower_bound(RefNo::new(word0, 0)))
                 .map(|slot| node.slots[slot].child.unwrap())
         };
-        assert_eq!(route(5), Some(100), "below the first key: the sentinel's child");
+        assert_eq!(
+            route(5),
+            Some(100),
+            "below the first key: the sentinel's child"
+        );
         assert_eq!(route(10), Some(200));
         assert_eq!(route(15), Some(200));
         assert_eq!(route(20), Some(300));
