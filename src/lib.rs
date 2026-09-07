@@ -7,6 +7,7 @@ pub mod error;
 pub mod index;
 pub mod meta;
 pub mod page;
+pub mod read_stats;
 pub mod record;
 pub mod refno;
 pub mod schema;
