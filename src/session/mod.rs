@@ -476,26 +476,51 @@ impl DbView {
 /// shows up in `IoStats::pages_read`.
 pub struct ChainWalk<'a> {
     pages: &'a mut PageCache,
+    cursor: ChainCursor,
+}
+
+impl<'a> ChainWalk<'a> {
+    pub fn new(pages: &'a mut PageCache, descriptor: &DbDescriptor) -> Self {
+        let cursor = ChainCursor::new(pages, descriptor);
+        Self { pages, cursor }
+    }
+
+    /// The next session back, or `None` once the chain head has been passed.
+    pub fn next_session(&mut self) -> Result<Option<SessionPage>, SessionError> {
+        self.cursor.advance(self.pages)
+    }
+
+    /// Session pages read so far.
+    pub fn steps(&self) -> u32 {
+        self.cursor.steps
+    }
+}
+
+/// A chain walk between two steps, holding no page source.
+///
+/// [`ChainWalk`] is this plus the pages it reads through. They are apart so
+/// that a walk can be **paused**: [`SessionChain`] stops at the session it was
+/// asked for and picks the same walk up later from the same place, which a
+/// walk borrowing the cache for its whole life cannot be stored to do.
+#[derive(Debug, Clone)]
+struct ChainCursor {
     next: Option<PageId>,
     seen: HashSet<PageId>,
     steps: u32,
     limit: u32,
 }
 
-impl<'a> ChainWalk<'a> {
-    pub fn new(pages: &'a mut PageCache, descriptor: &DbDescriptor) -> Self {
-        let limit = pages.physical_page_count().max(1);
+impl ChainCursor {
+    fn new(pages: &PageCache, descriptor: &DbDescriptor) -> Self {
         Self {
-            pages,
             next: Some(descriptor.latest_session_page()),
             seen: HashSet::new(),
             steps: 0,
-            limit,
+            limit: pages.physical_page_count().max(1),
         }
     }
 
-    /// The next session back, or `None` once the chain head has been passed.
-    pub fn next_session(&mut self) -> Result<Option<SessionPage>, SessionError> {
+    fn advance(&mut self, pages: &mut PageCache) -> Result<Option<SessionPage>, SessionError> {
         let Some(page) = self.next else {
             return Ok(None);
         };
@@ -511,31 +536,226 @@ impl<'a> ChainWalk<'a> {
                 limit: self.limit,
             });
         }
-        let parsed = read_session(self.pages, page)?;
+        let parsed = read_session(pages, page)?;
         self.next = parsed.previous;
         self.steps += 1;
         Ok(Some(parsed))
     }
+}
 
-    /// Session pages read so far.
-    pub fn steps(&self) -> u32 {
-        self.steps
+/// The chain as far as it has been walked, newest first.
+///
+/// A [`DbView`] and a `ReadOnlyEngine` each keep one for the life of the
+/// handle, so **a session page is read and parsed once**. Every resolve used
+/// to start again at the newest session: `diff_sessions(250, 264)` on
+/// `ams8000_0001` re-read the 32 session pages from 281 back to 250 on every
+/// call, and [`diff::diff_steps`] paid for the range twice inside one call —
+/// once resolving the two ends, once more listing the sessions between them,
+/// and that second walk ran to session 1 rather than stopping at `from`.
+///
+/// The walk is newest-first and skips nothing, so what is held is always a
+/// contiguous prefix of the chain. That is what makes [`SessionChain::between`]
+/// free of reads: resolving the older end of a range has already walked past
+/// every session in it.
+pub struct SessionChain {
+    known: Vec<SessionPage>,
+    cursor: ChainCursor,
+}
+
+impl std::fmt::Debug for SessionChain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionChain")
+            .field("known", &self.known.len())
+            .field("pages_read", &self.cursor.steps)
+            .field("complete", &self.is_complete())
+            .finish()
+    }
+}
+
+impl SessionChain {
+    /// An unwalked chain of the file `descriptor` describes. Reads nothing.
+    pub fn new(pages: &PageCache, descriptor: &DbDescriptor) -> Self {
+        Self {
+            known: Vec::new(),
+            cursor: ChainCursor::new(pages, descriptor),
+        }
+    }
+
+    /// The sessions walked so far, newest first.
+    pub fn known(&self) -> &[SessionPage] {
+        &self.known
+    }
+
+    /// Session pages read into this chain, each of them exactly once.
+    pub fn pages_read(&self) -> u32 {
+        self.cursor.steps
+    }
+
+    /// Whether the walk has passed the oldest session.
+    pub fn is_complete(&self) -> bool {
+        self.cursor.next.is_none()
+    }
+
+    /// Every session, newest first, walking on from wherever this chain
+    /// reaches.
+    pub fn all(&mut self, pages: &mut PageCache) -> Result<&[SessionPage], SessionError> {
+        while self.step(pages)? {}
+        Ok(&self.known)
+    }
+
+    /// The walked sessions with `from <= sesno <= to`, oldest first.
+    ///
+    /// Reads nothing, and is complete for any range whose older end this chain
+    /// has already resolved — see the type's own note on the prefix.
+    pub fn between(&self, from: u32, to: u32) -> Vec<SessionPage> {
+        let mut within: Vec<SessionPage> = self
+            .known
+            .iter()
+            .filter(|session| session.sesno >= from && session.sesno <= to)
+            .cloned()
+            .collect();
+        within.reverse();
+        within
+    }
+
+    /// One selector against this chain: see [`resolve`].
+    pub fn resolve(
+        &mut self,
+        pages: &mut PageCache,
+        want: SessionSelector,
+        path: &Path,
+    ) -> Result<(SessionPage, u32), SessionError> {
+        let ([session], read) = self.resolve_many(pages, [want], path)?;
+        Ok((session, read))
+    }
+
+    /// Two selectors against this chain, on one walk: see [`resolve_pair`].
+    pub fn resolve_pair(
+        &mut self,
+        pages: &mut PageCache,
+        first: SessionSelector,
+        second: SessionSelector,
+        path: &Path,
+    ) -> Result<([SessionPage; 2], u32), SessionError> {
+        self.resolve_many(pages, [first, second], path)
+    }
+
+    /// Resolve every selector on one newest-first walk, stopping as soon as all
+    /// of them have an answer and walking further than the sessions already
+    /// held only when those do not answer.
+    ///
+    /// `Exact(n)` with `n` above the newest session is refused after the first
+    /// page, without walking; that is the only shortcut. Anything else that is
+    /// not on the chain is reported after the whole chain has been read, with
+    /// the oldest session reached and the retained sessions either side of the
+    /// request.
+    ///
+    /// The count returned is the session pages **read from the file during this
+    /// call** — 0 when the walk so far already covers the request.
+    pub fn resolve_many<const N: usize>(
+        &mut self,
+        pages: &mut PageCache,
+        wants: [SessionSelector; N],
+        path: &Path,
+    ) -> Result<([SessionPage; N], u32), SessionError> {
+        let read_before = self.cursor.steps;
+        let mut pending: Vec<Pending> = wants.into_iter().map(Pending::new).collect();
+
+        if self.known.is_empty() {
+            self.step(pages)?;
+        }
+        let newest_sesno = self
+            .known
+            .first()
+            .expect("a chain walk always starts at the descriptor's newest session")
+            .sesno;
+
+        for want in &pending {
+            if let SessionSelector::Exact(wanted) = want.want {
+                if wanted > newest_sesno {
+                    return Err(SessionError::NoSuchSession {
+                        path: path.to_path_buf(),
+                        requested: wanted,
+                        newest: newest_sesno,
+                        oldest: None,
+                        nearest_older: Some(newest_sesno),
+                        nearest_newer: None,
+                    });
+                }
+            }
+        }
+
+        let settled = |pending: &[Pending]| pending.iter().all(|want| want.found.is_some());
+        let mut offered = 0usize;
+        let mut oldest_reached = newest_sesno;
+        loop {
+            while offered < self.known.len() {
+                let session = &self.known[offered];
+                oldest_reached = session.sesno;
+                for want in pending.iter_mut() {
+                    want.offer(session);
+                }
+                offered += 1;
+                if settled(&pending) {
+                    break;
+                }
+            }
+            if settled(&pending) || !self.step(pages)? {
+                break;
+            }
+        }
+
+        let read = self.cursor.steps - read_before;
+        let mut resolved = Vec::with_capacity(N);
+        for want in pending {
+            match want.found {
+                Some(session) => resolved.push(session),
+                None => {
+                    return Err(SessionError::NoSuchSession {
+                        path: path.to_path_buf(),
+                        requested: want
+                            .want
+                            .sesno()
+                            .expect("Latest always resolves to the newest session"),
+                        newest: newest_sesno,
+                        oldest: Some(oldest_reached),
+                        nearest_older: want.nearest_older,
+                        nearest_newer: want.nearest_newer,
+                    })
+                }
+            }
+        }
+        let resolved: [SessionPage; N] = resolved
+            .try_into()
+            .unwrap_or_else(|_| unreachable!("one resolved session per selector"));
+        Ok((resolved, read))
+    }
+
+    /// One session further back, or `false` once the oldest has been passed.
+    fn step(&mut self, pages: &mut PageCache) -> Result<bool, SessionError> {
+        match self.cursor.advance(pages)? {
+            Some(session) => {
+                self.known.push(session);
+                Ok(true)
+            }
+            None => Ok(false),
+        }
     }
 }
 
 /// Walk the whole chain from the newest session back to the oldest.
 ///
-/// [`DbView::walk_sessions`] and `ReadOnlyEngine::sessions` both come here.
+/// The one-shot form, for a caller holding no [`SessionChain`] of its own.
+/// [`DbView::walk_sessions`] and `ReadOnlyEngine::sessions` go through the
+/// chain they keep instead, which is the same walk without re-reading the
+/// sessions that handle has already parsed.
 pub fn walk_chain(
     pages: &mut PageCache,
     descriptor: &DbDescriptor,
 ) -> Result<Vec<SessionPage>, SessionError> {
-    let mut walk = ChainWalk::new(pages, descriptor);
-    let mut out = Vec::new();
-    while let Some(session) = walk.next_session()? {
-        out.push(session);
-    }
-    Ok(out)
+    let mut chain = SessionChain::new(pages, descriptor);
+    chain.all(pages)?;
+    Ok(chain.known)
 }
 
 /// The newest session, in one page read.
@@ -551,15 +771,18 @@ pub fn latest(
 
 /// The one place a selector becomes a session page.
 ///
-/// Returns the session and how many session pages had to be read to reach it.
+/// The one-shot form of [`SessionChain::resolve`], which is where the resolving
+/// is done: this walks a chain that is dropped on return, so a caller asking
+/// twice pays twice. Returns the session and how many session pages had to be
+/// read to reach it.
 pub fn resolve(
     pages: &mut PageCache,
     descriptor: &DbDescriptor,
     want: SessionSelector,
     path: &Path,
 ) -> Result<(SessionPage, u32), SessionError> {
-    let ([session], read) = resolve_many(pages, descriptor, [want], path)?;
-    Ok((session, read))
+    let mut chain = SessionChain::new(pages, descriptor);
+    chain.resolve(pages, want, path)
 }
 
 /// Two selectors, one walk.
@@ -567,6 +790,8 @@ pub fn resolve(
 /// A range diff names two sessions; resolving them one after the other would
 /// walk the chain twice and, worse, would be a second resolver. Returns the
 /// pages in the order the selectors were given, and the session pages read.
+/// One-shot, like [`resolve`]: see [`SessionChain::resolve_pair`] to keep the
+/// walk.
 pub fn resolve_pair(
     pages: &mut PageCache,
     descriptor: &DbDescriptor,
@@ -574,7 +799,8 @@ pub fn resolve_pair(
     second: SessionSelector,
     path: &Path,
 ) -> Result<([SessionPage; 2], u32), SessionError> {
-    resolve_many(pages, descriptor, [first, second], path)
+    let mut chain = SessionChain::new(pages, descriptor);
+    chain.resolve_pair(pages, first, second, path)
 }
 
 /// One selector part-way through a walk.
@@ -628,82 +854,6 @@ impl Pending {
             self.nearest_older = Some(self.nearest_older.map_or(seen, |n| n.max(seen)));
         }
     }
-}
-
-/// Resolve every selector on one newest-first walk, stopping as soon as all of
-/// them have an answer.
-///
-/// `Exact(n)` with `n` above the newest session is refused after the first
-/// page, without walking; that is the only shortcut. Anything else that is not
-/// on the chain is reported after the whole chain has been read, with the
-/// oldest session reached and the retained sessions either side of the
-/// request.
-fn resolve_many<const N: usize>(
-    pages: &mut PageCache,
-    descriptor: &DbDescriptor,
-    wants: [SessionSelector; N],
-    path: &Path,
-) -> Result<([SessionPage; N], u32), SessionError> {
-    let mut pending: Vec<Pending> = wants.into_iter().map(Pending::new).collect();
-    let mut walk = ChainWalk::new(pages, descriptor);
-
-    let newest = walk
-        .next_session()?
-        .expect("a chain walk always starts at the descriptor's newest session");
-    let newest_sesno = newest.sesno;
-
-    for want in &pending {
-        if let SessionSelector::Exact(wanted) = want.want {
-            if wanted > newest_sesno {
-                return Err(SessionError::NoSuchSession {
-                    path: path.to_path_buf(),
-                    requested: wanted,
-                    newest: newest_sesno,
-                    oldest: None,
-                    nearest_older: Some(newest_sesno),
-                    nearest_newer: None,
-                });
-            }
-        }
-    }
-
-    let mut current = Some(newest);
-    let mut oldest_reached = newest_sesno;
-    while let Some(session) = current {
-        oldest_reached = session.sesno;
-        for want in pending.iter_mut() {
-            want.offer(&session);
-        }
-        if pending.iter().all(|want| want.found.is_some()) {
-            break;
-        }
-        current = walk.next_session()?;
-    }
-
-    let read = walk.steps();
-    let mut resolved = Vec::with_capacity(N);
-    for want in pending {
-        match want.found {
-            Some(session) => resolved.push(session),
-            None => {
-                return Err(SessionError::NoSuchSession {
-                    path: path.to_path_buf(),
-                    requested: want
-                        .want
-                        .sesno()
-                        .expect("Latest always resolves to the newest session"),
-                    newest: newest_sesno,
-                    oldest: Some(oldest_reached),
-                    nearest_older: want.nearest_older,
-                    nearest_newer: want.nearest_newer,
-                })
-            }
-        }
-    }
-    let resolved: [SessionPage; N] = resolved
-        .try_into()
-        .unwrap_or_else(|_| unreachable!("one resolved session per selector"));
-    Ok((resolved, read))
 }
 
 fn read_session(pages: &mut PageCache, page: PageId) -> Result<SessionPage, SessionError> {

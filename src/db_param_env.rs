@@ -73,6 +73,21 @@ const DESIGN_PROPERTY: &str = "RPRO";
 /// connection sizes through this view: `/RFJFD-PA1.PBOR = ( ATTRIB DDES[2 ] +
 /// ATTRIB DDES[3 ] )`, `PWID = ( ATTRIB DDES[2 ] )`.
 const NUMERIC_DESIGN_PARAMS: &str = "DDES";
+/// `ATTRIB CPAR[n]`：设计构件视角下的**目录参数**。
+///
+/// 也不是属性——1933 个 noun 里没有一个声明 `CPAR`——而是 Core3D 现算的伪属性
+/// （`getattlib_des/DESPRE@0x10031CE0` 的 `886899` 支）：先在当前元素上 `DGETRA(PARA)`，
+/// 读不到（设计 noun 没有 `PARA`）就 `catdblib/GATGOC@0x1035CFB0` 走 `SPRE →
+/// [SPCO → CATR]* → 目录件`，在目录件上再读一次 `PARA`。所以它就是「先设计侧、后目录
+/// 侧」地读 `PARA`——正好是 [`DbElementParamEnv::hosts`] 的顺序。
+///
+/// 语料：BS 型材库 `/BS-GMSS-ANG` 的 `SPVE.PX = ( - ATTRIB CPAR[5 ] )`、
+/// `PY = ( ATTRIB CPAR[4 ] - ATTRIB CPAR[1 ] )`——GMSS 被一整族 SPRF 共用，顶点公式
+/// 只能问「当前实例的目录件」，`ATTRIB PARA` 在这里语义相同但目录作者写的是 `CPAR`。
+/// ams7324 有 1155 只 SCTN 因这一格答不上而退成中心线。
+const CATALOGUE_PARAMS: &str = "CPAR";
+/// `PARA`：目录件的参数数组，[`CATALOGUE_PARAMS`] 最终读的就是它。
+const CATALOGUE_PARAM_ARRAY: &str = "PARA";
 /// `UNIPAR`: the per-entry unit/type words that go with `DESP`.
 const DESIGN_PARAM_UNITS: &str = "UNIPAR";
 /// The `WORD` type word `UNIPAR` carries for a non-numeric `DESP` entry.
@@ -162,6 +177,16 @@ impl DbElementParamEnv {
         Self::new(None, Some(catalogue))
     }
 
+    /// Evaluate one catalogue design property (`ATTRIB RPRO <key>`).
+    ///
+    /// Geometry selection uses the same design-table values as profile
+    /// expressions.  Exposing this narrow entry point keeps callers from
+    /// reimplementing `DTRE -> DATA` selection and its `PPRO/PURP/DPRO`
+    /// fallback rules.
+    pub fn rpro(&self, key: &str) -> Option<f64> {
+        self.design_property(key)
+    }
+
     /// 查名字的顺序：先设计构件，再目录件。
     ///
     /// 实测两边名字集不相交（见模块头那张表），所以这个顺序在 ams8000 上**一次
@@ -200,21 +225,47 @@ impl DbElementParamEnv {
 
     /// `DESP n` / `ATTRIB DESP[n]`：设计构件的第 n 个设计参数，1 起。
     ///
-    /// 只问设计构件——`DESP` 只声明在设计 noun 上（见模块头那张表），目录件那头
-    /// 没有同名属性可顶。越界给 `None`（`GATPAR` 的 223）。
+    /// 先问设计构件；该槽位未存储、但当前目录件的 `DTRE` 明确声明了
+    /// `PURP=DESP, NUMB=n` 时，按目录表达式的数值空槽语义返回 0。
+    ///
+    /// 这个回落由原生 E3D 对拍钉住：ams7999 的阀 `/1RCV071VP` 在 ATT 中
+    /// `DESP=unset`，但原生 RVM 仍生成阀前后约 130/126 mm 的管段，且 APOS/LPOS
+    /// 有效。它的 PTRE 是 `DESP[1] + PARA[2] * 0.5`，原生连接点距中心 115 mm，
+    /// 正好是 `0 + 230 * 0.5`；若把同行 `DPRO=230` 当运行时值，结果会错误地变成
+    /// 345 mm。Core3D 的 DESPRE 原始属性分支也把未存储 DESP 报为 unset，二者
+    /// 一致说明 `DPRO` 是目录定义/交互默认值，不是该表达式的运行时替代值。
     fn design_parameter(&self, index: i32) -> Option<f64> {
-        let index = usize::try_from(index).ok()?.checked_sub(1)?;
-        match self
+        let slot = usize::try_from(index).ok()?.checked_sub(1)?;
+        let stored = match self
             .design
             .as_ref()?
             .attribute(ParamArray::Desp.attribute())
         {
-            Ok(Some(DescriptorValue::RealArray(items))) => items.get(index).copied(),
+            Ok(Some(DescriptorValue::RealArray(items))) => items.get(slot).copied(),
             Ok(Some(DescriptorValue::IntArray(items))) => {
-                items.get(index).map(|value| f64::from(*value))
+                items.get(slot).map(|value| f64::from(*value))
             }
             _ => None,
-        }
+        };
+        stored.or_else(|| self.declared_design_parameter(index).then_some(0.0))
+    }
+
+    /// Whether the catalogue design table declares this `DESP` slot.
+    fn declared_design_parameter(&self, index: i32) -> bool {
+        self.nested(|| {
+            let catalogue = self.catalogue.as_ref()?;
+            let table = catalogue.get_element("DTRE").ok().flatten()?;
+            for row in table.members().ok()? {
+                if word_text(&row, "PURP").as_deref() != Some(purpose::DESIGN_PARAM)
+                    || whole_number(&row, "NUMB") != Some(index)
+                {
+                    continue;
+                }
+                return Some(true);
+            }
+            Some(false)
+        })
+        .unwrap_or(false)
     }
 
     /// `ATTRIB DDES[n]`：见 [`NUMERIC_DESIGN_PARAMS`]。
@@ -426,15 +477,7 @@ impl DbElementParamEnv {
     fn design_property_source(&self, row: &DbElement, key: &str) -> Option<f64> {
         match word_text(row, "PURP")?.as_str() {
             purpose::CATALOGUE_PARAM => self.param(whole_number(row, "NUMB")?),
-            purpose::DESIGN_PARAM => {
-                let index = usize::try_from(whole_number(row, "NUMB")?)
-                    .ok()?
-                    .checked_sub(1)?;
-                match self.design.as_ref()?.attribute("DESP") {
-                    Ok(Some(DescriptorValue::RealArray(items))) => items.get(index).copied(),
-                    _ => None,
-                }
-            }
+            purpose::DESIGN_PARAM => self.design_parameter(whole_number(row, "NUMB")?),
             // `NUMB` 在这一类行上也有值（`HEIG` 行是 1），但它不是下标——`HEIG`
             // 在 `FTUB` 的属性表里排第 17 位。当排序用，取值只认名字。
             purpose::DESIGN_ATTRIBUTE => {
@@ -474,10 +517,10 @@ impl DbElementParamEnv {
     /// `DPRO=( ATTRIB RPRO YA / 2 )` 还会再提 `RPRO`——所以与 `PPRO` 同一条求值
     /// 路、同一个深度闸。`DPRO` 自己也空或答不上，照旧 `None`。
     ///
-    /// 尚欠一笔：E3D 本体在源 unset 时是否也按 `DPRO` 回落，还没拿 RVM 对拍钉死
-    /// （2026-08-31 时 e3d-model 工作树被并发会话改到一半，rvm_compare 编译不过）。
-    /// 在那之前，这条按目录说明书自己的语义立账：说明书写了默认值的地方，读它
-    /// 不是替作者编答案。
+    /// 注意 `DPRO` 不是 `PURP=DESP` 数值空槽的运行时替代值。2026-09-06 的原生
+    /// E3D RVM/ATT 对拍显示，ams7999 `/1RCV071VP` 未存的 `DESP[1]/[2]` 在 PTRE
+    /// 中按 0 求值，而不是取同行的 230/184；这类行由 `design_property_source`
+    /// 先返回已声明空槽的 0，因此不会落到这里。
     fn row_default(&self, row: &DbElement) -> Option<f64> {
         self.row_formula(row, "DPRO")
     }
@@ -705,8 +748,14 @@ impl ParamEnv for DbElementParamEnv {
                 // `None` for the same expression.
                 if attribute.name == "IPAR" {
                     self.iparam(index)
+                } else if attribute.name == ParamArray::Desp.attribute() {
+                    self.design_parameter(index)
                 } else if attribute.name == NUMERIC_DESIGN_PARAMS {
                     self.numeric_design_parameter(index)
+                } else if attribute.name == CATALOGUE_PARAMS {
+                    // DESPRE：当前元素的 `PARA`，读不到再去目录件上读——就是 `hosts()`
+                    // 的顺序，所以直接按 `PARA` 走同一条索引路。
+                    self.indexed(CATALOGUE_PARAM_ARRAY, index)
                 } else {
                     self.indexed(attribute.name, index)
                 }
@@ -771,6 +820,21 @@ mod tests {
         assert!(selection_range_contains(15.0, 100.0, 100.001));
         assert!(!selection_range_contains(15.0, 100.0, 14.9989));
         assert!(!selection_range_contains(15.0, 100.0, 100.0011));
+    }
+
+    /// `CPAR` 走的是 `PARA` 那条索引路：没有宿主时同样答不上，而不是 0。
+    /// 越界与非整数下标沿用 `PARA` 的判法（下面两条测试）。
+    #[test]
+    fn catalogue_params_without_hosts_answer_nothing() {
+        let env = DbElementParamEnv::new(None, None);
+        assert_eq!(
+            env.attribute_number(&AttribRef::subscripted(CATALOGUE_PARAMS, 5.0)),
+            None
+        );
+        assert_eq!(
+            env.attribute_number(&AttribRef::subscripted(CATALOGUE_PARAMS, 0.0)),
+            None
+        );
     }
 
     /// 下标得是整数。`PARA[1.5]` 没有读法，截断成 `PARA[1]` 是编答案。

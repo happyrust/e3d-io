@@ -43,6 +43,7 @@ const PROGRAM_MARKER: i32 = 1;
 const OP_PUSH_NUMBER: i32 = 101;
 const OP_ATTRIBUTE: i32 = 106;
 const OP_PUSH_TEXT: i32 = 118;
+const OP_GREATER_THAN: i32 = 601;
 const OP_NEGATE: i32 = 801;
 const OP_ADD: i32 = 802;
 const OP_SUBTRACT: i32 = 803;
@@ -53,8 +54,24 @@ const OP_COS: i32 = 902;
 const OP_TAN: i32 = 903;
 /// Inverse sine. PCLA point axes use it to derive both Pz and Ptcdirection.
 const OP_ASIN: i32 = 904;
+/// Unary arctangent, used by SQRD PTCA.PTCD (P7 through P10).
+const OP_ATAN: i32 = 906;
 /// Two-argument arctangent. `PTCA.Ptcdirection` turns through one.
 const OP_ATANT: i32 = 907;
+/// E3D SQRT, captured in LSNO /SQRD-BODY1 POFF (=15194/4150).
+const OP_SQRT: i32 = 1001;
+/// Native /CFLEX-BODY and /CFLEX-AEXT3 programs, verified by E3D TTY.
+const OP_POW: i32 = 1002;
+/// Absolute value. AMS cable-tray rung programs use it while distributing
+/// rungs over a variable straight length.
+const OP_ABS: i32 = 1005;
+/// Maximum. The same rung programs clamp repeated spacing calculations with
+/// it; Core's function-name table places MAX immediately before MIN.
+const OP_MAX: i32 = 1008;
+const OP_MIN: i32 = 1009;
+const OP_MATCH: i32 = 1308;
+const OP_TRIM: i32 = 1314;
+const OP_LOGICAL_STRING: i32 = 1410;
 
 /// `101` is followed by this word, then four words of number, then it again.
 const NUMBER_SHAPE: i32 = 6;
@@ -107,10 +124,11 @@ const MAX_SCALED_EXPONENT: i32 = 64;
 /// Loosest first, so a child of the same precedence needs no brackets on the
 /// left. Unary minus takes everything to its right: E3D prints
 /// `( - ATTRIB PARA[2 ] / 2 )` for a negated quotient.
-const PRECEDENCE_NEGATE: u8 = 0;
-const PRECEDENCE_ADDITIVE: u8 = 1;
-const PRECEDENCE_MULTIPLICATIVE: u8 = 2;
-const PRECEDENCE_ATOM: u8 = 3;
+const PRECEDENCE_COMPARISON: u8 = 0;
+const PRECEDENCE_NEGATE: u8 = 1;
+const PRECEDENCE_ADDITIVE: u8 = 2;
+const PRECEDENCE_MULTIPLICATIVE: u8 = 3;
+const PRECEDENCE_ATOM: u8 = 4;
 
 /// One value on the evaluation stack, with what it took to build it.
 #[derive(Debug, Clone)]
@@ -160,6 +178,13 @@ struct Attribute {
     name: String,
     /// `ATTRIB PARA[…]` takes its subscript off the evaluation stack.
     subscript_from_stack: bool,
+    /// `ATTRIB PARA[4 ]` with the subscript written into the operand itself:
+    /// the qualifier words are `[n, n]` with `n >= 2` and no second name. The
+    /// BS profile catalogue in ams7324 stores `SPVE.PX` as
+    /// `0.5 * ATTRIB PARA[1 ] - ATTRIB PARA[4 ]` this way — `[1, 1]` for the
+    /// first (the shape [`SECOND_NAME_FOLLOWS`] already reads as a plain
+    /// attribute) and `[4, 4]` for the second, which nothing read before.
+    inline_subscript: Option<i32>,
     /// The second word of `ATTRIB X Y`.
     qualifier: Option<String>,
     /// The `OF a OF b` owners, nearest first. Non-empty only for the chain form.
@@ -178,7 +203,10 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             OP_ATTRIBUTE => parse_attribute(&program[cursor..])?,
             OP_PUSH_TEXT => parse_text(&program[cursor..])?,
             OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
-            | OP_TAN | OP_ASIN | OP_ATANT => (Step::Operator(program[cursor]), 1),
+            | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_MAX
+            | OP_MIN | OP_GREATER_THAN | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING => {
+                (Step::Operator(program[cursor]), 1)
+            }
             // An opcode this has never seen used is a program it has not read.
             _ => return None,
         };
@@ -216,6 +244,15 @@ pub fn render(words: &[i32]) -> Option<String> {
             Step::Operator(OP_COS) => apply_function("COS", &mut stack)?,
             Step::Operator(OP_TAN) => apply_function("TAN", &mut stack)?,
             Step::Operator(OP_ASIN) => apply_function("ASIN", &mut stack)?,
+            Step::Operator(OP_ATAN) => apply_function("ATAN", &mut stack)?,
+            Step::Operator(OP_SQRT) => apply_function("SQRT", &mut stack)?,
+            Step::Operator(OP_POW) => apply_binary_function("POW", &mut stack)?,
+            Step::Operator(OP_ABS) => apply_function("ABS", &mut stack)?,
+            Step::Operator(OP_MAX) => apply_binary_function("MAX", &mut stack)?,
+            Step::Operator(OP_MIN) => apply_binary_function("MIN", &mut stack)?,
+            Step::Operator(OP_MATCH) => apply_binary_function("MAT", &mut stack)?,
+            Step::Operator(OP_TRIM) => apply_function("TRIM", &mut stack)?,
+            Step::Operator(OP_LOGICAL_STRING) => apply_function("STR", &mut stack)?,
             Step::Operator(OP_ATANT) => apply_binary_function("ATANT", &mut stack)?,
             Step::Operator(operator) => apply_binary(operator, &mut stack)?,
         }
@@ -243,16 +280,16 @@ pub fn render(words: &[i32]) -> Option<String> {
 /// division by an unset parameter is a degenerate to report, not an infinity to
 /// pass on). [`OP_ATANT`] declines too — see [`apply_numeric`].
 pub fn evaluate_words(words: &[i32], env: &dyn ParamEnv) -> Option<f64> {
-    let mut stack: Vec<f64> = Vec::new();
+    let mut stack: Vec<Value> = Vec::new();
 
     for step in parse(words)? {
         match step {
-            Step::Number(value) => stack.push(value),
-            Step::Text(_) => return None,
+            Step::Number(value) => stack.push(Value::Number(value)),
+            Step::Text(value) => stack.push(Value::Text(value)),
             Step::Attribute(attribute) => {
                 let subscript = match attribute.subscript_from_stack {
-                    true => Some(stack.pop()?),
-                    false => None,
+                    true => Some(stack.pop()?.number()?),
+                    false => attribute.inline_subscript.map(f64::from),
                 };
                 let owners: Vec<&str> = attribute.owners.iter().map(String::as_str).collect();
                 let reference = AttribRef {
@@ -261,16 +298,85 @@ pub fn evaluate_words(words: &[i32], env: &dyn ParamEnv) -> Option<f64> {
                     qualifier: attribute.qualifier.as_deref(),
                     owner_chain: &owners,
                 };
-                stack.push(env.attribute_number(&reference)?);
+                let mut value = env.attribute_number(&reference);
+                // The plain shape is `[1, 1]` — inline subscript 1. On a scalar
+                // that is the value itself; on an array (`ATTRIB PARA` written
+                // with `[1, 1]`) it is the first entry, which the unsubscripted
+                // lookup cannot give.
+                if value.is_none()
+                    && subscript.is_none()
+                    && attribute.qualifier.is_none()
+                    && owners.is_empty()
+                {
+                    value = env.attribute_number(&AttribRef {
+                        subscript: Some(1.0),
+                        ..reference
+                    });
+                }
+                let value = value?;
+                if !value.is_finite() {
+                    return None;
+                }
+                stack.push(Value::Number(value));
             }
-            Step::Operator(operator) => apply_numeric(operator, &mut stack)?,
+            Step::Operator(operator) => apply_value(operator, &mut stack)?,
         }
     }
 
     match stack.as_slice() {
-        [only] if only.is_finite() => Some(*only),
+        [Value::Number(only)] if only.is_finite() => Some(*only),
         _ => None,
     }
+}
+
+/// Catalogue conditions travel through logical and text values before MAT
+/// turns the one-based match position back into a numeric dimension mask.
+enum Value {
+    Number(f64),
+    Logical(bool),
+    Text(String),
+}
+
+impl Value {
+    fn number(self) -> Option<f64> {
+        match self {
+            Self::Number(value) => Some(value),
+            _ => None,
+        }
+    }
+    fn text(self) -> Option<String> {
+        match self {
+            Self::Text(value) => Some(value),
+            _ => None,
+        }
+    }
+}
+
+fn apply_value(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
+    let value = match operator {
+        OP_GREATER_THAN => {
+            let right = stack.pop()?.number()?;
+            Value::Logical(stack.pop()?.number()? > right)
+        }
+        OP_LOGICAL_STRING => match stack.pop()? {
+            Value::Logical(value) => Value::Text(value.to_string()),
+            // 1410 is logical STR; other STR types have different opcodes.
+            _ => return None,
+        },
+        OP_TRIM => Value::Text(stack.pop()?.text()?.trim_matches(' ').to_string()),
+        OP_MATCH => {
+            let pattern = stack.pop()?.text()?;
+            let text = stack.pop()?.text()?;
+            let position = text
+                .find(&pattern)
+                .map(|at| text[..at].chars().count() + 1)
+                .unwrap_or(0);
+            Value::Number(position as f64)
+        }
+        _ => return apply_numeric(operator, stack),
+    };
+    stack.push(value);
+    Some(())
 }
 
 /// Apply one operator to the numeric stack.
@@ -281,27 +387,36 @@ pub fn evaluate_words(words: &[i32], env: &dyn ParamEnv) -> Option<f64> {
 /// a P point placed by it would sit at a plausible wrong spot. The census's
 /// `Pdistance` and `Px`/`Py`/`Pz` formulas never reach it, so declining costs
 /// nothing today and admits the gap.
-fn apply_numeric(operator: i32, stack: &mut Vec<f64>) -> Option<()> {
+fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
     let value = match operator {
-        OP_NEGATE => -stack.pop()?,
-        OP_SIN => stack.pop()?.to_radians().sin(),
-        OP_COS => stack.pop()?.to_radians().cos(),
-        OP_TAN => stack.pop()?.to_radians().tan(),
-        OP_ASIN => stack.pop()?.asin().to_degrees(),
+        OP_NEGATE => -stack.pop()?.number()?,
+        OP_SIN => stack.pop()?.number()?.to_radians().sin(),
+        OP_COS => stack.pop()?.number()?.to_radians().cos(),
+        OP_TAN => stack.pop()?.number()?.to_radians().tan(),
+        OP_ASIN => stack.pop()?.number()?.asin().to_degrees(),
+        OP_ATAN => stack.pop()?.number()?.atan().to_degrees(),
+        OP_SQRT => stack.pop()?.number()?.sqrt(),
+        OP_ABS => stack.pop()?.number()?.abs(),
         OP_ATANT => return None,
         _ => {
-            let right = stack.pop()?;
-            let left = stack.pop()?;
+            let right = stack.pop()?.number()?;
+            let left = stack.pop()?.number()?;
             match operator {
                 OP_ADD => left + right,
                 OP_SUBTRACT => left - right,
                 OP_MULTIPLY => left * right,
                 OP_DIVIDE => left / right,
+                OP_POW if left != 0.0 || right > 0.0 => left.powf(right),
+                OP_MAX => left.max(right),
+                OP_MIN => left.min(right),
                 _ => return None,
             }
         }
     };
-    stack.push(value);
+    if !value.is_finite() {
+        return None;
+    }
+    stack.push(Value::Number(value));
     Some(())
 }
 
@@ -312,6 +427,8 @@ fn render_attribute(attribute: &Attribute, stack: &mut Vec<Term>) -> Option<Stri
         // The subscript has to be a number, not a formula.
         let subscript = stack.pop()?.number?;
         let _ = write!(text, "[{} ]", format_number(subscript));
+    } else if let Some(subscript) = attribute.inline_subscript {
+        let _ = write!(text, "[{subscript} ]");
     }
     if let Some(qualifier) = &attribute.qualifier {
         text.push(' ');
@@ -326,6 +443,20 @@ fn render_attribute(attribute: &Attribute, stack: &mut Vec<Term>) -> Option<Stri
         text.push(' ');
     }
     Some(text)
+}
+
+/// Whether these words have the shape of a PML program at all: a length word
+/// that counts the whole blob, then [`PROGRAM_MARKER`].
+///
+/// The explicit stream keys formulas by negated attribute hash, but not every
+/// body stored there is PML. The BS profile catalogue in ams7324 (`/BS-...`,
+/// reached when `SPRE` points straight at the `SPRF`) stores `SPVE.PX` as the
+/// four-word tuple `[20, 1, 1, 0]` — `0.5 TIMES PARAM 1` — in that same slot.
+/// [`evaluate_words`] declines it (20 is not the length), and the caller needs
+/// to know whether to hand the words to the tuple reader or to report an
+/// unreadable program. Two words decide that: `[20, 1, …]` fails on the first.
+pub fn is_program(words: &[i32]) -> bool {
+    program_of(words).is_some()
 }
 
 /// Strip the length word and the marker, checking the length as we go.
@@ -413,6 +544,7 @@ fn parse_attribute(words: &[i32]) -> Option<(Step, usize)> {
         (SUBSCRIPT_FROM_STACK, 0) => Attribute {
             name,
             subscript_from_stack: true,
+            inline_subscript: None,
             qualifier: None,
             owners: Vec::new(),
         },
@@ -422,13 +554,25 @@ fn parse_attribute(words: &[i32]) -> Option<(Step, usize)> {
         (SECOND_NAME_FOLLOWS, 0) => Attribute {
             name,
             subscript_from_stack: false,
+            inline_subscript: None,
             qualifier: None,
             owners: Vec::new(),
         },
         (SECOND_NAME_FOLLOWS, qualifier) => Attribute {
             name,
             subscript_from_stack: false,
+            inline_subscript: None,
             qualifier: Some(name_of(*qualifier)?),
+            owners: Vec::new(),
+        },
+        // `[n, n]` past 1 with no second name: the subscript itself, written
+        // inline (`ATTRIB PARA[4 ]` in the BS profile catalogue). See
+        // [`Attribute::inline_subscript`].
+        ([index, repeat], 0) if index == repeat && index >= 2 => Attribute {
+            name,
+            subscript_from_stack: false,
+            inline_subscript: Some(index),
+            qualifier: None,
             owners: Vec::new(),
         },
         _ => return None,
@@ -475,6 +619,7 @@ fn parse_owner_chain(words: &[i32]) -> Option<(Step, usize)> {
     let attribute = Attribute {
         name,
         subscript_from_stack: false,
+        inline_subscript: None,
         qualifier: None,
         owners: named,
     };
@@ -517,6 +662,7 @@ fn apply_binary(operator: i32, stack: &mut Vec<Term>) -> Option<()> {
         OP_SUBTRACT => ("-", PRECEDENCE_ADDITIVE),
         OP_MULTIPLY => ("*", PRECEDENCE_MULTIPLICATIVE),
         OP_DIVIDE => ("/", PRECEDENCE_MULTIPLICATIVE),
+        OP_GREATER_THAN => ("GT", PRECEDENCE_COMPARISON),
         _ => return None,
     };
     let right = stack.pop()?;
@@ -543,6 +689,71 @@ fn apply_binary(operator: i32, stack: &mut Vec<Term>) -> Option<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn flex_body_poff_evaluates_the_native_pow_program() {
+        // LSNO 15194/5489 /CFLEX-BODY, queried through E3D TTY.
+        let words = [
+            50, 1, 101, 6, 20480, 0, 4, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701, 101, 6, 16384,
+            0, 2, 0, 6, 1002, 101, 6, 22528, 0, 4, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701,
+            101, 6, 16384, 0, 2, 0, 6, 1002, 802, 1001,
+        ];
+        assert_eq!(
+            render(&words).as_deref(),
+            Some("( SQRT ( POW ( ATTRIB DESP[10 ] , 2 ) + POW ( ATTRIB DESP[11 ] , 2 ) ) )")
+        );
+        let env = MapParamEnv::new()
+            .set_attribute("DESP[10]", -3.0)
+            .set_attribute("DESP[11]", 4.0);
+        assert_eq!(evaluate_words(&words, &env), Some(5.0));
+    }
+
+    #[test]
+    fn flex_extension_diameter_obeys_native_strict_threshold() {
+        // SCYL 15194/22899 /CFLEX-AEXT3. Native MAT returns 1 or 0 here.
+        let words = [
+            66, 1, 101, 6, 16384, 0, 2, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701, 101, 6, 20480,
+            0, 5, 0, 6, 802, 101, 6, 30720, 0, 4, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701, 101,
+            6, 25600, 0, 6, 0, 6, 101, 6, 24576, 0, 2, 0, 6, 804, 601, 1410, 1314, 118, 4, 116,
+            114, 117, 101, 1308, 804,
+        ];
+        assert_eq!(render(&words).as_deref(), Some("( ( ATTRIB DESP[2 ] + 20 ) * MAT ( TRIM ( STR ( ATTRIB DESP[15 ] GT 50 * 3 ) ) , 'true' ) )"));
+        for (distance, diameter) in [(50.0, 0.0), (150.0, 0.0), (151.0, 370.0)] {
+            let env = MapParamEnv::new()
+                .set_attribute("DESP[2]", 350.0)
+                .set_attribute("DESP[15]", distance);
+            assert_eq!(evaluate_words(&words, &env), Some(diameter));
+        }
+    }
+
+    #[test]
+    fn flex_extension_distance_uses_native_minimum() {
+        let words = [
+            33, 1, 101, 6, 30720, 0, 4, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701, 101, 6, 25600,
+            0, 6, 0, 6, 101, 6, 24576, 0, 2, 0, 6, 804, 1009,
+        ];
+        for (distance, expected) in [(50.0, 50.0), (200.0, 150.0)] {
+            let env = MapParamEnv::new().set_attribute("DESP[15]", distance);
+            assert_eq!(evaluate_words(&words, &env), Some(expected));
+        }
+    }
+
+    #[test]
+    fn cable_tray_rung_programs_use_native_abs_and_max() {
+        // Core's built-in function table maps 1005=ABS and 1008=MAX. Both
+        // occur in AMS /SW5/SL3/STRAIGHT-VAR-GMSE rung PY programs.
+        let abs = [
+            18, 1, 101, 6, 0, 0, 1073742848, 0, 6, 101, 6, 1310720, 0, 1073742849, 0, 6, 803, 1005,
+        ];
+        assert_eq!(render(&abs).as_deref(), Some("( ABS ( 2 - 5 ) )"));
+        assert_eq!(evaluate_words(&abs, &MapParamEnv::new()), Some(3.0));
+
+        let max = [
+            17, 1, 101, 6, 0, 0, 1073742848, 0, 6, 101, 6, 1310720, 0, 1073742849, 0, 6, 1008,
+        ];
+        assert_eq!(render(&max).as_deref(), Some("( MAX ( 2 , 5 ) )"));
+        assert_eq!(evaluate_words(&max, &MapParamEnv::new()), Some(5.0));
+    }
 
     /// Every distinct expression blob in the 2026-08-26 TTY sample, against
     /// what E3D printed for the attribute that owns it.
@@ -890,6 +1101,19 @@ mod tests {
 
     use crate::record::catalogue_eval::MapParamEnv;
 
+    #[test]
+    fn sqrd_snout_offset_sqrt_opcode() {
+        // E3D TTY Q POFF on LSNO =15194/4150 prints SQRT; its stream ends
+        // in opcode 1001. A 250 x 250 inlet needs sqrt(125² + 125²).
+        let words = [10, 1, 101, 6, 18432, 0, 4, 0, 6, 1001]; // SQRT(9)
+        assert_eq!(evaluate_words(&words, &MapParamEnv::new()), Some(3.0));
+        assert!(render(&words).unwrap().contains("SQRT"));
+        let negative = [11, 1, 101, 6, 18432, 0, 4, 0, 6, 801, 1001];
+        assert_eq!(evaluate_words(&negative, &MapParamEnv::new()), None);
+        let angle = [10, 1, 101, 6, 16384, 0, 1, 0, 6, 906]; // ATAN(1)
+        assert_eq!(evaluate_words(&angle, &MapParamEnv::new()), Some(45.0));
+    }
+
     /// The three `PTAX.Pdistance` blobs of the census, and the `PARA` values a
     /// real 50 mm component carries (`SCOM /ACP1000-TFVL-50`).
     fn bend_env() -> MapParamEnv {
@@ -1022,6 +1246,35 @@ mod tests {
         let env = MapParamEnv::new().set_attribute("PARA[11]", 1.0);
         assert_eq!(render(words).as_deref(), Some("( ATTRIB PARA[11 ] / 0 )"));
         assert_eq!(evaluate_words(words, &env), None);
+    }
+
+    /// ams7324 `/BS-…` profile catalogue, `SPVE 31896/9872 .PX`: the subscripts
+    /// are written into the operands (`[1, 1]` and `[4, 4]`) instead of being
+    /// pushed on the stack. The first shape already read as a plain `ATTRIB
+    /// PARA`; the second was declined, so the vertex — and the 72 SCTN plus 72
+    /// GENSEC on that profile — fell back to a centreline.
+    #[test]
+    fn reads_an_inline_subscript() {
+        let words = &[
+            27, 1, 101, 6, 8192, 0, 1, 0, 6, 106, 2, 564289, 1, 1, 0, 1601, 1701, 804, 106, 2,
+            564289, 4, 4, 0, 1601, 1701, 803,
+        ];
+        assert_eq!(
+            render(words).as_deref(),
+            Some("( 0.5 * ATTRIB PARA - ATTRIB PARA[4 ] )")
+        );
+        let env = MapParamEnv::new()
+            .set_attribute("PARA[1]", 80.0)
+            .set_attribute("PARA[4]", 23.4);
+        assert_eq!(evaluate_words(words, &env), Some(0.5 * 80.0 - 23.4));
+    }
+
+    /// The inline form is only `[n, n]`; a mismatched pair is still a shape
+    /// this has not seen.
+    #[test]
+    fn a_mismatched_inline_subscript_is_declined() {
+        let words = &[10, 1, 106, 2, 564289, 4, 5, 0, 1601, 1701];
+        assert_eq!(render(words), None);
     }
 
     /// A program neither reader accepts stays rejected by both.

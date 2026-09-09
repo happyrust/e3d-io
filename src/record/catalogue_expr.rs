@@ -249,7 +249,11 @@ impl fmt::Display for Operand {
                 write!(f, "{} {index}", array.keyword())
             }
             Operand::Constant(tenths) => {
-                write!(f, "{}", format_number(f64::from(*tenths) / CONSTANT_SCALE as f64))
+                write!(
+                    f,
+                    "{}",
+                    format_number(f64::from(*tenths) / CONSTANT_SCALE as f64)
+                )
             }
             Operand::DesignDimension(3) => write!(f, "DDRADIUS"),
             Operand::DesignDimension(4) => write!(f, "DDANGLE"),
@@ -575,7 +579,10 @@ mod tests {
         let env = sample_env();
         assert_close(evaluate_words(&[4, 40, 1, (-95i32) as u32, 0], &env), 9.5);
         assert_close(evaluate_words(&[4, 40, 1, (-85i32) as u32, 0], &env), 8.5);
-        assert_close(evaluate_words(&[4, 40, 1, (-1875i32) as u32, 0], &env), 187.5);
+        assert_close(
+            evaluate_words(&[4, 40, 1, (-1875i32) as u32, 0], &env),
+            187.5,
+        );
         assert_close(evaluate_words(&[4, 40, 1, (-7i32) as u32, 0], &env), 0.7);
         assert_close(evaluate_words(&[4, 40, 1, (-6i32) as u32, 0], &env), 0.6);
         assert_close(evaluate_words(&[4, 40, 1, (-20i32) as u32, 0], &env), 2.0);
@@ -590,7 +597,10 @@ mod tests {
         assert_eq!(Operand::decode(-5), Operand::DesignDimension(5));
         assert_eq!(render(&[40, 1, (-95i32) as u32, 0]).as_deref(), Some("9.5"));
         assert_eq!(render(&[40, 1, (-870i32) as u32, 0]).as_deref(), Some("87"));
-        assert_eq!(render(&[40, 1, (-4i32) as u32, 0]).as_deref(), Some("DDANGLE"));
+        assert_eq!(
+            render(&[40, 1, (-4i32) as u32, 0]).as_deref(),
+            Some("DDANGLE")
+        );
     }
 
     /// The operand bands of Core3D `pplib/DECARG` (0x103C12B8), decoded one

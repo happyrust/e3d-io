@@ -182,6 +182,20 @@ pub struct ElementExtraction {
     pub attributes: Vec<ExtractedAttribute>,
 }
 
+impl ElementExtraction {
+    /// 按名字找属性，大小写不敏感，取**第一条**同名的。
+    ///
+    /// 就是顺序扫。2026-09-04 试过给它建一张「大小写无关指纹 → 下标」的排序索引，
+    /// 实测**更慢**（ams8000 生成 280ms → 300ms）：名字表短，104 万次查询平均只比
+    /// 9 个名字就命中，而建索引要为每一件抽取件排一次序，建表钱比省下的比较钱还多。
+    /// 再想加索引之前，先把 `attr_lookups` 与平均扫描长度重新量一遍。
+    pub fn find_attribute(&self, name: &str) -> Option<&ExtractedAttribute> {
+        self.attributes
+            .iter()
+            .find(|attribute| attribute.name.eq_ignore_ascii_case(name))
+    }
+}
+
 pub fn extract_attribute(
     parsed: &ParsedElement,
     descriptor: &TemplateAttr,

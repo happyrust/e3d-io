@@ -1060,6 +1060,7 @@ pub fn extract_parsed_element_with_descriptors(
                             &explicit.value,
                             attlib.attr_def(descriptor.hash),
                             descriptor.storage_type_code,
+                            descriptor.hash,
                         ));
                         extracted.status =
                             record::descriptor::AttributeExtractionStatus::DecodedExplicit;
@@ -1137,10 +1138,21 @@ fn explicit_value_to_descriptor_value(
     value: &record::explicit::ExplicitValue,
     def: Option<&e3d_attlib::AttrDefEntry>,
     storage_type_code: u32,
+    attribute_hash: u32,
 ) -> record::descriptor::DescriptorValue {
     use record::descriptor::DescriptorValue;
     use record::explicit::ExplicitValue;
     match value {
+        // Explicit one-word angles carry the same signed centidegrees as
+        // implicit words (descriptor::decode_value). A missing ATGTDF entry
+        // must not erase the catalog's ANGL unit, as it did for RAIL.BANG.
+        ExplicitValue::Integer(value)
+            if storage_type_code == 3
+                && e3d_attlib::is_angle_attr(attribute_hash)
+                && !def.is_some_and(|def| matches!(def.data_type, 1 | 3)) =>
+        {
+            DescriptorValue::Real(f64::from(*value) / 100.0)
+        }
         ExplicitValue::Integer(value)
             if def.is_some_and(|def| matches!(def.data_type, 5 | 6)) || storage_type_code == 3 =>
         {
@@ -1222,6 +1234,7 @@ mod explicit_semantic_tests {
             &record::explicit::ExplicitValue::Integer(914_199),
             None,
             3,
+            0,
         );
 
         assert_eq!(
@@ -1231,6 +1244,22 @@ mod explicit_semantic_tests {
                 text: Some("FALS".into()),
             }
         );
+    }
+
+    #[test]
+    fn explicit_word_angle_uses_the_same_units_as_implicit_storage() {
+        use record::descriptor::DescriptorValue;
+        use record::explicit::ExplicitValue;
+        for (raw, expected) in [(0, 0.0), (-9000, -90.0), (1150, 11.5)] {
+            let value = explicit_value_to_descriptor_value(
+                &ExplicitValue::Integer(raw), None, 3, e3d_attlib::db1_hash("BANG"),
+            );
+            assert_eq!(value, DescriptorValue::Real(expected));
+        }
+        assert_eq!(explicit_value_to_descriptor_value(&ExplicitValue::Real(11.5),
+            None, 3, e3d_attlib::db1_hash("BANG")), DescriptorValue::Real(11.5));
+        assert!(matches!(explicit_value_to_descriptor_value(&ExplicitValue::Integer(-9000),
+            None, 3, e3d_attlib::db1_hash("JUSL")), DescriptorValue::Word { .. }));
     }
 }
 

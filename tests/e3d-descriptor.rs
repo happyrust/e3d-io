@@ -3,13 +3,10 @@ use std::process::Command;
 
 mod common;
 
-const DESIGN_DB: &str =
-    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001";
-const CATA_DB: &str =
-    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7351_0001";
+const DESIGN_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001";
+const CATA_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7351_0001";
 const SYST_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\amssys";
-const REFERENCE_DB: &str =
-    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5053_0001";
+const REFERENCE_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5053_0001";
 const DICTIONARY_DBS: &[&str] = &[
     r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001",
     r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000\acp7006_0001",
@@ -26,7 +23,10 @@ const ALL_DICTIONARY_DBS: &[&str] = &[
 const DESVIR: &str = common::DESVIR;
 const CATVIR: &str = common::CATVIR;
 const DICVIR: &str = common::DICVIR;
-const SYSVIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/sysvir.dat");
+const SYSVIR: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/schema/e3d31/binaries/sysvir.dat"
+);
 const ATTLIB: &str = common::ATTLIB;
 
 #[test]
@@ -78,13 +78,11 @@ fn bran_binary_and_dictionary_attributes_match_the_e3d_tty_capture() {
     assert_eq!(report["deferred_uda_row_count"], 0);
     assert_eq!(report["omitted_row_count"], 0);
     assert_eq!(report["comparison_counts"]["equivalent"], 115);
-    assert!(
-        report["attributes"]
-            .as_array()
-            .expect("attribute rows")
-            .iter()
-            .all(|row| row["comparison"] == "equivalent")
-    );
+    assert!(report["attributes"]
+        .as_array()
+        .expect("attribute rows")
+        .iter()
+        .all(|row| row["comparison"] == "equivalent"));
 }
 
 #[test]
