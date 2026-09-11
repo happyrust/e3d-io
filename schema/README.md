@@ -44,11 +44,10 @@ e3d31`) fills in `--desvir`, `--attlib`, `--dicvir`, `--catalog-layout` and
 file needs no pack edit.
 
 Commands that read element descriptors (`extract`, `extract-complete` and
-`list-uda`) can omit the schema flags when the database remains under a
-version-bearing project path. A component such as `E3D2.1`,
-`Everything3D2.10`, or `E3D3.1` selects the release; the database's live
-primary-element and RefNo-index tree identities then validate the format
-family:
+`list-uda`) can omit the schema flags. The reader checks retained session
+records in the database binary: E3D 3.1 writes `Saving Meta Data.` sessions,
+while the 2.10 `core.dll` contains no such literal. Tree identities still
+validate the database family:
 
 ```powershell
 e3d-descriptor extract --db D:\...\ams8000_0001 --refno 24384/46
@@ -61,10 +60,10 @@ let pack = SchemaPack::detect_for_database("schema", database)?;
 let project_pack = SchemaPack::detect_for_project("schema", project_root)?;
 ```
 
-A database copied outside that project context is deliberately ambiguous:
-the installed 2.1 and 3.1 corpora both use tree pair
-`(7618377, 13387743)`. Supply `--schema` / `--e3d-version` (or call
-`SchemaPack::open_version`) instead of guessing.
+Both releases use tree pair `(7618377, 13387743)`, so that pair cannot select a
+pack. A binary with a 3.1 metadata session selects 3.1; without one it remains
+2.1-compatible. Project detection examines all primary database binaries and
+uses the highest evidenced format. Paths and directory names are ignored.
 
 ## Where the AVEVA binaries live
 
@@ -107,12 +106,15 @@ Copy-Item "<install>\*vir.dat", "<install>\attlib.dat" schema\e3d31\binaries\
    `KNOWN_VERSIONS`. A pack whose `version.id` has no constants is refused by
    name; it does not fall back to 3.1's.
 3. Measure the tree identities — do not carry them over, and do not assume
-   they uniquely identify a release. Add a project-path marker alias when the
-   new release shares another release's pair.
+   they uniquely identify a release. Establish a writer-specific binary
+   marker from the product executable and confirm it against real project
+   session chains.
 
 E3D 2.10 was added after a full primary-extent census, not from the
 `7618321` constant found in its `core.dll`: all 828 files under
 `D:/AVEVA/Projects/E3D2.1` use `data_page_main = 7 618 377` and
 `data_page_index = 13 387 743`, exactly the pair used by all 1002 files under
-the installed E3D 3.1 project. The project path selects between their schema
-packs; the pair remains a fail-loud compatibility check.
+the installed E3D 3.1 project. The discriminator is instead the retained
+`Saving Meta Data.` session: present in the 3.1 `core.dll` and five installed
+3.1 project databases, absent from the 2.10 `core.dll` and all 4,232 measured
+2.1 database extents. The pair remains a fail-loud compatibility check.

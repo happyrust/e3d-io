@@ -9,14 +9,24 @@
 //! words rather than an error. `TemplateFile` checks `template_type`, which
 //! says `DESI`, not `3.1`.
 //!
-//! Nor does a database file uniquely identify those two releases. The live
-//! primary-element and RefNo-index trees are `(7618377, 13387743)` in all 828
-//! files under the installed E3D 2.1 project and all 1002 files under the E3D
-//! 3.1 project. [`detect_project_version`] therefore takes the release marker
-//! from the project path (`E3D2.1`, `Everything3D2.10`, `E3D3.1`, …), while
-//! [`detect_database_version`] uses the tree pair only to reject a file that
-//! is not compatible with the marked release. A copied database with no
-//! project marker is deliberately ambiguous rather than silently called 3.1.
+//! The tree identities do not distinguish 2.1 from 3.1 either: both measured
+//! corpora use `(7618377, 13387743)`. The binary writer does leave one usable
+//! discriminator. E3D 3.1's `core.dll` contains and writes sessions commented
+//! `Saving Meta Data.`; the 2.10 binary contains no such literal. Five
+//! databases in the installed 3.1 project carry those sessions, while none of
+//! 4,232 database extents in the 2.1 project does. [`detect_database_version`]
+//! reads that retained session chain, and [`detect_project_version`] takes the
+//! newest format evidenced by any primary database under the project root.
+//! Paths and directory names are never evidence.
+//!
+//! This deliberately detects the binary's minimum required schema, not the
+//! name of the product installation around it. Of 824 database paths shared
+//! by the two installed project trees, 816 have the same length and the
+//! sampled unchanged files are byte-for-byte identical. No algorithm can
+//! label identical bytes differently because one copy lives under a directory
+//! called `E3D3.1`. An untouched copy therefore remains 2.1-compatible; once
+//! 3.1 writes its metadata session, the binary promotes the project to the
+//! 3.1 pack.
 //!
 //! Keeping each release in its own directory under one root is what makes the
 //! mix hard to express in the first place:
@@ -47,7 +57,8 @@
 //! them.
 
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -99,6 +110,13 @@ pub const E3D31: E3dVersion = E3dVersion {
 
 /// Every release this crate can name.
 pub const KNOWN_VERSIONS: &[&E3dVersion] = &[&E3D210, &E3D31];
+
+/// Session comment written by E3D 3.1's binary metadata save.
+///
+/// The literal occurs in `Everything3D3.1/core.dll` and not in
+/// `Everything3D2.10/core.dll`. It was also censused across the installed
+/// project binaries: 0 hits in 2.1, 5 database hits in 3.1.
+pub const E3D31_BINARY_SESSION_MARKER: &str = "Saving Meta Data.";
 
 /// The release with this id, or `None` when the id names one that has not been
 /// measured.
@@ -183,36 +201,6 @@ pub enum SchemaError {
         known: String,
     },
 
-    #[error(
-        "{path}: database tree identity (main table {data_page_main}, RefNo index \
-         {data_page_index}) is shared by {candidates}; the release cannot be \
-         inferred from a copied database alone—use its versioned project path \
-         or choose a schema pack explicitly"
-    )]
-    AmbiguousDatabaseVersion {
-        path: PathBuf,
-        data_page_main: u32,
-        data_page_index: u32,
-        candidates: String,
-    },
-
-    #[error(
-        "{path}: the project path identifies {version}, but the database has \
-         tree identity (main table {data_page_main}, RefNo index \
-         {data_page_index}); expected ({expected_main}, {expected_index})"
-    )]
-    ProjectVersionMismatch {
-        path: PathBuf,
-        version: &'static str,
-        data_page_main: u32,
-        data_page_index: u32,
-        expected_main: u32,
-        expected_index: u32,
-    },
-
-    #[error("{path}: conflicting E3D release markers occur in the path: {markers}")]
-    ConflictingProjectVersions { path: PathBuf, markers: String },
-
     #[error("read project directory {path}: {source}")]
     ProjectRead {
         path: PathBuf,
@@ -221,8 +209,8 @@ pub enum SchemaError {
     },
 
     #[error(
-        "{root}: no readable primary database extent identified the E3D release \
-         ({candidates} *_0001 candidates checked{detail})"
+        "{root}: no readable primary database binary identified the E3D release \
+         ({candidates} candidates checked{detail})"
     )]
     ProjectVersionNotDetected {
         root: PathBuf,
@@ -231,12 +219,13 @@ pub enum SchemaError {
     },
 }
 
-/// Detect the E3D release of one Dabacon database in its project path.
+/// Detect the minimum E3D schema required by one Dabacon database binary.
 ///
-/// The project path supplies the release marker and the selected session's
-/// primary-element / RefNo-index pair validates that the database belongs to
-/// the expected format family. When no path component identifies a release,
-/// a pair shared by several releases is an ambiguity error.
+/// The selected session's primary-element / RefNo-index pair first validates
+/// the database family. The retained session chain then supplies the version
+/// evidence: a `Saving Meta Data.` session can only have been written by 3.1.
+/// Without that evidence the bytes remain 2.1-compatible, regardless of the
+/// directory in which somebody placed the file.
 pub fn detect_database_version(
     database: impl AsRef<Path>,
 ) -> Result<&'static E3dVersion, SchemaError> {
@@ -245,92 +234,52 @@ pub fn detect_database_version(
         path: path.to_path_buf(),
         source,
     })?;
+    detect_database_version_in_view(path, &mut view)
+}
+
+fn detect_database_version_in_view(
+    path: &Path,
+    view: &mut DbView,
+) -> Result<&'static E3dVersion, SchemaError> {
     let main_root = view.session().claim;
     let index_root = view.session().index_root;
-    let data_page_main = table_identity(&mut view, path, main_root, "primary-element table")?;
-    let data_page_index = table_identity(&mut view, path, index_root, "RefNo index")?;
+    let data_page_main = table_identity(view, path, main_root, "primary-element table")?;
+    let data_page_index = table_identity(view, path, index_root, "RefNo index")?;
 
-    if let Some(version) = version_from_project_path(path)? {
-        if version.data_page_main == data_page_main && version.data_page_index == data_page_index {
-            return Ok(version);
-        }
-        return Err(SchemaError::ProjectVersionMismatch {
-            path: path.to_path_buf(),
-            version: version.id,
-            data_page_main,
-            data_page_index,
-            expected_main: version.data_page_main,
-            expected_index: version.data_page_index,
-        });
-    }
-
-    let matching_versions = KNOWN_VERSIONS
-        .iter()
-        .copied()
-        .filter(|version| {
-            version.data_page_main == data_page_main && version.data_page_index == data_page_index
-        })
-        .collect::<Vec<_>>();
-    match matching_versions.as_slice() {
-        [version] => Ok(version),
-        [] => Err(SchemaError::UnknownDatabaseVersion {
+    if !KNOWN_VERSIONS.iter().any(|version| {
+        version.data_page_main == data_page_main && version.data_page_index == data_page_index
+    }) {
+        return Err(SchemaError::UnknownDatabaseVersion {
             path: path.to_path_buf(),
             data_page_main,
             data_page_index,
             known: known_version_pairs(),
-        }),
-        _ => Err(SchemaError::AmbiguousDatabaseVersion {
+        });
+    }
+
+    let sessions = view
+        .walk_sessions()
+        .map_err(|source| SchemaError::DatabaseRead {
             path: path.to_path_buf(),
-            data_page_main,
-            data_page_index,
-            candidates: matching_versions
-                .iter()
-                .map(|version| version.id)
-                .collect::<Vec<_>>()
-                .join(", "),
-        }),
+            source,
+        })?;
+    if sessions
+        .iter()
+        .any(|session| session.comment == E3D31_BINARY_SESSION_MARKER)
+    {
+        Ok(&E3D31)
+    } else {
+        Ok(&E3D210)
     }
 }
 
-/// Read an E3D release marker from a project path.
+/// Detect the highest binary schema evidenced by a project tree.
 ///
-/// Release-bound schema is a project/install property, not a database-header
-/// property. AVEVA's standard project roots and installation directories name
-/// it (`E3D2.1`, `Everything3D2.10`, `E3D3.1`); suffixed roots such as
-/// `E3D3.1-slyk-project` are accepted. Multiple different markers in one path
-/// are refused.
-pub fn version_from_project_path(
-    project_path: impl AsRef<Path>,
-) -> Result<Option<&'static E3dVersion>, SchemaError> {
-    let path = project_path.as_ref();
-    let mut found = None;
-    let mut markers = Vec::new();
-    for component in path.components() {
-        let Some(component) = component.as_os_str().to_str() else {
-            continue;
-        };
-        let Some(version) = version_from_component(component) else {
-            continue;
-        };
-        markers.push(format!("{component}={}", version.id));
-        if found.is_some_and(|existing: &E3dVersion| existing.id != version.id) {
-            return Err(SchemaError::ConflictingProjectVersions {
-                path: path.to_path_buf(),
-                markers: markers.join(", "),
-            });
-        }
-        found = Some(version);
-    }
-    Ok(found)
-}
-
-/// Detect a project root from its release-bearing path, falling back to a
-/// readable primary database extent only when that extent has a unique tree
-/// signature.
-///
-/// The fallback is intentionally unable to choose between 2.1 and 3.1 today:
-/// their measured database signatures are identical. It remains useful when a
-/// later release has a unique pair.
+/// Every primary Dabacon file is inspected, with SYST databases first. A
+/// single 3.1 metadata session promotes the whole project to the 3.1 pack so a
+/// mixed upgraded project reads new records with the newer schema. If every
+/// retained chain is 2.1-compatible, the 2.1 pack is selected. Directory names
+/// and filesystem timestamps do not participate.
 pub fn detect_project_version(
     project_root: impl AsRef<Path>,
 ) -> Result<&'static E3dVersion, SchemaError> {
@@ -338,13 +287,9 @@ pub fn detect_project_version(
     if root.is_file() {
         return detect_database_version(root);
     }
-    if let Some(version) = version_from_project_path(root)? {
-        return Ok(version);
-    }
 
     let mut directories = vec![root.to_path_buf()];
-    let mut candidates = 0usize;
-    let mut first_failure = None;
+    let mut candidates = Vec::new();
     while let Some(directory) = directories.pop() {
         let mut entries = fs::read_dir(&directory)
             .map_err(|source| SchemaError::ProjectRead {
@@ -370,30 +315,45 @@ pub fn detect_project_version(
                 children.push(entry.path());
                 continue;
             }
-            if !file_type.is_file() || !is_primary_extent(&entry.path()) {
+            if !file_type.is_file() {
                 continue;
             }
-            candidates += 1;
-            match detect_database_version(entry.path()) {
-                Ok(version) => return Ok(version),
-                Err(
-                    error @ (SchemaError::UnknownDatabaseVersion { .. }
-                    | SchemaError::AmbiguousDatabaseVersion { .. }
-                    | SchemaError::ProjectVersionMismatch { .. }
-                    | SchemaError::ConflictingProjectVersions { .. }),
-                ) => return Err(error),
-                Err(error) => {
-                    first_failure.get_or_insert_with(|| error.to_string());
-                }
+            let path = entry.path();
+            if let Some(db_type) = primary_database_type(&path) {
+                candidates.push((db_type, path));
             }
         }
         // The stack pops from the end; reverse to preserve lexical traversal.
         directories.extend(children.into_iter().rev());
     }
 
+    let syst = e3d_attlib::db1_hash("SYST");
+    candidates.sort_by(|(left_type, left_path), (right_type, right_path)| {
+        (*left_type != syst)
+            .cmp(&(*right_type != syst))
+            .then_with(|| left_path.cmp(right_path))
+    });
+
+    let candidate_count = candidates.len();
+    let mut checked = 0usize;
+    let mut first_failure = None;
+    for (_, path) in candidates {
+        match detect_database_version(&path) {
+            Ok(version) if version == &E3D31 => return Ok(&E3D31),
+            Ok(_) => checked += 1,
+            Err(error @ SchemaError::UnknownDatabaseVersion { .. }) => return Err(error),
+            Err(error) => {
+                first_failure.get_or_insert_with(|| error.to_string());
+            }
+        }
+    }
+    if checked > 0 && first_failure.is_none() {
+        return Ok(&E3D210);
+    }
+
     Err(SchemaError::ProjectVersionNotDetected {
         root: root.to_path_buf(),
-        candidates,
+        candidates: candidate_count,
         detail: first_failure
             .map(|failure| format!("; first failure: {failure}"))
             .unwrap_or_default(),
@@ -437,50 +397,22 @@ fn table_identity(
     Ok(header.type_id)
 }
 
-fn is_primary_extent(path: &Path) -> bool {
-    path.extension().is_none()
-        && path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .and_then(|name| name.rsplit_once('_'))
-            .is_some_and(|(_, extent)| extent == "0001")
-}
-
-fn version_from_component(component: &str) -> Option<&'static E3dVersion> {
-    let component = component.to_ascii_lowercase();
-    const E3D210_ALIASES: &[&str] = &[
-        "everything3d2.10",
-        "everything3d2.1",
-        "e3d2.10",
-        "e3d2.1",
-        "e3d210",
-    ];
-    const E3D31_ALIASES: &[&str] = &["everything3d3.1", "e3d3.1", "e3d31"];
-
-    if E3D210_ALIASES
-        .iter()
-        .any(|alias| component_has_alias(&component, alias))
-    {
-        return Some(&E3D210);
+/// Read just enough of a file to decide whether it is a primary Dabacon
+/// database and, if so, return its database-type hash.
+///
+/// Project trees contain thousands of non-database files and secondary
+/// extents. Rejecting them from the first 60 bytes avoids opening a session
+/// chain merely to discover that the file was never a primary database.
+fn primary_database_type(path: &Path) -> Option<u32> {
+    const DESCRIPTOR_PREFIX: usize = 0x3C;
+    let mut file = File::open(path).ok()?;
+    let mut prefix = [0u8; DESCRIPTOR_PREFIX];
+    file.read_exact(&mut prefix).ok()?;
+    let descriptor = crate::meta::DbDescriptor::parse(&prefix).ok()?;
+    if descriptor.ext_no != 1 || descriptor.db_type_name().is_none() {
+        return None;
     }
-    if E3D31_ALIASES
-        .iter()
-        .any(|alias| component_has_alias(&component, alias))
-    {
-        return Some(&E3D31);
-    }
-    None
-}
-
-fn component_has_alias(component: &str, alias: &str) -> bool {
-    let Some(rest) = component.strip_prefix(alias) else {
-        return false;
-    };
-    rest.is_empty()
-        || rest
-            .chars()
-            .next()
-            .is_some_and(|separator| matches!(separator, '-' | '_' | ' ' | '(' | '[' | '{'))
+    Some(descriptor.db_type_hash)
 }
 
 fn known_version_pairs() -> String {
@@ -794,6 +726,7 @@ mod tests {
         relative: &str,
         main_identity: u32,
         index_identity: u32,
+        e3d31_metadata_session: bool,
     ) -> PathBuf {
         const WORDS: u32 = 64;
         const PAGE_BYTES: usize = WORDS as usize * 4;
@@ -808,6 +741,7 @@ mod tests {
         put(0, 0x2C, 1);
         put(0, 0x30, 2);
         put(0, 0x38, 16_192);
+        put(0, 0x20, e3d_attlib::db1_hash("DESI"));
         put(2, 0x00, 3);
         put(2, 0x04, u32::MAX);
         put(2, 0x08, 1);
@@ -820,6 +754,11 @@ mod tests {
         put(3, 0x04, main_identity);
         put(4, 0x00, 5);
         put(4, 0x04, index_identity);
+        if e3d31_metadata_session {
+            let marker = E3D31_BINARY_SESSION_MARKER.as_bytes();
+            put(2, 0xA0, marker.len().div_ceil(4) as u32);
+            pages[2][0xA4..0xA4 + marker.len()].copy_from_slice(marker);
+        }
 
         let mut file = fs::File::create(&path).unwrap();
         for page in pages {
@@ -830,36 +769,39 @@ mod tests {
     }
 
     #[test]
-    fn database_version_uses_project_marker_and_validates_both_tree_identities() {
+    fn database_version_comes_from_binary_session_evidence_not_its_path() {
         let dir = tempfile::tempdir().unwrap();
         let e3d210 = versioned_database(
             dir.path(),
-            "E3D2.1/AvevaMarineSample/ams000/ams8000_0001",
+            "directory-called-E3D3.1/ams8000_0001",
             E3D210.data_page_main,
             E3D210.data_page_index,
+            false,
         );
         let e3d31 = versioned_database(
             dir.path(),
-            "E3D3.1/AvevaMarineSample/ams000/ams8000_0001",
+            "directory-called-E3D2.1/ams1112_0001",
             E3D31.data_page_main,
             E3D31.data_page_index,
+            true,
         );
         assert_eq!(detect_database_version(e3d210).unwrap(), &E3D210);
         assert_eq!(detect_database_version(e3d31).unwrap(), &E3D31);
     }
 
     #[test]
-    fn a_path_marker_does_not_override_an_incompatible_database() {
+    fn an_incompatible_database_tree_pair_is_not_assigned_a_release() {
         let dir = tempfile::tempdir().unwrap();
         let database = versioned_database(
             dir.path(),
-            "E3D2.1/ams000/ams8000_0001",
+            "ams000/ams8000_0001",
             E3D210.data_page_main,
             99,
+            false,
         );
         assert!(matches!(
             detect_database_version(database),
-            Err(SchemaError::ProjectVersionMismatch {
+            Err(SchemaError::UnknownDatabaseVersion {
                 data_page_main: 7_618_377,
                 data_page_index: 99,
                 ..
@@ -868,54 +810,36 @@ mod tests {
     }
 
     #[test]
-    fn a_copied_database_without_project_context_is_ambiguous() {
+    fn project_detection_uses_the_highest_binary_evidence_any_file_carries() {
         let dir = tempfile::tempdir().unwrap();
-        let database = versioned_database(
+        versioned_database(
             dir.path(),
-            "copy/ams000/ams8000_0001",
+            "old/ams8000_0001",
             E3D210.data_page_main,
             E3D210.data_page_index,
+            false,
         );
-        assert!(matches!(
-            detect_database_version(database),
-            Err(SchemaError::AmbiguousDatabaseVersion { .. })
-        ));
+        versioned_database(
+            dir.path(),
+            "new/ams1112_0001",
+            E3D31.data_page_main,
+            E3D31.data_page_index,
+            true,
+        );
+        assert_eq!(detect_project_version(dir.path()).unwrap(), &E3D31);
     }
 
     #[test]
-    fn project_path_markers_cover_installed_and_suffixed_roots() {
-        assert_eq!(
-            version_from_project_path("D:/AVEVA/Projects/E3D2.1/AvevaMarineSample").unwrap(),
-            Some(&E3D210)
-        );
-        assert_eq!(
-            version_from_project_path("D:/AVEVA/Everything3D2.10").unwrap(),
-            Some(&E3D210)
-        );
-        assert_eq!(
-            version_from_project_path("D:/AVEVA/Projects/E3D3.1-slyk-project").unwrap(),
-            Some(&E3D31)
-        );
-        assert_eq!(
-            version_from_project_path("D:/projects/plant").unwrap(),
-            None
-        );
-    }
-
-    #[test]
-    fn conflicting_project_markers_are_refused() {
-        assert!(matches!(
-            version_from_project_path("D:/E3D2.1/E3D3.1/project"),
-            Err(SchemaError::ConflictingProjectVersions { .. })
-        ));
-    }
-
-    #[test]
-    fn project_detection_prefers_the_release_marker() {
+    fn an_all_legacy_binary_project_selects_the_2_10_pack() {
         let dir = tempfile::tempdir().unwrap();
-        let project = dir.path().join("E3D2.1/AvevaMarineSample");
-        fs::create_dir_all(&project).unwrap();
-        assert_eq!(detect_project_version(project).unwrap(), &E3D210);
+        versioned_database(
+            dir.path(),
+            "project/ams8000_0001",
+            E3D210.data_page_main,
+            E3D210.data_page_index,
+            false,
+        );
+        assert_eq!(detect_project_version(dir.path()).unwrap(), &E3D210);
     }
 
     /// The shipped 3.1 pack must not send anyone to a path only one machine

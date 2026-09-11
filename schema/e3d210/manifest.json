@@ -3,7 +3,7 @@
   "version": {
     "id": "e3d210",
     "display": "AVEVA Everything3D 2.1 (2.10)",
-    "note": "Selected by the E3D2.1/Everything3D2.10 project-path marker; the shared live tree pair validates the database family."
+    "note": "Selected when retained database sessions contain no E3D 3.1 binary metadata marker; the shared live tree pair validates the database family."
   },
   "constants": {
     "comment": "Declared here for the record. The read path uses e3d_io::schema::E3D210.",

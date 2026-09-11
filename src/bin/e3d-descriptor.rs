@@ -1616,9 +1616,9 @@ fn required<'a>(options: &'a HashMap<String, String>, name: &str) -> Result<&'a 
 ///
 /// `--schema PATH` opens that pack directly; `--schema-root PATH
 /// --e3d-version ID` opens `PATH/ID`. For a database-reading descriptor
-/// command, `--schema-root PATH` without a version reads the release marker
-/// from the database's project path and validates its tree identities; with
-/// neither flag, the same detection uses this build's bundled schema root.
+/// command, `--schema-root PATH` without a version reads the database binary's
+/// retained session evidence and validates its tree identities; with neither
+/// flag, the same detection uses this build's bundled schema root.
 ///
 /// An explicit flag always wins, so a one-off file needs no pack edit. Only
 /// the files the pack actually has are filled in: a pack that carries no
@@ -2210,7 +2210,7 @@ fn layout_name(layout: StorageLayout) -> &'static str {
 }
 
 fn usage() -> String {
-    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR [--e3d-version ID]]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; extract\n  commands select the bundled pack from the database's versioned project path when\n  none is named. An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
+    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR [--e3d-version ID]]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; extract\n  commands select the bundled pack from retained database-session binary evidence when\n  none is named. An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
         .into()
 }
 
