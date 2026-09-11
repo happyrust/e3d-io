@@ -1,11 +1,11 @@
-/// E3D 3.1 magic constants recovered from IDA decompile.
+/// Dabacon constants recovered from the E3D 3.1 IDA decompile and checked
+/// against the installed E3D 2.1 and 3.1 project corpora.
 ///
-/// WARNING: These values are specific to E3D 3.1.
-/// E3D 2.10 uses different values (e.g. 7618321 instead of 7618377).
-///
-/// The release-bound ones are also carried on [`crate::schema::E3D31`], which
-/// is where a second release would add its own; the values live here so the
-/// read path can reach them without a schema pack being open.
+/// These tree identities do **not** distinguish E3D 2.1 from 3.1: all 828
+/// primary extents under the installed 2.1 project and all 1002 under the 3.1
+/// project use the same pair. Release selection belongs to
+/// [`crate::schema`]; the values live here because the structural read path
+/// validates the RefNo index without opening a schema pack.
 
 /// The tree identity `sub_5AFB660` checks a type-5 page's second word
 /// against.

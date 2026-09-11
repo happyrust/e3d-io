@@ -3,11 +3,20 @@
 //! Three kinds of input are release-bound and **none of them states its own
 //! release**: an installation's `*vir.dat` descriptor files, its `attlib.dat`,
 //! and the live catalog export taken beside them. Mixing two releases is
-//! therefore silent. `desvir.dat` from one and `attlib.dat` from another both
-//! parse; the descriptors decide the word offsets, so the result is plausible
-//! numbers read out of the wrong words rather than an error. The reader has no
-//! way to notice — `TemplateFile` checks `template_type`, which says `DESI`,
-//! not `3.1`.
+//! therefore silent if those paths are supplied independently. `desvir.dat`
+//! from one and `attlib.dat` from another both parse; the descriptors decide
+//! the word offsets, so the result is plausible numbers read out of the wrong
+//! words rather than an error. `TemplateFile` checks `template_type`, which
+//! says `DESI`, not `3.1`.
+//!
+//! Nor does a database file uniquely identify those two releases. The live
+//! primary-element and RefNo-index trees are `(7618377, 13387743)` in all 828
+//! files under the installed E3D 2.1 project and all 1002 files under the E3D
+//! 3.1 project. [`detect_project_version`] therefore takes the release marker
+//! from the project path (`E3D2.1`, `Everything3D2.10`, `E3D3.1`, …), while
+//! [`detect_database_version`] uses the tree pair only to reject a file that
+//! is not compatible with the marked release. A copied database with no
+//! project marker is deliberately ambiguous rather than silently called 3.1.
 //!
 //! Keeping each release in its own directory under one root is what makes the
 //! mix hard to express in the first place:
@@ -21,11 +30,11 @@
 //!     metadata/         compiled parser_metadata.v1.json
 //! ```
 //!
-//! A pack is meant to carry its own binaries — the 3.1 pack holds all 20
-//! `*vir.dat` and `attlib.dat` — so that naming the pack names everything.
-//! They are AVEVA installation files and cannot be redistributed, so
-//! `binaries/` is git-ignored and a fresh clone finds it empty; that is why
-//! [`SchemaPack`] searches for each file rather than assuming it is there.
+//! A pack is meant to carry its own binaries — both supported packs hold all
+//! 20 `*vir.dat` and `attlib.dat` — so that naming the pack names everything.
+//! They are licensed AVEVA installation files; keep the repository within the
+//! licensed parties. [`SchemaPack`] still searches because another machine
+//! may intentionally point a pack at its own installation.
 //!
 //! 1. the environment variable the manifest names in `binaries.root_env`,
 //! 2. `<pack>/binaries/`,
@@ -38,16 +47,20 @@
 //! them.
 
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-/// Magic numbers that change between E3D releases.
+use crate::error::E3dReaderError;
+use crate::page::{PageHeader, PageId, PageType};
+use crate::session::DbView;
+
+/// One supported E3D release and the database-tree identities it accepts.
 ///
-/// These are the values `core.dll` compares against, so they belong to the
-/// binary that wrote a database rather than to the database. Everything else
-/// this crate reads — page size, session chain, descriptor geometry — is
-/// stated by the file itself and needs no entry here.
+/// The identities validate the database family; they are not necessarily
+/// unique release fingerprints. E3D 2.1 and 3.1 use the same pair in the
+/// installed project corpora.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct E3dVersion {
     /// Directory name of the pack, and the id a manifest declares.
@@ -60,8 +73,23 @@ pub struct E3dVersion {
     pub data_page_index: u32,
 }
 
-/// AVEVA Everything3D 3.1, the release every constant in this crate was
-/// recovered from.
+/// AVEVA Everything3D 2.1. The installation directory calls this release
+/// `Everything3D2.10`; existing project roots commonly call it `E3D2.1`.
+///
+/// The accepted pair was censused over all 828 primary extents under
+/// `D:/AVEVA/Projects/E3D2.1`: the selected session's `claim` root is
+/// `(5, 7618377)` and its RefNo index root is `(5, 13387743)` in every file.
+/// `7618321` exists in the 2.10 `core.dll`, but it is not the live `claim`
+/// identity of these databases and therefore cannot identify their release.
+pub const E3D210: E3dVersion = E3dVersion {
+    id: "e3d210",
+    display: "AVEVA Everything3D 2.1 (2.10)",
+    data_page_main: 7_618_377,
+    data_page_index: 13_387_743,
+};
+
+/// AVEVA Everything3D 3.1. The same pair was observed in all 1002 primary
+/// extents under `D:/AVEVA/Projects/E3D3.1`.
 pub const E3D31: E3dVersion = E3dVersion {
     id: "e3d31",
     display: "AVEVA Everything3D 3.1",
@@ -70,14 +98,7 @@ pub const E3D31: E3dVersion = E3dVersion {
 };
 
 /// Every release this crate can name.
-///
-/// E3D 2.10 is deliberately absent. Its `data_page_main` is known to be
-/// 7 618 321 rather than 7 618 377, but its index-tree identity has never been
-/// measured, and a release entry carrying one real number and one guessed one
-/// is worse than no entry: the guess would be indistinguishable from evidence
-/// at every call site. Add the release here once both words are read off a
-/// 2.10 file.
-pub const KNOWN_VERSIONS: &[&E3dVersion] = &[&E3D31];
+pub const KNOWN_VERSIONS: &[&E3dVersion] = &[&E3D210, &E3D31];
 
 /// The release with this id, or `None` when the id names one that has not been
 /// measured.
@@ -135,6 +156,344 @@ pub enum SchemaError {
 
     #[error("{pack} declares no template file for database type {db_type:?}")]
     NoSuchTemplate { pack: PathBuf, db_type: String },
+
+    #[error("open {path} to detect its E3D release: {source}")]
+    DatabaseRead {
+        path: PathBuf,
+        #[source]
+        source: E3dReaderError,
+    },
+
+    #[error("{path}: {role} root {page} is not a readable table page: {detail}")]
+    VersionProbe {
+        path: PathBuf,
+        role: &'static str,
+        page: PageId,
+        detail: String,
+    },
+
+    #[error(
+        "{path}: database release is unknown (main table {data_page_main}, \
+         RefNo index {data_page_index}); measured releases are {known}"
+    )]
+    UnknownDatabaseVersion {
+        path: PathBuf,
+        data_page_main: u32,
+        data_page_index: u32,
+        known: String,
+    },
+
+    #[error(
+        "{path}: database tree identity (main table {data_page_main}, RefNo index \
+         {data_page_index}) is shared by {candidates}; the release cannot be \
+         inferred from a copied database alone—use its versioned project path \
+         or choose a schema pack explicitly"
+    )]
+    AmbiguousDatabaseVersion {
+        path: PathBuf,
+        data_page_main: u32,
+        data_page_index: u32,
+        candidates: String,
+    },
+
+    #[error(
+        "{path}: the project path identifies {version}, but the database has \
+         tree identity (main table {data_page_main}, RefNo index \
+         {data_page_index}); expected ({expected_main}, {expected_index})"
+    )]
+    ProjectVersionMismatch {
+        path: PathBuf,
+        version: &'static str,
+        data_page_main: u32,
+        data_page_index: u32,
+        expected_main: u32,
+        expected_index: u32,
+    },
+
+    #[error("{path}: conflicting E3D release markers occur in the path: {markers}")]
+    ConflictingProjectVersions { path: PathBuf, markers: String },
+
+    #[error("read project directory {path}: {source}")]
+    ProjectRead {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error(
+        "{root}: no readable primary database extent identified the E3D release \
+         ({candidates} *_0001 candidates checked{detail})"
+    )]
+    ProjectVersionNotDetected {
+        root: PathBuf,
+        candidates: usize,
+        detail: String,
+    },
+}
+
+/// Detect the E3D release of one Dabacon database in its project path.
+///
+/// The project path supplies the release marker and the selected session's
+/// primary-element / RefNo-index pair validates that the database belongs to
+/// the expected format family. When no path component identifies a release,
+/// a pair shared by several releases is an ambiguity error.
+pub fn detect_database_version(
+    database: impl AsRef<Path>,
+) -> Result<&'static E3dVersion, SchemaError> {
+    let path = database.as_ref();
+    let mut view = DbView::open(path).map_err(|source| SchemaError::DatabaseRead {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let main_root = view.session().claim;
+    let index_root = view.session().index_root;
+    let data_page_main = table_identity(&mut view, path, main_root, "primary-element table")?;
+    let data_page_index = table_identity(&mut view, path, index_root, "RefNo index")?;
+
+    if let Some(version) = version_from_project_path(path)? {
+        if version.data_page_main == data_page_main && version.data_page_index == data_page_index {
+            return Ok(version);
+        }
+        return Err(SchemaError::ProjectVersionMismatch {
+            path: path.to_path_buf(),
+            version: version.id,
+            data_page_main,
+            data_page_index,
+            expected_main: version.data_page_main,
+            expected_index: version.data_page_index,
+        });
+    }
+
+    let matching_versions = KNOWN_VERSIONS
+        .iter()
+        .copied()
+        .filter(|version| {
+            version.data_page_main == data_page_main && version.data_page_index == data_page_index
+        })
+        .collect::<Vec<_>>();
+    match matching_versions.as_slice() {
+        [version] => Ok(version),
+        [] => Err(SchemaError::UnknownDatabaseVersion {
+            path: path.to_path_buf(),
+            data_page_main,
+            data_page_index,
+            known: known_version_pairs(),
+        }),
+        _ => Err(SchemaError::AmbiguousDatabaseVersion {
+            path: path.to_path_buf(),
+            data_page_main,
+            data_page_index,
+            candidates: matching_versions
+                .iter()
+                .map(|version| version.id)
+                .collect::<Vec<_>>()
+                .join(", "),
+        }),
+    }
+}
+
+/// Read an E3D release marker from a project path.
+///
+/// Release-bound schema is a project/install property, not a database-header
+/// property. AVEVA's standard project roots and installation directories name
+/// it (`E3D2.1`, `Everything3D2.10`, `E3D3.1`); suffixed roots such as
+/// `E3D3.1-slyk-project` are accepted. Multiple different markers in one path
+/// are refused.
+pub fn version_from_project_path(
+    project_path: impl AsRef<Path>,
+) -> Result<Option<&'static E3dVersion>, SchemaError> {
+    let path = project_path.as_ref();
+    let mut found = None;
+    let mut markers = Vec::new();
+    for component in path.components() {
+        let Some(component) = component.as_os_str().to_str() else {
+            continue;
+        };
+        let Some(version) = version_from_component(component) else {
+            continue;
+        };
+        markers.push(format!("{component}={}", version.id));
+        if found.is_some_and(|existing: &E3dVersion| existing.id != version.id) {
+            return Err(SchemaError::ConflictingProjectVersions {
+                path: path.to_path_buf(),
+                markers: markers.join(", "),
+            });
+        }
+        found = Some(version);
+    }
+    Ok(found)
+}
+
+/// Detect a project root from its release-bearing path, falling back to a
+/// readable primary database extent only when that extent has a unique tree
+/// signature.
+///
+/// The fallback is intentionally unable to choose between 2.1 and 3.1 today:
+/// their measured database signatures are identical. It remains useful when a
+/// later release has a unique pair.
+pub fn detect_project_version(
+    project_root: impl AsRef<Path>,
+) -> Result<&'static E3dVersion, SchemaError> {
+    let root = project_root.as_ref();
+    if root.is_file() {
+        return detect_database_version(root);
+    }
+    if let Some(version) = version_from_project_path(root)? {
+        return Ok(version);
+    }
+
+    let mut directories = vec![root.to_path_buf()];
+    let mut candidates = 0usize;
+    let mut first_failure = None;
+    while let Some(directory) = directories.pop() {
+        let mut entries = fs::read_dir(&directory)
+            .map_err(|source| SchemaError::ProjectRead {
+                path: directory.clone(),
+                source,
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|source| SchemaError::ProjectRead {
+                path: directory.clone(),
+                source,
+            })?;
+        entries.sort_by_key(|entry| entry.file_name());
+
+        let mut children = Vec::new();
+        for entry in entries {
+            let file_type = entry
+                .file_type()
+                .map_err(|source| SchemaError::ProjectRead {
+                    path: entry.path(),
+                    source,
+                })?;
+            if file_type.is_dir() {
+                children.push(entry.path());
+                continue;
+            }
+            if !file_type.is_file() || !is_primary_extent(&entry.path()) {
+                continue;
+            }
+            candidates += 1;
+            match detect_database_version(entry.path()) {
+                Ok(version) => return Ok(version),
+                Err(
+                    error @ (SchemaError::UnknownDatabaseVersion { .. }
+                    | SchemaError::AmbiguousDatabaseVersion { .. }
+                    | SchemaError::ProjectVersionMismatch { .. }
+                    | SchemaError::ConflictingProjectVersions { .. }),
+                ) => return Err(error),
+                Err(error) => {
+                    first_failure.get_or_insert_with(|| error.to_string());
+                }
+            }
+        }
+        // The stack pops from the end; reverse to preserve lexical traversal.
+        directories.extend(children.into_iter().rev());
+    }
+
+    Err(SchemaError::ProjectVersionNotDetected {
+        root: root.to_path_buf(),
+        candidates,
+        detail: first_failure
+            .map(|failure| format!("; first failure: {failure}"))
+            .unwrap_or_default(),
+    })
+}
+
+/// The schema root carried by this checkout/build.
+pub fn bundled_schema_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("schema")
+}
+
+fn table_identity(
+    view: &mut DbView,
+    path: &Path,
+    page: PageId,
+    role: &'static str,
+) -> Result<u32, SchemaError> {
+    let bytes = view
+        .pages_mut()
+        .get(page)
+        .map_err(|error| SchemaError::VersionProbe {
+            path: path.to_path_buf(),
+            role,
+            page,
+            detail: error.to_string(),
+        })?;
+    let header = PageHeader::parse(bytes).ok_or_else(|| SchemaError::VersionProbe {
+        path: path.to_path_buf(),
+        role,
+        page,
+        detail: "page is too short for a page header".to_string(),
+    })?;
+    if header.page_type != PageType::Tree {
+        return Err(SchemaError::VersionProbe {
+            path: path.to_path_buf(),
+            role,
+            page,
+            detail: format!("page type is {:?}, expected Tree (5)", header.page_type),
+        });
+    }
+    Ok(header.type_id)
+}
+
+fn is_primary_extent(path: &Path) -> bool {
+    path.extension().is_none()
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.rsplit_once('_'))
+            .is_some_and(|(_, extent)| extent == "0001")
+}
+
+fn version_from_component(component: &str) -> Option<&'static E3dVersion> {
+    let component = component.to_ascii_lowercase();
+    const E3D210_ALIASES: &[&str] = &[
+        "everything3d2.10",
+        "everything3d2.1",
+        "e3d2.10",
+        "e3d2.1",
+        "e3d210",
+    ];
+    const E3D31_ALIASES: &[&str] = &["everything3d3.1", "e3d3.1", "e3d31"];
+
+    if E3D210_ALIASES
+        .iter()
+        .any(|alias| component_has_alias(&component, alias))
+    {
+        return Some(&E3D210);
+    }
+    if E3D31_ALIASES
+        .iter()
+        .any(|alias| component_has_alias(&component, alias))
+    {
+        return Some(&E3D31);
+    }
+    None
+}
+
+fn component_has_alias(component: &str, alias: &str) -> bool {
+    let Some(rest) = component.strip_prefix(alias) else {
+        return false;
+    };
+    rest.is_empty()
+        || rest
+            .chars()
+            .next()
+            .is_some_and(|separator| matches!(separator, '-' | '_' | ' ' | '(' | '[' | '{'))
+}
+
+fn known_version_pairs() -> String {
+    KNOWN_VERSIONS
+        .iter()
+        .map(|version| {
+            format!(
+                "{}=({},{})",
+                version.id, version.data_page_main, version.data_page_index
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// One release's schema files, resolved from a pack directory.
@@ -215,6 +574,26 @@ impl SchemaPack {
         version_id: &str,
     ) -> Result<Self, SchemaError> {
         Self::open(schema_root.as_ref().join(version_id))
+    }
+
+    /// Detect one database's release and open the matching pack below
+    /// `schema_root`.
+    pub fn detect_for_database(
+        schema_root: impl AsRef<Path>,
+        database: impl AsRef<Path>,
+    ) -> Result<Self, SchemaError> {
+        let version = detect_database_version(database)?;
+        Self::open_version(schema_root, version.id)
+    }
+
+    /// Detect a project root's release and open the matching pack below
+    /// `schema_root`.
+    pub fn detect_for_project(
+        schema_root: impl AsRef<Path>,
+        project_root: impl AsRef<Path>,
+    ) -> Result<Self, SchemaError> {
+        let version = detect_project_version(project_root)?;
+        Self::open_version(schema_root, version.id)
     }
 
     pub fn root(&self) -> &Path {
@@ -328,6 +707,7 @@ fn string_map(value: &Value, path: &[&str]) -> BTreeMap<String, String> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::Write;
 
     fn pack(manifest: &str) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -391,21 +771,151 @@ mod tests {
         assert!(error.to_string().contains("CATA"), "{error}");
     }
 
-    /// An unmeasured release is refused by name rather than falling back to
-    /// 3.1's constants, which is the failure this module exists to prevent.
+    /// An unmeasured release is refused by name rather than falling back to a
+    /// measured release, which is the failure this module exists to prevent.
     #[test]
     fn an_unknown_release_is_refused_and_lists_the_known_ones() {
         let dir = pack(
             r#"{
             "schema": "e3d-io-schema-pack/v1",
-            "version": { "id": "e3d210" },
+            "version": { "id": "e3d99" },
             "binaries": { "attlib": "attlib.dat" }
         }"#,
         );
         let error = SchemaPack::open(dir.path()).unwrap_err();
         let message = error.to_string();
+        assert!(message.contains("e3d99"), "{message}");
         assert!(message.contains("e3d210"), "{message}");
         assert!(message.contains("e3d31"), "{message}");
+    }
+
+    fn versioned_database(
+        root: &Path,
+        relative: &str,
+        main_identity: u32,
+        index_identity: u32,
+    ) -> PathBuf {
+        const WORDS: u32 = 64;
+        const PAGE_BYTES: usize = WORDS as usize * 4;
+        let path = root.join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut pages = vec![vec![0u8; PAGE_BYTES]; 5];
+        let mut put = |page: usize, at: usize, value: u32| {
+            pages[page][at..at + 4].copy_from_slice(&value.to_be_bytes());
+        };
+        put(0, 0x34, WORDS);
+        put(0, 0x28, 2);
+        put(0, 0x2C, 1);
+        put(0, 0x30, 2);
+        put(0, 0x38, 16_192);
+        put(2, 0x00, 3);
+        put(2, 0x04, u32::MAX);
+        put(2, 0x08, 1);
+        put(2, 0x0C, 1);
+        put(2, 0x1C, 4);
+        put(2, 0x20, 1);
+        put(2, 0x24, 3);
+        put(2, 0x28, 1);
+        put(3, 0x00, 5);
+        put(3, 0x04, main_identity);
+        put(4, 0x00, 5);
+        put(4, 0x04, index_identity);
+
+        let mut file = fs::File::create(&path).unwrap();
+        for page in pages {
+            file.write_all(&page).unwrap();
+        }
+        file.flush().unwrap();
+        path
+    }
+
+    #[test]
+    fn database_version_uses_project_marker_and_validates_both_tree_identities() {
+        let dir = tempfile::tempdir().unwrap();
+        let e3d210 = versioned_database(
+            dir.path(),
+            "E3D2.1/AvevaMarineSample/ams000/ams8000_0001",
+            E3D210.data_page_main,
+            E3D210.data_page_index,
+        );
+        let e3d31 = versioned_database(
+            dir.path(),
+            "E3D3.1/AvevaMarineSample/ams000/ams8000_0001",
+            E3D31.data_page_main,
+            E3D31.data_page_index,
+        );
+        assert_eq!(detect_database_version(e3d210).unwrap(), &E3D210);
+        assert_eq!(detect_database_version(e3d31).unwrap(), &E3D31);
+    }
+
+    #[test]
+    fn a_path_marker_does_not_override_an_incompatible_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let database = versioned_database(
+            dir.path(),
+            "E3D2.1/ams000/ams8000_0001",
+            E3D210.data_page_main,
+            99,
+        );
+        assert!(matches!(
+            detect_database_version(database),
+            Err(SchemaError::ProjectVersionMismatch {
+                data_page_main: 7_618_377,
+                data_page_index: 99,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_copied_database_without_project_context_is_ambiguous() {
+        let dir = tempfile::tempdir().unwrap();
+        let database = versioned_database(
+            dir.path(),
+            "copy/ams000/ams8000_0001",
+            E3D210.data_page_main,
+            E3D210.data_page_index,
+        );
+        assert!(matches!(
+            detect_database_version(database),
+            Err(SchemaError::AmbiguousDatabaseVersion { .. })
+        ));
+    }
+
+    #[test]
+    fn project_path_markers_cover_installed_and_suffixed_roots() {
+        assert_eq!(
+            version_from_project_path("D:/AVEVA/Projects/E3D2.1/AvevaMarineSample").unwrap(),
+            Some(&E3D210)
+        );
+        assert_eq!(
+            version_from_project_path("D:/AVEVA/Everything3D2.10").unwrap(),
+            Some(&E3D210)
+        );
+        assert_eq!(
+            version_from_project_path("D:/AVEVA/Projects/E3D3.1-slyk-project").unwrap(),
+            Some(&E3D31)
+        );
+        assert_eq!(
+            version_from_project_path("D:/projects/plant").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn conflicting_project_markers_are_refused() {
+        assert!(matches!(
+            version_from_project_path("D:/E3D2.1/E3D3.1/project"),
+            Err(SchemaError::ConflictingProjectVersions { .. })
+        ));
+    }
+
+    #[test]
+    fn project_detection_prefers_the_release_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("E3D2.1/AvevaMarineSample");
+        fs::create_dir_all(&project).unwrap();
+        assert_eq!(detect_project_version(project).unwrap(), &E3D210);
     }
 
     /// The shipped 3.1 pack must not send anyone to a path only one machine
@@ -426,6 +936,44 @@ mod tests {
             pack.binary_candidates("desvir.dat").last().unwrap(),
             &root.join("binaries").join("desvir.dat")
         );
+    }
+
+    #[test]
+    fn shipped_pack_manifests_repeat_the_measured_tree_identities() {
+        let schema_root = bundled_schema_root();
+        for version in KNOWN_VERSIONS {
+            let manifest_path = schema_root.join(version.id).join(MANIFEST_FILE);
+            let manifest: Value =
+                serde_json::from_str(&fs::read_to_string(&manifest_path).unwrap()).unwrap();
+            assert_eq!(
+                manifest["constants"]["data_page_main"].as_u64(),
+                Some(u64::from(version.data_page_main)),
+                "{}",
+                manifest_path.display()
+            );
+            assert_eq!(
+                manifest["constants"]["data_page_index"].as_u64(),
+                Some(u64::from(version.data_page_index)),
+                "{}",
+                manifest_path.display()
+            );
+        }
+    }
+
+    #[test]
+    fn shipped_packs_carry_the_schema_files_used_by_gen_model() {
+        let schema_root = bundled_schema_root();
+        for version in KNOWN_VERSIONS {
+            let pack = SchemaPack::open_version(&schema_root, version.id).unwrap();
+            assert!(pack.attlib().unwrap().is_file(), "{}", version.id);
+            for db_type in ["DESI", "CATA", "DICT"] {
+                assert!(
+                    pack.template(db_type).unwrap().is_file(),
+                    "{} {db_type}",
+                    version.id
+                );
+            }
+        }
     }
 
     #[test]

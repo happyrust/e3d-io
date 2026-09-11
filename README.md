@@ -1,6 +1,8 @@
 # e3d-io
 
-Standalone read-only IO library for AVEVA E3D 3.1 (`Everything3D 3.1`) database files. Provides page-level access, B+tree index search, element-record decoding, and a high-level attribute resolver.
+Standalone read-only IO library for AVEVA E3D 2.1 (`Everything3D 2.10`) and
+E3D 3.1 database files. Provides page-level access, B+tree index search,
+element-record decoding, and a high-level attribute resolver.
 
 Reverse-engineered from `core.dll` via IDA Pro; all field offsets and constants in this crate cite IDA evidence in the parent IDA exports / docs (see [`pdms-io-fork-engine-v2/ida_exports/3.1/`](https://github.com/) and `docs/ida-3.1-{structures,attributes}.md` in the goals repo).
 
@@ -69,7 +71,8 @@ Everything bound to an E3D release — the installation's `*vir.dat` and
 `schema/<release>/`. None of those files states its own release, so mixing two
 is silent: the descriptors decide the word offsets, and the wrong ones read
 plausible numbers out of the wrong words. One directory per release is what
-makes the mix hard to express.
+makes the mix hard to express. E3D 2.10 (`e3d210`) and E3D 3.1 (`e3d31`) are
+currently measured and bundled.
 
 Every command accepts a pack in place of the individual path flags:
 
@@ -77,16 +80,27 @@ Every command accepts a pack in place of the individual path flags:
 e3d-descriptor describe --schema schema\e3d31 --noun BRAN
 ```
 
+Database-reading descriptor commands select it automatically when the database
+is still under a version-bearing project path:
+
+```powershell
+e3d-descriptor extract --db D:\...\ams8000_0001 --refno 24384/46
+```
+
+Standard path components such as `E3D2.1`, `Everything3D2.10`, and `E3D3.1`
+select the release. The live session's primary-element/index tree pair then
+validates the database family. That pair is `(7618377, 13387743)` in both
+installed corpora, so a copied database outside its project is ambiguous and
+must use `--schema` or `--e3d-version`; it is never guessed as 3.1.
+
 That fills `--desvir`, `--attlib`, `--dicvir`, `--catalog-layout` and
-`--catalog-fields`; an explicit flag still wins. The 3.1 pack carries its own
-copies of the 20 `*vir.dat` and `attlib.dat` in `schema\e3d31\binaries\`, and
-they are committed, so the line above needs no AVEVA installation and no
-environment variable — only the sibling checkout named under Building. They
-are AVEVA installation files: do not publish this repository outside the
-parties already licensed for that installation. A machine that wants its own
-installation instead points `$E3D31_SCHEMA_DIR` at it — the pack looks in that
-variable first, then `schema\e3d31\binaries\`, then a `binaries.root` its
-manifest records, and names every place it looked when it finds none.
+`--catalog-fields`; an explicit flag still wins. Both packs carry their own
+licensed binaries. Do not publish this repository outside the parties already
+licensed for those installations. A machine that wants its own installation
+instead points `$E3D210_SCHEMA_DIR` or `$E3D31_SCHEMA_DIR` at it — the pack
+looks in that variable first, then its own `binaries\`, then a
+`binaries.root` its manifest records, and names every place it looked when it
+finds none.
 `schema/README.md` covers adding a release; `e3d_io::SchemaPack` is the same
 resolution from Rust.
 
@@ -169,7 +183,10 @@ Every descriptor produces a row, so nothing is dropped silently. On
 
 ## Byte-order convention
 
-E3D 3.1 database files use **big-endian** byte order (Fortran legacy). `f64` values use **Fortran word-swap** storage: two big-endian 32-bit words in `(lo, hi)` order rather than standard IEEE 754 BE. See `record::attrs::read_f64` for the implementation.
+Supported E3D 2.1/3.1 database files use **big-endian** byte order (Fortran
+legacy). `f64` values use **Fortran word-swap** storage: two big-endian 32-bit
+words in `(lo, hi)` order rather than standard IEEE 754 BE. See
+`record::attrs::read_f64` for the implementation.
 
 ## License
 

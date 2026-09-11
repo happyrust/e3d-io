@@ -2,7 +2,7 @@
 name = "e3d-io"
 version = "0.1.0"
 edition = "2021"
-description = "Standalone read-only IO library for E3D 3.1 database files (renamed from e3d-reader 2026-05-11)"
+description = "Standalone read-only IO library for version-detected AVEVA E3D database files"
 
 [dependencies]
 thiserror = "2"

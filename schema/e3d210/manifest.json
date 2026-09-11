@@ -1,0 +1,23 @@
+{
+  "schema": "e3d-io-schema-pack/v1",
+  "version": {
+    "id": "e3d210",
+    "display": "AVEVA Everything3D 2.1 (2.10)",
+    "note": "Selected by the E3D2.1/Everything3D2.10 project-path marker; the shared live tree pair validates the database family."
+  },
+  "constants": {
+    "comment": "Declared here for the record. The read path uses e3d_io::schema::E3D210.",
+    "data_page_main": 7618377,
+    "data_page_index": 13387743
+  },
+  "binaries": {
+    "comment": "The checked-in copies come from the licensed Everything3D2.10 installation. E3D210_SCHEMA_DIR may point at another installation.",
+    "root_env": "E3D210_SCHEMA_DIR",
+    "attlib": "attlib.dat",
+    "templates": {
+      "DESI": "desvir.dat",
+      "CATA": "catvir.dat",
+      "DICT": "dicvir.dat"
+    }
+  }
+}

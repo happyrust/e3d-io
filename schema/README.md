@@ -5,6 +5,9 @@ inside it, so a reader is given one pack and cannot silently combine two.
 
 ```text
 schema/
+  e3d210/
+    manifest.json
+    binaries/
   e3d31/
     manifest.json     release identity, magic constants, and the file map
     binaries/         desvir.dat, attlib.dat, dicvir.dat, … (committed, see below)
@@ -40,12 +43,34 @@ e3d31`) fills in `--desvir`, `--attlib`, `--dicvir`, `--catalog-layout` and
 `--catalog-fields`. An explicit flag always wins over the pack, so a one-off
 file needs no pack edit.
 
+Commands that read element descriptors (`extract`, `extract-complete` and
+`list-uda`) can omit the schema flags when the database remains under a
+version-bearing project path. A component such as `E3D2.1`,
+`Everything3D2.10`, or `E3D3.1` selects the release; the database's live
+primary-element and RefNo-index tree identities then validate the format
+family:
+
+```powershell
+e3d-descriptor extract --db D:\...\ams8000_0001 --refno 24384/46
+```
+
+Rust callers use the same route:
+
+```rust
+let pack = SchemaPack::detect_for_database("schema", database)?;
+let project_pack = SchemaPack::detect_for_project("schema", project_root)?;
+```
+
+A database copied outside that project context is deliberately ambiguous:
+the installed 2.1 and 3.1 corpora both use tree pair
+`(7618377, 13387743)`. Supply `--schema` / `--e3d-version` (or call
+`SchemaPack::open_version`) instead of guessing.
+
 ## Where the AVEVA binaries live
 
-In the repository. `schema/e3d31/binaries/` holds all 20 `*vir.dat` and
-`attlib.dat`, 14.5 MB, committed — a clone can run `--schema schema/e3d31`
-with nothing installed and no environment set, and no manifest names an
-absolute path.
+In the repository. Each supported pack's `binaries/` holds that release's
+`*vir.dat` files and `attlib.dat` — a clone can use either supported release
+with nothing installed and no manifest names an absolute path.
 
 They are AVEVA installation files. Committing them trades redistribution for
 a checkout that is honest about what it tested: while `binaries/` was
@@ -58,7 +83,7 @@ need to point at its own installation. It tries three places in order and the
 error names all three when none has the file:
 
 1. the directory named by the manifest's `binaries.root_env` environment
-   variable — `E3D31_SCHEMA_DIR` for the 3.1 pack;
+   variable — `E3D210_SCHEMA_DIR` for 2.10 and `E3D31_SCHEMA_DIR` for 3.1;
 2. `<pack>/binaries/`;
 3. the `binaries.root` the manifest records, if it records one.
 
@@ -81,10 +106,13 @@ Copy-Item "<install>\*vir.dat", "<install>\attlib.dat" schema\e3d31\binaries\
 2. Add an `E3dVersion` constant for it in `src/schema.rs` and list it in
    `KNOWN_VERSIONS`. A pack whose `version.id` has no constants is refused by
    name; it does not fall back to 3.1's.
-3. Measure the constants — do not carry them over. `data_page_main` is already
-   known to differ: 3.1 uses 7 618 377 where 2.10 uses 7 618 321.
+3. Measure the tree identities — do not carry them over, and do not assume
+   they uniquely identify a release. Add a project-path marker alias when the
+   new release shares another release's pair.
 
-That last point is why E3D 2.10 is not in this directory. One of its two
-constants has been read off a real file and the other has not, and an entry
-holding one measurement and one guess is worse than no entry, because at the
-call site the two are indistinguishable.
+E3D 2.10 was added after a full primary-extent census, not from the
+`7618321` constant found in its `core.dll`: all 828 files under
+`D:/AVEVA/Projects/E3D2.1` use `data_page_main = 7 618 377` and
+`data_page_index = 13 387 743`, exactly the pair used by all 1002 files under
+the installed E3D 3.1 project. The project path selects between their schema
+packs; the pair remains a fail-loud compatibility check.

@@ -37,7 +37,7 @@ fn run() -> Result<(), String> {
     let mut args = env::args().skip(1);
     let command = args.next().ok_or_else(usage)?;
     let mut options = parse_options(args)?;
-    apply_schema_pack(&mut options)?;
+    apply_schema_pack(&command, &mut options)?;
     if command == "compile-metadata" {
         let summary = compile_metadata(&options)?;
         println!(
@@ -81,9 +81,13 @@ fn run() -> Result<(), String> {
     if command == "header" {
         let db = required(&options, "db")?;
         let engine = ReadOnlyEngine::open(db).map_err(|e| format!("open database: {e}"))?;
+        let version = e3d_io::detect_database_version(db)
+            .map_err(|e| format!("detect database release: {e}"))?;
         let descriptor = engine.descriptor();
         let summary = json!({
             "db": db,
+            "e3d_version": version.id,
+            "e3d_version_display": version.display,
             "dbnum": descriptor.db_mark,
             "db_type": descriptor.db_type_name(),
             "db_type_hash": descriptor.db_type_hash,
@@ -1608,11 +1612,13 @@ fn required<'a>(options: &'a HashMap<String, String>, name: &str) -> Result<&'a 
         .ok_or_else(|| format!("missing --{name}"))
 }
 
-/// Fill the release-bound paths from a schema pack, when one is named.
+/// Fill release-bound paths from one schema pack.
 ///
 /// `--schema PATH` opens that pack directly; `--schema-root PATH
-/// --e3d-version ID` opens `PATH/ID`. Neither is required and nothing changes
-/// when neither is given.
+/// --e3d-version ID` opens `PATH/ID`. For a database-reading descriptor
+/// command, `--schema-root PATH` without a version reads the release marker
+/// from the database's project path and validates its tree identities; with
+/// neither flag, the same detection uses this build's bundled schema root.
 ///
 /// An explicit flag always wins, so a one-off file needs no pack edit. Only
 /// the files the pack actually has are filled in: a pack that carries no
@@ -1622,20 +1628,32 @@ fn required<'a>(options: &'a HashMap<String, String>, name: &str) -> Result<&'a 
 /// Which `*vir.dat` `--desvir` gets follows `--template-type`, because that
 /// flag already says which database type is being read — `--template-type
 /// DICT` is how `list-uda` asks for `dicvir.dat`.
-fn apply_schema_pack(options: &mut HashMap<String, String>) -> Result<(), String> {
+fn apply_schema_pack(command: &str, options: &mut HashMap<String, String>) -> Result<(), String> {
     let pack = match (options.get("schema"), options.get("schema-root")) {
         (Some(_), Some(_)) => return Err("use either --schema or --schema-root, not both".into()),
         (Some(path), None) => SchemaPack::open(path),
-        (None, Some(root)) => {
-            let version = required(options, "e3d-version")
-                .map_err(|_| "--schema-root needs --e3d-version".to_string())?;
-            SchemaPack::open_version(root, version)
-        }
+        (None, Some(root)) => match options.get("e3d-version") {
+            Some(version) => SchemaPack::open_version(root, version),
+            None if auto_schema_command(command) => {
+                let db = required(options, "db")
+                    .map_err(|_| "--schema-root needs --e3d-version or --db".to_string())?;
+                SchemaPack::detect_for_database(root, db)
+            }
+            None => {
+                return Err("--schema-root needs --e3d-version for this command".to_string());
+            }
+        },
         (None, None) => {
             if options.contains_key("e3d-version") {
                 return Err("--e3d-version needs --schema-root".into());
             }
-            return Ok(());
+            if !auto_schema_command(command)
+                || (options.contains_key("desvir") && options.contains_key("attlib"))
+            {
+                return Ok(());
+            }
+            let db = required(options, "db")?;
+            SchemaPack::detect_for_database(e3d_io::bundled_schema_root(), db)
         }
     }
     .map_err(|e| format!("open schema pack: {e}"))?;
@@ -1673,6 +1691,10 @@ fn apply_schema_pack(options: &mut HashMap<String, String>) -> Result<(), String
         }
     }
     Ok(())
+}
+
+fn auto_schema_command(command: &str) -> bool {
+    matches!(command, "extract" | "extract-complete" | "list-uda")
 }
 
 fn display_path(path: &Path) -> String {
@@ -2188,7 +2210,7 @@ fn layout_name(layout: StorageLayout) -> &'static str {
 }
 
 fn usage() -> String {
-    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; an\n  explicit flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH --desvir PATH --attlib PATH --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH --desvir DICVIR --template-type DICT --attlib PATH [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
+    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR [--e3d-version ID]]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; extract\n  commands select the bundled pack from the database's versioned project path when\n  none is named. An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
         .into()
 }
 

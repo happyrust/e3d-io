@@ -133,7 +133,7 @@ impl Iterator for ElementScan<'_> {
     }
 }
 
-/// Read-only engine for E3D 3.1 database files, as of one session.
+/// Read-only engine for supported E3D 2.1/3.1 database files, as of one session.
 pub struct ReadOnlyEngine {
     cache: PageCache,
     descriptor: DbDescriptor,

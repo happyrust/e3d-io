@@ -3,7 +3,7 @@
   "version": {
     "id": "e3d31",
     "display": "AVEVA Everything3D 3.1",
-    "note": "Every offset and constant in this crate was recovered from this release's core.dll."
+    "note": "Release-specific descriptor assets come from 3.1; its live database tree pair is shared with the measured 2.10 corpus."
   },
   "constants": {
     "comment": "Declared here for the record. The reader takes them from e3d_io::schema::E3D31, because they are needed where no manifest is loaded.",
