@@ -80,20 +80,23 @@ Every command accepts a pack in place of the individual path flags:
 e3d-descriptor describe --schema schema\e3d31 --noun BRAN
 ```
 
-Database-reading descriptor commands select it automatically from the current
-`COMM.VERS` records in the database's project directory:
+Database-reading descriptor commands must name a pack or version:
 
 ```powershell
-e3d-descriptor extract --db D:\...\ams8000_0001 --refno 24384/46
+e3d-descriptor extract --schema schema\e3d31 `
+  --db D:\...\ams8000_0001 --refno 24384/46
 ```
 
 IDA confirms that `DB_Communication::updateVersion()` writes
-`VersionInfo::version()` into `COMM.VERS`. Measured `3.1.*` values select 3.1;
-measured `2.1.*` / `12.1.*` values select 2.10. Missing or unfamiliar evidence
-is an error, not a fallback. Directory names, timestamps, file sizes and the
-`Saving Meta Data.` session comment are ignored. The primary/index tree pair
+`VersionInfo::version()` into `COMM.VERS`, but
+`DB_Communication::clearComm()` clears it when that client exits. A current
+Communication database can also contain several module versions. The field is
+reported by `e3d-descriptor header` for diagnosis but never selects a schema.
+`WORL.UPGDNO`, `Saving Meta Data.`, directory names, timestamps and file sizes
+are likewise non-evidence. The primary/index tree pair
 `(7618377, 13387743)` is shared by both releases and serves only as a
-database-family validation.
+database-family validation. Until a durable release field is proven,
+automatic selection fails loudly.
 
 That fills `--desvir`, `--attlib`, `--dicvir`, `--catalog-layout` and
 `--catalog-fields`; an explicit flag still wins. Both packs carry their own

@@ -16,12 +16,13 @@
 //! numbers. The two measured `amssys` files both store `12010401`, and the two
 //! `ams8000_0001` files both store `12010104`.
 //!
-//! The positive product evidence is in the Communication database instead.
-//! E3D 3.1's `DB_Communication::updateVersion()` writes
-//! `VersionInfo::version()` to the `VERS` attribute of a `COMM` element. Project
-//! detection therefore inspects the current indexed `COMM.VERS` values and
-//! opens a pack only when one names a measured release. A missing or unfamiliar
-//! value is `Unknown`; it is not silently called 2.10.
+//! The Communication database does carry a `VERS` field, but it is not durable
+//! schema evidence either. `DB_Communication::updateVersion()` writes the
+//! current client's `VersionInfo::version()` to a `COMM` element, while
+//! `DB_Communication::clearComm()` clears that field on logout/expunge. One
+//! current database can contain several module versions, and an idle project
+//! commonly contains none. `COMM.VERS` is therefore exposed as diagnostic
+//! metadata only and never selects a pack.
 //!
 //! `Saving Meta Data.` is retained as a diagnostic constant only.
 //! `DB_DB::setMetaData()` writes `DBMDAT/DBMVAL/DBMEXT` and then uses that text
@@ -123,7 +124,7 @@ pub const E3D31_BINARY_SESSION_MARKER: &str = "Saving Meta Data.";
 /// Which database field supplied the evidence returned by a probe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VersionEvidenceSource {
-    /// A measured product version stored on a current `COMM` element.
+    /// Ephemeral client/module versions stored on current `COMM` elements.
     CommunicationVersion,
     /// The database migration number on the world element. Reported for
     /// diagnosis, but not mapped to an E3D product release.
@@ -144,8 +145,9 @@ impl VersionEvidenceSource {
 
 /// Version evidence read from one database binary.
 ///
-/// `version == None` is a first-class result: callers deciding a schema must
-/// stop or use an explicit manual version rather than guessing from the path.
+/// `version` remains optional for API compatibility, but no currently proven
+/// database field populates it. Callers deciding a schema must use an explicit
+/// manual version rather than guessing from diagnostics or the path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DatabaseVersionEvidence {
     pub version: Option<&'static E3dVersion>,
@@ -239,8 +241,11 @@ pub enum SchemaError {
         known: String,
     },
 
-    #[error("{path}: database version evidence is insufficient ({detail})")]
-    DatabaseVersionNotDetected { path: PathBuf, detail: String },
+    #[error(
+        "{path}: automatic E3D schema selection is unavailable because no durable \
+         database release field has been proven ({detail}); choose a SchemaPack explicitly"
+    )]
+    AutomaticVersionSelectionUnavailable { path: PathBuf, detail: String },
 
     #[error("read project directory {path}: {source}")]
     ProjectRead {
@@ -250,7 +255,7 @@ pub enum SchemaError {
     },
 
     #[error(
-        "{root}: no current COMM.VERS field identified the E3D release \
+        "{root}: no readable current COMM records provided version diagnostics \
          ({candidates} candidates checked{detail})"
     )]
     ProjectVersionNotDetected {
@@ -262,11 +267,10 @@ pub enum SchemaError {
 
 /// Read version evidence from one Dabacon database binary.
 ///
-/// A single file can positively identify a release only when it is a
-/// Communication database whose current indexed `COMM` records carry a
-/// measured `VERS` value. Other database types intentionally return
-/// `version: None`; their `UPGDNO` values are shared by the measured 2.10 and
-/// 3.1 samples.
+/// Communication databases expose current client/module `VERS` values for
+/// diagnostics. Other database types return no such text. Neither case assigns
+/// a release: `VERS` is cleared with the communication session, while
+/// `UPGDNO` values are shared by the measured 2.10 and 3.1 samples.
 pub fn database_version_evidence(
     database: impl AsRef<Path>,
 ) -> Result<DatabaseVersionEvidence, SchemaError> {
@@ -291,52 +295,37 @@ pub fn database_version_evidence(
     }
 
     let (upgrade_number, versions) = scan_version_fields(path)?;
-    if let Some((version, raw_text)) = classify_communication_versions(&versions) {
-        return Ok(DatabaseVersionEvidence {
-            version: Some(version),
-            source: VersionEvidenceSource::CommunicationVersion,
-            raw_value: upgrade_number,
-            raw_text: Some(raw_text),
-            session_page,
-            database: path.to_path_buf(),
-        });
-    }
-
-    if !versions.is_empty() {
-        return Ok(DatabaseVersionEvidence {
-            version: None,
-            source: VersionEvidenceSource::CommunicationVersion,
-            raw_value: upgrade_number,
-            raw_text: Some(versions.into_iter().collect::<Vec<_>>().join(", ")),
-            session_page,
-            database: path.to_path_buf(),
-        });
-    }
-
+    let raw_text =
+        (!versions.is_empty()).then(|| versions.into_iter().collect::<Vec<_>>().join(", "));
     Ok(DatabaseVersionEvidence {
         version: None,
-        source: upgrade_number
-            .map(|_| VersionEvidenceSource::DatabaseUpgradeNumber)
-            .unwrap_or(VersionEvidenceSource::Unknown),
+        source: if raw_text.is_some() {
+            VersionEvidenceSource::CommunicationVersion
+        } else if upgrade_number.is_some() {
+            VersionEvidenceSource::DatabaseUpgradeNumber
+        } else {
+            VersionEvidenceSource::Unknown
+        },
         raw_value: upgrade_number,
-        raw_text: None,
+        raw_text,
         session_page,
         database: path.to_path_buf(),
     })
 }
 
-/// Detect one database's release, refusing to guess when it has no measured
-/// `COMM.VERS` value.
+/// Automatic selection is intentionally unavailable.
+///
+/// Kept as a fail-loud compatibility entry point for callers of the earlier
+/// API. [`database_version_evidence`] returns diagnostics without assigning a
+/// release.
 pub fn detect_database_version(
     database: impl AsRef<Path>,
 ) -> Result<&'static E3dVersion, SchemaError> {
     let evidence = database_version_evidence(database)?;
-    evidence
-        .version
-        .ok_or_else(|| SchemaError::DatabaseVersionNotDetected {
-            path: evidence.database.clone(),
-            detail: evidence_detail(&evidence),
-        })
+    Err(SchemaError::AutomaticVersionSelectionUnavailable {
+        path: evidence.database.clone(),
+        detail: evidence_detail(&evidence),
+    })
 }
 
 fn validate_database_family(path: &Path, view: &mut DbView) -> Result<(), SchemaError> {
@@ -358,12 +347,13 @@ fn validate_database_family(path: &Path, view: &mut DbView) -> Result<(), Schema
     Ok(())
 }
 
-/// Read the strongest measured `COMM.VERS` evidence under a project tree.
+/// Read representative `COMM.VERS` diagnostics under a project tree.
 ///
 /// Candidate discovery uses descriptor bytes, not names. Only primary
 /// Communication databases are opened; backup files with a filename extension
-/// are excluded from discovery. If several configured projects share a root,
-/// the highest measured release wins.
+/// are excluded from discovery. A current non-empty value is preferred over an
+/// idle database whose communication records have already been cleared, but
+/// neither assigns a schema release.
 pub fn project_version_evidence(
     project_root: impl AsRef<Path>,
 ) -> Result<DatabaseVersionEvidence, SchemaError> {
@@ -416,22 +406,18 @@ pub fn project_version_evidence(
     candidates.sort();
 
     let candidate_count = candidates.len();
-    let mut e3d210 = None;
+    let mut fallback = None;
     let mut first_failure = None;
     for path in candidates {
         match database_version_evidence(&path) {
-            Ok(evidence) if evidence.version == Some(&E3D31) => return Ok(evidence),
-            Ok(evidence) if evidence.version == Some(&E3D210) => {
-                e3d210.get_or_insert(evidence);
+            Ok(evidence)
+                if evidence.source == VersionEvidenceSource::CommunicationVersion
+                    && evidence.raw_text.is_some() =>
+            {
+                return Ok(evidence);
             }
             Ok(evidence) => {
-                first_failure.get_or_insert_with(|| {
-                    format!(
-                        "{}: {}",
-                        evidence.database.display(),
-                        evidence_detail(&evidence)
-                    )
-                });
+                fallback.get_or_insert(evidence);
             }
             Err(error @ SchemaError::UnknownDatabaseVersion { .. }) => return Err(error),
             Err(error) => {
@@ -439,7 +425,7 @@ pub fn project_version_evidence(
             }
         }
     }
-    if let Some(evidence) = e3d210 {
+    if let Some(evidence) = fallback {
         return Ok(evidence);
     }
 
@@ -452,18 +438,16 @@ pub fn project_version_evidence(
     })
 }
 
-/// Detect a project release from current `COMM.VERS` fields.
+/// Automatic project selection is intentionally unavailable.
 pub fn detect_project_version(
     project_root: impl AsRef<Path>,
 ) -> Result<&'static E3dVersion, SchemaError> {
-    let evidence = project_version_evidence(project_root)?;
-    evidence
-        .version
-        .ok_or_else(|| SchemaError::ProjectVersionNotDetected {
-            root: evidence.database.clone(),
-            candidates: 1,
-            detail: format!("; {}", evidence_detail(&evidence)),
-        })
+    let root = project_root.as_ref().to_path_buf();
+    let evidence = project_version_evidence(&root)?;
+    Err(SchemaError::AutomaticVersionSelectionUnavailable {
+        path: root,
+        detail: evidence_detail(&evidence),
+    })
 }
 
 fn scan_version_fields(path: &Path) -> Result<(Option<u32>, BTreeSet<String>), SchemaError> {
@@ -555,32 +539,6 @@ fn version_token(value: &str) -> Option<String> {
         cursor = end.max(start + 1);
     }
     None
-}
-
-fn classify_communication_versions(
-    versions: &BTreeSet<String>,
-) -> Option<(&'static E3dVersion, String)> {
-    for version in versions {
-        if has_release_prefix(version, "3.1") {
-            return Some((&E3D31, version.clone()));
-        }
-    }
-    for version in versions {
-        if ["2.1", "2.10", "12.1"]
-            .iter()
-            .any(|prefix| has_release_prefix(version, prefix))
-        {
-            return Some((&E3D210, version.clone()));
-        }
-    }
-    None
-}
-
-fn has_release_prefix(value: &str, prefix: &str) -> bool {
-    value == prefix
-        || value
-            .strip_prefix(prefix)
-            .is_some_and(|suffix| suffix.starts_with('.'))
 }
 
 fn evidence_detail(evidence: &DatabaseVersionEvidence) -> String {
@@ -741,30 +699,23 @@ impl SchemaPack {
         Self::open(schema_root.as_ref().join(version_id))
     }
 
-    /// Detect one database's project release and open the matching pack below
-    /// `schema_root`.
+    /// Compatibility entry point for automatic selection.
     ///
-    /// Product evidence lives in the sibling Communication database, not in a
-    /// DESI/SYST file. The parent directory is used only to discover primary
-    /// COMM binaries; its spelling is never version evidence.
+    /// This currently fails loudly because no durable database release field
+    /// has been proven. Open a pack explicitly with [`Self::open_version`].
     pub fn detect_for_database(
         schema_root: impl AsRef<Path>,
         database: impl AsRef<Path>,
     ) -> Result<Self, SchemaError> {
         let database = database.as_ref();
         let context = database.parent().unwrap_or(database);
-        let evidence = project_version_evidence(context)?;
-        let version = evidence
-            .version
-            .ok_or_else(|| SchemaError::DatabaseVersionNotDetected {
-                path: database.to_path_buf(),
-                detail: evidence_detail(&evidence),
-            })?;
+        let version = detect_project_version(context)?;
         Self::open_version(schema_root, version.id)
     }
 
-    /// Detect a project root's release and open the matching pack below
-    /// `schema_root`.
+    /// Compatibility entry point for project automatic selection.
+    ///
+    /// This currently fails loudly; use [`Self::open_version`].
     pub fn detect_for_project(
         schema_root: impl AsRef<Path>,
         project_root: impl AsRef<Path>,
@@ -1036,7 +987,7 @@ mod tests {
             assert_eq!(evidence.source, VersionEvidenceSource::Unknown);
             assert!(matches!(
                 detect_database_version(database),
-                Err(SchemaError::DatabaseVersionNotDetected { .. })
+                Err(SchemaError::AutomaticVersionSelectionUnavailable { .. })
             ));
         }
     }
@@ -1100,26 +1051,6 @@ mod tests {
     }
 
     #[test]
-    fn measured_comm_versions_map_without_guessing_unknown_values() {
-        let versions = BTreeSet::from(["3.1.9.0".to_string(), "1.3.13.0".to_string()]);
-        assert_eq!(
-            classify_communication_versions(&versions),
-            Some((&E3D31, "3.1.9.0".to_string()))
-        );
-
-        let versions = BTreeSet::from(["12.1.SP4.51".to_string()]);
-        assert_eq!(
-            classify_communication_versions(&versions),
-            Some((&E3D210, "12.1.SP4.51".to_string()))
-        );
-
-        for unknown in ["", "1.3.13.0", "3.2.0.0", "4.0.0.0"] {
-            let versions = BTreeSet::from([unknown.to_string()]);
-            assert_eq!(classify_communication_versions(&versions), None);
-        }
-    }
-
-    #[test]
     fn a_raw_comm_version_tolerates_prefix_words_but_keeps_the_exact_token() {
         let attribute = crate::record::explicit::ExplicitAttribute {
             hash: e3d_attlib::db1_hash("VERS"),
@@ -1140,7 +1071,7 @@ mod tests {
 
     #[test]
     #[ignore = "requires the installed E3D 2.1 and 3.1 AvevaMarineSample projects"]
-    fn live_project_evidence_comes_from_comm_vers_and_legacy_ams_stays_unknown() {
+    fn live_comm_versions_are_diagnostic_and_never_select_a_schema() {
         let old = Path::new(r"D:\AVEVA\Projects\E3D2.1\AvevaMarineSample\ams000");
         let new = Path::new(r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000");
         let (old_sys_upgrade, _) = scan_version_fields(&old.join("amssys")).unwrap();
@@ -1153,18 +1084,28 @@ mod tests {
         assert_eq!(old_desi_upgrade, Some(12010104));
         assert_eq!(new_desi_upgrade, old_desi_upgrade);
 
-        let e3d31 =
+        let current_clients =
             project_version_evidence(r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000").unwrap();
-        assert_eq!(e3d31.version, Some(&E3D31));
-        assert_eq!(e3d31.source, VersionEvidenceSource::CommunicationVersion);
-        assert_eq!(e3d31.raw_text.as_deref(), Some("3.1.9.0"));
-        assert!(e3d31.database.ends_with("amscom"));
-
-        let e3d210 = project_version_evidence(r"D:\AVEVA\Projects\E3D2.1\AvevaMarineSample\ams000");
+        assert_eq!(current_clients.version, None);
+        assert_eq!(
+            current_clients.source,
+            VersionEvidenceSource::CommunicationVersion
+        );
+        assert_eq!(
+            current_clients.raw_text.as_deref(),
+            Some("1.3.13.0, 3.1.9.0")
+        );
+        assert!(current_clients.database.ends_with("amscom"));
         assert!(matches!(
-            e3d210,
-            Err(SchemaError::ProjectVersionNotDetected { .. })
+            detect_project_version(r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000"),
+            Err(SchemaError::AutomaticVersionSelectionUnavailable { .. })
         ));
+
+        let idle =
+            project_version_evidence(r"D:\AVEVA\Projects\E3D2.1\AvevaMarineSample\ams000").unwrap();
+        assert_eq!(idle.version, None);
+        assert_eq!(idle.source, VersionEvidenceSource::DatabaseUpgradeNumber);
+        assert_eq!(idle.raw_value, Some(12010104));
     }
 
     #[test]
@@ -1176,8 +1117,8 @@ mod tests {
         fs::create_dir_all(copied.parent().unwrap()).unwrap();
         fs::copy(source, &copied).unwrap();
         let evidence = project_version_evidence(copied.parent().unwrap()).unwrap();
-        assert_eq!(evidence.version, Some(&E3D31));
-        assert_eq!(evidence.raw_text.as_deref(), Some("3.1.9.0"));
+        assert_eq!(evidence.version, None);
+        assert_eq!(evidence.raw_text.as_deref(), Some("1.3.13.0, 3.1.9.0"));
     }
 
     /// The shipped 3.1 pack must not send anyone to a path only one machine

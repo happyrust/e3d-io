@@ -2,12 +2,12 @@
 
 ## Result
 
-Automatic schema selection must use the current `VERS` attributes on `COMM`
-elements in the project's Communication database. It must not use a session
-comment, a directory name, file metadata, or `WORL.UPGDNO`.
+No investigated database field is a durable E3D release discriminator.
+Automatic SchemaPack selection is disabled; callers must choose `e3d210` or
+`e3d31` explicitly.
 
-If no current `COMM.VERS` value names a measured release, the result is
-`Unknown`. An explicit `e3d_version` remains the only override.
+`COMM.VERS`, `WORL.UPGDNO`, session comments, directory names and file metadata
+remain available only as diagnostics.
 
 ## IDA evidence (`Everything3D3.1/core.dll`)
 
@@ -19,6 +19,9 @@ If no current `COMM.VERS` value names a measured release, the result is
   and saves work with the comment `Software upgrade number established`.
 - `DB_Communication::updateVersion()` at `0x5A0CD50` writes
   `VersionInfo::version()` to `ATT_VERS` on a `COMM` element.
+- `DB_Communication::clearComm(DB_Element&, int)` at `0x5A0A480` writes an
+  empty string to `ATT_VERS` while clearing the communication entry. Its callers
+  include `clearAllComm`, the no-argument `clearComm`, and `expunge`.
 - `DB_DB::setMetaData()` at `0x5912B60` writes
   `DBMDAT/DBMVAL/DBMEXT`, then saves with the comment
   `Saving Meta Data.`. The comment carries no release value.
@@ -37,29 +40,32 @@ Both `amssys` World records store `UPGDNO=12010401`. Both
 `ams8000_0001` World records store `UPGDNO=12010104`. Those values therefore
 cannot distinguish the releases.
 
-The E3D 3.1 `amscom` current index contains `COMM.VERS=3.1.9.0`. The E3D 2.1
-`amscom` has no measured product-version value, so strict automatic detection
-returns `Unknown` instead of inferring 2.10 from absence.
+The E3D 3.1 `amscom` current index contains both `COMM.VERS=3.1.9.0` and
+`COMM.VERS=1.3.13.0` on different communication entries. The E3D 2.1 `amscom`
+has no current value. These are client/module versions with a session
+lifecycle, not one database-format version.
 
-Copying the 3.1 `amscom` under a directory named `E3D2.1` leaves the result at
-`e3d31`, confirming that the path spelling does not participate.
+Copying the 3.1 `amscom` under a directory named `E3D2.1` preserves the same
+diagnostic strings and still assigns no release, confirming that the path
+spelling does not participate.
 
 ## Additional E3D 3.1 project sample
 
-The production `e3d-descriptor header` path was run against seven more current
-Communication databases:
+The production `e3d-descriptor header` diagnostic path was run against seven
+more current Communication databases:
 
-- `AvevaPlantSample/aps000`: `COMM.VERS=3.1.9.0`, selected `e3d31`.
-- `TEST/TES000`: `COMM.VERS=3.1.9.0`, selected `e3d31`.
-- `YCYK-E3D/acw000`: `COMM.VERS=3.1.9.0`, selected `e3d31`.
-- `E3D3.1-slyk-project/YCYK-E3D/acw000`: `COMM.VERS=3.1.8.1`, selected
-  `e3d31`.
-- `AvevaCatalogue/acp000`: no measured `COMM.VERS`, returned `Unknown`
-  (`UPGDNO=12010101` is diagnostic only).
-- `SCB/scb000`: no measured `COMM.VERS`, returned `Unknown`.
-- `ZDJ/ZDJ000`: no measured `COMM.VERS`, returned `Unknown`.
+- `AvevaPlantSample/aps000`: current values include `3.1.9.0`.
+- `TEST/TES000`: current values include `3.1.9.0`.
+- `YCYK-E3D/acw000`: current values include `3.1.9.0`.
+- `E3D3.1-slyk-project/YCYK-E3D/acw000`: current values include `3.1.8.1`.
+- `AvevaCatalogue/acp000`: no current `VERS`; its E3D 2.1 and E3D 3.1
+  `acpcom` files are byte-for-byte identical (same SHA-256 and 2011 mtime).
+- `SCB/scb000`: current `VERS` values are empty. Unreferenced old record bytes
+  contain `1.8.3.0`, which is not current evidence.
+- `ZDJ/ZDJ000`: current `VERS` is empty; unreferenced old record bytes likewise
+  contain `1.8.3.0`.
 
-This is why gen-model limits discovery to `included_projects`: an excluded
-project with recognizable evidence must not lend its version to an otherwise
-unknown configured project. When several included projects share one schema,
-the highest measured version among those projects is selected.
+All three idle Communication databases still report only their original
+session 1 (2011, 2017 and 2013 respectively). SCB and ZDJ have newer filesystem
+mtimes but unchanged session metadata, consistent with communication entries
+being updated and cleared rather than a durable schema upgrade being recorded.

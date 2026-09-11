@@ -3,7 +3,7 @@
   "version": {
     "id": "e3d31",
     "display": "AVEVA Everything3D 3.1",
-    "note": "Selected from a measured current COMM.VERS value such as 3.1.9.0, or explicitly by id; its live tree pair is shared with the measured 2.10 corpus."
+    "note": "Selected explicitly by id. COMM.VERS is ephemeral client metadata and cannot select a schema; the live tree pair is shared with the measured 2.10 corpus."
   },
   "constants": {
     "comment": "Declared here for the record. The reader takes them from e3d_io::schema::E3D31, because they are needed where no manifest is loaded.",
