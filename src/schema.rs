@@ -10,23 +10,24 @@
 //! says `DESI`, not `3.1`.
 //!
 //! The tree identities do not distinguish 2.1 from 3.1 either: both measured
-//! corpora use `(7618377, 13387743)`. The binary writer does leave one usable
-//! discriminator. E3D 3.1's `core.dll` contains and writes sessions commented
-//! `Saving Meta Data.`; the 2.10 binary contains no such literal. Five
-//! databases in the installed 3.1 project carry those sessions, while none of
-//! 4,232 database extents in the 2.1 project does. [`detect_database_version`]
-//! reads that retained session chain, and [`detect_project_version`] takes the
-//! newest format evidenced by any primary database under the project root.
-//! Paths and directory names are never evidence.
+//! corpora use `(7618377, 13387743)`. IDA shows that the database world's
+//! `UPGDNO` is not a product release: `DB_DB::upgdno()` reads it and
+//! `DB_UpgradeCtrl::applicableVersion()` compares it with database-migration
+//! numbers. The two measured `amssys` files both store `12010401`, and the two
+//! `ams8000_0001` files both store `12010104`.
 //!
-//! This deliberately detects the binary's minimum required schema, not the
-//! name of the product installation around it. Of 824 database paths shared
-//! by the two installed project trees, 816 have the same length and the
-//! sampled unchanged files are byte-for-byte identical. No algorithm can
-//! label identical bytes differently because one copy lives under a directory
-//! called `E3D3.1`. An untouched copy therefore remains 2.1-compatible; once
-//! 3.1 writes its metadata session, the binary promotes the project to the
-//! 3.1 pack.
+//! The positive product evidence is in the Communication database instead.
+//! E3D 3.1's `DB_Communication::updateVersion()` writes
+//! `VersionInfo::version()` to the `VERS` attribute of a `COMM` element. Project
+//! detection therefore inspects the current indexed `COMM.VERS` values and
+//! opens a pack only when one names a measured release. A missing or unfamiliar
+//! value is `Unknown`; it is not silently called 2.10.
+//!
+//! `Saving Meta Data.` is retained as a diagnostic constant only.
+//! `DB_DB::setMetaData()` writes `DBMDAT/DBMVAL/DBMEXT` and then uses that text
+//! as a session comment; the comment is not a version field and does not
+//! participate in selection. Paths, timestamps and file sizes are likewise
+//! never evidence.
 //!
 //! Keeping each release in its own directory under one root is what makes the
 //! mix hard to express in the first place:
@@ -56,7 +57,7 @@
 //! path flag overrides one file, and unsetting the variable overrides all of
 //! them.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -65,7 +66,10 @@ use serde_json::Value;
 
 use crate::error::E3dReaderError;
 use crate::page::{PageHeader, PageId, PageType};
+use crate::record::explicit::ExplicitValue;
+use crate::refno::RefNo;
 use crate::session::DbView;
+use crate::{ReadOnlyEngine, ScanTier};
 
 /// One supported E3D release and the database-tree identities it accepts.
 ///
@@ -113,10 +117,44 @@ pub const KNOWN_VERSIONS: &[&E3dVersion] = &[&E3D210, &E3D31];
 
 /// Session comment written by E3D 3.1's binary metadata save.
 ///
-/// The literal occurs in `Everything3D3.1/core.dll` and not in
-/// `Everything3D2.10/core.dll`. It was also censused across the installed
-/// project binaries: 0 hits in 2.1, 5 database hits in 3.1.
+/// Diagnostic only. It is deliberately not used by either version detector.
 pub const E3D31_BINARY_SESSION_MARKER: &str = "Saving Meta Data.";
+
+/// Which database field supplied the evidence returned by a probe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VersionEvidenceSource {
+    /// A measured product version stored on a current `COMM` element.
+    CommunicationVersion,
+    /// The database migration number on the world element. Reported for
+    /// diagnosis, but not mapped to an E3D product release.
+    DatabaseUpgradeNumber,
+    /// No version-bearing field was found.
+    Unknown,
+}
+
+impl VersionEvidenceSource {
+    pub fn field_name(self) -> &'static str {
+        match self {
+            Self::CommunicationVersion => "COMM.VERS",
+            Self::DatabaseUpgradeNumber => "WORL.UPGDNO",
+            Self::Unknown => "none",
+        }
+    }
+}
+
+/// Version evidence read from one database binary.
+///
+/// `version == None` is a first-class result: callers deciding a schema must
+/// stop or use an explicit manual version rather than guessing from the path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatabaseVersionEvidence {
+    pub version: Option<&'static E3dVersion>,
+    pub source: VersionEvidenceSource,
+    pub raw_value: Option<u32>,
+    pub raw_text: Option<String>,
+    pub session_page: Option<u32>,
+    pub database: PathBuf,
+}
 
 /// The release with this id, or `None` when the id names one that has not been
 /// measured.
@@ -201,6 +239,9 @@ pub enum SchemaError {
         known: String,
     },
 
+    #[error("{path}: database version evidence is insufficient ({detail})")]
+    DatabaseVersionNotDetected { path: PathBuf, detail: String },
+
     #[error("read project directory {path}: {source}")]
     ProjectRead {
         path: PathBuf,
@@ -209,7 +250,7 @@ pub enum SchemaError {
     },
 
     #[error(
-        "{root}: no readable primary database binary identified the E3D release \
+        "{root}: no current COMM.VERS field identified the E3D release \
          ({candidates} candidates checked{detail})"
     )]
     ProjectVersionNotDetected {
@@ -219,28 +260,86 @@ pub enum SchemaError {
     },
 }
 
-/// Detect the minimum E3D schema required by one Dabacon database binary.
+/// Read version evidence from one Dabacon database binary.
 ///
-/// The selected session's primary-element / RefNo-index pair first validates
-/// the database family. The retained session chain then supplies the version
-/// evidence: a `Saving Meta Data.` session can only have been written by 3.1.
-/// Without that evidence the bytes remain 2.1-compatible, regardless of the
-/// directory in which somebody placed the file.
-pub fn detect_database_version(
+/// A single file can positively identify a release only when it is a
+/// Communication database whose current indexed `COMM` records carry a
+/// measured `VERS` value. Other database types intentionally return
+/// `version: None`; their `UPGDNO` values are shared by the measured 2.10 and
+/// 3.1 samples.
+pub fn database_version_evidence(
     database: impl AsRef<Path>,
-) -> Result<&'static E3dVersion, SchemaError> {
+) -> Result<DatabaseVersionEvidence, SchemaError> {
     let path = database.as_ref();
     let mut view = DbView::open(path).map_err(|source| SchemaError::DatabaseRead {
         path: path.to_path_buf(),
         source,
     })?;
-    detect_database_version_in_view(path, &mut view)
+    validate_database_family(path, &mut view)?;
+
+    let session_page = Some(view.session().page.page);
+    let db_type = view.descriptor().db_type_hash;
+    if db_type != e3d_attlib::db1_hash("COMM") {
+        return Ok(DatabaseVersionEvidence {
+            version: None,
+            source: VersionEvidenceSource::Unknown,
+            raw_value: None,
+            raw_text: None,
+            session_page,
+            database: path.to_path_buf(),
+        });
+    }
+
+    let (upgrade_number, versions) = scan_version_fields(path)?;
+    if let Some((version, raw_text)) = classify_communication_versions(&versions) {
+        return Ok(DatabaseVersionEvidence {
+            version: Some(version),
+            source: VersionEvidenceSource::CommunicationVersion,
+            raw_value: upgrade_number,
+            raw_text: Some(raw_text),
+            session_page,
+            database: path.to_path_buf(),
+        });
+    }
+
+    if !versions.is_empty() {
+        return Ok(DatabaseVersionEvidence {
+            version: None,
+            source: VersionEvidenceSource::CommunicationVersion,
+            raw_value: upgrade_number,
+            raw_text: Some(versions.into_iter().collect::<Vec<_>>().join(", ")),
+            session_page,
+            database: path.to_path_buf(),
+        });
+    }
+
+    Ok(DatabaseVersionEvidence {
+        version: None,
+        source: upgrade_number
+            .map(|_| VersionEvidenceSource::DatabaseUpgradeNumber)
+            .unwrap_or(VersionEvidenceSource::Unknown),
+        raw_value: upgrade_number,
+        raw_text: None,
+        session_page,
+        database: path.to_path_buf(),
+    })
 }
 
-fn detect_database_version_in_view(
-    path: &Path,
-    view: &mut DbView,
+/// Detect one database's release, refusing to guess when it has no measured
+/// `COMM.VERS` value.
+pub fn detect_database_version(
+    database: impl AsRef<Path>,
 ) -> Result<&'static E3dVersion, SchemaError> {
+    let evidence = database_version_evidence(database)?;
+    evidence
+        .version
+        .ok_or_else(|| SchemaError::DatabaseVersionNotDetected {
+            path: evidence.database.clone(),
+            detail: evidence_detail(&evidence),
+        })
+}
+
+fn validate_database_family(path: &Path, view: &mut DbView) -> Result<(), SchemaError> {
     let main_root = view.session().claim;
     let index_root = view.session().index_root;
     let data_page_main = table_identity(view, path, main_root, "primary-element table")?;
@@ -256,36 +355,21 @@ fn detect_database_version_in_view(
             known: known_version_pairs(),
         });
     }
-
-    let sessions = view
-        .walk_sessions()
-        .map_err(|source| SchemaError::DatabaseRead {
-            path: path.to_path_buf(),
-            source,
-        })?;
-    if sessions
-        .iter()
-        .any(|session| session.comment == E3D31_BINARY_SESSION_MARKER)
-    {
-        Ok(&E3D31)
-    } else {
-        Ok(&E3D210)
-    }
+    Ok(())
 }
 
-/// Detect the highest binary schema evidenced by a project tree.
+/// Read the strongest measured `COMM.VERS` evidence under a project tree.
 ///
-/// Every primary Dabacon file is inspected, with SYST databases first. A
-/// single 3.1 metadata session promotes the whole project to the 3.1 pack so a
-/// mixed upgraded project reads new records with the newer schema. If every
-/// retained chain is 2.1-compatible, the 2.1 pack is selected. Directory names
-/// and filesystem timestamps do not participate.
-pub fn detect_project_version(
+/// Candidate discovery uses descriptor bytes, not names. Only primary
+/// Communication databases are opened; backup files with a filename extension
+/// are excluded from discovery. If several configured projects share a root,
+/// the highest measured release wins.
+pub fn project_version_evidence(
     project_root: impl AsRef<Path>,
-) -> Result<&'static E3dVersion, SchemaError> {
+) -> Result<DatabaseVersionEvidence, SchemaError> {
     let root = project_root.as_ref();
     if root.is_file() {
-        return detect_database_version(root);
+        return database_version_evidence(root);
     }
 
     let mut directories = vec![root.to_path_buf()];
@@ -319,36 +403,44 @@ pub fn detect_project_version(
                 continue;
             }
             let path = entry.path();
-            if let Some(db_type) = primary_database_type(&path) {
-                candidates.push((db_type, path));
+            if path.extension().is_none()
+                && primary_database_type(&path) == Some(e3d_attlib::db1_hash("COMM"))
+            {
+                candidates.push(path);
             }
         }
         // The stack pops from the end; reverse to preserve lexical traversal.
         directories.extend(children.into_iter().rev());
     }
 
-    let syst = e3d_attlib::db1_hash("SYST");
-    candidates.sort_by(|(left_type, left_path), (right_type, right_path)| {
-        (*left_type != syst)
-            .cmp(&(*right_type != syst))
-            .then_with(|| left_path.cmp(right_path))
-    });
+    candidates.sort();
 
     let candidate_count = candidates.len();
-    let mut checked = 0usize;
+    let mut e3d210 = None;
     let mut first_failure = None;
-    for (_, path) in candidates {
-        match detect_database_version(&path) {
-            Ok(version) if version == &E3D31 => return Ok(&E3D31),
-            Ok(_) => checked += 1,
+    for path in candidates {
+        match database_version_evidence(&path) {
+            Ok(evidence) if evidence.version == Some(&E3D31) => return Ok(evidence),
+            Ok(evidence) if evidence.version == Some(&E3D210) => {
+                e3d210.get_or_insert(evidence);
+            }
+            Ok(evidence) => {
+                first_failure.get_or_insert_with(|| {
+                    format!(
+                        "{}: {}",
+                        evidence.database.display(),
+                        evidence_detail(&evidence)
+                    )
+                });
+            }
             Err(error @ SchemaError::UnknownDatabaseVersion { .. }) => return Err(error),
             Err(error) => {
                 first_failure.get_or_insert_with(|| error.to_string());
             }
         }
     }
-    if checked > 0 && first_failure.is_none() {
-        return Ok(&E3D210);
+    if let Some(evidence) = e3d210 {
+        return Ok(evidence);
     }
 
     Err(SchemaError::ProjectVersionNotDetected {
@@ -358,6 +450,147 @@ pub fn detect_project_version(
             .map(|failure| format!("; first failure: {failure}"))
             .unwrap_or_default(),
     })
+}
+
+/// Detect a project release from current `COMM.VERS` fields.
+pub fn detect_project_version(
+    project_root: impl AsRef<Path>,
+) -> Result<&'static E3dVersion, SchemaError> {
+    let evidence = project_version_evidence(project_root)?;
+    evidence
+        .version
+        .ok_or_else(|| SchemaError::ProjectVersionNotDetected {
+            root: evidence.database.clone(),
+            candidates: 1,
+            detail: format!("; {}", evidence_detail(&evidence)),
+        })
+}
+
+fn scan_version_fields(path: &Path) -> Result<(Option<u32>, BTreeSet<String>), SchemaError> {
+    let mut engine = ReadOnlyEngine::open(path).map_err(|source| SchemaError::DatabaseRead {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let world = e3d_attlib::db1_hash("WORL");
+    let communication = e3d_attlib::db1_hash("COMM");
+    let upgrade_number = e3d_attlib::db1_hash("UPGDNO");
+    let product_version = e3d_attlib::db1_hash("VERS");
+    let null = RefNo::new(0, 0);
+    let mut raw_upgrade = None;
+    let mut raw_versions = BTreeSet::new();
+
+    let scan =
+        engine
+            .scan_elements(ScanTier::Full)
+            .map_err(|source| SchemaError::DatabaseRead {
+                path: path.to_path_buf(),
+                source,
+            })?;
+    for item in scan {
+        let item = item.map_err(|source| SchemaError::DatabaseRead {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let Some(parsed) = item.parsed else {
+            continue;
+        };
+        if item.noun_hash == world && item.owner == null {
+            raw_upgrade = parsed
+                .explicit_attributes
+                .iter()
+                .find(|attribute| attribute.hash == upgrade_number)
+                .and_then(explicit_u32);
+        }
+        if item.noun_hash == communication {
+            raw_versions.extend(
+                parsed
+                    .explicit_attributes
+                    .iter()
+                    .filter(|attribute| attribute.hash == product_version)
+                    .filter_map(explicit_version_token),
+            );
+        }
+    }
+    Ok((raw_upgrade, raw_versions))
+}
+
+fn explicit_u32(attribute: &crate::record::explicit::ExplicitAttribute) -> Option<u32> {
+    match &attribute.value {
+        ExplicitValue::Integer(value) => u32::try_from(*value).ok(),
+        ExplicitValue::RawWords(words) if words.len() == 1 => words.first().copied(),
+        _ => None,
+    }
+}
+
+fn explicit_version_token(
+    attribute: &crate::record::explicit::ExplicitAttribute,
+) -> Option<String> {
+    match &attribute.value {
+        ExplicitValue::Text(value) => version_token(value),
+        ExplicitValue::RawWords(words) => {
+            let bytes = words
+                .iter()
+                .flat_map(|word| word.to_be_bytes())
+                .collect::<Vec<_>>();
+            version_token(&String::from_utf8_lossy(&bytes))
+        }
+        _ => None,
+    }
+}
+
+fn version_token(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        let start = cursor + bytes[cursor..].iter().position(u8::is_ascii_digit)?;
+        let end = bytes[start..]
+            .iter()
+            .position(|byte| !byte.is_ascii_alphanumeric() && !matches!(*byte, b'.' | b'-' | b'_'))
+            .map(|offset| start + offset)
+            .unwrap_or(bytes.len());
+        let token = &value[start..end];
+        if token.contains('.') {
+            return Some(token.to_string());
+        }
+        cursor = end.max(start + 1);
+    }
+    None
+}
+
+fn classify_communication_versions(
+    versions: &BTreeSet<String>,
+) -> Option<(&'static E3dVersion, String)> {
+    for version in versions {
+        if has_release_prefix(version, "3.1") {
+            return Some((&E3D31, version.clone()));
+        }
+    }
+    for version in versions {
+        if ["2.1", "2.10", "12.1"]
+            .iter()
+            .any(|prefix| has_release_prefix(version, prefix))
+        {
+            return Some((&E3D210, version.clone()));
+        }
+    }
+    None
+}
+
+fn has_release_prefix(value: &str, prefix: &str) -> bool {
+    value == prefix
+        || value
+            .strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.starts_with('.'))
+}
+
+fn evidence_detail(evidence: &DatabaseVersionEvidence) -> String {
+    format!(
+        "field={} raw_value={:?} raw_text={:?} session_page={:?}",
+        evidence.source.field_name(),
+        evidence.raw_value,
+        evidence.raw_text,
+        evidence.session_page
+    )
 }
 
 /// The schema root carried by this checkout/build.
@@ -508,13 +741,25 @@ impl SchemaPack {
         Self::open(schema_root.as_ref().join(version_id))
     }
 
-    /// Detect one database's release and open the matching pack below
+    /// Detect one database's project release and open the matching pack below
     /// `schema_root`.
+    ///
+    /// Product evidence lives in the sibling Communication database, not in a
+    /// DESI/SYST file. The parent directory is used only to discover primary
+    /// COMM binaries; its spelling is never version evidence.
     pub fn detect_for_database(
         schema_root: impl AsRef<Path>,
         database: impl AsRef<Path>,
     ) -> Result<Self, SchemaError> {
-        let version = detect_database_version(database)?;
+        let database = database.as_ref();
+        let context = database.parent().unwrap_or(database);
+        let evidence = project_version_evidence(context)?;
+        let version = evidence
+            .version
+            .ok_or_else(|| SchemaError::DatabaseVersionNotDetected {
+                path: database.to_path_buf(),
+                detail: evidence_detail(&evidence),
+            })?;
         Self::open_version(schema_root, version.id)
     }
 
@@ -769,24 +1014,53 @@ mod tests {
     }
 
     #[test]
-    fn database_version_comes_from_binary_session_evidence_not_its_path() {
+    fn session_comments_and_path_names_are_not_version_evidence() {
         let dir = tempfile::tempdir().unwrap();
-        let e3d210 = versioned_database(
+        let without_marker = versioned_database(
             dir.path(),
             "directory-called-E3D3.1/ams8000_0001",
             E3D210.data_page_main,
             E3D210.data_page_index,
             false,
         );
-        let e3d31 = versioned_database(
+        let with_marker = versioned_database(
             dir.path(),
             "directory-called-E3D2.1/ams1112_0001",
             E3D31.data_page_main,
             E3D31.data_page_index,
             true,
         );
-        assert_eq!(detect_database_version(e3d210).unwrap(), &E3D210);
-        assert_eq!(detect_database_version(e3d31).unwrap(), &E3D31);
+        for database in [without_marker, with_marker] {
+            let evidence = database_version_evidence(&database).unwrap();
+            assert_eq!(evidence.version, None);
+            assert_eq!(evidence.source, VersionEvidenceSource::Unknown);
+            assert!(matches!(
+                detect_database_version(database),
+                Err(SchemaError::DatabaseVersionNotDetected { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn a_truncated_session_is_a_read_error_not_an_unknown_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let database = versioned_database(
+            dir.path(),
+            "project/ams8000_0001",
+            E3D210.data_page_main,
+            E3D210.data_page_index,
+            false,
+        );
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&database)
+            .unwrap()
+            .set_len(2 * 256 + 64)
+            .unwrap();
+        assert!(matches!(
+            database_version_evidence(database),
+            Err(SchemaError::DatabaseRead { .. })
+        ));
     }
 
     #[test]
@@ -810,27 +1084,7 @@ mod tests {
     }
 
     #[test]
-    fn project_detection_uses_the_highest_binary_evidence_any_file_carries() {
-        let dir = tempfile::tempdir().unwrap();
-        versioned_database(
-            dir.path(),
-            "old/ams8000_0001",
-            E3D210.data_page_main,
-            E3D210.data_page_index,
-            false,
-        );
-        versioned_database(
-            dir.path(),
-            "new/ams1112_0001",
-            E3D31.data_page_main,
-            E3D31.data_page_index,
-            true,
-        );
-        assert_eq!(detect_project_version(dir.path()).unwrap(), &E3D31);
-    }
-
-    #[test]
-    fn an_all_legacy_binary_project_selects_the_2_10_pack() {
+    fn a_project_without_a_communication_database_is_unknown() {
         let dir = tempfile::tempdir().unwrap();
         versioned_database(
             dir.path(),
@@ -839,7 +1093,91 @@ mod tests {
             E3D210.data_page_index,
             false,
         );
-        assert_eq!(detect_project_version(dir.path()).unwrap(), &E3D210);
+        assert!(matches!(
+            detect_project_version(dir.path()),
+            Err(SchemaError::ProjectVersionNotDetected { candidates: 0, .. })
+        ));
+    }
+
+    #[test]
+    fn measured_comm_versions_map_without_guessing_unknown_values() {
+        let versions = BTreeSet::from(["3.1.9.0".to_string(), "1.3.13.0".to_string()]);
+        assert_eq!(
+            classify_communication_versions(&versions),
+            Some((&E3D31, "3.1.9.0".to_string()))
+        );
+
+        let versions = BTreeSet::from(["12.1.SP4.51".to_string()]);
+        assert_eq!(
+            classify_communication_versions(&versions),
+            Some((&E3D210, "12.1.SP4.51".to_string()))
+        );
+
+        for unknown in ["", "1.3.13.0", "3.2.0.0", "4.0.0.0"] {
+            let versions = BTreeSet::from([unknown.to_string()]);
+            assert_eq!(classify_communication_versions(&versions), None);
+        }
+    }
+
+    #[test]
+    fn a_raw_comm_version_tolerates_prefix_words_but_keeps_the_exact_token() {
+        let attribute = crate::record::explicit::ExplicitAttribute {
+            hash: e3d_attlib::db1_hash("VERS"),
+            type_code: 0,
+            data_words: 4,
+            is_uda: false,
+            value: ExplicitValue::RawWords(vec![7, 0x332E_312E, 0x392E_3000, 0]),
+        };
+        assert_eq!(
+            explicit_version_token(&attribute).as_deref(),
+            Some("3.1.9.0")
+        );
+        assert_eq!(
+            version_token("AVEVA Everything3D 3.1.9.0").as_deref(),
+            Some("3.1.9.0")
+        );
+    }
+
+    #[test]
+    #[ignore = "requires the installed E3D 2.1 and 3.1 AvevaMarineSample projects"]
+    fn live_project_evidence_comes_from_comm_vers_and_legacy_ams_stays_unknown() {
+        let old = Path::new(r"D:\AVEVA\Projects\E3D2.1\AvevaMarineSample\ams000");
+        let new = Path::new(r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000");
+        let (old_sys_upgrade, _) = scan_version_fields(&old.join("amssys")).unwrap();
+        let (new_sys_upgrade, _) = scan_version_fields(&new.join("amssys")).unwrap();
+        assert_eq!(old_sys_upgrade, Some(12010401));
+        assert_eq!(new_sys_upgrade, old_sys_upgrade);
+
+        let (old_desi_upgrade, _) = scan_version_fields(&old.join("ams8000_0001")).unwrap();
+        let (new_desi_upgrade, _) = scan_version_fields(&new.join("ams8000_0001")).unwrap();
+        assert_eq!(old_desi_upgrade, Some(12010104));
+        assert_eq!(new_desi_upgrade, old_desi_upgrade);
+
+        let e3d31 =
+            project_version_evidence(r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000").unwrap();
+        assert_eq!(e3d31.version, Some(&E3D31));
+        assert_eq!(e3d31.source, VersionEvidenceSource::CommunicationVersion);
+        assert_eq!(e3d31.raw_text.as_deref(), Some("3.1.9.0"));
+        assert!(e3d31.database.ends_with("amscom"));
+
+        let e3d210 = project_version_evidence(r"D:\AVEVA\Projects\E3D2.1\AvevaMarineSample\ams000");
+        assert!(matches!(
+            e3d210,
+            Err(SchemaError::ProjectVersionNotDetected { .. })
+        ));
+    }
+
+    #[test]
+    #[ignore = "requires the installed E3D 3.1 AvevaMarineSample project"]
+    fn live_comm_evidence_does_not_depend_on_the_directory_name() {
+        let source = Path::new(r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\amscom");
+        let dir = tempfile::tempdir().unwrap();
+        let copied = dir.path().join("directory-called-E3D2.1").join("database");
+        fs::create_dir_all(copied.parent().unwrap()).unwrap();
+        fs::copy(source, &copied).unwrap();
+        let evidence = project_version_evidence(copied.parent().unwrap()).unwrap();
+        assert_eq!(evidence.version, Some(&E3D31));
+        assert_eq!(evidence.raw_text.as_deref(), Some("3.1.9.0"));
     }
 
     /// The shipped 3.1 pack must not send anyone to a path only one machine

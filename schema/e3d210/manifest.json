@@ -3,7 +3,7 @@
   "version": {
     "id": "e3d210",
     "display": "AVEVA Everything3D 2.1 (2.10)",
-    "note": "Selected when retained database sessions contain no E3D 3.1 binary metadata marker; the shared live tree pair validates the database family."
+    "note": "Selected only from a measured legacy COMM.VERS value or explicitly by id; missing version evidence is Unknown. The shared live tree pair validates the database family."
   },
   "constants": {
     "comment": "Declared here for the record. The read path uses e3d_io::schema::E3D210.",

@@ -23,7 +23,8 @@ pub use meta::{DbDescriptor, FileInfo};
 pub use page::{PageHeader, PageType};
 pub use refno::{PageAddress, RefNo};
 pub use schema::{
-    bundled_schema_root, detect_database_version, detect_project_version, E3dVersion, SchemaError,
-    SchemaPack, E3D210, E3D31,
+    bundled_schema_root, database_version_evidence, detect_database_version,
+    detect_project_version, project_version_evidence, DatabaseVersionEvidence, E3dVersion,
+    SchemaError, SchemaPack, VersionEvidenceSource, E3D210, E3D31,
 };
 pub mod noun_catalog;

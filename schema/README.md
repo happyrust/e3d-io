@@ -44,10 +44,9 @@ e3d31`) fills in `--desvir`, `--attlib`, `--dicvir`, `--catalog-layout` and
 file needs no pack edit.
 
 Commands that read element descriptors (`extract`, `extract-complete` and
-`list-uda`) can omit the schema flags. The reader checks retained session
-records in the database binary: E3D 3.1 writes `Saving Meta Data.` sessions,
-while the 2.10 `core.dll` contains no such literal. Tree identities still
-validate the database family:
+`list-uda`) can omit the schema flags. The reader finds the sibling
+Communication database and reads current indexed `COMM.VERS` attributes.
+Tree identities still validate the database family:
 
 ```powershell
 e3d-descriptor extract --db D:\...\ams8000_0001 --refno 24384/46
@@ -61,9 +60,18 @@ let project_pack = SchemaPack::detect_for_project("schema", project_root)?;
 ```
 
 Both releases use tree pair `(7618377, 13387743)`, so that pair cannot select a
-pack. A binary with a 3.1 metadata session selects 3.1; without one it remains
-2.1-compatible. Project detection examines all primary database binaries and
-uses the highest evidenced format. Paths and directory names are ignored.
+pack. A measured `COMM.VERS` such as `3.1.9.0` selects 3.1; `2.1.*` and
+`12.1.*` select the 2.10 pack. A missing or unfamiliar value is `Unknown` and
+does not fall back to 2.10. `SchemaPack::detect_for_database` uses the supplied
+database's parent only to discover a primary COMM binary; paths, timestamps and
+file sizes are not version evidence.
+
+`WORL.UPGDNO` cannot make this choice. IDA's `DB_DB::upgdno()` reads a database
+migration number, and the measured 2.10/3.1 pairs are identical
+(`amssys=12010401`, `ams8000_0001=12010104`). Likewise,
+`Saving Meta Data.` is only the save comment used by
+`DB_DB::setMetaData()` after writing `DBMDAT/DBMVAL/DBMEXT`; it remains useful
+diagnostically but is not consulted by automatic selection.
 
 ## Where the AVEVA binaries live
 
@@ -106,15 +114,14 @@ Copy-Item "<install>\*vir.dat", "<install>\attlib.dat" schema\e3d31\binaries\
    `KNOWN_VERSIONS`. A pack whose `version.id` has no constants is refused by
    name; it does not fall back to 3.1's.
 3. Measure the tree identities — do not carry them over, and do not assume
-   they uniquely identify a release. Establish a writer-specific binary
-   marker from the product executable and confirm it against real project
-   session chains.
+   they uniquely identify a release. Identify a product version field written
+   into a current database record and confirm its encoding against real
+   projects. A session comment or executable literal is not enough.
 
 E3D 2.10 was added after a full primary-extent census, not from the
 `7618321` constant found in its `core.dll`: all 828 files under
 `D:/AVEVA/Projects/E3D2.1` use `data_page_main = 7 618 377` and
 `data_page_index = 13 387 743`, exactly the pair used by all 1002 files under
 the installed E3D 3.1 project. The discriminator is instead the retained
-`Saving Meta Data.` session: present in the 3.1 `core.dll` and five installed
-3.1 project databases, absent from the 2.10 `core.dll` and all 4,232 measured
-2.1 database extents. The pair remains a fail-loud compatibility check.
+`COMM.VERS` field written by `DB_Communication::updateVersion()`. The pair
+remains a fail-loud compatibility check.

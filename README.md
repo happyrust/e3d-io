@@ -80,21 +80,20 @@ Every command accepts a pack in place of the individual path flags:
 e3d-descriptor describe --schema schema\e3d31 --noun BRAN
 ```
 
-Database-reading descriptor commands select it automatically from the database
-binary:
+Database-reading descriptor commands select it automatically from the current
+`COMM.VERS` records in the database's project directory:
 
 ```powershell
 e3d-descriptor extract --db D:\...\ams8000_0001 --refno 24384/46
 ```
 
-E3D 3.1's `core.dll` writes retained sessions commented `Saving Meta Data.`;
-the 2.10 binary contains no such literal. The reader walks the binary session
-chain and selects 3.1 when that evidence is present, otherwise the binary
-remains 2.1-compatible. Project detection inspects every primary database and
-uses the highest format evidenced by any of them, so an upgraded project can
-contain untouched old files. Directory names and timestamps are ignored. The
-primary/index tree pair `(7618377, 13387743)` is shared by both releases and
-serves only as a database-family validation.
+IDA confirms that `DB_Communication::updateVersion()` writes
+`VersionInfo::version()` into `COMM.VERS`. Measured `3.1.*` values select 3.1;
+measured `2.1.*` / `12.1.*` values select 2.10. Missing or unfamiliar evidence
+is an error, not a fallback. Directory names, timestamps, file sizes and the
+`Saving Meta Data.` session comment are ignored. The primary/index tree pair
+`(7618377, 13387743)` is shared by both releases and serves only as a
+database-family validation.
 
 That fills `--desvir`, `--attlib`, `--dicvir`, `--catalog-layout` and
 `--catalog-fields`; an explicit flag still wins. Both packs carry their own
