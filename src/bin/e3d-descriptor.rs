@@ -1439,6 +1439,9 @@ fn session_json(session: &e3d_io::session::SessionPage) -> Value {
         "end_page": session.end.page,
         "user": session.user,
         "comment": session.comment,
+        "date": session.date.map(|date| date.to_string()),
+        "utc_date": session.utc_date.map(|date| date.to_string()),
+        "zone_offset_seconds": session.zone_offset_seconds(),
         "stamp_words": session.stamp_words,
         "tail": session.tail.map(|tail| {
             json!({

@@ -17,6 +17,7 @@
 //!   refno does not exist".
 
 use std::collections::HashSet;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use crate::error::{E3dReaderError, SessionError};
@@ -46,8 +47,24 @@ mod at {
     pub const INDEX_ROOT_EXTNO: usize = 0x20;
     pub const CLAIM_PGNO: usize = 0x24;
     pub const CLAIM_EXTNO: usize = 0x28;
-    /// First word of the timestamp region, whose encoding is not closed.
-    pub const STAMP: usize = 0x34;
+    /// `DATE`: word count at +0x30 (always 4 when stated), the four words at
+    /// +0x34 — `year, month, day * 24 + hour, minute * 60 + second`, local
+    /// wall clock. `core.dll` reads it through `DB_DB::GetSessionDateTime` →
+    /// `DB_DateTime::set(year, month, hours, milliseconds, kind)`, which
+    /// splits the third word with `DB_TimeSpan::fromHours` (`days()` →
+    /// `wDay`, `hours()` → `wHour`) and the fourth, scaled to milliseconds,
+    /// with `fromMilliSeconds` (`minutes()`, `seconds()`, `milliseconds()`).
+    pub const DATE_LEN: usize = 0x30;
+    pub const DATE: usize = 0x34;
+    pub const DATE_WORDS: usize = 4;
+    /// `UDATE`: the same four words in UTC with the fourth in
+    /// **milliseconds**, count at +0x64 (`UTCSES` is that count being 4) and
+    /// words at +0x68. E3D 3.1 writes it; 2.1 states a count of 0.
+    pub const UDATE_LEN: usize = 0x64;
+    pub const UDATE: usize = 0x68;
+    /// First word of the raw stamp region kept on [`super::SessionPage::stamp_words`]:
+    /// the four `DATE` words and the word after them.
+    pub const STAMP: usize = DATE;
     pub const STAMP_WORDS: usize = 5;
     /// `USER` length, counted in 4-byte words — the same shape as the comment.
     /// `core.dll` serves this field as the session attribute `USER`
@@ -156,12 +173,19 @@ pub struct SessionPage {
     /// Session comment, +0xA4, length at +0xA0 counted in 4-byte words.
     /// `core.dll` calls it `DESC`.
     pub comment: String,
-    /// Words +0x34..+0x48 verbatim.
-    ///
-    /// The first two decode as a year and a month (2026, 8 across the sampled
-    /// pages) and +0x40 rises monotonically with session number, but the rest
-    /// of the encoding is **not closed**, so the words are handed over as they
-    /// are rather than turned into a date this library cannot justify.
+    /// When the session was written, local wall clock of the machine that
+    /// wrote it — `core.dll`'s `DATE` (+0x30 count, +0x34 words). `None` when
+    /// the page does not state exactly four words there, which is the
+    /// condition `DB_DB::GetSessionDateTime` puts on it too.
+    pub date: Option<SessionDate>,
+    /// The same instant in UTC with milliseconds — `UDATE` (+0x64 count,
+    /// +0x68 words), which E3D 3.1 writes and 2.1 does not. `core.dll`
+    /// prefers it over `date` whenever it is stated and the project's
+    /// `outputUTCSessionDateTime` switch is on (`DB_DB::canGetUTCDateTimeForSession`).
+    pub utc_date: Option<SessionDate>,
+    /// Words +0x34..+0x48 verbatim: the four `DATE` words and the word after
+    /// them. Kept for callers that decode the stamp themselves; new code
+    /// should read [`Self::date`] / [`Self::utc_date`].
     pub stamp_words: [u32; at::STAMP_WORDS],
     /// DAB database-engine build tag at +0x7DC, when the complete session page
     /// is available.
@@ -174,6 +198,139 @@ pub struct SessionPage {
     /// The six bookkeeping words at +0x7E4..+0x7F8, when the complete session
     /// page is available. See [`SessionTail`].
     pub tail: Option<SessionTail>,
+}
+
+/// A session's timestamp as the page stores it: civil fields, no zone.
+///
+/// Decoded the way `core.dll` decodes the four `DATE` / `UDATE` words
+/// (`DB_DB::GetSessionDateTime` → `DB_DateTime::set(year, month, hours,
+/// milliseconds, kind)`):
+///
+/// | word | holds | split |
+/// |---|---|---|
+/// | 0 | year | as is |
+/// | 1 | month | as is |
+/// | 2 | `day * 24 + hour` | `DB_TimeSpan::fromHours(w).days()` / `.hours()` |
+/// | 3 | `DATE`: `minute * 60 + second`; `UDATE`: the same in milliseconds | `fromMilliSeconds(ms).minutes()` / `.seconds()` / `.milliseconds()` |
+///
+/// `ams8000_0001` of E3D 3.1, session 444: `DATE` `2026, 9, 216, 1325` is
+/// 2026-09-09 00:22:05 local and `UDATE` `2026, 9, 208, 1325919` is
+/// 2026-09-08 16:22:05.919 UTC — eight hours apart, as the machine's zone
+/// says, with the same seconds. `core.dll` itself drops `UDATE`'s
+/// milliseconds (`fromMilliSeconds(w).totalSeconds()` before the split);
+/// this type keeps them.
+///
+/// Which zone the fields are in is the page's business: [`SessionPage::date`]
+/// is the writing machine's local clock, [`SessionPage::utc_date`] is UTC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SessionDate {
+    pub year: u32,
+    pub month: u32,
+    pub day: u32,
+    pub hour: u32,
+    pub minute: u32,
+    pub second: u32,
+    /// Only `UDATE` carries these; `DATE` always states 0.
+    pub millisecond: u32,
+}
+
+/// How the fourth date word is scaled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FourthWord {
+    Seconds,
+    Milliseconds,
+}
+
+impl SessionDate {
+    /// Split the four stored words the way `DB_DateTime::set` does. No range
+    /// check: the page's statement is handed over, and [`Self::is_plausible`]
+    /// says whether it reads as a calendar date.
+    fn from_words(words: [u32; at::DATE_WORDS], fourth: FourthWord) -> Self {
+        let [year, month, hours, fourth_word] = words;
+        let milliseconds = match fourth {
+            FourthWord::Seconds => u64::from(fourth_word) * 1000,
+            FourthWord::Milliseconds => u64::from(fourth_word),
+        };
+        Self {
+            year,
+            month,
+            day: hours / 24,
+            hour: hours % 24,
+            minute: (milliseconds / 60_000) as u32,
+            second: ((milliseconds / 1000) % 60) as u32,
+            millisecond: (milliseconds % 1000) as u32,
+        }
+    }
+
+    /// Read `DATE` (`fourth` = seconds) or `UDATE` (`fourth` = milliseconds)
+    /// from a page: the count word must state exactly four words, as
+    /// `DB_DB::GetSessionDateTime` requires (`(end - begin) & !3 == 0x10`).
+    fn read(data: &[u8], len_at: usize, words_at: usize, fourth: FourthWord) -> Option<Self> {
+        let r = |off: usize| -> Option<u32> {
+            Some(u32::from_be_bytes(data.get(off..off + 4)?.try_into().ok()?))
+        };
+        if r(len_at)? != at::DATE_WORDS as u32 {
+            return None;
+        }
+        let mut words = [0u32; at::DATE_WORDS];
+        for (i, word) in words.iter_mut().enumerate() {
+            *word = r(words_at + i * 4)?;
+        }
+        Some(Self::from_words(words, fourth))
+    }
+
+    /// Whether the fields read as a calendar date and time of day. A page
+    /// that states `DATE` as four zero words, or a count of 4 over garbage,
+    /// parses but is not plausible.
+    pub fn is_plausible(&self) -> bool {
+        (1..=12).contains(&self.month)
+            && (1..=31).contains(&self.day)
+            && self.hour < 24
+            && self.minute < 60
+            && self.second < 60
+            && self.millisecond < 1000
+            && (1970..=9999).contains(&self.year)
+    }
+
+    /// Seconds since 1970-01-01T00:00:00 **treating the fields as UTC**.
+    ///
+    /// Exact for [`SessionPage::utc_date`]. For [`SessionPage::date`] it is
+    /// the local wall clock re-labelled as UTC, so the difference between the
+    /// two is the writing machine's zone offset — 28 800 on every 3.1 sample,
+    /// which is what [`SessionPage::zone_offset_seconds`] reports.
+    pub fn unix_seconds_as_utc(&self) -> i64 {
+        days_from_civil(i64::from(self.year), self.month, self.day) * 86_400
+            + i64::from(self.hour) * 3600
+            + i64::from(self.minute) * 60
+            + i64::from(self.second)
+    }
+}
+
+impl fmt::Display for SessionDate {
+    /// `2026-09-08T16:22:05.919`, or without the fraction when it is zero.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+            self.year, self.month, self.day, self.hour, self.minute, self.second
+        )?;
+        if self.millisecond != 0 {
+            write!(f, ".{:03}", self.millisecond)?;
+        }
+        Ok(())
+    }
+}
+
+/// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's
+/// `days_from_civil`), for a crate that does not carry a calendar dependency.
+fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let month_from_march = (i64::from(month) + 9) % 12;
+    let day_of_year = (153 * month_from_march + 2) / 5 + i64::from(day) - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
 }
 
 /// The six words `core.dll` keeps at the very end of a session page, words
@@ -282,6 +439,8 @@ impl SessionPage {
             tables: table_directory(page, data)?,
             user: word_text(data, at::USER_TEXT, r(at::USER_LEN), at::USER_MAX_WORDS),
             comment: comment(data, r(at::COMMENT_LEN)),
+            date: SessionDate::read(data, at::DATE_LEN, at::DATE, FourthWord::Seconds),
+            utc_date: SessionDate::read(data, at::UDATE_LEN, at::UDATE, FourthWord::Milliseconds),
             stamp_words,
             dabacon_version_tag: data
                 .get(
@@ -293,6 +452,14 @@ impl SessionPage {
                 .filter(|tag| !tag.is_empty()),
             tail: SessionTail::parse(data),
         })
+    }
+
+    /// The writing machine's zone offset in seconds east of UTC, when the page
+    /// states both clocks: `date - utc_date`, to the second. `28_800` on every
+    /// E3D 3.1 sample written in UTC+8; `None` on 2.1 pages, which have no
+    /// `UDATE`.
+    pub fn zone_offset_seconds(&self) -> Option<i64> {
+        Some(self.date?.unix_seconds_as_utc() - self.utc_date?.unix_seconds_as_utc())
     }
 
     /// Root of the named table as of this session.
@@ -1084,8 +1251,19 @@ mod tests {
             (0x20, 1),
             (0x24, 8898),
             (0x28, 1),
+            // DATE and UDATE as page 12439 (session 444) of the same file
+            // states them on 2026-09-12: 2026-09-09 00:22:05 local, which is
+            // 2026-09-08 16:22:05.919 UTC.
+            (0x30, 4),
             (0x34, 2026),
-            (0x38, 8),
+            (0x38, 9),
+            (0x3C, 216),
+            (0x40, 1325),
+            (0x64, 4),
+            (0x68, 2026),
+            (0x6C, 9),
+            (0x70, 208),
+            (0x74, 1_325_919),
             (0x78, 1),
             (0xA0, 3),
             // The tail words as the 2026-09-12 page 12439 (session 444) of the
@@ -1117,7 +1295,32 @@ mod tests {
         assert_eq!(parsed.claim, PageId::new(1, 8898));
         assert_eq!(parsed.user, "dpc");
         assert_eq!(parsed.comment, "CODEX db8");
-        assert_eq!(parsed.stamp_words[0], 2026);
+        assert_eq!(parsed.stamp_words, [2026, 9, 216, 1325, 0]);
+        assert_eq!(
+            parsed.date,
+            Some(SessionDate {
+                year: 2026,
+                month: 9,
+                day: 9,
+                hour: 0,
+                minute: 22,
+                second: 5,
+                millisecond: 0,
+            })
+        );
+        assert_eq!(
+            parsed.utc_date,
+            Some(SessionDate {
+                year: 2026,
+                month: 9,
+                day: 8,
+                hour: 16,
+                minute: 22,
+                second: 5,
+                millisecond: 919,
+            })
+        );
+        assert_eq!(parsed.zone_offset_seconds(), Some(8 * 3600));
         assert_eq!(parsed.dabacon_version_tag.as_deref(), Some("2_35_23o"));
         assert_eq!(
             parsed.tail,
@@ -1158,6 +1361,58 @@ mod tests {
         page[0x78..0x7C].copy_from_slice(&0u32.to_be_bytes());
         let parsed = SessionPage::parse(PageId::new(1, 8897), &page).unwrap();
         assert_eq!(parsed.user, "", "a zero count is an empty name");
+    }
+
+    /// The date words split the way `DB_DateTime::set(year, month, hours,
+    /// milliseconds, kind)` splits them: hours → day and hour, the fourth
+    /// word → minute, second and, for `UDATE`, millisecond.
+    #[test]
+    fn date_words_split_like_db_datetime_set() {
+        let local = SessionDate::from_words([2024, 10, 449, 1555], FourthWord::Seconds);
+        assert_eq!(local.to_string(), "2024-10-18T17:25:55");
+        assert!(local.is_plausible());
+
+        let utc = SessionDate::from_words([2026, 9, 208, 1_325_919], FourthWord::Milliseconds);
+        assert_eq!(utc.to_string(), "2026-09-08T16:22:05.919");
+        assert_eq!(utc.unix_seconds_as_utc(), 1_788_884_525);
+
+        // A midnight hour is day * 24 exactly, and hour 0.
+        let midnight = SessionDate::from_words([2026, 9, 216, 0], FourthWord::Seconds);
+        assert_eq!((midnight.day, midnight.hour), (9, 0));
+        assert_eq!(midnight.to_string(), "2026-09-09T00:00:00");
+
+        // Four zero words parse but are not a date.
+        assert!(!SessionDate::from_words([0; 4], FourthWord::Seconds).is_plausible());
+    }
+
+    /// `days_from_civil` against dates whose day numbers are known.
+    #[test]
+    fn days_from_civil_matches_the_calendar() {
+        assert_eq!(days_from_civil(1970, 1, 1), 0);
+        assert_eq!(days_from_civil(2000, 3, 1), 11_017);
+        assert_eq!(days_from_civil(2024, 2, 29), 19_782);
+        assert_eq!(days_from_civil(2026, 9, 8), 20_704);
+    }
+
+    /// `DATE` and `UDATE` are stated only by a count of exactly four words,
+    /// which is the condition `core.dll` puts on them; a 2.1 page states a
+    /// `UDATE` count of 0 and has no UTC clock.
+    #[test]
+    fn a_date_is_only_read_behind_a_count_of_four() {
+        let mut page = ams8000_latest();
+        page[0x64..0x68].copy_from_slice(&0u32.to_be_bytes());
+        let parsed = SessionPage::parse(PageId::new(1, 8897), &page).unwrap();
+        assert!(parsed.date.is_some());
+        assert_eq!(parsed.utc_date, None, "no UDATE on an E3D 2.1 page");
+        assert_eq!(parsed.zone_offset_seconds(), None);
+
+        page[0x30..0x34].copy_from_slice(&5u32.to_be_bytes());
+        let parsed = SessionPage::parse(PageId::new(1, 8897), &page).unwrap();
+        assert_eq!(parsed.date, None, "a count other than four is not a DATE");
+        assert_eq!(
+            parsed.stamp_words[0], 2026,
+            "the raw words are still handed over"
+        );
     }
 
     /// A page that ends before +0x7FC states no tail, the same way it states
