@@ -54,12 +54,17 @@ pub struct DbFilePin {
     pub sesno: Option<u32>,
 }
 
-/// E3D 的模板命名法：库类型前三字母小写 + `vir.dat`。
+/// E3D 的模板命名法：通常是库类型前三字母小写 + `vir.dat`。
 ///
-/// 派生而不是查表——写死的表会在第一个没列进去的库类型上安静地退成 DESI，
-/// 而那读出来的是别人的 schema。
+/// Global DB 是安装格式里的唯一历史例外：文件头/模板类型自报 `GLOB`，但 AVEVA
+/// 发布的文件名是 `glbvir.dat`，不是机械截断得到的 `glovir.dat`。其余类型仍派生，
+/// 不维护一张会在新类型上静默退成 DESI 的不完整表。
 pub fn template_file_for(template_dir: &Path, db_type: &str) -> Result<PathBuf, DbElementError> {
-    let stem: String = db_type.chars().take(3).collect::<String>().to_lowercase();
+    let stem = if db_type.eq_ignore_ascii_case("GLOB") {
+        "glb".to_string()
+    } else {
+        db_type.chars().take(3).collect::<String>().to_lowercase()
+    };
     if stem.chars().count() != 3 {
         return Err(DbElementError::Open {
             file: template_dir.to_path_buf(),
@@ -1185,7 +1190,7 @@ mod tests {
         assert_eq!(element.exists().unwrap(), false);
     }
 
-    /// 模板文件名从库类型派生，不查会静默退化的表。
+    /// 模板文件名从库类型派生；GLOB 保留 AVEVA 的历史文件名 glbvir.dat。
     #[test]
     fn a_template_file_is_named_after_the_db_type() {
         let dir = Path::new("dir");
@@ -1196,6 +1201,10 @@ mod tests {
         assert_eq!(
             template_file_for(dir, "CATA").unwrap(),
             dir.join("catvir.dat")
+        );
+        assert_eq!(
+            template_file_for(dir, "GLOB").unwrap(),
+            dir.join("glbvir.dat")
         );
         assert!(template_file_for(dir, "DI").is_err());
     }

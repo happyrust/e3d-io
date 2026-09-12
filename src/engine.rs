@@ -133,6 +133,26 @@ impl Iterator for ElementScan<'_> {
     }
 }
 
+/// Version-adjacent facts persisted in the database header and selected
+/// session.
+///
+/// These fields deliberately carry no inferred [`crate::E3dVersion`]:
+/// `CRINFO` names the creator, `TMPLVN` protects template compatibility, and
+/// the DAB tag names the engine that wrote one session. None is, by itself, a
+/// durable selector between the `e3d210` and `e3d31` SchemaPacks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatabaseHeaderDiagnostics {
+    pub database: PathBuf,
+    pub template_type_hash: u32,
+    pub template_type_name: Option<String>,
+    pub template_version: i32,
+    pub creation_info: Option<String>,
+    pub header_format: Option<u32>,
+    pub session_page: PageId,
+    pub session_number: u32,
+    pub dabacon_version_tag: Option<String>,
+}
+
 /// Read-only engine for supported E3D 2.1/3.1 database files, as of one session.
 pub struct ReadOnlyEngine {
     cache: PageCache,
@@ -142,6 +162,14 @@ pub struct ReadOnlyEngine {
     /// The newest session, read once at open. Its index root is the only tree
     /// this engine descends.
     session: SessionPage,
+}
+
+/// Open a database read-only and return its descriptor/latest-session
+/// diagnostics without scanning any element tree.
+pub fn database_header_diagnostics(
+    path: impl AsRef<Path>,
+) -> Result<DatabaseHeaderDiagnostics, E3dReaderError> {
+    Ok(ReadOnlyEngine::open(path)?.header_diagnostics())
 }
 
 impl ReadOnlyEngine {
@@ -215,6 +243,25 @@ impl ReadOnlyEngine {
 
     pub fn descriptor(&self) -> &DbDescriptor {
         &self.descriptor
+    }
+
+    /// Header diagnostics for the session this engine was opened at.
+    ///
+    /// [`Self::open`] reports the newest session. [`Self::open_at`] reports the
+    /// selected historical session, including the DAB engine tag stored on
+    /// that exact session page.
+    pub fn header_diagnostics(&self) -> DatabaseHeaderDiagnostics {
+        DatabaseHeaderDiagnostics {
+            database: self.path.clone(),
+            template_type_hash: self.descriptor.db_type_hash,
+            template_type_name: self.descriptor.db_type_name(),
+            template_version: self.descriptor.template_version,
+            creation_info: self.descriptor.creation_info.clone(),
+            header_format: self.descriptor.header_format,
+            session_page: self.session.page,
+            session_number: self.session.sesno,
+            dabacon_version_tag: self.session.dabacon_version_tag.clone(),
+        }
     }
 
     pub fn file_info(&self) -> &FileInfo {
@@ -1252,14 +1299,31 @@ mod explicit_semantic_tests {
         use record::explicit::ExplicitValue;
         for (raw, expected) in [(0, 0.0), (-9000, -90.0), (1150, 11.5)] {
             let value = explicit_value_to_descriptor_value(
-                &ExplicitValue::Integer(raw), None, 3, e3d_attlib::db1_hash("BANG"),
+                &ExplicitValue::Integer(raw),
+                None,
+                3,
+                e3d_attlib::db1_hash("BANG"),
             );
             assert_eq!(value, DescriptorValue::Real(expected));
         }
-        assert_eq!(explicit_value_to_descriptor_value(&ExplicitValue::Real(11.5),
-            None, 3, e3d_attlib::db1_hash("BANG")), DescriptorValue::Real(11.5));
-        assert!(matches!(explicit_value_to_descriptor_value(&ExplicitValue::Integer(-9000),
-            None, 3, e3d_attlib::db1_hash("JUSL")), DescriptorValue::Word { .. }));
+        assert_eq!(
+            explicit_value_to_descriptor_value(
+                &ExplicitValue::Real(11.5),
+                None,
+                3,
+                e3d_attlib::db1_hash("BANG")
+            ),
+            DescriptorValue::Real(11.5)
+        );
+        assert!(matches!(
+            explicit_value_to_descriptor_value(
+                &ExplicitValue::Integer(-9000),
+                None,
+                3,
+                e3d_attlib::db1_hash("JUSL")
+            ),
+            DescriptorValue::Word { .. }
+        ));
     }
 }
 

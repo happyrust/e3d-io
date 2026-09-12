@@ -78,6 +78,17 @@ fn run() -> Result<(), String> {
         );
         return Ok(());
     }
+    if command == "project-dab-tags" {
+        let project_root = required(&options, "project-root")?;
+        let report = e3d_io::project_dabacon_tags(project_root)
+            .map_err(|error| format!("aggregate project DAB tags: {error}"))?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&project_dabacon_tags_json(report))
+                .map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
     if command == "header" {
         let db = required(&options, "db")?;
         let engine = ReadOnlyEngine::open(db).map_err(|e| format!("open database: {e}"))?;
@@ -87,6 +98,7 @@ fn run() -> Result<(), String> {
             .or_else(|_| e3d_io::database_version_evidence(database))
             .map_err(|e| format!("read database project version diagnostics: {e}"))?;
         let descriptor = engine.descriptor();
+        let header = engine.header_diagnostics();
         let summary = json!({
             "db": db,
             "e3d_version": Value::Null,
@@ -103,6 +115,11 @@ fn run() -> Result<(), String> {
             "latest_ses_pgno": descriptor.latest_ses_pgno,
             "extent": descriptor.ext_no,
             "page_size": descriptor.page_size,
+            "header_creation_info": header.creation_info,
+            "header_template_version": header.template_version,
+            "header_format": header.header_format,
+            "selected_session_number": header.session_number,
+            "selected_session_dabacon_version_tag": header.dabacon_version_tag,
         });
         println!(
             "{}",
@@ -1293,6 +1310,93 @@ fn source_name(source: CompleteAttributeSource) -> &'static str {
     }
 }
 
+fn project_dabacon_tags_json(report: e3d_io::ProjectDabaconTagReport) -> Value {
+    let e3d_io::ProjectDabaconTagReport {
+        root,
+        discovered_databases,
+        databases,
+        issues,
+        latest_tag_database_counts,
+        historical_tag_session_counts,
+        historical_tag_database_counts,
+        latest_untagged_databases,
+        historical_untagged_databases,
+        historical_untagged_sessions,
+    } = report;
+    let readable_databases = databases.len();
+    let issue_count = issues.len();
+    let databases = databases
+        .into_iter()
+        .map(|database| {
+            let e3d_io::DatabaseDabaconTagReport {
+                database,
+                dbnum,
+                db_type_hash,
+                db_type_name,
+                latest_session_number,
+                latest_dabacon_version_tag,
+                retained_sessions,
+                historical_tag_session_counts,
+                untagged_retained_sessions,
+            } = database;
+            let retained_session_count = retained_sessions.len();
+            let sessions = retained_sessions
+                .into_iter()
+                .map(|session| {
+                    json!({
+                        "session_number": session.session_number,
+                        "session_page": session.session_page,
+                        "dabacon_version_tag": session.dabacon_version_tag,
+                    })
+                })
+                .collect::<Vec<_>>();
+            json!({
+                "database": database,
+                "dbnum": dbnum,
+                "db_type_hash": db_type_hash,
+                "db_type": db_type_name,
+                "latest_session_number": latest_session_number,
+                "latest_dabacon_version_tag": latest_dabacon_version_tag,
+                "retained_session_count": retained_session_count,
+                "historical_tag_session_counts": historical_tag_session_counts,
+                "untagged_retained_sessions": untagged_retained_sessions,
+                "sessions": sessions,
+            })
+        })
+        .collect::<Vec<_>>();
+    let issues = issues
+        .into_iter()
+        .map(|issue| {
+            json!({
+                "database": issue.database,
+                "detail": issue.detail,
+            })
+        })
+        .collect::<Vec<_>>();
+    let tagged_historical_sessions: usize = historical_tag_session_counts.values().sum();
+
+    json!({
+        "project_root": root,
+        "release_selection": "diagnostic_only",
+        "discovered_databases": discovered_databases,
+        "readable_databases": readable_databases,
+        "issue_count": issue_count,
+        "issues": issues,
+        "latest": {
+            "tag_database_counts": latest_tag_database_counts,
+            "untagged_databases": latest_untagged_databases,
+        },
+        "history": {
+            "tag_session_counts": historical_tag_session_counts,
+            "tag_database_counts": historical_tag_database_counts,
+            "tagged_sessions": tagged_historical_sessions,
+            "untagged_databases": historical_untagged_databases,
+            "untagged_sessions": historical_untagged_sessions,
+        },
+        "databases": databases,
+    })
+}
+
 /// `sessions --db PATH`: the retained session chain, newest first.
 ///
 /// The chain is what a range can be cut at. `MERGE CHANGES` leaves holes —
@@ -2219,7 +2323,7 @@ fn layout_name(layout: StorageLayout) -> &'static str {
 }
 
 fn usage() -> String {
-    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
+    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor project-dab-tags --project-root PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
         .into()
 }
 
@@ -2258,6 +2362,64 @@ mod tests {
         assert_eq!(
             dictionary_databases(&options).unwrap(),
             vec!["first", "second", "third"]
+        );
+    }
+
+    #[test]
+    fn project_dab_tags_json_keeps_latest_and_history_explicit() {
+        let database = PathBuf::from("project").join("ams8000_0001");
+        let report = e3d_io::ProjectDabaconTagReport {
+            root: PathBuf::from("project"),
+            discovered_databases: 1,
+            databases: vec![e3d_io::DatabaseDabaconTagReport {
+                database: database.clone(),
+                dbnum: 8000,
+                db_type_hash: db1_hash("DESI"),
+                db_type_name: Some("DESI".to_owned()),
+                latest_session_number: 2,
+                latest_dabacon_version_tag: Some("2_35_23o".to_owned()),
+                retained_sessions: vec![
+                    e3d_io::SessionDabaconTag {
+                        session_number: 2,
+                        session_page: 20,
+                        dabacon_version_tag: Some("2_35_23o".to_owned()),
+                    },
+                    e3d_io::SessionDabaconTag {
+                        session_number: 1,
+                        session_page: 4,
+                        dabacon_version_tag: Some("2_28_19_".to_owned()),
+                    },
+                ],
+                historical_tag_session_counts: BTreeMap::from([
+                    ("2_28_19_".to_owned(), 1),
+                    ("2_35_23o".to_owned(), 1),
+                ]),
+                untagged_retained_sessions: 0,
+            }],
+            issues: Vec::new(),
+            latest_tag_database_counts: BTreeMap::from([("2_35_23o".to_owned(), 1)]),
+            historical_tag_session_counts: BTreeMap::from([
+                ("2_28_19_".to_owned(), 1),
+                ("2_35_23o".to_owned(), 1),
+            ]),
+            historical_tag_database_counts: BTreeMap::from([
+                ("2_28_19_".to_owned(), 1),
+                ("2_35_23o".to_owned(), 1),
+            ]),
+            latest_untagged_databases: 0,
+            historical_untagged_databases: 0,
+            historical_untagged_sessions: 0,
+        };
+
+        let output = project_dabacon_tags_json(report);
+        assert_eq!(output["release_selection"], "diagnostic_only");
+        assert_eq!(output["latest"]["tag_database_counts"]["2_35_23o"], 1);
+        assert_eq!(output["history"]["tag_session_counts"]["2_28_19_"], 1);
+        assert_eq!(output["databases"][0]["database"], json!(database));
+        assert_eq!(output["databases"][0]["sessions"][1]["session_number"], 1);
+        assert!(
+            usage().contains("e3d-descriptor project-dab-tags --project-root PATH"),
+            "usage must advertise the project aggregation command"
         );
     }
 }

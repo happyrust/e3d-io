@@ -44,6 +44,7 @@
 
 ### Fixed
 
+- Global Database templates now resolve to AVEVA's actual `glbvir.dat` filename. The database/template type reports `GLOB`; mechanically truncating that name produced nonexistent `glovir.dat`, so a `DbSet` resolver could locate `<project>glb` by its header dbnum and still fail before reading the first DB declaration.
 - An element whose member list arrives in more than one block no longer loses everything behind it. `parse_tail` took one member block and then looked for explicit blocks, so a second member block stopped the walk: BRAN `24383/85432` in the AMS sample reported **no explicit attributes at all**, `NAME` included, along with the only UDA value it stores. A scan of `ams7999_0001` finds 493 of 29920 elements carrying two or more member blocks, 297 of them with an explicit block behind the cut. The failure was silent in the worst way — "stores nothing" and "the reader stopped early" produce identical output — and it took E3D's own `q att` plus the raw bytes to tell them apart.
 - A member list split across blocks no longer drops the RefNo that straddles the boundary or invents one. The list splits mid-RefNo just as an attribute stream does: the first block of that BRAN ends with the word `24383` and the second begins with `85434`, which together are member `24383/85434`. Decoding the blocks separately produced a phantom `85434/0`. The two words after each block header are also skipped unconditionally now rather than only when zero — the same block carries `18010/8193` there, and it was being reported as a member.
 

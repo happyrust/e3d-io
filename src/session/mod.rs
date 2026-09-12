@@ -59,6 +59,9 @@ mod at {
     /// `(name_hash, root_pgno, root_extno)` triples, [`TABLE_COUNT`] of them.
     pub const TABLE_DIR: usize = 0x320;
     pub const TABLE_ENTRY_BYTES: usize = 12;
+    /// Eight bytes copied from `DBVRSN`, beginning after its `DAB` prefix.
+    pub const DABACON_VERSION_TAG: usize = 0x7DC;
+    pub const DABACON_VERSION_TAG_BYTES: usize = 8;
     /// Everything through the comment length word must be present.
     pub const MIN_BYTES: usize = COMMENT_TEXT;
 }
@@ -134,6 +137,14 @@ pub struct SessionPage {
     /// of the encoding is **not closed**, so the words are handed over as they
     /// are rather than turned into a date this library cannot justify.
     pub stamp_words: [u32; at::STAMP_WORDS],
+    /// DAB database-engine build tag at +0x7DC, when the complete session page
+    /// is available.
+    ///
+    /// `core.dll` writes eight bytes from `DBVRSN` into every new session:
+    /// observed examples include `2_28_19_` and `2_35_23o`. This identifies
+    /// the engine that wrote this session, not the E3D release that should be
+    /// used to select a SchemaPack.
+    pub dabacon_version_tag: Option<String>,
 }
 
 impl SessionPage {
@@ -187,6 +198,14 @@ impl SessionPage {
             machine: ascii_field(&data[at::MACHINE..at::COMMENT_LEN]),
             comment: comment(data, r(at::COMMENT_LEN)),
             stamp_words,
+            dabacon_version_tag: data
+                .get(
+                    at::DABACON_VERSION_TAG
+                        ..at::DABACON_VERSION_TAG + at::DABACON_VERSION_TAG_BYTES,
+                )
+                .map(ascii_field)
+                .map(|tag| tag.trim_end().to_owned())
+                .filter(|tag| !tag.is_empty()),
         })
     }
 
@@ -978,6 +997,7 @@ mod tests {
         }
         page[0x7C..0x7F].copy_from_slice(b"dpc");
         page[0xA4..0xAD].copy_from_slice(b"CODEX db8");
+        page[0x7DC..0x7E4].copy_from_slice(b"2_35_23o");
         page
     }
 
@@ -992,6 +1012,7 @@ mod tests {
         assert_eq!(parsed.machine, "dpc");
         assert_eq!(parsed.comment, "CODEX db8");
         assert_eq!(parsed.stamp_words[0], 2026);
+        assert_eq!(parsed.dabacon_version_tag.as_deref(), Some("2_35_23o"));
     }
 
     #[test]

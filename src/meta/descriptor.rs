@@ -8,11 +8,15 @@ mod at {
     pub const NOUN: usize = 0x04;
     pub const DB_NUM: usize = 0x08;
     pub const DB_TYPE_HASH: usize = 0x20;
+    pub const TEMPLATE_VERSION: usize = 0x24;
     pub const LATEST_SES_PGNO: usize = 0x28;
     pub const EXT_NO: usize = 0x2C;
     pub const FIRST_SES_PGNO: usize = 0x30;
     pub const PAGE_SIZE_WORDS: usize = 0x34;
     pub const PRIMARY_EXTENT_REF: usize = 0x38;
+    pub const CREATION_INFO_WORDS: usize = 0x40;
+    pub const CREATION_INFO: usize = 0x44;
+    pub const FORMAT: usize = 0x154;
 }
 
 impl DbDescriptor {
@@ -31,11 +35,14 @@ impl DbDescriptor {
     /// | +0x04 | noun | 2 |
     /// | +0x08 | db_num | 8000 |
     /// | +0x20 | db1 hash of the database type name | 722578 (`DESI`) |
+    /// | +0x24 | signed template version | -1 |
     /// | +0x28 | `latest_ses_pgno` — page of the **newest** session | 8897 |
     /// | +0x2C | `ext_no` of this file | 1 |
     /// | +0x30 | `first_ses_pgno` — page of the **oldest** session | 4 |
     /// | +0x34 | page size, in 4-byte words | 512 (= 2048 bytes) |
     /// | +0x38 | `primary_extent_ref` | 16192 |
+    /// | +0x40/+0x44 | `CRINFO` word count / packed ASCII creator banner | varies |
+    /// | +0x154 | `FORMAT` text-storage format | 0 or 1 |
     ///
     /// The two session pointers are easy to mistake for each other and are not
     /// interchangeable: page 8897 states `sesno` 264 and page 4 states 1. A
@@ -100,10 +107,13 @@ impl DbDescriptor {
             page_size_words,
             db_mark: r(at::DB_NUM),
             db_type_hash: r(at::DB_TYPE_HASH),
+            template_version: r(at::TEMPLATE_VERSION) as i32,
             latest_ses_pgno: r(at::LATEST_SES_PGNO),
             ext_no,
             session_page_no: r(at::FIRST_SES_PGNO),
             primary_extent_ref: r(at::PRIMARY_EXTENT_REF),
+            creation_info: creation_info(data),
+            header_format: optional_u32(data, at::FORMAT),
         })
     }
 
@@ -147,4 +157,22 @@ impl DbDescriptor {
     pub fn page_type(&self) -> PageType {
         PageType::from_raw(self.bucket_type_id)
     }
+}
+
+fn optional_u32(data: &[u8], at: usize) -> Option<u32> {
+    Some(u32::from_be_bytes(data.get(at..at + 4)?.try_into().ok()?))
+}
+
+fn creation_info(data: &[u8]) -> Option<String> {
+    let words = optional_u32(data, at::CREATION_INFO_WORDS)? as usize;
+    let bytes = words.checked_mul(4)?;
+    let stored = data.get(at::CREATION_INFO..at::CREATION_INFO.checked_add(bytes)?)?;
+    let text: String = stored
+        .iter()
+        .copied()
+        .take_while(|byte| *byte != 0)
+        .take_while(|byte| byte.is_ascii_graphic() || *byte == b' ')
+        .map(char::from)
+        .collect();
+    (!text.is_empty()).then_some(text)
 }

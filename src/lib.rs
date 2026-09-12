@@ -1,4 +1,5 @@
 pub mod attlib_metadata;
+pub mod dabacon_tags;
 pub mod db_element;
 pub mod db_param_env;
 pub mod element_name;
@@ -15,9 +16,16 @@ pub mod session;
 pub mod tty;
 pub mod uda_catalog;
 
+pub use dabacon_tags::{
+    project_dabacon_tags, DatabaseDabaconTagReport, ProjectDabaconTagIssue,
+    ProjectDabaconTagReport, SessionDabaconTag,
+};
 pub use db_element::{DbElement, DbElementError, DbFilePin, DbFileResolver, DbSet, MemberCursor};
 pub use db_param_env::DbElementParamEnv;
-pub use engine::{ElementScan, ReadOnlyEngine, ScanTier, ScannedElement};
+pub use engine::{
+    database_header_diagnostics, DatabaseHeaderDiagnostics, ElementScan, ReadOnlyEngine, ScanTier,
+    ScannedElement,
+};
 pub use error::E3dReaderError;
 pub use meta::{DbDescriptor, FileInfo};
 pub use page::{PageHeader, PageType};

@@ -362,48 +362,10 @@ pub fn project_version_evidence(
         return database_version_evidence(root);
     }
 
-    let mut directories = vec![root.to_path_buf()];
-    let mut candidates = Vec::new();
-    while let Some(directory) = directories.pop() {
-        let mut entries = fs::read_dir(&directory)
-            .map_err(|source| SchemaError::ProjectRead {
-                path: directory.clone(),
-                source,
-            })?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|source| SchemaError::ProjectRead {
-                path: directory.clone(),
-                source,
-            })?;
-        entries.sort_by_key(|entry| entry.file_name());
-
-        let mut children = Vec::new();
-        for entry in entries {
-            let file_type = entry
-                .file_type()
-                .map_err(|source| SchemaError::ProjectRead {
-                    path: entry.path(),
-                    source,
-                })?;
-            if file_type.is_dir() {
-                children.push(entry.path());
-                continue;
-            }
-            if !file_type.is_file() {
-                continue;
-            }
-            let path = entry.path();
-            if path.extension().is_none()
-                && primary_database_type(&path) == Some(e3d_attlib::db1_hash("COMM"))
-            {
-                candidates.push(path);
-            }
-        }
-        // The stack pops from the end; reverse to preserve lexical traversal.
-        directories.extend(children.into_iter().rev());
-    }
-
-    candidates.sort();
+    let candidates: Vec<PathBuf> = project_database_paths(root)?
+        .into_iter()
+        .filter(|path| primary_database_type(path) == Some(e3d_attlib::db1_hash("COMM")))
+        .collect();
 
     let candidate_count = candidates.len();
     let mut fallback = None;
@@ -436,6 +398,60 @@ pub fn project_version_evidence(
             .map(|failure| format!("; first failure: {failure}"))
             .unwrap_or_default(),
     })
+}
+
+/// Primary, extensionless Dabacon databases under a project tree, in lexical
+/// path order.
+///
+/// Descriptor-prefix validation excludes secondary extents and the many
+/// extensionless text files found under project defaults directories without
+/// paying to open a session chain for each one.
+pub(crate) fn project_database_paths(root: &Path) -> Result<Vec<PathBuf>, SchemaError> {
+    if root.is_file() {
+        return Ok(vec![root.to_path_buf()]);
+    }
+
+    let mut directories = vec![root.to_path_buf()];
+    let mut candidates = Vec::new();
+    while let Some(directory) = directories.pop() {
+        let mut entries = fs::read_dir(&directory)
+            .map_err(|source| SchemaError::ProjectRead {
+                path: directory.clone(),
+                source,
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|source| SchemaError::ProjectRead {
+                path: directory.clone(),
+                source,
+            })?;
+        entries.sort_by_key(|entry| entry.file_name());
+
+        let mut children = Vec::new();
+        for entry in entries {
+            let file_type = entry
+                .file_type()
+                .map_err(|source| SchemaError::ProjectRead {
+                    path: entry.path(),
+                    source,
+                })?;
+            if file_type.is_dir() {
+                children.push(entry.path());
+                continue;
+            }
+            if !file_type.is_file() {
+                continue;
+            }
+            let path = entry.path();
+            if path.extension().is_none() && primary_database_type(&path).is_some() {
+                candidates.push(path);
+            }
+        }
+        // The stack pops from the end; reverse to preserve lexical traversal.
+        directories.extend(children.into_iter().rev());
+    }
+
+    candidates.sort();
+    Ok(candidates)
 }
 
 /// Automatic project selection is intentionally unavailable.

@@ -23,6 +23,12 @@ pub struct DbDescriptor {
     /// db1 hash of the database type name (`DESI`/`CATA`/…), at +0x20.
     /// [`DbDescriptor::db_type_name`] turns it back into the name.
     pub db_type_hash: u32,
+    /// Signed template version at +0x24.
+    ///
+    /// `core.dll` compares its absolute value with word 3 of the matching
+    /// `*vir.dat` template header when opening a database. It is a schema
+    /// compatibility value, not an E3D product release.
+    pub template_version: i32,
     /// Page of the **newest** session, at +0x28. This is the chain tail that
     /// `open` starts from.
     pub latest_ses_pgno: u32,
@@ -36,6 +42,18 @@ pub struct DbDescriptor {
     /// Page type word at +0x00, 0 for a descriptor page. Named
     /// `bucket_type_id` before the page header layout was known.
     pub bucket_type_id: u32,
+    /// Packed ASCII `CRINFO` from +0x40/+0x44.
+    ///
+    /// This is the database creator banner (user, time, OS, product and build).
+    /// It survives later opens and upgrades, so it describes creation rather
+    /// than the client that currently reads or last wrote the file.
+    pub creation_info: Option<String>,
+    /// `FORMAT` at +0x154 when the caller supplied the complete descriptor
+    /// page. Short prefix probes leave it as `None`.
+    ///
+    /// The writer uses this value while converting packed text fields. It is
+    /// not an E3D product release.
+    pub header_format: Option<u32>,
 }
 
 /// One extent allocation recorded on page 1.
@@ -271,6 +289,7 @@ mod tests {
         assert_eq!(desc.noun, 2);
         assert_eq!(desc.db_type_hash, 722_578);
         assert_eq!(desc.db_type_name().as_deref(), Some("DESI"));
+        assert_eq!(desc.template_version, -1);
         assert_eq!(desc.ext_no, 1);
         assert_eq!(desc.page_size_words, 512);
         assert_eq!(desc.page_size, 2048);
@@ -284,6 +303,33 @@ mod tests {
             crate::page::PageId::new(1, 8897)
         );
         assert_eq!(desc.first_session_page(), crate::page::PageId::new(1, 4));
+    }
+
+    #[test]
+    fn descriptor_exposes_creator_template_and_format_as_diagnostics() {
+        let mut page = ams8000_page0();
+        let creator = b"dpc using AVEVA Administration Admin Mk1.4.0.3";
+        let words = creator.len().div_ceil(4);
+        page[0x40..0x44].copy_from_slice(&(words as u32).to_be_bytes());
+        page[0x44..0x44 + creator.len()].copy_from_slice(creator);
+        page[0x154..0x158].copy_from_slice(&1u32.to_be_bytes());
+
+        let desc = DbDescriptor::parse(&page).unwrap();
+        assert_eq!(desc.template_version, -1);
+        assert_eq!(
+            desc.creation_info.as_deref(),
+            Some("dpc using AVEVA Administration Admin Mk1.4.0.3")
+        );
+        assert_eq!(desc.header_format, Some(1));
+    }
+
+    #[test]
+    fn descriptor_prefix_probe_keeps_extended_diagnostics_optional() {
+        let page = ams8000_page0();
+        let desc = DbDescriptor::parse(&page[..0x3C]).unwrap();
+        assert_eq!(desc.template_version, -1);
+        assert_eq!(desc.creation_info, None);
+        assert_eq!(desc.header_format, None);
     }
 
     #[test]
