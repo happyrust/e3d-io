@@ -6,6 +6,9 @@
 Cargo.lock.bak
 .idea/
 .vscode/
+# Trigram index a code-search tool (tgrep) keeps per checkout: derived data,
+# ~3.6 MB, rebuilt on demand.
+.tgrep/
 
 # Investigation output, not sources. `evidence/` is 46 MB of run logs, probe
 # JSON and decompiled third-party assemblies; a pack's `metadata/` is 25 MB
