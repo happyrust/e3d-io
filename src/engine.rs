@@ -125,6 +125,7 @@ impl Iterator for ElementScan<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let entry = self.entries.next()?;
+        crate::read_stats::note_scanned_element();
         Some(self.read(&entry))
     }
 
@@ -231,6 +232,7 @@ impl ReadOnlyEngine {
         let file_info = FileInfo::parse_page1(page1)?;
 
         let (session, _sessions_read) = crate::session::resolve(&mut cache, &descriptor, at, path)?;
+        crate::read_stats::note_database_open();
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -422,6 +424,7 @@ impl ReadOnlyEngine {
     ///
     /// Delegates to [`IndexCursor`], which is the crate's only descent.
     pub fn search_index(&mut self, target: RefNo) -> Result<Option<SearchResult>, E3dReaderError> {
+        crate::read_stats::note_index_point_lookup();
         let root = self.session.index_root;
         let found = IndexCursor::at_root(&mut self.cache, root)
             .seek(target)
@@ -470,6 +473,7 @@ impl ReadOnlyEngine {
     /// the largest corpus file), so the tree is not descended per element and
     /// the scan's page reads run in tree order.
     pub fn scan_elements(&mut self, tier: ScanTier) -> Result<ElementScan<'_>, E3dReaderError> {
+        crate::read_stats::note_scan_call();
         let root = self.session.index_root;
         let mut entries = Vec::new();
         for found in IndexCursor::at_root(&mut self.cache, root).walk() {
@@ -521,6 +525,34 @@ impl ReadOnlyEngine {
                 page_no: found.entry.page_no,
                 byte_offset: found.entry.offset_words * 2,
                 found: stated,
+            });
+        }
+        Ok(Some(view))
+    }
+
+    /// The database's WORLD element, by point lookup — no element scan.
+    ///
+    /// Looks up [`DbDescriptor::world_refno`] (`primary_extent_ref / 0`) in
+    /// this session's index and confirms the record really is a `WORL` with a
+    /// null owner. `Ok(None)` means the index has no element at that address
+    /// (the three project-administration database types keep their WORLD
+    /// elsewhere; see [`DbDescriptor::world_refno`]). An element *is* there
+    /// but is not a `WORL` is data this library does not understand and is
+    /// reported as [`E3dReaderError::NotAWorld`] rather than guessed around.
+    ///
+    /// This is the tree-root entry point that replaces "scan the database for
+    /// the `WORL` noun": one B+tree descent and one record read per database.
+    pub fn world(&mut self) -> Result<Option<ElementRecordView>, E3dReaderError> {
+        let refno = self.descriptor.world_refno();
+        let Some(view) = self.find_element(refno)? else {
+            return Ok(None);
+        };
+        let header = view.header();
+        if header.noun_hash != e3d_attlib::db1_hash("WORL") || header.owner.is_valid() {
+            return Err(E3dReaderError::NotAWorld {
+                refno,
+                noun_hash: header.noun_hash,
+                owner: header.owner,
             });
         }
         Ok(Some(view))

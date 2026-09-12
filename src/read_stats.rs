@@ -1,4 +1,5 @@
-//! 读取侧计数器：回答「同一个元素被重复取了多少次」。
+//! 读取侧计数器：回答「同一个元素被重复取了多少次」，以及读路径实际做了多少
+//! 开库、全树扫描和索引点查。
 //!
 //! [`DbElement`](crate::db_element::DbElement) 的 `parsed` / `extraction` 是**逐句柄**
 //! 记忆化的（各一个 `OnceLock`），而 [`DbSet::element`](crate::db_element::DbSet::element)
@@ -36,6 +37,10 @@ static EXTRACT_SHARED_HITS: AtomicU64 = AtomicU64::new(0);
 static EXTRACT_MISSES: AtomicU64 = AtomicU64::new(0);
 static EXTRACT_NANOS: AtomicU64 = AtomicU64::new(0);
 static ATTR_LOOKUPS: AtomicU64 = AtomicU64::new(0);
+static DATABASE_OPENS: AtomicU64 = AtomicU64::new(0);
+static SCAN_CALLS: AtomicU64 = AtomicU64::new(0);
+static SCANNED_ELEMENTS: AtomicU64 = AtomicU64::new(0);
+static INDEX_POINT_LOOKUPS: AtomicU64 = AtomicU64::new(0);
 
 /// 某一刻的读取计数。差值用 [`ReadStats::delta_from`]，别自己相减——
 /// 少减一项就得到一个看着像真的数。
@@ -63,6 +68,15 @@ pub struct ReadStats {
     /// [`AttrNameIndex`](crate::record::descriptor::AttrNameIndex)。留着这个计数
     /// 是为了下次有人怀疑那张索引时，先看这个数还在不在同一个量级。
     pub attr_lookups: u64,
+    /// 成功打开并冻结到一个会话的 [`ReadOnlyEngine`](crate::ReadOnlyEngine) 数。
+    pub database_opens: u64,
+    /// 调用 [`ReadOnlyEngine::scan_elements`](crate::ReadOnlyEngine::scan_elements) 的次数。
+    pub scan_calls: u64,
+    /// `ElementScan` 真正被迭代过的条目数；只创建扫描器而不消费时保持为零。
+    pub scanned_elements: u64,
+    /// 通过 [`ReadOnlyEngine::search_index`](crate::ReadOnlyEngine::search_index)
+    /// 发起的 B+tree 单点查找数，命中与未命中都计。
+    pub index_point_lookups: u64,
 }
 
 impl ReadStats {
@@ -90,13 +104,22 @@ impl ReadStats {
             extract_misses: self.extract_misses.saturating_sub(earlier.extract_misses),
             extract_nanos: self.extract_nanos.saturating_sub(earlier.extract_nanos),
             attr_lookups: self.attr_lookups.saturating_sub(earlier.attr_lookups),
+            database_opens: self.database_opens.saturating_sub(earlier.database_opens),
+            scan_calls: self.scan_calls.saturating_sub(earlier.scan_calls),
+            scanned_elements: self
+                .scanned_elements
+                .saturating_sub(earlier.scanned_elements),
+            index_point_lookups: self
+                .index_point_lookups
+                .saturating_sub(earlier.index_point_lookups),
         }
     }
 
     /// 一行摘要，直接进日志。
     pub fn summary(&self) -> String {
         format!(
-            "parse hit={} shared={} miss={} {}ms | extract hit={} shared={} miss={} {}ms | attr lookups={}",
+            "parse hit={} shared={} miss={} {}ms | extract hit={} shared={} miss={} {}ms | \
+             attr lookups={} | db opens={} scans={} scanned elements={} point lookups={}",
             self.parse_hits,
             self.parse_shared_hits,
             self.parse_misses,
@@ -106,6 +129,10 @@ impl ReadStats {
             self.extract_misses,
             self.extract_time().as_millis(),
             self.attr_lookups,
+            self.database_opens,
+            self.scan_calls,
+            self.scanned_elements,
+            self.index_point_lookups,
         )
     }
 }
@@ -121,6 +148,10 @@ pub fn snapshot() -> ReadStats {
         extract_misses: EXTRACT_MISSES.load(Ordering::Relaxed),
         extract_nanos: EXTRACT_NANOS.load(Ordering::Relaxed),
         attr_lookups: ATTR_LOOKUPS.load(Ordering::Relaxed),
+        database_opens: DATABASE_OPENS.load(Ordering::Relaxed),
+        scan_calls: SCAN_CALLS.load(Ordering::Relaxed),
+        scanned_elements: SCANNED_ELEMENTS.load(Ordering::Relaxed),
+        index_point_lookups: INDEX_POINT_LOOKUPS.load(Ordering::Relaxed),
     }
 }
 
@@ -136,6 +167,10 @@ pub fn reset() {
         &EXTRACT_MISSES,
         &EXTRACT_NANOS,
         &ATTR_LOOKUPS,
+        &DATABASE_OPENS,
+        &SCAN_CALLS,
+        &SCANNED_ELEMENTS,
+        &INDEX_POINT_LOOKUPS,
     ] {
         counter.store(0, Ordering::Relaxed);
     }
@@ -170,6 +205,26 @@ pub(crate) fn note_extract_miss(elapsed: Duration) {
 /// 一次按名字取属性。
 pub(crate) fn note_attr_lookup() {
     ATTR_LOOKUPS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// 一个引擎已成功打开，并冻结到了请求的会话。
+pub(crate) fn note_database_open() {
+    DATABASE_OPENS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// 一次全树元素扫描已被请求。
+pub(crate) fn note_scan_call() {
+    SCAN_CALLS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// 扫描器消费了一条索引项；记录读失败也算扫描成本。
+pub(crate) fn note_scanned_element() {
+    SCANNED_ELEMENTS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// 一次 B+tree 单元素定位已被请求。
+pub(crate) fn note_index_point_lookup() {
+    INDEX_POINT_LOOKUPS.fetch_add(1, Ordering::Relaxed);
 }
 
 // ---- 按需开的「读了哪些元素」记录器（线程局部、可嵌套） ---------------------
@@ -282,6 +337,10 @@ mod tests {
             extract_misses: 1,
             extract_nanos: 100,
             attr_lookups: 4,
+            database_opens: 1,
+            scan_calls: 2,
+            scanned_elements: 50,
+            index_point_lookups: 3,
         };
         let later = ReadStats {
             parse_hits: 25,
@@ -293,6 +352,10 @@ mod tests {
             extract_misses: 2,
             extract_nanos: 350,
             attr_lookups: 30,
+            database_opens: 5,
+            scan_calls: 7,
+            scanned_elements: 80,
+            index_point_lookups: 11,
         };
         let delta = later.delta_from(earlier);
         assert_eq!(delta.parse_hits, 15);
@@ -304,6 +367,10 @@ mod tests {
         assert_eq!(delta.extract_misses, 1);
         assert_eq!(delta.extract_nanos, 250);
         assert_eq!(delta.attr_lookups, 26);
+        assert_eq!(delta.database_opens, 4);
+        assert_eq!(delta.scan_calls, 5);
+        assert_eq!(delta.scanned_elements, 30);
+        assert_eq!(delta.index_point_lookups, 8);
     }
 
     fn refno(dbno: u32, word1: u32) -> RefNo {
@@ -325,7 +392,12 @@ mod tests {
         note_element_read(refno(7000, 4));
         assert_eq!(
             outer.finish(),
-            vec![refno(8000, 10), refno(7000, 2), refno(7000, 3), refno(7000, 4)]
+            vec![
+                refno(8000, 10),
+                refno(7000, 2),
+                refno(7000, 3),
+                refno(7000, 4)
+            ]
         );
         // 全部收完之后又回到「不记」。
         note_element_read(refno(7000, 5));

@@ -103,6 +103,12 @@ mod tests {
         assert_eq!(r.dbno(), 1);
         assert!(r.is_valid());
 
+        // E3D 2.1 jeuglb capture: word0 carries extent 2 around dbnum 8188.
+        let jeu_global = RefNo::new(24_572, 115);
+        assert_eq!(jeu_global.dbno(), 8_188);
+        assert_eq!(jeu_global.extent(), 2);
+        assert!(jeu_global.is_valid());
+
         let r2 = RefNo::new(0, 0);
         assert_eq!(r2.dbno(), 0);
         assert!(!r2.is_valid());

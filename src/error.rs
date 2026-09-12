@@ -258,6 +258,16 @@ pub enum E3dReaderError {
         found: crate::refno::RefNo,
     },
 
+    #[error(
+        "{refno} is where the descriptor puts this database's WORLD, but the record there has \
+         noun hash {noun_hash} and owner {owner}, not an owner-less WORL"
+    )]
+    NotAWorld {
+        refno: crate::refno::RefNo,
+        noun_hash: u32,
+        owner: crate::refno::RefNo,
+    },
+
     #[error("page {page_no} out of range (total {total_pages})")]
     PageOutOfRange { page_no: u32, total_pages: u32 },
 

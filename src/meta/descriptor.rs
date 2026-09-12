@@ -141,6 +141,28 @@ impl DbDescriptor {
         PageId::new(self.extent(), self.session_page_no)
     }
 
+    /// RefNo of this database's WORLD element: `primary_extent_ref / 0`.
+    ///
+    /// Census over every primary database of the installed E3D 2.1 and 3.1
+    /// projects (2026-09-12, 1,947 files): each database holds exactly one
+    /// `WORL`, its owner is null, and for all 1,905 element/catalogue/dictionary
+    /// databases (DESI, CATA, DICT, PROP, PADD, ISOD, …) that element is
+    /// `RefNo(primary_extent_ref, 0)` — the first extent's word0 with element
+    /// number 0. This is what `DB_DB::getWorld` in `core.dll` hands back.
+    ///
+    /// The three project-administration types are the only exceptions and are
+    /// not element databases of any MDB: `COMM` (8190) keeps its WORLD at
+    /// element 1, `MISC` (8189) at element 1, `SYST` (8191) in its second
+    /// extent at element 3. Callers that route through an MDB's CURD never
+    /// meet them; anyone opening those files must scan for the `WORL` noun.
+    ///
+    /// The descriptor only states where the WORLD *should* be. Confirm it
+    /// with [`crate::ReadOnlyEngine::world`], which point-looks it up and
+    /// checks the record's noun, before treating the address as fact.
+    pub fn world_refno(&self) -> crate::refno::RefNo {
+        crate::refno::RefNo::new(self.primary_extent_ref, 0)
+    }
+
     /// This file's extent number, falling back to the primary when the header
     /// states 0 — which no sampled database does. A value past `u16::MAX` was
     /// refused by [`DbDescriptor::parse`], so the conversion cannot truncate.

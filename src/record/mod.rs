@@ -137,6 +137,29 @@ pub struct ElementRecordView {
     pub byte_offset: u32,
 }
 
+impl ElementRecordView {
+    /// The eleven-word header re-read from [`Self::raw_bytes`]: the record's
+    /// own RefNo, noun and owner, with no parsing of the attribute stream.
+    ///
+    /// `raw_bytes` always starts with the complete header — the reader refuses
+    /// records shorter than [`HEADER_WORDS`] — so this cannot run off the end.
+    pub fn header(&self) -> RecordHeader {
+        let be32 = |at: usize| {
+            u32::from_be_bytes(
+                self.raw_bytes[at..at + 4]
+                    .try_into()
+                    .expect("record header is at least eleven words"),
+            )
+        };
+        RecordHeader {
+            implicit_words: be32(0),
+            refno: RefNo::new(be32(4), be32(8)),
+            noun_hash: be32(12),
+            owner: RefNo::new(be32(16), be32(20)),
+        }
+    }
+}
+
 /// One element record's bytes, gathered from every page they live on.
 #[derive(Debug, Clone)]
 pub struct RecordBytes {
