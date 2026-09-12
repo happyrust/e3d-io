@@ -36,6 +36,42 @@ pub use delta::{
 pub use diff::{ChangeKind, ChangedElement, ChangedElements, SessionDiff};
 
 /// Byte offsets inside a session page, all big-endian words.
+///
+/// `core.dll` addresses a session page by attribute hash: `sub_5AF8740` is the
+/// integer table (hash → word), `sub_5AF83D0` the text / array table (IDB
+/// `plant3/core.dll.i64`, 2026-09-12; the 2.1 `core.dll` has the same words
+/// but no `UDATE` / `UTCSES`). The full map, with the name each word is
+/// served under and what this crate reads it as:
+///
+/// | offset | word | `core.dll` | this crate |
+/// |---|---|---|---|
+/// | +0x00 | 0 | — | page type (3 = session) |
+/// | +0x04 / +0x08 | 1 / 2 | `PREVSP` — page / extent of the previous session page | [`SessionPage::previous`]; `0xFFFFFFFF` or 0 ends the chain |
+/// | +0x0C | 3 | `SESNO` | [`SessionPage::sesno`] |
+/// | +0x10 | 4 | `OWNSES` — the owning extract's session this one derives from | [`SessionPage::reserved_10`], verbatim; `0xFFFFFFFF` on every sampled page, which are all master files |
+/// | +0x14 / +0x18 | 5 / 6 | `LASTSP` — last page the session wrote (`EXFLSZ`, the extent file size in pages, is this + 1) | [`SessionPage::end`] |
+/// | +0x1C / +0x20 | 7 / 8 | `INDEX` — root of the RefNo B+tree as of this session | [`SessionPage::index_root`] |
+/// | +0x24 / +0x28 | 9 / 10 | `CLAIM` — root of the claim tree | [`SessionPage::claim`], carried and not walked |
+/// | +0x2C | 11 | `PRISES` — primary session | *not read* |
+/// | +0x30 / +0x34.. | 12 / 13..16 | `DATE` — word count (4) and `year, month, day×24+hour, minute×60+second`, local clock | [`SessionPage::date`]; the raw words on [`SessionPage::stamp_words`] |
+/// | +0x50.. | 20.. | `TRANSA` — an array the text table serves from word 20; its length rule is not decoded | *not read* |
+/// | +0x64 / +0x68.. | 25 / 26..29 | `UDATE` — the same four words in UTC, fourth in milliseconds; `UTCSES` is "the count is 4" (3.1 only) | [`SessionPage::utc_date`] |
+/// | +0x78 / +0x7C.. | 30 / 31..39 | `USER` — word count and text | [`SessionPage::user`], decoded under the header's `FORMAT` |
+/// | +0xA0 / +0xA4.. | 40 / 41.. | `DESC` — word count and text | [`SessionPage::comment`], decoded under the header's `FORMAT` |
+/// | +0x31C / +0x320.. | 199 / 200.. | table directory: count, then `(name_hash, root_pgno, root_extno)` triples | [`SessionPage::tables`] |
+/// | +0x7DC | 503..504 | eight bytes of the `DBVRSN` engine tag after its `DAB` prefix | [`SessionPage::dabacon_version_tag`] |
+/// | +0x7E4 | 505 | `RUNUM` | [`SessionTail::runum`] |
+/// | +0x7E8 | 506 | `MEMEXT` | [`SessionTail::memext`] |
+/// | +0x7EC | 507 | `MEMPPS` | [`SessionTail::mempps`] |
+/// | +0x7F0 | 508 | `BASESN` — the session this one was based on; 0 = none | [`SessionTail::base_sesno`] |
+/// | +0x7F4 | 509 | `REASON` — code of the message (group 43, 460 + code) `DB_DB::reason` shows | [`SessionTail::reason`] |
+/// | +0x7F8 | 510 | `LINKPS` | [`SessionTail::linkps`] |
+///
+/// Three names in the integer table are not stored words but derived on the
+/// spot: `SPGNO` is the page's own number, `PRVSES` is word 3 of the page
+/// `PREVSP` names, and `FRSTSP` — the first page this session wrote — is the
+/// previous page's `LASTSP` + 1, or this page's own `LASTSP` when there is no
+/// previous session.
 mod at {
     pub const PAGE_TYPE: usize = 0x00;
     pub const LAST_SES_PGNO: usize = 0x04;

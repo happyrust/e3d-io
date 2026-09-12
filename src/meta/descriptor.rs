@@ -27,27 +27,59 @@ impl DbDescriptor {
 
     /// Parse the descriptor from page 0.
     ///
-    /// Layout, verified word by word against `ams8000_0001`:
+    /// Layout, verified word by word against `ams8000_0001`. The `core.dll`
+    /// column is the name the file-header attribute is served under: the
+    /// header is addressed by attribute hash, and `sub_5AF7C30` is the
+    /// integer table that turns each hash into a word index (IDB
+    /// `plant3/core.dll.i64`, 2026-09-12; the 2.1 `core.dll` has the same
+    /// words). Rows this crate does not read yet say so; nothing in the 643
+    /// local databases exercises them (every file states `EXTID 1`,
+    /// `OWNEXT 255`, `NOWNEX 0`, `INCON 0`, `CPYFLG 0` — no extract exists
+    /// on this machine), so their meaning below is from the product's own
+    /// code paths and not from data.
     ///
-    /// | offset | field | `ams8000_0001` |
-    /// |---|---|---|
-    /// | +0x00 | page type (0 = descriptor) | 0 |
-    /// | +0x04 | noun | 2 |
-    /// | +0x08 | db_num | 8000 |
-    /// | +0x20 | db1 hash of the database type name | 722578 (`DESI`) |
-    /// | +0x24 | signed template version | -1 |
-    /// | +0x28 | `latest_ses_pgno` — page of the **newest** session | 8897 |
-    /// | +0x2C | `ext_no` of this file | 1 |
-    /// | +0x30 | `first_ses_pgno` — page of the **oldest** session | 4 |
-    /// | +0x34 | page size, in 4-byte words | 512 (= 2048 bytes) |
-    /// | +0x38 | `primary_extent_ref` | 16192 |
-    /// | +0x40/+0x44 | `CRINFO` word count / packed ASCII creator banner | varies |
-    /// | +0x154 | `FORMAT` text-storage format: 1 = UTF-8 as stored, else the escaped project charset (`&~ … &`, GBK here) — what `core.dll` branches on before reading any string; see [`crate::record::text`] | 0 or 1 |
+    /// | offset | word | `core.dll` | this crate | `ams8000_0001` |
+    /// |---|---|---|---|---|
+    /// | +0x00 | 0 | — | page type (0 = descriptor) | 0 |
+    /// | +0x04 | 1 | — | noun | 2 |
+    /// | +0x08 | 2 | `DBNO` | `db_mark` | 8000 |
+    /// | +0x0C | 3 | `EXTID` — extract number of this file; 1 is the master | *not read* | 1 |
+    /// | +0x10 | 4 | `ACCMOD` — access mode | *not read* | 0 / 1 / 2 (209 / 432 / 2 files) |
+    /// | +0x14 | 5 | `CPYFLG` | *not read* | 0 |
+    /// | +0x18 | 6 | `OWNEXT` — owning extract; 255 = none | *not read* | 255 |
+    /// | +0x1C | 7 | `INCON` — inconsistent-database flag | *not read* | 0 |
+    /// | +0x20 | 8 | `TMPLNO` | `db_type_hash`, db1 hash of the type name | 722578 (`DESI`) |
+    /// | +0x24 | 9 | `TMPLVN` | `template_version`, signed | -1 |
+    /// | +0x28 | 10 | `LSPGNO` | `latest_ses_pgno` — page of the **newest** session | 8897 |
+    /// | +0x2C | 11 | *not in the integer table* | `ext_no` of this file | 1 |
+    /// | +0x30 | 12 | `NXTBKT` — next bucket of the bucket chain (`db_add_bucket` / `db_get_bucket`) | `session_page_no`, read as the page of the **oldest** session | 4 |
+    /// | +0x34 | 13 | `PGSIZE` | page size, in 4-byte words | 512 (= 2048 bytes) |
+    /// | +0x38 | 14 | *not in the integer table* | `primary_extent_ref` | 16192 |
+    /// | +0x40/+0x44 | 16/17 | `CRINFO` | `creation_info`: word count / packed ASCII creator banner | varies |
+    /// | +0x154 | 85 | `FORMAT` | `header_format` — 1 = UTF-8 as stored, else the escaped project charset (`&~ … &`, GBK here); what `core.dll` branches on before reading any string, see [`crate::record::text`] | 1 |
+    /// | +0x168 | 90 | `EXPIRY` | *not read* | — |
+    /// | +0x16C | 91 | `CPCNT` | *not read* | — |
+    /// | +0x170 | 92 | `OCPCNT` | *not read* | — |
+    /// | +0x174 | 93 | `SUBTYP` — 1 = Marine (`DB_DB::setSubTypeMarine`) | *not read* | 0 (1 on 13 marine files) |
+    /// | +0x178 | 94 | `CLCCNT` | *not read* | — |
+    /// | +0x17C | 95 | `EXPNG` — expunge count | *not read* | 0..253 across the corpus |
+    /// | +0x180 | 96 | `HCCNT` | *not read* | — |
+    /// | +0x188 | 98 | `NACCNT` | *not read* | — |
+    /// | +0x198 | 102 | `USERID` | *not read* | — |
+    /// | +0x19C | 103 | `NOWNEX` — number of owned extracts | *not read* | 0 |
+    ///
+    /// `LSTSNO`, the latest session number, is not a header word: `core.dll`
+    /// answers it from word 3 of the page `LSPGNO` names.
     ///
     /// The two session pointers are easy to mistake for each other and are not
     /// interchangeable: page 8897 states `sesno` 264 and page 4 states 1. A
     /// reader that starts from +0x30 expecting the current state gets the
-    /// database as it was at its very first session.
+    /// database as it was at its very first session. `core.dll` does not call
+    /// +0x30 a session pointer at all — it is `NXTBKT`, the head of the bucket
+    /// chain — and the reading "oldest session" rests on the sampled files,
+    /// where the oldest session page is the first bucket; a file that has
+    /// been through `MERGE CHANGES` / `EXPUNGE` (`EXPNG` > 0) is where that
+    /// reading would be tested.
     ///
     /// +0x38 was read as a stored page count until a census showed it is the
     /// `RefNo::word0` of the elements stored in the database's first extent:
