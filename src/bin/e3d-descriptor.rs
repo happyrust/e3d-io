@@ -247,7 +247,7 @@ fn run() -> Result<(), String> {
                     .find_element(refno)
                     .map_err(|e| format!("reopen element for UDA values: {e}"))?
                     .ok_or_else(|| format!("element {refno} disappeared during UDA extraction"))?;
-                let parsed = ParsedElement::parse(&view.raw_bytes)
+                let parsed = ParsedElement::parse_as(&view.raw_bytes, engine.text_format())
                     .map_err(|e| format!("parse element for UDA values: {e}"))?;
                 uda.materialize_for_element(&mut extraction, &parsed.explicit_attributes);
             }
@@ -1554,9 +1554,11 @@ fn diff_json(
     let tally = diff.tally();
     let mut changes = Vec::with_capacity(diff.changes().len().min(limit));
     if content {
+        let text_format = view.text_format();
         for element in view.changed_elements(diff).take(limit) {
             let element = element.map_err(|e| format!("read a changed record: {e}"))?;
-            let mut delta = ElementDelta::of(&element).map_err(|e| e.to_string())?;
+            let mut delta =
+                ElementDelta::of_as(&element, text_format).map_err(|e| e.to_string())?;
             if let Some((attlib, provider)) = templates.as_deref_mut() {
                 delta.with_attribute_rows(attlib, provider);
             }
@@ -1994,7 +1996,7 @@ fn resolve_reference_names(
             else {
                 continue;
             };
-            let parsed = ParsedElement::parse(&view.raw_bytes)
+            let parsed = ParsedElement::parse_as(&view.raw_bytes, engine.text_format())
                 .map_err(|error| format!("parse reference {refno} in {database}: {error}"))?;
             let Some(name) = parsed
                 .explicit_attributes

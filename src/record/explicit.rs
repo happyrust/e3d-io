@@ -7,6 +7,7 @@
 //! and a block that says it continues must be followed by one.
 
 use crate::record::block::{block_at, BlockKind};
+use crate::record::text::TextFormat;
 use crate::refno::RefNo;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,7 +48,15 @@ pub struct TailData {
     pub continues_past_end: bool,
 }
 
+/// [`parse_tail_as`] without the header's `FORMAT` word: text is guessed at
+/// ([`TextFormat::Detect`]).
 pub fn parse_tail(raw: &[u8], start: usize, refno: RefNo) -> TailData {
+    parse_tail_as(raw, start, refno, TextFormat::Detect)
+}
+
+/// Walk the member and explicit blocks from `start`, decoding text attributes
+/// the way the database's header says they are stored.
+pub fn parse_tail_as(raw: &[u8], start: usize, refno: RefNo, text: TextFormat) -> TailData {
     let mut out = TailData {
         record_end: start,
         ..TailData::default()
@@ -81,7 +90,7 @@ pub fn parse_tail(raw: &[u8], start: usize, refno: RefNo) -> TailData {
         more_promised = block.continues_at.is_some();
     }
     parse_members(&member_payload, &mut out.members);
-    parse_explicit_payload(&explicit_payload, &mut out.attributes);
+    parse_explicit_payload(&explicit_payload, &mut out.attributes, text);
     out.record_end = cursor;
     out.continues_past_end = more_promised;
     out
@@ -109,9 +118,9 @@ fn parse_members(payload: &[u8], out: &mut Vec<RefNo>) {
 /// stepped over when they read zero. They are the block's continuation address
 /// ([`crate::record::block`]), always two words, so the payload always begins
 /// at byte 20 and the stream always begins at its start.
-fn parse_explicit_payload(payload: &[u8], out: &mut Vec<ExplicitAttribute>) {
+fn parse_explicit_payload(payload: &[u8], out: &mut Vec<ExplicitAttribute>, text: TextFormat) {
     let mut parsed = Vec::new();
-    if parse_attribute_stream(payload, 0, &mut parsed) {
+    if parse_attribute_stream(payload, 0, &mut parsed, text) {
         out.extend(parsed);
     }
 }
@@ -120,6 +129,7 @@ fn parse_attribute_stream(
     payload: &[u8],
     mut cursor: usize,
     out: &mut Vec<ExplicitAttribute>,
+    text: TextFormat,
 ) -> bool {
     let initial = cursor;
     while cursor + 8 <= payload.len() {
@@ -134,7 +144,7 @@ fn parse_attribute_stream(
         let Some(data) = payload.get(data_start..data_start + data_len) else {
             return false;
         };
-        let Some(value) = decode_value(type_code, data) else {
+        let Some(value) = decode_value(type_code, data, text) else {
             return false;
         };
         out.push(ExplicitAttribute {
@@ -149,7 +159,7 @@ fn parse_attribute_stream(
     cursor > initial
 }
 
-fn decode_value(type_code: u16, data: &[u8]) -> Option<ExplicitValue> {
+fn decode_value(type_code: u16, data: &[u8], text: TextFormat) -> Option<ExplicitValue> {
     Some(match type_code {
         0x0C00 => ExplicitValue::Integer(read_u32(data, 0)? as i32),
         0x1400 => ExplicitValue::Bool(read_u32(data, 0)? != 0),
@@ -163,7 +173,7 @@ fn decode_value(type_code: u16, data: &[u8]) -> Option<ExplicitValue> {
         0x3C00 | 0x2800 => {
             let len = read_u32(data, 0)? as usize;
             let bytes = data.get(4..4 + len)?;
-            ExplicitValue::Text(crate::record::text::decode(bytes))
+            ExplicitValue::Text(crate::record::text::decode_as(bytes, text))
         }
         0x4000 | 0x1000 => ExplicitValue::RefNo(RefNo::new(read_u32(data, 0)?, read_u32(data, 4)?)),
         0x1C00 => {

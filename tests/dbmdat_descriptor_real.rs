@@ -65,6 +65,7 @@ fn dbmdat_descriptor_decodes_its_two_internal_explicit_attributes() {
         ],
         record_end: 24,
         total_size: 24,
+        text_format: e3d_io::record::text::TextFormat::Detect,
     };
     let engine = ReadOnlyEngine::open(DB).expect("open engine context");
     let extraction = engine

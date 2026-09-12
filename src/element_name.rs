@@ -129,5 +129,5 @@ fn is_null(refno: RefNo) -> bool {
 
 fn read(engine: &mut ReadOnlyEngine, refno: RefNo) -> Option<ParsedElement> {
     let view = engine.find_element(refno).ok()??;
-    ParsedElement::parse(&view.raw_bytes).ok()
+    ParsedElement::parse_as(&view.raw_bytes, engine.text_format()).ok()
 }

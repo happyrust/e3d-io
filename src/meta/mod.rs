@@ -51,7 +51,14 @@ pub struct DbDescriptor {
     /// `FORMAT` at +0x154 when the caller supplied the complete descriptor
     /// page. Short prefix probes leave it as `None`.
     ///
-    /// The writer uses this value while converting packed text fields. It is
+    /// How every string in the file is stored: `1` is UTF-8 as it lies, any
+    /// other value is the escaped project charset (`&~ … &` runs, GBK on the
+    /// sampled sites). `core.dll` reads this word before any text and
+    /// branches on `== 1`; [`crate::record::text::TextFormat::from_header`]
+    /// is the same branch, and [`crate::ReadOnlyEngine::text_format`] carries
+    /// it to every record and session page read through an engine. Of the 643
+    /// local databases, 451 say 1 (every AVEVA-shipped file and the `acw000`
+    /// project) and 192 say 0 (`ams1112_0001`, the `TES000` project). It is
     /// not an E3D product release.
     pub header_format: Option<u32>,
 }

@@ -172,7 +172,7 @@ impl UdaCatalog {
                     continue;
                 }
             };
-            let parsed = match ParsedElement::parse(&view.raw_bytes) {
+            let parsed = match ParsedElement::parse_as(&view.raw_bytes, engine.text_format()) {
                 Ok(parsed) => parsed,
                 Err(error) => {
                     issues.push(UdaDefinitionIssue {

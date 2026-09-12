@@ -982,7 +982,7 @@ impl DbElement {
                 .find_element(refno)
                 .map_err(|source| DbElementError::Io { dbno, source })?
                 .ok_or(DbElementError::NotFound { refno, dbno, sesno })?;
-            ParsedElement::parse(&view.raw_bytes)
+            ParsedElement::parse_as(&view.raw_bytes, db.engine.text_format())
                 .map_err(|detail| DbElementError::Parse { refno, detail })
         });
         crate::read_stats::note_parse_miss(started.elapsed());

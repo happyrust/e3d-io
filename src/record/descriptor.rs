@@ -372,6 +372,9 @@ pub fn extract_default(
         explicit_attributes: Vec::new(),
         record_end: 0,
         total_size: 0,
+        // Template defaults come from the schema files, not from a database,
+        // so no header states their format; the guess is the only reading.
+        text_format: crate::record::text::TextFormat::Detect,
     };
     let extracted = extract_attribute(&synthetic, &descriptor, def, StorageLayout::Wide, name);
     extracted.value.is_some().then_some(extracted)
@@ -430,7 +433,10 @@ fn decode_value(
                 bytes.extend_from_slice(&word.to_be_bytes());
             }
             bytes.truncate(count as usize);
-            Ok(DescriptorValue::Text(crate::record::text::decode(&bytes)))
+            Ok(DescriptorValue::Text(crate::record::text::decode_as(
+                &bytes,
+                parsed.text_format,
+            )))
         }
         StorageShape::Record => {
             // `sub_5AB5600`: `v18 = v17 * ((a3[4] - 1) / a3[3])`. The stride
@@ -641,6 +647,7 @@ mod tests {
             explicit_attributes: Vec::new(),
             record_end: words.len() * 4,
             total_size: words.len() * 4,
+            text_format: crate::record::text::TextFormat::Detect,
         }
     }
 

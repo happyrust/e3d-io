@@ -501,6 +501,7 @@ mod tests {
             explicit_attributes: Vec::new(),
             record_end: implicit_words.len() * 4,
             total_size: implicit_words.len() * 4,
+            text_format: crate::record::text::TextFormat::Detect,
         }
     }
 

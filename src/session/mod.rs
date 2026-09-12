@@ -25,6 +25,7 @@ use crate::meta::DbDescriptor;
 use crate::page::cache::PageCache;
 use crate::page::io::PageReader;
 use crate::page::{IoStats, PageId, PageType};
+use crate::record::text::TextFormat;
 
 pub mod delta;
 pub mod diff;
@@ -390,8 +391,15 @@ impl SessionTail {
 }
 
 impl SessionPage {
-    /// Parse a session page, rejecting anything that is not one.
+    /// [`SessionPage::parse_as`] without the header's `FORMAT` word: `USER`
+    /// and `DESC` are guessed at from their bytes ([`TextFormat::Detect`]).
     pub fn parse(page: PageId, data: &[u8]) -> Result<Self, SessionError> {
+        Self::parse_as(page, data, TextFormat::Detect)
+    }
+
+    /// Parse a session page, rejecting anything that is not one, and decode
+    /// its two text fields the way the database's header says text is stored.
+    pub fn parse_as(page: PageId, data: &[u8], text: TextFormat) -> Result<Self, SessionError> {
         if data.len() < at::MIN_BYTES {
             return Err(SessionError::PageTooSmall {
                 page,
@@ -437,8 +445,14 @@ impl SessionPage {
             )?,
             claim: address(page, "claim", r(at::CLAIM_EXTNO), r(at::CLAIM_PGNO))?,
             tables: table_directory(page, data)?,
-            user: word_text(data, at::USER_TEXT, r(at::USER_LEN), at::USER_MAX_WORDS),
-            comment: comment(data, r(at::COMMENT_LEN)),
+            user: word_text(
+                data,
+                at::USER_TEXT,
+                r(at::USER_LEN),
+                at::USER_MAX_WORDS,
+                text,
+            ),
+            comment: comment(data, r(at::COMMENT_LEN), text),
             date: SessionDate::read(data, at::DATE_LEN, at::DATE, FourthWord::Seconds),
             utc_date: SessionDate::read(data, at::UDATE_LEN, at::UDATE, FourthWord::Milliseconds),
             stamp_words,
@@ -706,6 +720,12 @@ impl DbView {
         &self.descriptor
     }
 
+    /// How this database stores text, from the header's `FORMAT` word; see
+    /// [`crate::record::text`]. Records read through this view decode under it.
+    pub fn text_format(&self) -> TextFormat {
+        TextFormat::from_header(self.descriptor.header_format)
+    }
+
     /// Session pages read while opening: 1 for the newest, one more per step
     /// back. Also visible as demand reads in [`DbView::stats`].
     pub fn sessions_read(&self) -> u32 {
@@ -780,6 +800,10 @@ struct ChainCursor {
     seen: HashSet<PageId>,
     steps: u32,
     limit: u32,
+    /// The header's `FORMAT` word, under which every page's `USER` and
+    /// `DESC` are decoded — the same branch `db_get_file_session_string`
+    /// takes before reading either.
+    text_format: TextFormat,
 }
 
 impl ChainCursor {
@@ -789,6 +813,7 @@ impl ChainCursor {
             seen: HashSet::new(),
             steps: 0,
             limit: pages.physical_page_count().max(1),
+            text_format: TextFormat::from_header(descriptor.header_format),
         }
     }
 
@@ -808,7 +833,7 @@ impl ChainCursor {
                 limit: self.limit,
             });
         }
-        let parsed = read_session(pages, page)?;
+        let parsed = read_session(pages, page, self.text_format)?;
         self.next = parsed.previous;
         self.steps += 1;
         Ok(Some(parsed))
@@ -1038,7 +1063,11 @@ pub fn latest(
     pages: &mut PageCache,
     descriptor: &DbDescriptor,
 ) -> Result<SessionPage, SessionError> {
-    read_session(pages, descriptor.latest_session_page())
+    read_session(
+        pages,
+        descriptor.latest_session_page(),
+        TextFormat::from_header(descriptor.header_format),
+    )
 }
 
 /// The one place a selector becomes a session page.
@@ -1128,12 +1157,16 @@ impl Pending {
     }
 }
 
-fn read_session(pages: &mut PageCache, page: PageId) -> Result<SessionPage, SessionError> {
+fn read_session(
+    pages: &mut PageCache,
+    page: PageId,
+    text_format: TextFormat,
+) -> Result<SessionPage, SessionError> {
     let data = pages.get(page).map_err(|source| SessionError::Unreadable {
         page,
         detail: source.to_string(),
     })?;
-    SessionPage::parse(page, data)
+    SessionPage::parse_as(page, data, text_format)
 }
 
 /// A `(pageno, extno)` pair from a session page.
@@ -1174,8 +1207,8 @@ fn ascii_field(bytes: &[u8]) -> String {
 ///
 /// `ams8000_0001` states 16 there and holds a 61-character comment NUL-padded
 /// to 64 bytes; the byte just past `4 * 16` is NUL on every sampled page.
-fn comment(data: &[u8], len_words: u32) -> String {
-    word_text(data, at::COMMENT_TEXT, len_words, usize::MAX)
+fn comment(data: &[u8], len_words: u32, text: TextFormat) -> String {
+    word_text(data, at::COMMENT_TEXT, len_words, usize::MAX, text)
 }
 
 /// A word-counted text field: `len_words` 4-byte words from `text_at`,
@@ -1185,11 +1218,27 @@ fn comment(data: &[u8], len_words: u32) -> String {
 /// `core.dll` copies (`sub_5AF83D0` moves exactly that many words); the
 /// caller's `max_words` is the room the layout leaves before the next field,
 /// so a corrupt count cannot read the neighbouring field as text.
-fn word_text(data: &[u8], text_at: usize, len_words: u32, max_words: usize) -> String {
+///
+/// The bytes are then decoded under the header's `FORMAT` word, as
+/// `db_get_file_session_string` decodes them (`sub_5ACECE0` reads `FORMAT`
+/// first and branches on it): a Chinese comment is `&~…  &` on a `FORMAT 0`
+/// page and raw UTF-8 on a `FORMAT 1` page, and either reads as itself.
+/// Control characters are dropped, as the ASCII reading before this dropped
+/// everything from the first one on.
+fn word_text(
+    data: &[u8],
+    text_at: usize,
+    len_words: u32,
+    max_words: usize,
+    text: TextFormat,
+) -> String {
     let words = (len_words as usize).min(max_words);
     let end = text_at.saturating_add(words * 4).min(data.len());
     match data.get(text_at..end) {
-        Some(text) => ascii_field(text),
+        Some(bytes) => crate::record::text::decode_as(bytes, text)
+            .chars()
+            .filter(|c| !c.is_control())
+            .collect(),
         None => String::new(),
     }
 }

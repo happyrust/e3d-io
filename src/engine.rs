@@ -9,6 +9,7 @@ use crate::page::cache::PageCache;
 use crate::page::io::PageReader;
 use crate::page::{PageHeader, PageId};
 use crate::record::element::ParsedElement;
+use crate::record::text::TextFormat;
 use crate::record::{self, ElementRecordView};
 use crate::refno::RefNo;
 use crate::session::{
@@ -62,6 +63,7 @@ pub struct ElementScan<'a> {
     cache: &'a mut PageCache,
     ext: u16,
     tier: ScanTier,
+    text_format: TextFormat,
     entries: std::vec::IntoIter<IndexEntry>,
 }
 
@@ -104,9 +106,10 @@ impl ElementScan<'_> {
         }
 
         let view = record::read_element_record(self.cache, self.ext, entry)?;
-        let parsed = ParsedElement::parse(&view.raw_bytes).map_err(|error| {
-            E3dReaderError::Other(format!("{}: gathered record parses: {error}", entry.refno))
-        })?;
+        let parsed =
+            ParsedElement::parse_as(&view.raw_bytes, self.text_format).map_err(|error| {
+                E3dReaderError::Other(format!("{}: gathered record parses: {error}", entry.refno))
+            })?;
         confirm(parsed.refno)?;
         Ok(ScannedElement {
             refno: entry.refno,
@@ -245,6 +248,15 @@ impl ReadOnlyEngine {
 
     pub fn descriptor(&self) -> &DbDescriptor {
         &self.descriptor
+    }
+
+    /// How this database stores text, from the header's `FORMAT` word
+    /// (`+0x154`): `1` is UTF-8 as it lies, anything else is the escaped
+    /// project charset. This is what `core.dll` branches on before reading any
+    /// string, and what every record and session page parsed through this
+    /// engine decodes under. See [`crate::record::text`].
+    pub fn text_format(&self) -> TextFormat {
+        TextFormat::from_header(self.descriptor.header_format)
     }
 
     /// Header diagnostics for the session this engine was opened at.
@@ -484,6 +496,7 @@ impl ReadOnlyEngine {
             entries.push(found.entry());
         }
         Ok(ElementScan {
+            text_format: self.text_format(),
             cache: &mut self.cache,
             ext: root.ext,
             tier,
@@ -634,7 +647,7 @@ impl ReadOnlyEngine {
                 .find_element(current)
                 .map_err(ResolveError::Io)?
                 .ok_or(ResolveError::ElementNotFound(current))?;
-            let parsed = ParsedElement::parse(&view.raw_bytes)
+            let parsed = ParsedElement::parse_as(&view.raw_bytes, self.text_format())
                 .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
 
             let value = match decode_attribute_by_hash(
@@ -691,7 +704,7 @@ impl ReadOnlyEngine {
             .find_element(refno)
             .map_err(ResolveError::Io)?
             .ok_or(ResolveError::ElementNotFound(refno))?;
-        let parsed = ParsedElement::parse(&view.raw_bytes)
+        let parsed = ParsedElement::parse_as(&view.raw_bytes, self.text_format())
             .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
 
         let mut attributes = Vec::new();
@@ -822,7 +835,7 @@ impl ReadOnlyEngine {
             .find_element(refno)
             .map_err(ResolveError::Io)?
             .ok_or(ResolveError::ElementNotFound(refno))?;
-        let parsed = ParsedElement::parse(&view.raw_bytes)
+        let parsed = ParsedElement::parse_as(&view.raw_bytes, self.text_format())
             .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
         let noun_hash = parsed.noun_hash;
         let noun_name = e3d_attlib::db1_dehash(noun_hash);
@@ -985,7 +998,7 @@ impl ReadOnlyEngine {
             .find_element(refno)
             .map_err(ResolveError::Io)?
             .ok_or(ResolveError::ElementNotFound(refno))?;
-        let parsed = ParsedElement::parse(&view.raw_bytes)
+        let parsed = ParsedElement::parse_as(&view.raw_bytes, self.text_format())
             .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
         self.summarize_parsed_element_with_template(refno, &parsed, attlib, template)
     }
@@ -1001,7 +1014,7 @@ impl ReadOnlyEngine {
             .find_element(refno)
             .map_err(ResolveError::Io)?
             .ok_or(ResolveError::ElementNotFound(refno))?;
-        let parsed = record::element::ParsedElement::parse(&view.raw_bytes)
+        let parsed = record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format())
             .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
         let template = provider
             .template_for(parsed.noun_hash)
@@ -1025,7 +1038,7 @@ impl ReadOnlyEngine {
             .find_element(refno)
             .map_err(ResolveError::Io)?
             .ok_or(ResolveError::ElementNotFound(refno))?;
-        let parsed = record::element::ParsedElement::parse(&view.raw_bytes)
+        let parsed = record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format())
             .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
         let template = provider
             .template_for(parsed.noun_hash)
@@ -1290,6 +1303,7 @@ mod explicit_semantic_tests {
             explicit_attributes: Vec::new(),
             record_end: 24,
             total_size: 24,
+            text_format: record::text::TextFormat::Detect,
         };
 
         let extraction = extract_parsed_element_with_descriptors(

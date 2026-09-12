@@ -1,4 +1,5 @@
-use crate::record::explicit::{parse_tail, ExplicitAttribute};
+use crate::record::explicit::{parse_tail_as, ExplicitAttribute};
+use crate::record::text::TextFormat;
 use crate::refno::RefNo;
 
 const HEADER_SIZE: usize = 24;
@@ -26,10 +27,24 @@ pub struct ParsedElement {
     pub explicit_attributes: Vec<ExplicitAttribute>,
     pub record_end: usize,
     pub total_size: usize,
+    /// How this record's text was decoded — the database header's `FORMAT`
+    /// word when the caller had it ([`ParsedElement::parse_as`]), else the
+    /// guess ([`TextFormat::Detect`]). The descriptor decoder reads implicit
+    /// text under the same format later, so a record carries its own answer.
+    pub text_format: TextFormat,
 }
 
 impl ParsedElement {
+    /// [`ParsedElement::parse_as`] without the header's `FORMAT` word: text
+    /// is guessed at from its bytes. Prefer `parse_as` with
+    /// [`crate::ReadOnlyEngine::text_format`] when an engine is at hand.
     pub fn parse(raw: &[u8]) -> Result<Self, String> {
+        Self::parse_as(raw, TextFormat::Detect)
+    }
+
+    /// Parse one gathered record, decoding its text the way the database's
+    /// header says it is stored.
+    pub fn parse_as(raw: &[u8], text_format: TextFormat) -> Result<Self, String> {
         let prefix = skip_padding(raw);
         if prefix + HEADER_SIZE > raw.len() {
             return Err(format!(
@@ -53,7 +68,7 @@ impl ParsedElement {
         let declared_impl_len = impl_len_words as usize * 4;
         let impl_end = (prefix + declared_impl_len).min(raw.len());
         let implicit_data = raw[prefix..impl_end].to_vec();
-        let tail = parse_tail(raw, impl_end, refno);
+        let tail = parse_tail_as(raw, impl_end, refno, text_format);
         if tail.continues_past_end {
             return Err(format!(
                 "record for {refno} ends at {} with a block that says it continues elsewhere: \
@@ -73,6 +88,7 @@ impl ParsedElement {
             explicit_attributes: tail.attributes,
             record_end: tail.record_end,
             total_size: raw.len(),
+            text_format,
         })
     }
 }

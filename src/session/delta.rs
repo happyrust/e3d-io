@@ -128,10 +128,21 @@ pub struct DeltaError {
 }
 
 impl ElementDelta {
-    /// Compare the two sides of a change. Template-free.
+    /// Compare the two sides of a change. Template-free; text on both sides is
+    /// guessed at from its bytes. Prefer [`ElementDelta::of_as`] with the
+    /// engine's [`crate::ReadOnlyEngine::text_format`] when one is at hand.
     pub fn of(changed: &ChangedElement) -> Result<Self, DeltaError> {
+        Self::of_as(changed, crate::record::text::TextFormat::Detect)
+    }
+
+    /// Compare the two sides of a change, decoding text under the database's
+    /// header `FORMAT` word. Template-free.
+    pub fn of_as(
+        changed: &ChangedElement,
+        text_format: crate::record::text::TextFormat,
+    ) -> Result<Self, DeltaError> {
         let parse = |side: &'static str, view: &crate::record::ElementRecordView| {
-            ParsedElement::parse(&view.raw_bytes).map_err(|detail| DeltaError {
+            ParsedElement::parse_as(&view.raw_bytes, text_format).map_err(|detail| DeltaError {
                 refno: changed.refno,
                 side,
                 detail,

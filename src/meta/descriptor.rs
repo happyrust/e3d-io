@@ -42,7 +42,7 @@ impl DbDescriptor {
     /// | +0x34 | page size, in 4-byte words | 512 (= 2048 bytes) |
     /// | +0x38 | `primary_extent_ref` | 16192 |
     /// | +0x40/+0x44 | `CRINFO` word count / packed ASCII creator banner | varies |
-    /// | +0x154 | `FORMAT` text-storage format | 0 or 1 |
+    /// | +0x154 | `FORMAT` text-storage format: 1 = UTF-8 as stored, else the escaped project charset (`&~ … &`, GBK here) — what `core.dll` branches on before reading any string; see [`crate::record::text`] | 0 or 1 |
     ///
     /// The two session pointers are easy to mistake for each other and are not
     /// interchangeable: page 8897 states `sesno` 264 and page 4 states 1. A
