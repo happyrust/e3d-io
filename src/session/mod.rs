@@ -49,9 +49,15 @@ mod at {
     /// First word of the timestamp region, whose encoding is not closed.
     pub const STAMP: usize = 0x34;
     pub const STAMP_WORDS: usize = 5;
-    /// NUL-padded ASCII, runs to [`COMMENT_LEN`].
-    pub const MACHINE: usize = 0x7C;
-    /// Comment length, counted in 4-byte words.
+    /// `USER` length, counted in 4-byte words — the same shape as the comment.
+    /// `core.dll` serves this field as the session attribute `USER`
+    /// (`sub_5AF83D0`: count at word 30, text from word 31).
+    pub const USER_LEN: usize = 0x78;
+    pub const USER_TEXT: usize = 0x7C;
+    /// Words 31..39 are all the room `USER` has before `DESC`'s length word at
+    /// +0xA0; a longer stated count is clamped rather than read into the comment.
+    pub const USER_MAX_WORDS: usize = (COMMENT_LEN - USER_TEXT) / 4;
+    /// Comment length, counted in 4-byte words. `core.dll` calls this `DESC`.
     pub const COMMENT_LEN: usize = 0xA0;
     pub const COMMENT_TEXT: usize = 0xA4;
     /// How many named tables the directory that follows declares.
@@ -62,6 +68,17 @@ mod at {
     /// Eight bytes copied from `DBVRSN`, beginning after its `DAB` prefix.
     pub const DABACON_VERSION_TAG: usize = 0x7DC;
     pub const DABACON_VERSION_TAG_BYTES: usize = 8;
+    /// The six bookkeeping words that close a 2048-byte session page, right
+    /// behind the DAB tag: words 505..510. Named after the session attributes
+    /// `core.dll`'s `sub_5AF8740` serves them under.
+    pub const RUNUM: usize = 0x7E4;
+    pub const MEMEXT: usize = 0x7E8;
+    pub const MEMPPS: usize = 0x7EC;
+    pub const BASESN: usize = 0x7F0;
+    pub const REASON: usize = 0x7F4;
+    pub const LINKPS: usize = 0x7F8;
+    /// A page must reach past `LINKPS` to state a [`super::SessionTail`].
+    pub const TAIL_END: usize = LINKPS + 4;
     /// Everything through the comment length word must be present.
     pub const MIN_BYTES: usize = COMMENT_TEXT;
 }
@@ -126,9 +143,18 @@ pub struct SessionPage {
     /// Copy-on-write like the index root, so these roots are session-pinned
     /// too: a view opened at session N sees that session's reference tables.
     pub tables: Vec<TableRoot>,
-    /// Machine that closed the session, +0x7C, NUL-padded ASCII.
-    pub machine: String,
+    /// User who wrote the session, +0x7C, length at +0x78 counted in 4-byte
+    /// words — `core.dll`'s session attribute `USER`.
+    ///
+    /// This field was called `machine` and read as NUL-padded ASCII up to the
+    /// comment. It is the name E3D recorded for whoever saved the session —
+    /// `dpc`, `80404`, `happyrust`, `YW`, but also host-shaped logins such as
+    /// `pdms-bj-c103-47` on the sampled databases — and the word at +0x78
+    /// states exactly its length in words, as the comment's does at +0xA0
+    /// (`dpc` → 1, `80404` → 2, `happyrust` → 3).
+    pub user: String,
     /// Session comment, +0xA4, length at +0xA0 counted in 4-byte words.
+    /// `core.dll` calls it `DESC`.
     pub comment: String,
     /// Words +0x34..+0x48 verbatim.
     ///
@@ -145,6 +171,65 @@ pub struct SessionPage {
     /// the engine that wrote this session, not the E3D release that should be
     /// used to select a SchemaPack.
     pub dabacon_version_tag: Option<String>,
+    /// The six bookkeeping words at +0x7E4..+0x7F8, when the complete session
+    /// page is available. See [`SessionTail`].
+    pub tail: Option<SessionTail>,
+}
+
+/// The six words `core.dll` keeps at the very end of a session page, words
+/// 505..510 (+0x7E4..+0x7F8), right behind the DAB version tag.
+///
+/// `sub_5AF8740` in `core.dll` 3.1 serves them as the session attributes
+/// `RUNUM`, `MEMEXT`, `MEMPPS`, `BASESN`, `REASON` and `LINKPS`; 2.1's
+/// `core.dll` carries the same attribute hashes. The names are kept as they
+/// are because only two of the six have a meaning this crate can state:
+///
+/// - `BASESN` is the session this one was written on top of. Every plain
+///   `SAVEWORK` sampled states the previous session number (`ams7000_0001`
+///   263 → 262, `ams1112_0001` 1020 → 1019, E3D 2.1 `ams8000_0001` 19 → 18).
+///   After `MERGE CHANGES` it can name a session the chain no longer retains,
+///   which is exactly what makes it worth keeping next to `previous`.
+/// - `REASON` says why the session exists. `DB_DB::reason(sesno, string&)`
+///   renders it through message group 43 as `460 + code`, so the text lives in
+///   the AVEVA message catalogue, not in this crate; every plain `SAVEWORK`
+///   sampled states 0, and the `Saving Meta Data` session E3D 3.1 writes
+///   states 15.
+///
+/// `RUNUM`, `MEMEXT`, `MEMPPS` and `LINKPS` are handed over verbatim: their
+/// names are `core.dll`'s, their meaning is not pinned. Sampled values are
+/// `RUNUM` 1..43, `MEMEXT` 0 or 1, the other two 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SessionTail {
+    /// `RUNUM`, +0x7E4.
+    pub runum: u32,
+    /// `MEMEXT`, +0x7E8.
+    pub memext: u32,
+    /// `MEMPPS`, +0x7EC.
+    pub mempps: u32,
+    /// `BASESN`, +0x7F0: the session this one was based on; 0 when none.
+    pub base_sesno: u32,
+    /// `REASON`, +0x7F4: why the session was created, as `core.dll`'s code.
+    pub reason: u32,
+    /// `LINKPS`, +0x7F8.
+    pub linkps: u32,
+}
+
+impl SessionTail {
+    /// Read the six words, or `None` when the page ends before them.
+    fn parse(data: &[u8]) -> Option<Self> {
+        if data.len() < at::TAIL_END {
+            return None;
+        }
+        let r = |off: usize| u32::from_be_bytes(data[off..off + 4].try_into().unwrap());
+        Some(Self {
+            runum: r(at::RUNUM),
+            memext: r(at::MEMEXT),
+            mempps: r(at::MEMPPS),
+            base_sesno: r(at::BASESN),
+            reason: r(at::REASON),
+            linkps: r(at::LINKPS),
+        })
+    }
 }
 
 impl SessionPage {
@@ -195,7 +280,7 @@ impl SessionPage {
             )?,
             claim: address(page, "claim", r(at::CLAIM_EXTNO), r(at::CLAIM_PGNO))?,
             tables: table_directory(page, data)?,
-            machine: ascii_field(&data[at::MACHINE..at::COMMENT_LEN]),
+            user: word_text(data, at::USER_TEXT, r(at::USER_LEN), at::USER_MAX_WORDS),
             comment: comment(data, r(at::COMMENT_LEN)),
             stamp_words,
             dabacon_version_tag: data
@@ -206,6 +291,7 @@ impl SessionPage {
                 .map(ascii_field)
                 .map(|tag| tag.trim_end().to_owned())
                 .filter(|tag| !tag.is_empty()),
+            tail: SessionTail::parse(data),
         })
     }
 
@@ -922,10 +1008,20 @@ fn ascii_field(bytes: &[u8]) -> String {
 /// `ams8000_0001` states 16 there and holds a 61-character comment NUL-padded
 /// to 64 bytes; the byte just past `4 * 16` is NUL on every sampled page.
 fn comment(data: &[u8], len_words: u32) -> String {
-    let end = at::COMMENT_TEXT
-        .saturating_add(len_words as usize * 4)
-        .min(data.len());
-    match data.get(at::COMMENT_TEXT..end) {
+    word_text(data, at::COMMENT_TEXT, len_words, usize::MAX)
+}
+
+/// A word-counted text field: `len_words` 4-byte words from `text_at`,
+/// NUL-padded to the word, as `USER` and `DESC` are both stored.
+///
+/// The stated count is the field's own statement of its size and is what
+/// `core.dll` copies (`sub_5AF83D0` moves exactly that many words); the
+/// caller's `max_words` is the room the layout leaves before the next field,
+/// so a corrupt count cannot read the neighbouring field as text.
+fn word_text(data: &[u8], text_at: usize, len_words: u32, max_words: usize) -> String {
+    let words = (len_words as usize).min(max_words);
+    let end = text_at.saturating_add(words * 4).min(data.len());
+    match data.get(text_at..end) {
         Some(text) => ascii_field(text),
         None => String::new(),
     }
@@ -990,7 +1086,17 @@ mod tests {
             (0x28, 1),
             (0x34, 2026),
             (0x38, 8),
+            (0x78, 1),
             (0xA0, 3),
+            // The tail words as the 2026-09-12 page 12439 (session 444) of the
+            // same file states them: a `Saving Meta Data` session, reason 15,
+            // based on no session.
+            (0x7E4, 43),
+            (0x7E8, 1),
+            (0x7EC, 0),
+            (0x7F0, 0),
+            (0x7F4, 15),
+            (0x7F8, 0),
         ];
         for (off, value) in words {
             page[*off..*off + 4].copy_from_slice(&value.to_be_bytes());
@@ -1009,10 +1115,61 @@ mod tests {
         assert_eq!(parsed.previous, Some(PageId::new(1, 8884)));
         assert_eq!(parsed.end, PageId::new(1, 8899));
         assert_eq!(parsed.claim, PageId::new(1, 8898));
-        assert_eq!(parsed.machine, "dpc");
+        assert_eq!(parsed.user, "dpc");
         assert_eq!(parsed.comment, "CODEX db8");
         assert_eq!(parsed.stamp_words[0], 2026);
         assert_eq!(parsed.dabacon_version_tag.as_deref(), Some("2_35_23o"));
+        assert_eq!(
+            parsed.tail,
+            Some(SessionTail {
+                runum: 43,
+                memext: 1,
+                mempps: 0,
+                base_sesno: 0,
+                reason: 15,
+                linkps: 0,
+            })
+        );
+    }
+
+    /// `USER` is word-counted like the comment: the count at +0x78 says how
+    /// many words are text, and printable bytes past it belong to whatever
+    /// the page left there, not to the user name.
+    #[test]
+    fn the_user_name_is_read_by_its_length_word() {
+        let mut page = ams8000_latest();
+        page[0x7C..0x88].copy_from_slice(b"happyrustXYZ");
+
+        page[0x78..0x7C].copy_from_slice(&3u32.to_be_bytes());
+        let parsed = SessionPage::parse(PageId::new(1, 8897), &page).unwrap();
+        assert_eq!(parsed.user, "happyrustXYZ", "three words are twelve bytes");
+
+        page[0x78..0x7C].copy_from_slice(&2u32.to_be_bytes());
+        let parsed = SessionPage::parse(PageId::new(1, 8897), &page).unwrap();
+        assert_eq!(parsed.user, "happyrus", "two words stop before the third");
+
+        // A count past the room `USER` has is clamped at the comment's length
+        // word, so the comment text never reads as part of the user.
+        page[0x78..0x7C].copy_from_slice(&40u32.to_be_bytes());
+        let parsed = SessionPage::parse(PageId::new(1, 8897), &page).unwrap();
+        assert_eq!(parsed.user, "happyrustXYZ");
+        assert_eq!(parsed.comment, "CODEX db8");
+
+        page[0x78..0x7C].copy_from_slice(&0u32.to_be_bytes());
+        let parsed = SessionPage::parse(PageId::new(1, 8897), &page).unwrap();
+        assert_eq!(parsed.user, "", "a zero count is an empty name");
+    }
+
+    /// A page that ends before +0x7FC states no tail, the same way it states
+    /// no DAB tag; the fields that are there still parse.
+    #[test]
+    fn a_short_page_has_no_tail() {
+        let page = ams8000_latest();
+        let parsed = SessionPage::parse(PageId::new(1, 8897), &page[..0x7DC]).unwrap();
+        assert_eq!(parsed.tail, None);
+        assert_eq!(parsed.dabacon_version_tag, None);
+        assert_eq!(parsed.user, "dpc");
+        assert_eq!(parsed.sesno, 264);
     }
 
     #[test]

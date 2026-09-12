@@ -1437,9 +1437,19 @@ fn session_json(session: &e3d_io::session::SessionPage) -> Value {
         "previous_page": session.previous.map(|p| p.page),
         "index_root": session.index_root.page,
         "end_page": session.end.page,
-        "machine": session.machine,
+        "user": session.user,
         "comment": session.comment,
         "stamp_words": session.stamp_words,
+        "tail": session.tail.map(|tail| {
+            json!({
+                "runum": tail.runum,
+                "memext": tail.memext,
+                "mempps": tail.mempps,
+                "base_sesno": tail.base_sesno,
+                "reason": tail.reason,
+                "linkps": tail.linkps,
+            })
+        }),
     })
 }
 
