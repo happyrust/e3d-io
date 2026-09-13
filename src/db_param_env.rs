@@ -235,8 +235,17 @@ impl DbElementParamEnv {
     /// 345 mm。Core3D 的 DESPRE 原始属性分支也把未存储 DESP 报为 unset，二者
     /// 一致说明 `DPRO` 是目录定义/交互默认值，不是该表达式的运行时替代值。
     fn design_parameter(&self, index: i32) -> Option<f64> {
+        self.stored_design_parameter(index)
+            .or_else(|| self.declared_design_parameter(index).then_some(0.0))
+    }
+
+    /// Read an actually stored `DESP` slot without applying expression-time
+    /// numeric-empty semantics.  RPRO table selection needs this distinction:
+    /// an absent design value selects the DATA row's `DPRO`, whereas an
+    /// ordinary catalogue expression reads the same declared empty slot as 0.
+    fn stored_design_parameter(&self, index: i32) -> Option<f64> {
         let slot = usize::try_from(index).ok()?.checked_sub(1)?;
-        let stored = match self
+        match self
             .design
             .as_ref()?
             .attribute(ParamArray::Desp.attribute())
@@ -246,8 +255,7 @@ impl DbElementParamEnv {
                 items.get(slot).map(|value| f64::from(*value))
             }
             _ => None,
-        };
-        stored.or_else(|| self.declared_design_parameter(index).then_some(0.0))
+        }
     }
 
     /// Whether the catalogue design table declares this `DESP` slot.
@@ -463,6 +471,17 @@ impl DbElementParamEnv {
     /// `PURP` 那条路留给 `PPRO` 是空的那些行（`HEIG` 行就是 `PURP=ATTR` 而
     /// `PPRO` 空着）。声明的源都答不上时才轮到 `DPRO`，见 [`Self::row_default`]。
     fn design_property_row(&self, row: &DbElement, key: &str) -> Option<f64> {
+        // `PPRO=(ATTRIB DESP[n])` is the interactive value expression for a
+        // DATA row.  If the instance does not actually store that slot, Core
+        // selects DPRO.  Do not let the generic expression rule (a declared
+        // numeric DESP hole evaluates to 0) turn an absent OUTA/OUTB into the
+        // opposite application flag before the row default can be considered.
+        if word_text(row, "PURP").as_deref() == Some(purpose::DESIGN_PARAM) {
+            let index = whole_number(row, "NUMB")?;
+            if self.stored_design_parameter(index).is_none() {
+                return self.row_default(row);
+            }
+        }
         // `PPRO` 挂在这一行上，但要在**外层**环境里求：它写的 `PARA[1]` 是目录件
         // 的参数、`DESP[1]` 是设计构件的参数，都不是这一行自己的。
         let stated = self.row_formula(row, "PPRO");
@@ -517,10 +536,11 @@ impl DbElementParamEnv {
     /// `DPRO=( ATTRIB RPRO YA / 2 )` 还会再提 `RPRO`——所以与 `PPRO` 同一条求值
     /// 路、同一个深度闸。`DPRO` 自己也空或答不上，照旧 `None`。
     ///
-    /// 注意 `DPRO` 不是 `PURP=DESP` 数值空槽的运行时替代值。2026-09-06 的原生
-    /// E3D RVM/ATT 对拍显示，ams7999 `/1RCV071VP` 未存的 `DESP[1]/[2]` 在 PTRE
-    /// 中按 0 求值，而不是取同行的 230/184；这类行由 `design_property_source`
-    /// 先返回已声明空槽的 0，因此不会落到这里。
+    /// `DPRO` 只替代 **RPRO DATA 行**里未存储的 `PURP=DESP` 值，不改变普通目录
+    /// 表达式的数值空槽语义。2026-09-06 的原生 E3D RVM/ATT 对拍显示，ams7999
+    /// `/1RCV071VP` 未存的 `DESP[1]/[2]` 在 PTRE 中按 0 求值，而不是取同行的
+    /// 230/184；而 AMS 8000 桥架的 OUTA/OUTB 在 RPRO 选择中必须回落到 DPRO=1。
+    /// 两条路径由 `stored_design_parameter` 与 `design_parameter` 明确分开。
     fn row_default(&self, row: &DbElement) -> Option<f64> {
         self.row_formula(row, "DPRO")
     }
