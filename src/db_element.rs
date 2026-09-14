@@ -821,6 +821,17 @@ impl DbElement {
             Some(DescriptorValue::Real(real)) => AttributeNumber::Stored(*real),
             // `GATRE` 读整型槽也是给实数。
             Some(DescriptorValue::Int(int)) => AttributeNumber::Stored(f64::from(*int)),
+            // 一个词都没有的词组是这个槽的**零**，不是「读不出数」。SLYK 目录里
+            // `SBOX 16596/14146` 的 `PY` 就存成 `RawWords([])`，同一条链上兄弟属性的
+            // 零写成四词元组 `[0, 1, 0, 0]`（求值 0.0）——两种写法同一个意思。
+            //
+            // E3D 自己盖了章：那只 SBOX 在窄口径 RVM 里照常导出（`lengths
+            // [300, 38, 22]`，与 `PXLE/PYLE/PZLE` 逐位相同），它的世界平移减去构件原点
+            // 之后 PY 那一路是 0.002 mm——就是 0 被 f32 舍了一下。判 `NotNumeric` 会让
+            // 整只图元建不出：SLYK 上 88 只阀门因此各少一块，逐只比 E3D 短 7–10 mm。
+            Some(DescriptorValue::RawWords(words)) if words.is_empty() => {
+                AttributeNumber::Stored(0.0)
+            }
             Some(DescriptorValue::RawWords(words)) => {
                 match catalogue_expr::evaluate_words(words, env) {
                     Some(value) => AttributeNumber::Evaluated {
