@@ -25,6 +25,33 @@
 //!
 //! An expression this cannot read makes the whole specification `None`. Half a
 //! chain of turns would be a different direction, not a partial one.
+//!
+//! # The component form
+//!
+//! PDMS also writes a direction as a plain vector — `X 1260 Y 0 Z 0` — and that
+//! is stored under a different opcode, wrapped in its own header and trailer:
+//!
+//! ```text
+//! 49 5 2 52 | 1 33 | 11 | <18 word program> | 13 | <10> | 15 | <10> | 61 71
+//!                     X    0.7 * RPRO LENG    Y   OFFY    Z   OFFZ
+//! ```
+//!
+//! Each named axis is **scaled** by the expression that follows it and the three
+//! are summed, where the turn form rotates one axis toward the next. Both end at
+//! `61`; the component form adds `71` behind it.
+//!
+//! Evidence (`examples/ptcd_census` over SLYK `acw5001` + `acw0212`, 890 PTCA):
+//! 767 use the turn form (610 bare axis, 77 one turn, 80 two turns) and **6 use
+//! this one**, all six on `/CIR-FILEXFILL-HOUSE-PT`, all with the same `1 33`
+//! header and `61 71` trailer. With only one opcode value in the corpus its
+//! arithmetic cannot be pinned, so the component count is read off the body
+//! instead of computed from the opcode — an unexpected header, a stray code, or
+//! a trailing word no one read still yields `None` and lets the caller fall back
+//! to `DIR`.
+//!
+//! Getting this wrong is not subtle: falling back to `DIR` put the hose of
+//! `/CIR-FILEXFILL-HOUSE-200` on the template default `+Y`, 820 mm outside the
+//! housing E3D draws it in.
 
 /// Closes the specification. Outside the range any direction code can take.
 const TERMINATOR: u32 = 61;
@@ -37,6 +64,12 @@ const OPCODE_BASE: u32 = 20;
 /// Direction codes count from here, in pairs of axis and reversed axis.
 const FIRST_DIRECTION: u32 = 11;
 const DIRECTIONS: &[&str] = &["X", "-X", "Y", "-Y", "Z", "-Z"];
+/// Opcode of the component (`X a Y b Z c`) form; see the module header.
+const COMPONENT_OPCODE: u32 = 52;
+/// The two words every sampled component specification puts after its opcode.
+const COMPONENT_HEADER: [u32; 2] = [1, 33];
+/// The word the component form puts behind [`TERMINATOR`].
+const COMPONENT_END: u32 = 71;
 
 fn direction_name(code: u32) -> Option<&'static str> {
     DIRECTIONS
@@ -106,6 +139,9 @@ pub fn direction(
     if *declared as usize != words.len() || !LEADING_WORDS.contains(leading) {
         return None;
     }
+    if *opcode == COMPONENT_OPCODE {
+        return component_direction(body, env);
+    }
     let turns = usize::try_from(opcode.checked_sub(OPCODE_BASE)?.checked_sub(1)?).ok()?;
     let (&TERMINATOR, body) = body.split_last()? else {
         return None;
@@ -136,6 +172,36 @@ pub fn direction(
         rest = tail;
     }
     rest.is_empty().then_some(vector)
+}
+
+/// The component form: `<1 33> (axis, program)+ <61 71>`, summed then normalised.
+///
+/// `body` starts just after the opcode. Every axis must be a named direction and
+/// every program must evaluate; a vector that sums to zero has no direction at
+/// all, so that is `None` too rather than an arbitrary axis.
+fn component_direction(
+    body: &[u32],
+    env: &dyn crate::record::catalogue_eval::ParamEnv,
+) -> Option<[f64; 3]> {
+    let mut rest = body.strip_prefix(&COMPONENT_HEADER)?;
+    rest = rest.strip_suffix(&[TERMINATOR, COMPONENT_END])?;
+    let mut vector = [0.0f64; 3];
+    while let Some((&code, tail)) = rest.split_first() {
+        let axis = direction_vector(code)?;
+        let length = usize::try_from(*tail.first()?).ok()?;
+        let program: Vec<i32> = tail.get(..length)?.iter().map(|word| *word as i32).collect();
+        let scale = crate::record::catalogue_pml::evaluate_words(&program, env)?;
+        if !scale.is_finite() {
+            return None;
+        }
+        for (component, unit) in vector.iter_mut().zip(axis) {
+            *component += unit * scale;
+        }
+        rest = tail.get(length..)?;
+    }
+    let length = (vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2]).sqrt();
+    (length > 0.0 && length.is_finite())
+        .then(|| [vector[0] / length, vector[1] / length, vector[2] / length])
 }
 
 #[cfg(test)]
@@ -181,6 +247,55 @@ mod tests {
             Some("( ATTRIB DESP[2 ] )")
         );
         assert_eq!(direction(&words, &env), Some([1.0, 0.0, 0.0]));
+    }
+
+    /// SLYK `/CIR-FILEXFILL-HOUSE-PT` P5 stores `X ( 0.7 * ATTRIB RPRO LENG )
+    /// Y ( ATTRIB RPRO OFFY ) Z ( ATTRIB RPRO OFFZ )` in the component form.
+    /// With the hose run straight (both offsets zero) it is the housing axis;
+    /// the turn-form reader could not read it at all and the caller fell back to
+    /// `DIR`, which is `+Y` on every template.
+    #[test]
+    fn evaluates_slyk_component_form_direction() {
+        let words = [
+            49, 5, 2, 52, 1, 33, 11, 18, 1, 101, 6, 419_430, 1_717_986_919, 1_073_742_846, 0, 0,
+            106, 2, 840_258, 1, 1, 679_575, 1601, 1701, 804, 13, 10, 1, 106, 2, 840_258, 1, 1,
+            1_028_067, 1601, 1701, 15, 10, 1, 106, 2, 840_258, 1, 1, 1_047_750, 1601, 1701, 61, 71,
+        ];
+        let straight = MapParamEnv::new()
+            .set_attribute("RPRO LENG", 1800.0)
+            .set_attribute("RPRO OFFY", 0.0)
+            .set_attribute("RPRO OFFZ", 0.0);
+        assert_eq!(direction(&words, &straight), Some([1.0, 0.0, 0.0]));
+
+        // A hose that does rise leans by exactly the stored offsets: the three
+        // components are summed, not chained as turns.
+        let offset = MapParamEnv::new()
+            .set_attribute("RPRO LENG", 1000.0)
+            .set_attribute("RPRO OFFY", 700.0)
+            .set_attribute("RPRO OFFZ", 0.0);
+        let leaning = direction(&words, &offset).expect("offsets still resolve");
+        assert!((leaning[0] - 0.7071).abs() < 1e-3, "{leaning:?}");
+        assert!((leaning[1] - 0.7071).abs() < 1e-3, "{leaning:?}");
+        assert_eq!(leaning[2], 0.0);
+    }
+
+    /// The component form is all-or-nothing: a header, an axis code, or a
+    /// trailer that is not the sampled one leaves the caller on `DIR`.
+    #[test]
+    fn a_malformed_component_specification_resolves_to_nothing() {
+        let env = MapParamEnv::new().set_attribute("RPRO LENG", 1800.0);
+        // `1 33` header replaced.
+        assert_eq!(
+            direction(&[12, 5, 2, 52, 1, 34, 11, 5, 1, 101, 6, 61], &env),
+            None
+        );
+        // Missing the `71` the component form puts behind the terminator.
+        assert_eq!(direction(&[11, 5, 2, 52, 1, 33, 11, 4, 1, 101, 61], &env), None);
+        // A code that is not one of the six named axes.
+        assert_eq!(
+            direction(&[12, 5, 2, 52, 1, 33, 17, 4, 1, 101, 61, 71], &env),
+            None
+        );
     }
 
     /// Both `Ptcdirection` rows of the 2026-08-26 TTY sample and the shapes
