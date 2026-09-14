@@ -43,6 +43,12 @@ const PROGRAM_MARKER: i32 = 1;
 const OP_PUSH_NUMBER: i32 = 101;
 const OP_ATTRIBUTE: i32 = 106;
 const OP_PUSH_TEXT: i32 = 118;
+/// Numeric equality. The `case 401` arm of Core's expression interpreter
+/// (`core.dll` `sub_51B4976`, reached from `exprlib/EXEVRE` at `0x51B485A`)
+/// does not compare bits — it asks `exprlib/EXRCTL` (`0x51D3B32`) for a slack
+/// first, see [`equal_within_slack`]. 402 is the text form, 403 the logical one
+/// and 404 the two-component one; none is in the corpus, so none is read here.
+const OP_EQUAL: i32 = 401;
 const OP_GREATER_THAN: i32 = 601;
 const OP_NEGATE: i32 = 801;
 const OP_ADD: i32 = 802;
@@ -72,6 +78,17 @@ const OP_MIN: i32 = 1009;
 const OP_MATCH: i32 = 1308;
 const OP_TRIM: i32 = 1314;
 const OP_LOGICAL_STRING: i32 = 1410;
+/// `IFTRUE ( cond , a , b )` over reals. The `case 1822` arm of the same
+/// interpreter pops `b`, then `a`, then a **logical**, and pushes `a` when
+/// the logical is true and `b` when it is false. The sibling opcodes select the
+/// same way over other types (1823 text, 1824 logical, 1825+ the rest); only
+/// the real one occurs in the corpus.
+///
+/// Without it the whole program is unreadable, not just this step: the SolidSupport
+/// U-bolt `/FHG_A_A1(S)_100` (SCOM `23055/25782`) writes every nut offset, the
+/// U-bend diameter and the rubber-sleeve thickness as `IFTRUE`-guarded options,
+/// so 5 of its 9 primitives went missing while the other 4 built normally.
+const OP_IF_REAL: i32 = 1822;
 
 /// `101` is followed by this word, then four words of number, then it again.
 const NUMBER_SHAPE: i32 = 6;
@@ -204,9 +221,8 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             OP_PUSH_TEXT => parse_text(&program[cursor..])?,
             OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
             | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_MAX
-            | OP_MIN | OP_GREATER_THAN | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING => {
-                (Step::Operator(program[cursor]), 1)
-            }
+            | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING
+            | OP_IF_REAL => (Step::Operator(program[cursor]), 1),
             // An opcode this has never seen used is a program it has not read.
             _ => return None,
         };
@@ -254,6 +270,15 @@ pub fn render(words: &[i32]) -> Option<String> {
             Step::Operator(OP_TRIM) => apply_function("TRIM", &mut stack)?,
             Step::Operator(OP_LOGICAL_STRING) => apply_function("STR", &mut stack)?,
             Step::Operator(OP_ATANT) => apply_binary_function("ATANT", &mut stack)?,
+            Step::Operator(OP_IF_REAL) => {
+                let otherwise = stack.pop()?;
+                let then = stack.pop()?;
+                let condition = stack.pop()?;
+                stack.push(Term::atom(format!(
+                    "IFTRUE ( {} , {} , {} )",
+                    condition.text, then.text, otherwise.text
+                )));
+            }
             Step::Operator(operator) => apply_binary(operator, &mut stack)?,
         }
     }
@@ -358,6 +383,24 @@ fn apply_value(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
             let right = stack.pop()?.number()?;
             Value::Logical(stack.pop()?.number()? > right)
         }
+        OP_EQUAL => {
+            let right = stack.pop()?.number()?;
+            Value::Logical(equal_within_slack(stack.pop()?.number()?, right))
+        }
+        // The branch not taken is dropped whole — Core pops both before it
+        // looks at the logical, so an unreadable `b` cannot fail a program
+        // whose condition selects `a`.
+        OP_IF_REAL => {
+            let otherwise = stack.pop()?.number()?;
+            let then = stack.pop()?.number()?;
+            match stack.pop()? {
+                Value::Logical(true) => Value::Number(then),
+                Value::Logical(false) => Value::Number(otherwise),
+                // Core pops a logical here; anything else is a program this
+                // has misread, not a condition to coerce.
+                _ => return None,
+            }
+        }
         OP_LOGICAL_STRING => match stack.pop()? {
             Value::Logical(value) => Value::Text(value.to_string()),
             // 1410 is logical STR; other STR types have different opcodes.
@@ -418,6 +461,32 @@ fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
     }
     stack.push(Value::Number(value));
     Some(())
+}
+
+/// `EQ` the way `exprlib/EXRCTL` (`core.dll` `0x51D3B32`) compares two reals.
+///
+/// The slack is relative — `1e-6 * max(|a|, |b|)` — and is *capped* at 0.9 when
+/// both operands are whole numbers inside the `int32` range. The cap only bites
+/// past a magnitude of 9e5, which no catalogue parameter reaches; it is here
+/// because transcribing half of a comparison is how a rule silently stops being
+/// the one the reference uses.
+///
+/// Bit equality would be the wrong reading: these operands arrive from
+/// [`decode_number`] and from `PARA`/`DESP` arrays, so a discriminator written
+/// as `DESP[3] EQ 1` is comparing a stored float against a literal.
+fn equal_within_slack(left: f64, right: f64) -> bool {
+    const RELATIVE: f64 = 1e-6;
+    const WHOLE_NUMBER_CAP: f64 = 0.9;
+    let whole = |value: f64| {
+        value >= f64::from(i32::MIN)
+            && value <= f64::from(i32::MAX)
+            && (value - value.round()).abs() <= RELATIVE
+    };
+    let mut slack = RELATIVE * left.abs().max(right.abs());
+    if whole(left) && whole(right) {
+        slack = slack.min(WHOLE_NUMBER_CAP);
+    }
+    (left - right).abs() <= slack
 }
 
 /// Spell an operand the way E3D's `Q` does, taking its subscript off the stack.
@@ -662,6 +731,7 @@ fn apply_binary(operator: i32, stack: &mut Vec<Term>) -> Option<()> {
         OP_SUBTRACT => ("-", PRECEDENCE_ADDITIVE),
         OP_MULTIPLY => ("*", PRECEDENCE_MULTIPLICATIVE),
         OP_DIVIDE => ("/", PRECEDENCE_MULTIPLICATIVE),
+        OP_EQUAL => ("EQ", PRECEDENCE_COMPARISON),
         OP_GREATER_THAN => ("GT", PRECEDENCE_COMPARISON),
         _ => return None,
     };
@@ -689,6 +759,65 @@ fn apply_binary(operator: i32, stack: &mut Vec<Term>) -> Option<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SLYK `/FHG_A_A1(S)_100` (SCOM 23055/25782) SEXT `23055/25724`.Pz — the
+    /// U-bolt nut offset. Two `EQ` discriminators pick between three nut
+    /// positions through two nested `IFTRUE`s; before 401/1822 were read the
+    /// whole program was undecodable and five of the U-bolt's nine primitives
+    /// silently went missing.
+    ///
+    /// With `DESP[1]=2`, `DESP[2]=0`, `RPRO DESC=1`, `PARA[8]=10.8`,
+    /// `PARA[9]=114.3` this is `0.5 * 114.3 - 10.8 = 46.35`, and the nut E3D
+    /// exports sits exactly there (local z −57.15..−46.35 along the SEXT's
+    /// negated axis, thickness `PARA[8]`).
+    #[test]
+    fn the_ubolt_nut_offset_reads_its_two_iftrue_discriminators() {
+        let words = [
+            113, 1, 101, 6, 0, 0, 1073742846, 0, 0, 101, 6, 131072, 0, 1073742850, 0, 0, 106, 2,
+            564289, -1, -1, 0, 1601, 1701, 804, 101, 6, 1048576, 0, 1073742847, 0, 0, 106, 2,
+            860359, -1, -1, 0, 1601, 1701, 101, 6, 1048576, 0, 1073742847, 0, 0, 401, 101, 6, 0, 0,
+            1073742848, 0, 0, 106, 2, 860359, -1, -1, 0, 1601, 1701, 106, 2, 840258, 1, 1, 604480,
+            1601, 1701, 101, 6, 1048576, 0, 1073742847, 0, 0, 401, 101, 6, 0, 0, 1073741824, 0, 0,
+            101, 6, 1572864, 0, 1073742849, 0, 0, 1822, 802, 101, 6, 0, 0, 1073742850, 0, 0, 106,
+            2, 564289, -1, -1, 0, 1601, 1701, 801, 1822, 802,
+        ];
+        assert_eq!(
+            render(&words).as_deref(),
+            Some(
+                "( 0.5 * ATTRIB PARA[9 ] + IFTRUE ( ATTRIB DESP[1 ] EQ 1 , \
+                 ATTRIB DESP[2 ] + IFTRUE ( ATTRIB RPRO DESC EQ 1 , 0 , 6 ) , \
+                 - ATTRIB PARA[8 ] ) )"
+            )
+        );
+
+        let env = MapParamEnv::new()
+            .set_attribute("PARA[9]", 114.3)
+            .set_attribute("PARA[8]", 10.8)
+            .set_attribute("DESP[1]", 2.0)
+            .set_attribute("DESP[2]", 0.0)
+            .set_attribute("RPRO DESC", 1.0);
+        let value = evaluate_words(&words, &env).expect("both branches readable");
+        assert!((value - 46.35).abs() < 1e-9, "{value}");
+
+        // `A/G = 1` takes the other branch of the outer IFTRUE: the nut moves
+        // to `DESP[2] + 0` above the datum instead of one thickness below it.
+        let env = env.set_attribute("DESP[1]", 1.0);
+        let value = evaluate_words(&words, &env).expect("other branch");
+        assert!((value - 57.15).abs() < 1e-9, "{value}");
+    }
+
+    /// `EQ` is not bit equality: `exprlib/EXRCTL` allows `1e-6 * max(|a|,|b|)`.
+    #[test]
+    fn equality_carries_exrctls_relative_slack() {
+        assert!(equal_within_slack(1.0, 1.0));
+        assert!(equal_within_slack(0.0, 0.0), "零对零不能靠相对量");
+        assert!(equal_within_slack(114.3, 114.3 + 1e-7));
+        assert!(!equal_within_slack(114.3, 114.3 + 1e-3));
+        assert!(!equal_within_slack(1.0, 2.0));
+        // Past 9e5 two whole numbers stop tracking the relative rule.
+        assert!(!equal_within_slack(2_000_000.0, 2_000_001.0));
+        assert!(equal_within_slack(2_000_000.5, 2_000_001.5));
+    }
 
     #[test]
     fn flex_body_poff_evaluates_the_native_pow_program() {
