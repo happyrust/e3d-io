@@ -646,11 +646,30 @@ fn whole_number(element: &DbElement, name: &str) -> Option<i32> {
 
 impl ParamEnv for DbElementParamEnv {
     /// `PARAM n` —— 目录件的 `PARA[n]`，1 起。见模块头的取证。
+    ///
+    /// **下标越过 `PARA` 的长度是 0，不是「答不上」。** Core3D `pplib/DECARG`
+    /// (`Core3D.dll` 0x103C12B8) 的 `PARAM` 波段（操作数 1..=50）用 `GATPAR` 取这一格，
+    /// 只要它置了错号就把操作数当场折成 0 接着算：越界那号（223）额外发条消息，
+    /// 「这一格没有」那号（202）连消息都不发，两条路的**值都是 0**——公式不作废，
+    /// 图元也不丢。`IPARAM` 早就按同一个做法读（`exppdms/GTGETP`，见 [`Self::iparam`]）。
+    ///
+    /// SLYK 的 `/Y42X-16C-FBP/GMSE_001` 正落在这条上：`SDSH 16596/17611` 的 `PHEI`
+    /// 写着 `PARAM 9`，而那只 SCOM 的 `PARA` 只有 8 格。E3D 求出 0，于是走 CRCATI
+    /// 碟臂（`0x10345ACC` case 702883/908861）`PHEI = 0` 那一路，出的是
+    /// `gm_CreateCylinder(PDIA/2, 1.0)` 的 1 mm 圆盘；80 根严尺子的基准里 116 只阀门
+    /// 各有这么一条 `Cylinder r=50 h=1`，我们这里答 `None` 时整只 SDSH 连同那块几何
+    /// 一起没了。
+    ///
+    /// 只折「`PARA` 读得出来、下标落在它之后」这一种。没有目录件、`PARA` 读不出来
+    /// 仍是 `None`：那是问不到，不是问到了零个——模块头第一条说的就是这个分别。
+    /// `ATTRIB PARA[i]` 那条 PML 路不在此列，它没有同样的取证。
     fn param(&self, n: i32) -> Option<f64> {
         let index = usize::try_from(n).ok()?.checked_sub(1)?;
         let catalogue = self.catalogue.as_ref()?;
         match catalogue.attribute("PARA") {
-            Ok(Some(DescriptorValue::RealArray(items))) => items.get(index).copied(),
+            Ok(Some(DescriptorValue::RealArray(items))) => {
+                Some(items.get(index).copied().unwrap_or(0.0))
+            }
             _ => None,
         }
     }
