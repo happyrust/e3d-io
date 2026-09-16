@@ -25,7 +25,7 @@
 //! [`DbFileResolver`] 的池子会先问一次 resolver（gen-model 拿 `CataDbLocator`
 //! 实现它，就得到 `DirectStore::pin_from_locator` 同款的按需补开）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
@@ -94,6 +94,12 @@ pub enum DbElementError {
         expected: u32,
         actual: u32,
     },
+    #[error("{}: 文件自报类型 {actual}，与要求的 {expected} 不符", file.display())]
+    DbTypeMismatch {
+        file: PathBuf,
+        expected: String,
+        actual: String,
+    },
     #[error("db {dbno} 会话 {sesno} 的索引里没有 {refno}")]
     NotFound { refno: RefNo, dbno: u32, sesno: u32 },
     #[error("db {dbno}: {source}")]
@@ -146,6 +152,34 @@ struct OpenDb {
     provider: TemplateProvider,
     /// 实际钉住的会话号：`pin.sesno` 给了就是它，没给就是开库时解出的冻结点。
     pinned_sesno: u32,
+    source: DbSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DbSource {
+    pub file: PathBuf,
+    pub sesno: u32,
+    pub len: u64,
+    pub modified: Option<std::time::SystemTime>,
+    pub created: Option<std::time::SystemTime>,
+}
+
+impl DbSource {
+    pub fn is_current(&self) -> std::io::Result<bool> {
+        let metadata = std::fs::metadata(&self.file)?;
+        Ok(metadata.len() == self.len
+            && metadata.modified().ok() == self.modified
+            && metadata.created().ok() == self.created)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DbMetadata {
+    pub dbnum: u32,
+    pub db_type: String,
+    pub source: DbSource,
+    pub world: RefNo,
+    pub extent_ref0s: Vec<u32>,
 }
 
 impl OpenDb {
@@ -154,6 +188,7 @@ impl OpenDb {
             file: pin.file.clone(),
             detail,
         };
+        let metadata = std::fs::metadata(&pin.file).map_err(|error| fail(error.to_string()))?;
         let engine = match pin.sesno {
             Some(sesno) => ReadOnlyEngine::open_at(&pin.file, sesno),
             None => ReadOnlyEngine::open(&pin.file),
@@ -162,6 +197,30 @@ impl OpenDb {
 
         let dbno = engine.descriptor().db_mark;
         let pinned_sesno = engine.session().sesno;
+        let source = DbSource {
+            file: pin.file.clone(),
+            sesno: pinned_sesno,
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+            created: metadata.created().ok(),
+        };
+        if !source
+            .is_current()
+            .map_err(|error| fail(error.to_string()))?
+        {
+            return Err(fail("source changed while opening frozen session".into()));
+        }
+
+        if let Some(expected) = pin.db_type.as_ref() {
+            let actual = engine.descriptor().db_type_name().unwrap_or_default();
+            if !actual.eq_ignore_ascii_case(expected) {
+                return Err(DbElementError::DbTypeMismatch {
+                    file: pin.file.clone(),
+                    expected: expected.clone(),
+                    actual,
+                });
+            }
+        }
 
         let expected_type = pin.db_type.as_deref().map(e3d_attlib::db1_hash);
         let provider = TemplateProvider::open(&pin.template, expected_type)
@@ -172,6 +231,7 @@ impl OpenDb {
             engine,
             provider,
             pinned_sesno,
+            source,
         })
     }
 }
@@ -187,8 +247,11 @@ pub struct DbSet {
     attlib: Arc<e3d_attlib::AttlibData>,
     dbs: RwLock<HashMap<u32, Arc<Mutex<OpenDb>>>>,
     resolver: Option<Box<dyn DbFileResolver>>,
-    element_cache: Option<RwLock<ElementCache>>,
+    element_cache: Option<RwLock<DbElementCaches>>,
+    opening: Mutex<HashMap<u32, Arc<Mutex<()>>>>,
 }
+
+type DbElementCaches = HashMap<u32, Arc<RwLock<ElementCache>>>;
 
 /// 池级元素缓存（默认关，见 [`DbSet::with_element_cache`]）。
 ///
@@ -217,6 +280,7 @@ impl DbSet {
             dbs: RwLock::new(HashMap::new()),
             resolver: None,
             element_cache: None,
+            opening: Mutex::new(HashMap::new()),
         }
     }
 
@@ -237,7 +301,7 @@ impl DbSet {
     /// 缓存的正确性挂在**会话钉死**上：[`DbSet::add_db`] 换库会连同该库的缓存条目一起丢，
     /// 因为换了时点再用旧解析读到的就是上一个时点的树。
     pub fn with_element_cache(mut self) -> Self {
-        self.element_cache = Some(RwLock::new(ElementCache::default()));
+        self.element_cache = Some(RwLock::new(HashMap::new()));
         self
     }
 
@@ -250,6 +314,7 @@ impl DbSet {
             dbs: RwLock::new(HashMap::new()),
             resolver: Some(resolver),
             element_cache: None,
+            opening: Mutex::new(HashMap::new()),
         }
     }
 
@@ -308,13 +373,73 @@ impl DbSet {
         let Ok(mut cache) = cache.write() else {
             return;
         };
-        cache.parsed.retain(|refno, _| refno.dbno() != dbno);
-        cache.extraction.retain(|refno, _| refno.dbno() != dbno);
+        cache.remove(&dbno);
+    }
+
+    /// Create the next immutable MDB view, preserving unaffected open sessions
+    /// and their caches by Arc. Existing callers retain this view and its pins.
+    /// No database opens, element scans, or per-element cache copies occur here.
+    pub fn fork_without(
+        &self,
+        changed: &HashSet<u32>,
+        resolver: Box<dyn DbFileResolver>,
+    ) -> Result<Self, DbElementError> {
+        let dbs: HashMap<_, _> = self
+            .dbs
+            .read()
+            .map_err(|_| DbElementError::Poisoned)?
+            .iter()
+            .filter(|(dbno, _)| !changed.contains(dbno))
+            .map(|(dbno, slot)| (*dbno, slot.clone()))
+            .collect();
+        let element_cache = self
+            .element_cache
+            .as_ref()
+            .map(|cache| {
+                let retained = cache
+                    .read()
+                    .map_err(|_| DbElementError::Poisoned)?
+                    .iter()
+                    .filter(|(dbno, _)| dbs.contains_key(dbno))
+                    .map(|(dbno, entries)| (*dbno, entries.clone()))
+                    .collect();
+                Ok::<_, DbElementError>(RwLock::new(retained))
+            })
+            .transpose()?;
+        Ok(Self {
+            attlib: self.attlib.clone(),
+            dbs: RwLock::new(dbs),
+            resolver: Some(resolver),
+            element_cache,
+            opening: Mutex::new(HashMap::new()),
+        })
+    }
+
+    pub fn cached_element_count(&self) -> usize {
+        self.element_cache
+            .as_ref()
+            .and_then(|cache| cache.read().ok())
+            .map(|databases| {
+                databases
+                    .values()
+                    .filter_map(|cache| cache.read().ok())
+                    // Extraction always parses first, so parsed is the key union.
+                    .map(|cache| cache.parsed.len())
+                    .sum()
+            })
+            .unwrap_or_default()
+    }
+
+    fn cache_of(&self, dbno: u32) -> Option<Arc<RwLock<ElementCache>>> {
+        let caches = self.element_cache.as_ref()?;
+        if let Some(cache) = caches.read().ok()?.get(&dbno) {
+            return Some(cache.clone());
+        }
+        Some(caches.write().ok()?.entry(dbno).or_default().clone())
     }
 
     fn cached_parsed(&self, refno: RefNo) -> Option<Arc<ParsedElement>> {
-        self.element_cache
-            .as_ref()?
+        self.cache_of(refno.dbno())?
             .read()
             .ok()?
             .parsed
@@ -323,17 +448,16 @@ impl DbSet {
     }
 
     fn store_parsed(&self, refno: RefNo, parsed: Arc<ParsedElement>) {
-        let Some(cache) = self.element_cache.as_ref() else {
+        let Some(cache) = self.cache_of(refno.dbno()) else {
             return;
         };
         if let Ok(mut cache) = cache.write() {
             cache.parsed.insert(refno, parsed);
-        }
+        };
     }
 
     fn cached_extraction(&self, refno: RefNo) -> Option<Arc<ElementExtraction>> {
-        self.element_cache
-            .as_ref()?
+        self.cache_of(refno.dbno())?
             .read()
             .ok()?
             .extraction
@@ -342,12 +466,12 @@ impl DbSet {
     }
 
     fn store_extraction(&self, refno: RefNo, extraction: Arc<ElementExtraction>) {
-        let Some(cache) = self.element_cache.as_ref() else {
+        let Some(cache) = self.cache_of(refno.dbno()) else {
             return;
         };
         if let Ok(mut cache) = cache.write() {
             cache.extraction.insert(refno, extraction);
-        }
+        };
     }
 
     /// 已注册的库号，无序。
@@ -356,6 +480,41 @@ impl DbSet {
             .read()
             .map(|map| map.keys().copied().collect())
             .unwrap_or_default()
+    }
+
+    /// Already-open source identities, without resolving or opening anything.
+    pub fn opened_sources(&self) -> Result<Vec<(u32, DbSource)>, DbElementError> {
+        let slots: Vec<_> = self
+            .dbs
+            .read()
+            .map_err(|_| DbElementError::Poisoned)?
+            .iter()
+            .map(|(dbnum, slot)| (*dbnum, slot.clone()))
+            .collect();
+        slots
+            .into_iter()
+            .map(|(dbnum, slot)| {
+                let source = slot
+                    .lock()
+                    .map_err(|_| DbElementError::Poisoned)?
+                    .source
+                    .clone();
+                Ok((dbnum, source))
+            })
+            .collect()
+    }
+
+    /// Metadata from the same frozen engine used for element reads.
+    pub fn metadata(&self, dbnum: u32) -> Result<DbMetadata, DbElementError> {
+        self.with_db(dbnum, |db| {
+            Ok(DbMetadata {
+                dbnum,
+                db_type: db.engine.descriptor().db_type_name().unwrap_or_default(),
+                source: db.source.clone(),
+                world: db.engine.descriptor().world_refno(),
+                extent_ref0s: db.engine.file_info().extent_refs(db.engine.descriptor()),
+            })
+        })
     }
 
     /// 实际钉住的会话号。对拍时要把它跟每条比对记在一起：时点差不是读错。
@@ -428,13 +587,29 @@ impl DbSet {
         {
             return Ok(hit.clone());
         }
+        let opening = self
+            .opening
+            .lock()
+            .map_err(|_| DbElementError::Poisoned)?
+            .entry(dbno)
+            .or_default()
+            .clone();
+        let _flight = opening.lock().map_err(|_| DbElementError::Poisoned)?;
+        if let Some(hit) = self
+            .dbs
+            .read()
+            .map_err(|_| DbElementError::Poisoned)?
+            .get(&dbno)
+        {
+            return Ok(hit.clone());
+        }
         let pin = self
             .resolver
             .as_ref()
             .and_then(|resolver| resolver.resolve(dbno))
             .ok_or(DbElementError::DbNotRegistered { dbno })?;
-        // 打开在池表锁之外做；两个线程同时开同一个库时后到的那份丢掉，多读几页，
-        // 换不会在文件 I/O 期间攥着表锁。
+        // Only this dbnum's first-open lock spans I/O. Unrelated dbnums open
+        // independently; concurrent callers of this dbnum reuse the result.
         let opened = OpenDb::open(&pin)?;
         if opened.dbno != dbno {
             return Err(DbElementError::DbNumberMismatch {
