@@ -806,6 +806,52 @@ impl ParamEnv for DbElementParamEnv {
             (None, None) => self.number(attribute.name),
         }
     }
+
+    /// `( :HXYsize[2] )`——按目录写下的键读一个 UDA，经宿主所在 `DbSet` 挂的字典
+    /// （[`DbElement::uda_by_key`]）。宿主顺序同 [`Self::hosts`]：先设计构件再目录件。
+    ///
+    /// 一个宿主的字典**认**这个键（对它的 noun 有效）就到此为止：有值取值，unset 就是
+    /// 答不上——不再去另一边找同键的值，那是另一个零件的尺寸。只有字典对这个宿主
+    /// 说「不认识 / 无效」才换下一个宿主。哪个宿主都不认（没挂字典、挂的字典里没有
+    /// 这个键）就是 `None`，公式按未解报出去，不猜。
+    ///
+    /// ams7997 的风管头槽位就停在「unset」这一格：`/HRTUBE1-BOXI.PXLE` 写的键是
+    /// `AvevaCatalogue` 字典（acp7006）那条 `HXYsize` 的 `OLDKEY`，BRAN 上的 `675 600`
+    /// 却存在本项目字典（ams5100）那条同名定义的键下——两条定义、一个名字，目录指的
+    /// 是设计元素没存值的那条。E3D 对这些槽位报的 `unable to evaluate … PXLE` 正是
+    /// 同一次落空（`catalogue_pml` 模块头）。
+    fn uda_number(&self, key: u32, subscript: Option<f64>) -> Option<f64> {
+        for host in self.hosts() {
+            let value = match host.uda_by_key(key) {
+                Ok(Some(value)) => value,
+                Ok(None) => return None,
+                Err(_) => continue,
+            };
+            return uda_value_number(&value, subscript);
+        }
+        None
+    }
+}
+
+/// 一个 UDA 值读成数：标量直接给（`[1]` 也算是它自己，与 `ATTRIB PARA` 写成 `[1, 1]`
+/// 的那条回落同口径），数组按 1 起的下标取；文本、逻辑、引用都不是数。
+fn uda_value_number(value: &DescriptorValue, subscript: Option<f64>) -> Option<f64> {
+    let index = match subscript {
+        None => None,
+        Some(subscript) if subscript.fract() == 0.0 && subscript >= 1.0 => {
+            Some(subscript as usize - 1)
+        }
+        Some(_) => return None,
+    };
+    match (value, index) {
+        (DescriptorValue::Real(real), None | Some(0)) => Some(*real),
+        (DescriptorValue::Int(int), None | Some(0)) => Some(f64::from(*int)),
+        (DescriptorValue::RealArray(items), Some(index)) => items.get(index).copied(),
+        (DescriptorValue::IntArray(items), Some(index)) => {
+            items.get(index).map(|item| f64::from(*item))
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -900,6 +946,38 @@ mod tests {
             }),
             None
         );
+    }
+
+    /// 没有宿主就没有字典，按键读 UDA 也得答「不知道」，不是 0。
+    #[test]
+    fn a_uda_key_without_hosts_answers_nothing() {
+        let env = DbElementParamEnv::new(None, None);
+        assert_eq!(env.uda_number(0x2652_AB52, Some(2.0)), None);
+        assert_eq!(env.uda_number(0x2652_AB52, None), None);
+    }
+
+    /// UDA 值读成数的口径：标量整体（`[1]` 也是它自己），数组按 1 起下标，越界与
+    /// 非整数下标、非数值形态一律答不上。
+    #[test]
+    fn a_uda_value_reads_as_a_number_only_where_it_is_one() {
+        let sizes = DescriptorValue::RealArray(vec![675.0, 600.0]);
+        assert_eq!(uda_value_number(&sizes, Some(1.0)), Some(675.0));
+        assert_eq!(uda_value_number(&sizes, Some(2.0)), Some(600.0));
+        assert_eq!(uda_value_number(&sizes, Some(3.0)), None);
+        assert_eq!(uda_value_number(&sizes, Some(0.0)), None);
+        assert_eq!(uda_value_number(&sizes, Some(1.5)), None);
+        assert_eq!(uda_value_number(&sizes, None), None, "an array is not a number");
+        let scalar = DescriptorValue::Real(2800.0);
+        assert_eq!(uda_value_number(&scalar, None), Some(2800.0));
+        assert_eq!(uda_value_number(&scalar, Some(1.0)), Some(2800.0));
+        assert_eq!(uda_value_number(&scalar, Some(2.0)), None);
+        assert_eq!(uda_value_number(&DescriptorValue::Int(7), None), Some(7.0));
+        assert_eq!(
+            uda_value_number(&DescriptorValue::IntArray(vec![3, 4]), Some(2.0)),
+            Some(4.0)
+        );
+        assert_eq!(uda_value_number(&DescriptorValue::Text("HP".into()), None), None);
+        assert_eq!(uda_value_number(&DescriptorValue::Bool(true), None), None);
     }
 
     /// 深度闸关上之后，再深的一层直接答不上，而不是继续往下钻。

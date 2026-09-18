@@ -96,6 +96,20 @@ pub trait ParamEnv {
     fn design_dimension(&self, id: i32) -> Option<f64>;
     /// `ATTRIB …` read to a number, in any of the shapes [`AttribRef`] names.
     fn attribute_number(&self, attribute: &AttribRef<'_>) -> Option<f64>;
+    /// A user-defined attribute the program names by its Dictionary key
+    /// (`:HXYsize[2]` is stored as the `UKEY` the name had when the catalogue
+    /// was written, not as the name), read to a number: the whole value when
+    /// `subscript` is `None`, entry `i` of an array for `Some(i)`.
+    ///
+    /// A key nobody can name is a UDA nobody can read. The default declines,
+    /// so an environment that has no Dictionary — a fixture, or a `DbSet` that
+    /// was never handed one — reports the formula unresolved rather than
+    /// guessing at a value; the live environment answers through the MDB's
+    /// Dictionary databases (`e3d_io::db_element::DbElement::uda_by_key`).
+    fn uda_number(&self, key: u32, subscript: Option<f64>) -> Option<f64> {
+        let _ = (key, subscript);
+        None
+    }
 }
 
 /// Which of the two stores an expression came out of.
@@ -186,6 +200,8 @@ pub struct MapParamEnv {
     iparams: Vec<f64>,
     design_dimensions: HashMap<i32, f64>,
     attributes: HashMap<String, f64>,
+    /// UDA values by Dictionary key. One entry is a scalar, more is an array.
+    udas: HashMap<u32, Vec<f64>>,
 }
 
 impl MapParamEnv {
@@ -220,6 +236,13 @@ impl MapParamEnv {
     /// so `set_attribute("PARA[5]", …)` answers `ATTRIB PARA[5]`.
     pub fn set_attribute(mut self, key: impl Into<String>, value: f64) -> Self {
         self.attributes.insert(key.into(), value);
+        self
+    }
+
+    /// Register a UDA by its Dictionary key: one value answers the bare
+    /// reference, several answer `[i]`.
+    pub fn with_uda(mut self, key: u32, values: impl IntoIterator<Item = f64>) -> Self {
+        self.udas.insert(key, values.into_iter().collect());
         self
     }
 
@@ -279,6 +302,18 @@ impl ParamEnv for MapParamEnv {
         self.attributes
             .get(&Self::attribute_key(attribute))
             .copied()
+    }
+
+    fn uda_number(&self, key: u32, subscript: Option<f64>) -> Option<f64> {
+        let values = self.udas.get(&key)?;
+        match subscript {
+            None => match values.as_slice() {
+                [only] => Some(*only),
+                _ => None,
+            },
+            Some(index) if index.fract() == 0.0 => nth(values, index as i32),
+            Some(_) => None,
+        }
     }
 }
 

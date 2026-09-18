@@ -22,6 +22,29 @@
 //! which E3D prints as `( ATTRIB PARA[5 ] + ATTRIB PARA[4 ] )`. Names are
 //! ordinary `db1_hash` words: 564289 is `PARA`, 840258 is `RPRO`.
 //!
+//! A user-defined attribute is named by its Dictionary key instead. The CADC
+//! HVAC catalogue's `/HRTUBE1-BOXI.PXLE` — E3D prints `( :HXYsize[2 ] )` —
+//! is `106 2 401558369 -1 -1 0 1601 1701` behind `push 2`: 401558369 is
+//! `0x17EF4B61`, above every base-27 name, and no `db1_dehash` reaches it. The
+//! word is the `UKEY` the name had when the catalogue was written, and only a
+//! Dictionary database can say which UDA that is. So the parser keeps the key
+//! ([`Attribute::uda_key`]), [`evaluate_words`] asks the environment for the
+//! value **by key** ([`ParamEnv::uda_number`]), and [`render_with_dictionary`]
+//! prints the name when a Dictionary knows the key and `:0x17EF4B61` when
+//! none does.
+//!
+//! By key, not by name, because the two are not the same question. On
+//! `AvevaMarineSample /ALL` the name `HXYsize` is declared twice: `ams5100`
+//! (the sample project's own Dictionary) allocates it `0x2652AB52`, and the
+//! design BRANs store their `675 600` under that key; `acp7006` (the
+//! `AvevaCatalogue` Dictionary the CADC catalogue was written against) has it
+//! as `0x2C00D576` with `OLDKEY 0x17EF4B61` — the word in the program. A
+//! by-key read of the BRAN finds the acp definition and no value under either
+//! of its keys: unset, formula unresolved. That is exactly what E3D does with
+//! the same program (`Catalogue error … unable to evaluate … PXLE` on every
+//! head slot that reaches it, while `Q :HXYsize` on the same BRAN prints
+//! `675 600`); a by-name read would invent the value E3D refuses.
+//!
 //! Anything this does not fully understand returns `None`. A half-read formula
 //! would be worse than the all-zero tuple it replaces, because it would look
 //! like an answer.
@@ -34,9 +57,11 @@
 
 use std::fmt::Write as _;
 
+use e3d_attlib::system_names::SYSTEM_HASH_MAX;
 use e3d_attlib::{db1_dehash, lookup_system_name};
 
 use crate::record::catalogue_eval::{AttribRef, ParamEnv};
+use crate::uda_catalog::UdaCatalog;
 
 /// Word 0 of the program, before any opcode. Every sampled blob carries it.
 const PROGRAM_MARKER: i32 = 1;
@@ -206,7 +231,12 @@ enum Step {
 /// An `ATTRIB …` operand, in the three shapes the form names one.
 #[derive(Debug, Clone, PartialEq)]
 struct Attribute {
+    /// The system name, or — for a UDA — the `:0x…` spelling of its key,
+    /// which [`render_with_dictionary`] replaces when a Dictionary knows it.
     name: String,
+    /// `Some` when the name word is a Dictionary key rather than a system
+    /// name: the program reads a user-defined attribute. See the module head.
+    uda_key: Option<u32>,
     /// `ATTRIB PARA[…]` takes its subscript off the evaluation stack.
     subscript_from_stack: bool,
     /// `ATTRIB PARA[4 ]` with the subscript written into the operand itself:
@@ -247,7 +277,18 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
 }
 
 /// Render the expression stored for an attribute, if this can read all of it.
+///
+/// A user-defined attribute prints as its key (`:0x17EE2B61`); give
+/// [`render_with_dictionary`] the MDB's Dictionary to print `:HXYsize` instead.
 pub fn render(words: &[i32]) -> Option<String> {
+    render_with_dictionary(words, None)
+}
+
+/// [`render`], spelling a user-defined attribute by the name `dictionary`
+/// gives its key — the way E3D prints `( :HXYsize[2 ] )`. A key the
+/// Dictionary does not declare (as current `UKEY` or as `OLDKEY`) keeps its
+/// `:0x…` spelling, so the text still says which UDA the formula wanted.
+pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) -> Option<String> {
     let mut stack: Vec<Term> = Vec::new();
 
     for step in parse(words)? {
@@ -258,7 +299,14 @@ pub fn render(words: &[i32]) -> Option<String> {
                 number: Some(value),
             }),
             Step::Text(value) => stack.push(Term::atom(format!("'{value}'"))),
-            Step::Attribute(attribute) => {
+            Step::Attribute(mut attribute) => {
+                if let Some(name) = attribute
+                    .uda_key
+                    .and_then(|key| dictionary?.by_key(key))
+                    .map(|definition| format!(":{}", definition.name))
+                {
+                    attribute.name = name;
+                }
                 let text = render_attribute(&attribute, &mut stack)?;
                 stack.push(Term::atom(text));
             }
@@ -330,6 +378,25 @@ pub fn evaluate_words(words: &[i32], env: &dyn ParamEnv) -> Option<f64> {
                     true => Some(stack.pop()?.number()?),
                     false => attribute.inline_subscript.map(f64::from),
                 };
+                if let Some(key) = attribute.uda_key {
+                    // A UDA with a qualifier or an owner chain is a shape the
+                    // corpus has not shown; only the plain and subscripted
+                    // forms are read. The plain `[1, 1]` shape falls back to
+                    // entry 1 the way a system attribute does below.
+                    if attribute.qualifier.is_some() || !attribute.owners.is_empty() {
+                        return None;
+                    }
+                    let mut value = env.uda_number(key, subscript);
+                    if value.is_none() && subscript.is_none() {
+                        value = env.uda_number(key, Some(1.0));
+                    }
+                    let value = value?;
+                    if !value.is_finite() {
+                        return None;
+                    }
+                    stack.push(Value::Number(value));
+                    continue;
+                }
                 let owners: Vec<&str> = attribute.owners.iter().map(String::as_str).collect();
                 let reference = AttribRef {
                     name: &attribute.name,
@@ -504,8 +571,14 @@ fn equal_within_slack(left: f64, right: f64) -> bool {
 }
 
 /// Spell an operand the way E3D's `Q` does, taking its subscript off the stack.
+///
+/// A user-defined attribute is written by its `:name` alone — E3D prints
+/// `( :HXYsize[2 ] )`, not `ATTRIB :HXYsize[2 ]`.
 fn render_attribute(attribute: &Attribute, stack: &mut Vec<Term>) -> Option<String> {
-    let mut text = format!("ATTRIB {}", attribute.name);
+    let mut text = match attribute.uda_key {
+        Some(_) => attribute.name.clone(),
+        None => format!("ATTRIB {}", attribute.name),
+    };
     if attribute.subscript_from_stack {
         // The subscript has to be a number, not a formula.
         let subscript = stack.pop()?.number?;
@@ -624,11 +697,12 @@ fn parse_attribute(words: &[i32]) -> Option<(Step, usize)> {
     if [*end_first, *end_second] != ATTRIBUTE_END {
         return None;
     }
-    let name = name_of(*name)?;
+    let (name, uda_key) = attribute_name(*name)?;
 
     let attribute = match ([*first, *second], third) {
         (SUBSCRIPT_FROM_STACK, 0) => Attribute {
             name,
+            uda_key,
             subscript_from_stack: true,
             inline_subscript: None,
             qualifier: None,
@@ -639,6 +713,7 @@ fn parse_attribute(words: &[i32]) -> Option<(Step, usize)> {
         // in one formula — `ATTRIB RADI * TAN ( ATTRIB ANGL / 2 )`.
         (SECOND_NAME_FOLLOWS, 0) => Attribute {
             name,
+            uda_key,
             subscript_from_stack: false,
             inline_subscript: None,
             qualifier: None,
@@ -646,6 +721,7 @@ fn parse_attribute(words: &[i32]) -> Option<(Step, usize)> {
         },
         (SECOND_NAME_FOLLOWS, qualifier) => Attribute {
             name,
+            uda_key,
             subscript_from_stack: false,
             inline_subscript: None,
             qualifier: Some(name_of(*qualifier)?),
@@ -656,6 +732,7 @@ fn parse_attribute(words: &[i32]) -> Option<(Step, usize)> {
         // [`Attribute::inline_subscript`].
         ([index, repeat], 0) if index == repeat && index >= 2 => Attribute {
             name,
+            uda_key,
             subscript_from_stack: false,
             inline_subscript: Some(index),
             qualifier: None,
@@ -690,7 +767,7 @@ fn parse_owner_chain(words: &[i32]) -> Option<(Step, usize)> {
     let [CHAIN_OPEN, owners @ .., CHAIN_CLOSE, ATTRIBUTE_TERMINATOR] = chain else {
         return None;
     };
-    let name = name_of(*name)?;
+    let (name, uda_key) = attribute_name(*name)?;
 
     let mut named = Vec::new();
     for word in owners {
@@ -704,6 +781,7 @@ fn parse_owner_chain(words: &[i32]) -> Option<(Step, usize)> {
     }
     let attribute = Attribute {
         name,
+        uda_key,
         subscript_from_stack: false,
         inline_subscript: None,
         qualifier: None,
@@ -740,8 +818,10 @@ fn parse_previous_element_chain(words: &[i32]) -> Option<(Step, usize)> {
     else {
         return None;
     };
+    let (name, uda_key) = attribute_name(*name)?;
     let attribute = Attribute {
-        name: name_of(*name)?,
+        name,
+        uda_key,
         subscript_from_stack: false,
         inline_subscript: None,
         qualifier: None,
@@ -757,6 +837,22 @@ fn name_of(hash: i32) -> Option<String> {
         .or_else(|| db1_dehash(hash))
         .map(|name| name.trim().to_string())
         .filter(|name| !name.is_empty())
+}
+
+/// The name word of an `ATTRIB` operand: a system attribute by its name, or a
+/// user-defined attribute by its Dictionary key.
+///
+/// Everything a system name can hash to lies at or below `SYSTEM_HASH_MAX`;
+/// a positive word above it is the band UDA keys are allocated from (every
+/// `UKEY` / `OLDKEY` in the AMS, ACP and SCB dictionaries: `0x171F…`–`0x2C00…`).
+/// A negative word is not a name at all — the explicit stream keys formulas by
+/// negated hash, and one of those inside a program is a shape not yet read.
+fn attribute_name(word: i32) -> Option<(String, Option<u32>)> {
+    if let Some(name) = name_of(word) {
+        return Some((name, None));
+    }
+    let key = u32::try_from(word).ok()?;
+    (key > SYSTEM_HASH_MAX).then(|| (format!(":0x{key:08X}"), Some(key)))
 }
 
 fn apply_function(name: &str, stack: &mut Vec<Term>) -> Option<()> {
@@ -1548,5 +1644,122 @@ mod tests {
         );
         assert_eq!(render(&[5, 1, 118, 1, 32]).as_deref(), Some("( ' ' )"));
         assert!(render(&[6, 1, 118, 3, 52, 56]).is_none());
+    }
+
+    /// `/HRTUBE1-BOXI.PXLE` and `.PZLE` as `acp7002_0001` stores them
+    /// (2026-09-18, `AvevaCatalogue`): `push 2` / `push 1`, then a subscripted
+    /// attribute whose name word `401558369 = 0x17EF4B61` is a Dictionary key
+    /// — the `OLDKEY` of `acp7006_0001`'s `/UDA/HVAC/HXYsize`.
+    const HRTUBE1_PXLE: [i32; 17] = [
+        17, 1, 101, 6, 0, 0, 1073742848, 0, 6, 106, 2, 401558369, -1, -1, 0, 1601, 1701,
+    ];
+    const HRTUBE1_PZLE: [i32; 17] = [
+        17, 1, 101, 6, 1048576, 0, 1073742847, 0, 6, 106, 2, 401558369, -1, -1, 0, 1601, 1701,
+    ];
+    const HXYSIZE_CATALOGUE_KEY: u32 = 0x17EF_4B61;
+
+    fn hxysize_dictionary(key: u32, old_key: Option<u32>) -> UdaCatalog {
+        use crate::uda_catalog::UdaDefinition;
+        UdaCatalog::from_definitions(vec![UdaDefinition {
+            refno: crate::RefNo::new(15198, 55),
+            owner: crate::RefNo::new(15198, 3),
+            key,
+            old_key,
+            element_name: "/UDA/HVAC/HXYsize".into(),
+            name: "HXYsize".into(),
+            dynamic_name: false,
+            is_pseudo: false,
+            value_type_hash: 768_519,
+            value_type: Some("REAL".into()),
+            length: 2,
+            applicable_nouns: vec![808_220],
+            default_is_defined: true,
+            default_mode: 0,
+            default_text: None,
+            default_real: Some(0.0),
+            default_location: None,
+            default_attribute: None,
+            default_expression: None,
+        }])
+    }
+
+    /// A key word parses where a name word would have declined the whole
+    /// program, and prints as the key until a Dictionary names it — E3D prints
+    /// `( :HXYsize[2 ] )`, without `ATTRIB`.
+    #[test]
+    fn a_uda_key_renders_as_its_key_or_its_dictionary_name() {
+        assert_eq!(
+            render(&HRTUBE1_PXLE).as_deref(),
+            Some("( :0x17EF4B61[2 ] )")
+        );
+        assert_eq!(
+            render(&HRTUBE1_PZLE).as_deref(),
+            Some("( :0x17EF4B61[1 ] )")
+        );
+        let by_current_key = hxysize_dictionary(HXYSIZE_CATALOGUE_KEY, None);
+        assert_eq!(
+            render_with_dictionary(&HRTUBE1_PXLE, Some(&by_current_key)).as_deref(),
+            Some("( :HXYsize[2 ] )")
+        );
+        // The key the catalogue was compiled with has since moved (acp7006:
+        // UKEY 0x2C00D576): OLDKEY still names it.
+        let by_old_key = hxysize_dictionary(0x2C00_D576, Some(HXYSIZE_CATALOGUE_KEY));
+        assert_eq!(
+            render_with_dictionary(&HRTUBE1_PZLE, Some(&by_old_key)).as_deref(),
+            Some("( :HXYsize[1 ] )")
+        );
+        // A Dictionary that declares the same name under other keys (ams5100)
+        // does not name this word: the text keeps saying which key the formula
+        // wanted.
+        let same_name_other_keys = hxysize_dictionary(0x2652_AB52, Some(0x18EF_4B61));
+        assert_eq!(
+            render_with_dictionary(&HRTUBE1_PXLE, Some(&same_name_other_keys)).as_deref(),
+            Some("( :0x17EF4B61[2 ] )")
+        );
+    }
+
+    /// The value is asked of the environment **by key**. An environment that
+    /// holds the key answers the subscript; one that does not — no Dictionary,
+    /// or a Dictionary that never declared this key — leaves the formula
+    /// unresolved rather than reaching for a same-named attribute.
+    #[test]
+    fn a_uda_evaluates_by_key_through_the_environment() {
+        use crate::record::catalogue_eval::MapParamEnv;
+        let env = MapParamEnv::new().with_uda(HXYSIZE_CATALOGUE_KEY, [675.0, 600.0]);
+        assert_eq!(evaluate_words(&HRTUBE1_PXLE, &env), Some(600.0));
+        assert_eq!(evaluate_words(&HRTUBE1_PZLE, &env), Some(675.0));
+
+        let other_key = MapParamEnv::new().with_uda(0x2652_AB52, [675.0, 600.0]);
+        assert_eq!(evaluate_words(&HRTUBE1_PXLE, &other_key), None);
+        assert_eq!(evaluate_words(&HRTUBE1_PXLE, &MapParamEnv::new()), None);
+
+        // The plain `[1, 1]` shape reads a scalar UDA whole, and an array's
+        // first entry the way `ATTRIB PARA` written `[1, 1]` does.
+        let plain = [
+            10, 1, 106, 2, HXYSIZE_CATALOGUE_KEY as i32, 1, 1, 0, 1601, 1701,
+        ];
+        assert_eq!(render(&plain).as_deref(), Some("( :0x17EF4B61 )"));
+        let scalar = MapParamEnv::new().with_uda(HXYSIZE_CATALOGUE_KEY, [350.0]);
+        assert_eq!(evaluate_words(&plain, &scalar), Some(350.0));
+        assert_eq!(evaluate_words(&plain, &env), Some(675.0));
+    }
+
+    /// Only positive words above the system band are keys. A negative word in
+    /// the name slot is the explicit stream's negated-hash convention, which
+    /// no program has been seen to carry, and a small word is a connective.
+    #[test]
+    fn only_a_word_above_the_system_band_is_a_uda_key() {
+        assert_eq!(
+            attribute_name(0x2652_AB52),
+            Some((":0x2652AB52".into(), Some(0x2652_AB52)))
+        );
+        assert_eq!(attribute_name(SYSTEM_HASH_MAX as i32 + 1).map(|(_, key)| key), Some(Some(SYSTEM_HASH_MAX + 1)));
+        assert_eq!(attribute_name(564289), Some(("PARA".into(), None)));
+        assert_eq!(attribute_name(0xFFF6_3EDCu32 as i32), None);
+        assert_eq!(attribute_name(3), None);
+        assert_eq!(
+            render(&[17, 1, 101, 6, 0, 0, 1073742848, 0, 6, 106, 2, -1, -1, -1, 0, 1601, 1701]),
+            None
+        );
     }
 }

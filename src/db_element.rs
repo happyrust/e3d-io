@@ -24,6 +24,14 @@
 //! 引用跳转按它到 [`DbSet`] 池里找已开库。没注册的库**报错**，不猜；装了
 //! [`DbFileResolver`] 的池子会先问一次 resolver（gen-model 拿 `CataDbLocator`
 //! 实现它，就得到 `DirectStore::pin_from_locator` 同款的按需补开）。
+//!
+//! 用户属性（UDA）：模板只声明系统属性，`:HXYsize` 这类名字与元素上按键存的值之间
+//! 那张表在 **MDB 的 DICT 库**里（`UKEY` / `OLDKEY` / `STUDNA` / `ELEL`，见
+//! [`crate::uda_catalog`]）。消费方按 MDB 的 `CURD` 序读出字典、
+//! [`DbSet::with_uda_catalog`] 挂上，本池的每个句柄就按同一张表答：
+//! [`DbElement::attribute`] 认 `:名`（`Q :HXYsize` 那条路），
+//! [`DbElement::uda_by_key`] 认键（目录表达式 `( :HXYsize[2] )` 存的是键，走这条），
+//! 没挂字典就两条都答「不认识」——不猜名字，也不拿别的库的同名顶替。
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -116,6 +124,16 @@ pub enum DbElementError {
         refno: RefNo,
         noun: String,
         name: String,
+    },
+    /// 按键读 UDA（[`DbElement::uda_by_key`]）答不上：池子没挂字典、字典里没有这个键、
+    /// 或字典定义对这个 noun 无效（E3D：`User defined attribute :X not valid for element`）。
+    /// 三种都不是「unset」——unset 是字典认这个键、元素上没存值。
+    #[error("元素 {refno}（{noun}）的 UDA 键 0x{key:08X}：{detail}")]
+    Uda {
+        refno: RefNo,
+        noun: String,
+        key: u32,
+        detail: String,
     },
     #[error("{refno} 的属性 {name} 是 {found}，不是 {wanted}")]
     TypeMismatch {
@@ -301,6 +319,14 @@ impl DbSet {
     pub fn with_uda_catalog(mut self, catalog: Arc<UdaCatalog>) -> Self {
         self.uda = Some(catalog);
         self
+    }
+
+    /// 本池挂着的 UDA 字典（[`DbSet::with_uda_catalog`]），没挂是 `None`。
+    ///
+    /// 渲染目录表达式时拿它把 `:0x17EF4B61` 这样的键印回名字
+    /// （[`crate::record::catalogue_pml::render_with_dictionary`]）。
+    pub fn uda_catalog(&self) -> Option<&Arc<UdaCatalog>> {
+        self.uda.as_ref()
     }
 
     /// 打开**池级**元素缓存：同一个 refno 的记录解析与描述符抽取全池只做一次。
@@ -923,6 +949,49 @@ impl DbElement {
         })
     }
 
+    /// 一个 UDA 的文件自报值，**按键**读——目录表达式 `( :HXYsize[2] )` 存的不是名字，
+    /// 是目录写下时 `HXYsize` 的 `UKEY`（[`crate::record::catalogue_pml`] 模块头）。
+    ///
+    /// 键先经本池的字典（[`DbSet::with_uda_catalog`]）认成一条定义（`UKEY` 或
+    /// `OLDKEY` 都算），值再按那条定义从本元素的显式流取（当前键、旧键都翻），
+    /// 没存值就是字典默认值——与 [`DbElement::attribute`] 走 `:名` 读到的同一个值。
+    ///
+    /// `Ok(None)` = 字典认这个键、对本 noun 有效、元素上就是 unset。答不上的三种情形
+    /// 都是 `Err(`[`DbElementError::Uda`]`)`：没挂字典、字典里没有这个键、定义对本 noun
+    /// 无效（E3D 对 TAPE 问 `:HXYsize` 报 `not valid for element`）。不猜：一个别的库
+    /// 恰好同名的定义、或者拿键去猜名字，都不是这个键的值。
+    pub fn uda_by_key(&self, key: u32) -> Result<Option<DescriptorValue>, DbElementError> {
+        let uda_error = |noun: String, detail: String| DbElementError::Uda {
+            refno: self.refno,
+            noun,
+            key,
+            detail,
+        };
+        let Some(catalog) = self.set.uda.as_ref() else {
+            return Err(uda_error(
+                self.element_type().unwrap_or_else(|_| "?".to_string()),
+                "DbSet 没挂 UDA 字典（MDB 的 DICT 库要先经 with_uda_catalog 接进来）".to_string(),
+            ));
+        };
+        let parsed = self.parsed()?;
+        let noun = noun_name(parsed.noun_hash);
+        let Some(definition) = catalog.by_key(key) else {
+            return Err(uda_error(
+                noun,
+                "字典里没有这个键（UKEY / OLDKEY 都对不上）——挂的字典不含这个键所属的那本，或键更早就被换过".to_string(),
+            ));
+        };
+        if !definition.applies_to(parsed.noun_hash) {
+            let detail = format!("字典定义 :{} 对 {noun} 无效（ELEL 不含它）", definition.name);
+            return Err(uda_error(noun, detail));
+        }
+        let (_, value) = definition.value_for(&parsed.explicit_attributes);
+        Ok(match value {
+            DescriptorValue::Unset => None,
+            value => Some(value),
+        })
+    }
+
     /// 文本值：`Text` 原文，或字值（`Word`）的反哈希文本。
     pub fn get_string(&self, name: &str) -> Result<Option<String>, DbElementError> {
         let Some(value) = self.attribute(name)? else {
@@ -1009,7 +1078,10 @@ impl DbElement {
             }
             return Ok(AttributeNumber::Unresolved {
                 form: ExpressionForm::Pml,
-                text: catalogue_pml::render(words),
+                text: catalogue_pml::render_with_dictionary(
+                    words,
+                    self.set.uda.as_deref(),
+                ),
             });
         }
 

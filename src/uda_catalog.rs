@@ -10,6 +10,14 @@
 //! hash in `OLDKEY`, and elements written before the re-allocation still carry
 //! their value under it — so a lookup that only knows `UKEY` reads them as
 //! unset.
+//!
+//! Which Dictionary databases apply to an element is decided by the MDB, not by
+//! the project directory: `AvevaMarineSample /ALL` declares six of them, four
+//! living under `AvevaCatalogue` and `SCB`. The consumer resolves that list
+//! (gen-model reads the SYS database's `CURD`), reads each with [`UdaCatalog::read`],
+//! folds them in that order with [`UdaCatalog::merge_in_order`], and hands the
+//! result to `DbSet::with_uda_catalog` so every `DbElement` of that set reads its
+//! UDAs by `:name` and by key against the same table.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -76,6 +84,54 @@ impl UdaDefinition {
     pub fn applies_to(&self, noun_hash: u32) -> bool {
         self.applicable_nouns.contains(&noun_hash)
             || self.applicable_nouns.contains(&ALL_PLANT_PSEUDO_NOUN_HASH)
+    }
+
+    /// Whether `key` names this definition: its current `UKEY`, or the
+    /// `OLDKEY` it had before a re-allocation.
+    pub fn answers_key(&self, key: u32) -> bool {
+        self.key == key || self.old_key == Some(key)
+    }
+
+    /// The value an element persists for this UDA, under the current key or —
+    /// for an element last written before a re-allocation — the old one.
+    pub fn stored_value<'a>(
+        &self,
+        explicit_attributes: &'a [ExplicitAttribute],
+    ) -> Option<&'a ExplicitAttribute> {
+        explicit_attributes
+            .iter()
+            .find(|attribute| attribute.hash == self.key)
+            .or_else(|| {
+                self.old_key.and_then(|old| {
+                    explicit_attributes
+                        .iter()
+                        .find(|attribute| attribute.hash == old)
+                })
+            })
+    }
+
+    /// What `Q :name` prints for an element: the persisted value when there is
+    /// one, otherwise the type-checked Dictionary default exactly as E3D
+    /// reports it — including logical `unset` for a missing or invalid default.
+    pub fn value_for(
+        &self,
+        explicit_attributes: &[ExplicitAttribute],
+    ) -> (AttributeExtractionStatus, DescriptorValue) {
+        match self.stored_value(explicit_attributes) {
+            Some(attribute) => (
+                AttributeExtractionStatus::DecodedExplicit,
+                explicit_value(&attribute.value),
+            ),
+            None => {
+                let value = match self.resolve_default() {
+                    UdaDefaultResolution::Value(value) => value,
+                    UdaDefaultResolution::Unset | UdaDefaultResolution::Invalid { .. } => {
+                        DescriptorValue::Unset
+                    }
+                };
+                (AttributeExtractionStatus::CatalogDefault, value)
+            }
+        }
     }
 
     pub fn resolve_default(&self) -> UdaDefaultResolution {
@@ -218,6 +274,16 @@ impl UdaCatalog {
         })
     }
 
+    /// A catalog from definitions already decoded — fixtures, or a consumer
+    /// holding its own copy of a Dictionary. The order is the order
+    /// [`UdaCatalog::merge_in_order`] would have produced: first wins.
+    pub fn from_definitions(definitions: Vec<UdaDefinition>) -> Self {
+        Self {
+            definitions,
+            issues: Vec::new(),
+        }
+    }
+
     pub fn definitions(&self) -> &[UdaDefinition] {
         &self.definitions
     }
@@ -277,44 +343,30 @@ impl UdaCatalog {
     /// Append Dictionary UDAs that are valid for this element's noun. Persisted
     /// explicit values win; otherwise the type-checked Dictionary default is
     /// materialised exactly as E3D reports it (including logical `unset`).
+    ///
+    /// One row per key **and** one row per name. Two Dictionaries of one MDB
+    /// can define the same name under different keys (`AvevaMarineSample /ALL`:
+    /// `HXYsize` is `0x2652AB52` in `ams5100` and `0x2C00D576` in `acp7006`);
+    /// `Q :HXYsize` answers with the first Dictionary's definition, so the
+    /// materialised table does the same instead of carrying two `:HXYsize`
+    /// rows and letting a name lookup pick whichever comes first.
     pub fn materialize_for_element(
         &self,
         extraction: &mut ElementExtraction,
         explicit_attributes: &[ExplicitAttribute],
     ) -> usize {
         let mut seen_keys = HashSet::new();
+        let mut seen_names: HashSet<String> = HashSet::new();
         let mut added = 0;
         for definition in self.definitions.iter().filter(|definition| {
             !definition.name.is_empty() && definition.applies_to(extraction.noun_hash)
         }) {
-            if !seen_keys.insert(definition.key) {
+            if !seen_keys.insert(definition.key)
+                || !seen_names.insert(definition.name.to_ascii_uppercase())
+            {
                 continue;
             }
-            let explicit = explicit_attributes
-                .iter()
-                .find(|attribute| attribute.hash == definition.key)
-                .or_else(|| {
-                    definition.old_key.and_then(|old| {
-                        explicit_attributes
-                            .iter()
-                            .find(|attribute| attribute.hash == old)
-                    })
-                });
-            let (status, value) = match explicit {
-                Some(attribute) => (
-                    AttributeExtractionStatus::DecodedExplicit,
-                    explicit_value(&attribute.value),
-                ),
-                None => {
-                    let value = match definition.resolve_default() {
-                        UdaDefaultResolution::Value(value) => value,
-                        UdaDefaultResolution::Unset | UdaDefaultResolution::Invalid { .. } => {
-                            DescriptorValue::Unset
-                        }
-                    };
-                    (AttributeExtractionStatus::CatalogDefault, value)
-                }
-            };
+            let (status, value) = definition.value_for(explicit_attributes);
             extraction.attributes.push(ExtractedAttribute {
                 hash: definition.key,
                 name: format!(":{}", definition.name),
@@ -693,5 +745,116 @@ mod tests {
 
         assert_eq!(catalog.materialize_for_element(&mut extraction, &[]), 0);
         assert!(extraction.attributes.is_empty());
+    }
+
+    fn real_array_definition(refno: RefNo, name: &str, key: u32, old_key: Option<u32>) -> UdaDefinition {
+        UdaDefinition {
+            refno,
+            owner: RefNo::new(refno.word0, 0),
+            key,
+            old_key,
+            element_name: format!("/{name}"),
+            name: name.into(),
+            dynamic_name: false,
+            is_pseudo: false,
+            value_type_hash: 768_519,
+            value_type: Some("REAL".into()),
+            length: 2,
+            applicable_nouns: vec![808_220],
+            default_is_defined: true,
+            default_mode: 0,
+            default_text: None,
+            default_real: Some(0.0),
+            default_location: None,
+            default_attribute: None,
+            default_expression: None,
+        }
+    }
+
+    fn bran_extraction() -> ElementExtraction {
+        ElementExtraction {
+            refno: RefNo::new(24381, 59287),
+            owner: RefNo::new(24381, 59286),
+            noun_hash: 808_220,
+            noun_name: Some("BRAN".into()),
+            implicit_word_count: 0,
+            format_word_10: 0,
+            layout: StorageLayout::Compact,
+            attributes: Vec::new(),
+        }
+    }
+
+    fn stored(hash: u32, value: ExplicitValue) -> ExplicitAttribute {
+        ExplicitAttribute {
+            hash,
+            type_code: 0,
+            data_words: 0,
+            is_uda: true,
+            value,
+        }
+    }
+
+    /// `AvevaMarineSample /ALL` in miniature: `ams5100` and `acp7006` both
+    /// define `HXYsize`, under different keys, and the BRAN stores its value
+    /// under the first one. `Q :HXYsize` gives that value; a table with two
+    /// `:HXYsize` rows would let the name lookup land on the second, unset one.
+    #[test]
+    fn the_first_dictionary_owns_a_name_declared_twice() {
+        let catalog = UdaCatalog {
+            definitions: vec![
+                real_array_definition(RefNo::new(13292, 123), "HXYsize", 0x2652_AB52, Some(0x18EF_4B61)),
+                real_array_definition(RefNo::new(15198, 55), "HXYsize", 0x2C00_D576, Some(0x17EF_4B61)),
+            ],
+            issues: Vec::new(),
+        };
+        let mut extraction = bran_extraction();
+        let explicit = [stored(0x2652_AB52, ExplicitValue::RealArray(vec![675.0, 600.0]))];
+
+        assert_eq!(catalog.materialize_for_element(&mut extraction, &explicit), 1);
+        let row = extraction.find_attribute(":hxysize").expect("one :HXYsize row");
+        assert_eq!(row.hash, 0x2652_AB52);
+        assert_eq!(row.status, AttributeExtractionStatus::DecodedExplicit);
+        assert_eq!(row.value, Some(DescriptorValue::RealArray(vec![675.0, 600.0])));
+        assert_eq!(
+            catalog.by_key(0x2C00_D576).map(|definition| definition.refno),
+            Some(RefNo::new(15198, 55)),
+            "the shadowed definition is still reachable by its own key"
+        );
+    }
+
+    /// An element last written before the key moved keeps its value under
+    /// `OLDKEY`; the definition reads it from there, and the row is filed under
+    /// the current key so one lookup path serves both generations of element.
+    #[test]
+    fn a_value_stored_under_the_old_key_is_still_the_stored_value() {
+        let definition = real_array_definition(RefNo::new(13292, 123), "HXYsize", 0x2652_AB52, Some(0x18EF_4B61));
+        let under_old_key = [stored(0x18EF_4B61, ExplicitValue::RealArray(vec![350.0, 350.0]))];
+        assert!(definition.answers_key(0x2652_AB52));
+        assert!(definition.answers_key(0x18EF_4B61));
+        assert!(!definition.answers_key(0x17EE_2B61));
+        assert_eq!(
+            definition.value_for(&under_old_key),
+            (
+                AttributeExtractionStatus::DecodedExplicit,
+                DescriptorValue::RealArray(vec![350.0, 350.0])
+            )
+        );
+        // No stored value and a Dictionary with no usable text default: `unset`.
+        assert_eq!(
+            definition.value_for(&[]),
+            (AttributeExtractionStatus::CatalogDefault, DescriptorValue::Unset)
+        );
+
+        let catalog = UdaCatalog {
+            definitions: vec![definition],
+            issues: Vec::new(),
+        };
+        let mut extraction = bran_extraction();
+        assert_eq!(catalog.materialize_for_element(&mut extraction, &under_old_key), 1);
+        assert_eq!(extraction.attributes[0].hash, 0x2652_AB52);
+        assert_eq!(
+            extraction.attributes[0].value,
+            Some(DescriptorValue::RealArray(vec![350.0, 350.0]))
+        );
     }
 }
