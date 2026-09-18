@@ -1,4 +1,8 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use e3d_attlib::AttlibData;
+use e3d_io::db_element::{DbElementError, DbFilePin, DbSet};
 use e3d_io::record::descriptor::DescriptorValue;
 use e3d_io::record::element::ParsedElement;
 use e3d_io::record::template::TemplateProvider;
@@ -14,9 +18,15 @@ const DESIGN_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7
 const DESVIR: &str = common::DESVIR;
 const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
 
+/// ams7997 的风管支管 `/-CCV-S-2-L-1405`。E3D 的 `Q :HXYsize` 答 `675 600`
+/// （`_runs/ams-init-1112-7997-20260917-mc/e3d-hvac-all-121918/c4_hxysize.log`）。
+const HVAC_DESIGN_DB: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7997_0001";
+const HVAC_BRAN: RefNo = RefNo::new(24_381, 59_287);
+
 mod common;
 
 const FIXTURES: &[&str] = &[DICTIONARY_DB, DICVIR, ATTLIB, DESIGN_DB, DESVIR];
+const HVAC_FIXTURES: &[&str] = &[DICTIONARY_DB, DICVIR, ATTLIB, HVAC_DESIGN_DB, DESVIR];
 
 #[test]
 fn ams_dictionary_materialises_bran_uda_definitions() {
@@ -163,4 +173,70 @@ fn bran_materialises_every_direct_dictionary_uda_and_defaults() {
         Some(DescriptorValue::Text("TRUE".into()))
     );
     assert_eq!(value(":H-TEMPERATURE"), Some(DescriptorValue::Unset));
+}
+
+/// `DbSet` 的 UDA 钩子：挂上字典库，`DbElement` 才按名字答得出 `:HXYsize`。
+///
+/// 这条钉的是几何那一侧的读法。`DbElementParamEnv` 求 `( :HXYsize[2] )` 是拿
+/// `host.attribute(":HXYsize")` 读的，而 `DbSet` 从前没有任何 UDA 入口——
+/// 抽取只走描述符，名字在 attlib 里查不到，那一支于是静悄悄地求不出值
+/// （ams7997 的 7 条风管头槽位就是这么一根管都没长出来的）。
+///
+/// 两侧都钉：不挂字典库必须仍是 `UnknownAttribute`（默认不挂，挂上会改变几何，
+/// 见 `with_uda_catalog` 的说明），挂上之后读出的值要与 E3D 的 `Q :HXYsize` 逐位相同。
+#[test]
+fn a_dbset_answers_hxysize_by_name_only_once_the_dictionary_is_attached() {
+    if common::missing(HVAC_FIXTURES) {
+        return;
+    }
+    let pin = || DbFilePin {
+        file: PathBuf::from(HVAC_DESIGN_DB),
+        template: PathBuf::from(DESVIR),
+        db_type: Some("DESI".to_string()),
+        sesno: None,
+    };
+
+    let bare = DbSet::with_attlib_file(ATTLIB).expect("attlib parses");
+    bare.add_db(pin()).expect("ams7997 opens");
+    let bare = Arc::new(bare);
+    let branch = bare.element(HVAC_BRAN);
+    assert!(matches!(
+        branch.attribute(":HXYsize"),
+        Err(DbElementError::UnknownAttribute { name, .. }) if name == ":HXYsize"
+    ));
+
+    let attlib = AttlibData::parse_file(ATTLIB).expect("parse attlib authority");
+    let catalog = UdaCatalog::read(DICTIONARY_DB, DICVIR, &attlib)
+        .expect("decode AMS Dictionary UDA definitions");
+    let definition = catalog
+        .by_name("HXYsize")
+        .first()
+        .copied()
+        .expect("the Dictionary defines HXYsize")
+        .clone();
+    // 0x2652AB52 是元素显式流里那个裸键。它是字典分配的 UKEY，不是 refno——
+    // 按 refno 拆出来的「dbno 1618」是假线索，那个库并不存在。
+    assert_eq!(definition.key, 0x2652_AB52);
+    assert_eq!(definition.value_type.as_deref(), Some("REAL"));
+    assert_eq!(definition.length, 2);
+    assert!(definition.applies_to(808_220), "HXYsize applies to BRAN");
+
+    let wired = DbSet::with_attlib_file(ATTLIB)
+        .expect("attlib parses")
+        .with_uda_catalog(Arc::new(catalog));
+    wired.add_db(pin()).expect("ams7997 opens");
+    let wired = Arc::new(wired);
+    let branch = wired.element(HVAC_BRAN);
+    assert_eq!(
+        branch.attribute(":HXYsize").expect("HXYsize is now a name"),
+        Some(DescriptorValue::RealArray(vec![675.0, 600.0]))
+    );
+    assert!(
+        branch
+            .attribute_names()
+            .expect("names")
+            .iter()
+            .any(|name| name == ":HXYsize"),
+        "the materialised UDA joins the declared attribute set"
+    );
 }

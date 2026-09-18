@@ -38,6 +38,7 @@ use crate::record::element::ParsedElement;
 use crate::record::template::TemplateProvider;
 use crate::record::{catalogue_expr, catalogue_pml};
 use crate::refno::RefNo;
+use crate::uda_catalog::UdaCatalog;
 
 /// 开一个库所需的文件三元组：库文件、该库类型的模板文件、时点。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -249,6 +250,7 @@ pub struct DbSet {
     resolver: Option<Box<dyn DbFileResolver>>,
     element_cache: Option<RwLock<DbElementCaches>>,
     opening: Mutex<HashMap<u32, Arc<Mutex<()>>>>,
+    uda: Option<Arc<UdaCatalog>>,
 }
 
 type DbElementCaches = HashMap<u32, Arc<RwLock<ElementCache>>>;
@@ -281,7 +283,24 @@ impl DbSet {
             resolver: None,
             element_cache: None,
             opening: Mutex::new(HashMap::new()),
+            uda: None,
         }
+    }
+
+    /// 挂上字典库的 UDA 定义，让 `:NAME` 这种项目属性也能按名字读。
+    ///
+    /// 默认不挂：系统属性来自 `attlib.dat` 与该库的 `*vir.dat`，项目属性不在那儿
+    /// ——UDA 的值是按 `UKEY` 存在元素显式流里的裸哈希，没有这张表就只有键没有名字，
+    /// [`DbElement::attribute`] 问 `:HXYsize` 只会得到 `UnknownAttribute`。
+    ///
+    /// 挂不挂由调用方决定，而不是池子自己去找字典库：一来名单是 MDB 的事
+    /// （SYS 库 `CURD`，跨项目，`AvevaMarineSample /ALL` 声明的六个字典库有四个
+    /// 在别的项目底下，扫目录猜会错），二来**挂上就会改变几何**——目录表达式里
+    /// `( :HXYsize[2] )` 这一类在挂之前求不出值、挂上之后求得出，管身该不该长出来
+    /// 是消费方的判断，不是格式库的。
+    pub fn with_uda_catalog(mut self, catalog: Arc<UdaCatalog>) -> Self {
+        self.uda = Some(catalog);
+        self
     }
 
     /// 打开**池级**元素缓存：同一个 refno 的记录解析与描述符抽取全池只做一次。
@@ -315,6 +334,7 @@ impl DbSet {
             resolver: Some(resolver),
             element_cache: None,
             opening: Mutex::new(HashMap::new()),
+            uda: None,
         }
     }
 
@@ -412,6 +432,8 @@ impl DbSet {
             resolver: Some(resolver),
             element_cache,
             opening: Mutex::new(HashMap::new()),
+            // 字典库有自己的生命周期（DICT 存盘才换），不随 DESI 换代作废。
+            uda: self.uda.clone(),
         })
     }
 
@@ -1219,7 +1241,10 @@ impl DbElement {
                 .map_err(|source| DbElementError::Extract { refno, source })
         });
         crate::read_stats::note_extract_miss(started.elapsed());
-        let extraction = extraction?;
+        let mut extraction = extraction?;
+        if let Some(catalog) = self.set.uda.as_ref() {
+            catalog.materialize_for_element(&mut extraction, &parsed.explicit_attributes);
+        }
         let extraction = self.extraction.get_or_init(|| Arc::new(extraction)).clone();
         self.set.store_extraction(self.refno, extraction.clone());
         Ok(extraction)
