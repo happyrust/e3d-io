@@ -116,6 +116,20 @@ const CHAIN_CLOSE: i32 = 6;
 /// Below this a word cannot be a name, so it is one of the chain's own
 /// connectives. See [`push_owner_chain`].
 const NAME_FLOOR: i32 = 0x0008_1BF2;
+/// The one-word chain that names no owner noun but the **previous element**:
+/// `ATTRIB LEAWID OF PREV `. The HVAC implied-straight catalogue writes every
+/// cross-section this way — `/RTUBE1-BOXI` … `/RTUBE3-BOXI` (`PXLE` / `PZLE`)
+/// and `/CTUBE-TUBE` / `/CTUBE2-TUBE` (`PDIA`) in `ams7000_0001` (15194/226,
+/// 252, 311, 321, 29188). The attribute part keeps the plain
+/// [`ATTRIBUTE_SHAPE`] with the `[1, 1]` qualifier of an unsubscripted name,
+/// and the chain is exactly three words — [`CHAIN_OPEN`], this word,
+/// [`ATTRIBUTE_TERMINATOR`] — with no [`CHAIN_CLOSE`] before the terminator.
+/// E3D prints it as `( ATTRIB LEAWID OF PREV  )` (`Q PXLE` on `/RTUBE2-BOXI`,
+/// 2026-09-18, `_runs/ams-init-1112-7997-20260917-mc/e3d-hvac-all-121918/c6_plain_tubes.log`).
+const PREVIOUS_ELEMENT: i32 = 10;
+/// How E3D spells the [`PREVIOUS_ELEMENT`] owner, and the name an environment
+/// sees in [`AttribRef::owner_chain`] for it.
+pub const PREVIOUS_ELEMENT_NAME: &str = "PREV";
 /// The qualifier of an attribute whose subscript is taken from the stack.
 const SUBSCRIPT_FROM_STACK: [i32; 2] = [-1, -1];
 /// The qualifier of an attribute named by a second word instead.
@@ -596,6 +610,9 @@ fn format_number(value: f64) -> String {
 }
 
 fn parse_attribute(words: &[i32]) -> Option<(Step, usize)> {
+    if let Some(found) = parse_previous_element_chain(words) {
+        return Some(found);
+    }
     if let Some(found) = parse_owner_chain(words) {
         return Some(found);
     }
@@ -693,6 +710,44 @@ fn parse_owner_chain(words: &[i32]) -> Option<(Step, usize)> {
         owners: named,
     };
     Some((Step::Attribute(attribute), ATTRIBUTE_WORDS + length))
+}
+
+/// `ATTRIB <name> OF PREV `: the attribute read off the previous element.
+///
+/// Read whole or not at all, like the noun chain: the attribute words must be
+/// the plain unsubscripted shape and the chain must be exactly
+/// `[CHAIN_OPEN, PREVIOUS_ELEMENT, ATTRIBUTE_TERMINATOR]`. A chain that
+/// mixes [`PREVIOUS_ELEMENT`] with noun names, or a subscripted attribute in
+/// front of it, is a shape this has not seen and declines. The catalogue
+/// blobs this was read from are the five HVAC straight primitives named at
+/// [`PREVIOUS_ELEMENT`]; each is `[13, 1, 106, 2, <name>, 1, 1, 0, 1602, 3, 2,
+/// 10, 1701]` with `<name>` one of `LEAWID` / `LEAHEI` / `LBOR`.
+fn parse_previous_element_chain(words: &[i32]) -> Option<(Step, usize)> {
+    let [
+        OP_ATTRIBUTE,
+        ATTRIBUTE_SHAPE,
+        name,
+        1,
+        1,
+        0,
+        OP_OWNER_CHAIN,
+        3,
+        CHAIN_OPEN,
+        PREVIOUS_ELEMENT,
+        ATTRIBUTE_TERMINATOR,
+        ..,
+    ] = words
+    else {
+        return None;
+    };
+    let attribute = Attribute {
+        name: name_of(*name)?,
+        subscript_from_stack: false,
+        inline_subscript: None,
+        qualifier: None,
+        owners: vec![PREVIOUS_ELEMENT_NAME.to_string()],
+    };
+    Some((Step::Attribute(attribute), ATTRIBUTE_WORDS + 3))
 }
 
 fn name_of(hash: i32) -> Option<String> {
@@ -1158,6 +1213,68 @@ mod tests {
         assert_eq!(
             render(&[14, 1, 106, 4, 74699205, 1, 100, 0, 1602, 4, 2, 640493, 6, 1701]).as_deref(),
             Some("( ATTRIB FACODE OF ZONE  )")
+        );
+    }
+
+    /// The HVAC implied-straight primitives read their cross-section off the
+    /// element **before** the tube: `/RTUBE2-BOXI` (`ams7000_0001` 15194/252)
+    /// stores `PXLE` / `PZLE` as these words and E3D prints them as
+    /// `( ATTRIB LEAWID OF PREV  )` / `( ATTRIB LEAHEI OF PREV  )`; `/RTUBE1-BOXI`
+    /// (15194/226) swaps the two names, `/CTUBE-TUBE` (15194/321) reads `LBOR`.
+    /// The name words are the ordinary `db1_hash` of the pseudo-attribute.
+    #[test]
+    fn renders_an_attribute_of_the_previous_element() {
+        let leawid = e3d_attlib::db1_hash("LEAWID") as i32;
+        let leahei = e3d_attlib::db1_hash("LEAHEI") as i32;
+        let lbor = e3d_attlib::db1_hash("LBOR") as i32;
+        assert_eq!(leawid, 63163623, "the word the RTUBE2-BOXI blob carries");
+        assert_eq!(leahei, 132487149, "the word the RTUBE1-BOXI blob carries");
+        assert_eq!(
+            render(&[13, 1, 106, 2, leawid, 1, 1, 0, 1602, 3, 2, 10, 1701]).as_deref(),
+            Some("( ATTRIB LEAWID OF PREV  )")
+        );
+        assert_eq!(
+            render(&[13, 1, 106, 2, leahei, 1, 1, 0, 1602, 3, 2, 10, 1701]).as_deref(),
+            Some("( ATTRIB LEAHEI OF PREV  )")
+        );
+        assert_eq!(
+            render(&[13, 1, 106, 2, lbor, 1, 1, 0, 1602, 3, 2, 10, 1701]).as_deref(),
+            Some("( ATTRIB LBOR OF PREV  )")
+        );
+    }
+
+    /// The evaluator hands the previous-element owner to the environment under
+    /// the same spelling the renderer prints, so a fixture keyed
+    /// `LEAWID OF PREV` answers it; a chain the environment does not know stays
+    /// unanswered rather than falling back to a bare `LEAWID`.
+    #[test]
+    fn evaluates_an_attribute_of_the_previous_element_through_the_environment() {
+        use crate::record::catalogue_eval::MapParamEnv;
+        let leawid = e3d_attlib::db1_hash("LEAWID") as i32;
+        let words = [13, 1, 106, 2, leawid, 1, 1, 0, 1602, 3, 2, 10, 1701];
+        let env = MapParamEnv::new().set_attribute("LEAWID OF PREV", 1460.0);
+        assert_eq!(evaluate_words(&words, &env), Some(1460.0));
+        let bare = MapParamEnv::new().set_attribute("LEAWID", 1460.0);
+        assert_eq!(evaluate_words(&words, &bare), None);
+    }
+
+    /// The previous-element chain is read whole or not at all: a chain that
+    /// closes like the noun form, one that mixes in a noun, or a subscripted
+    /// attribute in front of it are shapes this has not seen.
+    #[test]
+    fn declines_a_previous_element_chain_of_another_shape() {
+        let leawid = e3d_attlib::db1_hash("LEAWID") as i32;
+        assert_eq!(
+            render(&[14, 1, 106, 2, leawid, 1, 1, 0, 1602, 4, 2, 10, 6, 1701]),
+            None
+        );
+        assert_eq!(
+            render(&[14, 1, 106, 2, leawid, 1, 1, 0, 1602, 4, 2, 10, 640493, 1701]),
+            None
+        );
+        assert_eq!(
+            render(&[13, 1, 106, 2, leawid, -1, -1, 0, 1602, 3, 2, 10, 1701]),
+            None
         );
     }
 
