@@ -96,6 +96,16 @@ const OP_POW: i32 = 1002;
 /// Absolute value. AMS cable-tray rung programs use it while distributing
 /// rungs over a variable straight length.
 const OP_ABS: i32 = 1005;
+/// The other `ABS` Core writes. CADC HVAC `/RBREECH-NGAP` and `NLPYRAMID 2 of
+/// /RBREECH-BODY1` store `PCTP = ( ATTRIB DESP[42 ] + ABS ( ATTRIB DESP[11 ] ) )`
+/// as `… 106 [DESP 11] 1007 802`, and E3D's own `Q PCTP` prints that 1007 as
+/// `ABS` (2026-09-19, ams7997 `THREEWAY 1 of BRANCH /-CUP-S-3-M-1405`, seg15 §26.12).
+/// 1005 was only ever seen with integer literals underneath; 1007 sits on a real
+/// attribute — the two typed arms of the same function. Unread, the whole program
+/// is unreadable and the two V-notch cutters of the breeches piece were dropped
+/// ("skipped by Core-style local failure"), leaving the notch unfilled or, with
+/// the filler `GAP` inverted, cut to the filler's outline instead of the cutter's.
+const OP_ABS_REAL: i32 = 1007;
 /// Maximum. The same rung programs clamp repeated spacing calculations with
 /// it; Core's function-name table places MAX immediately before MIN.
 const OP_MAX: i32 = 1008;
@@ -264,9 +274,9 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             OP_ATTRIBUTE => parse_attribute(&program[cursor..])?,
             OP_PUSH_TEXT => parse_text(&program[cursor..])?,
             OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
-            | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_MAX
-            | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING
-            | OP_IF_REAL => (Step::Operator(program[cursor]), 1),
+            | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_ABS_REAL
+            | OP_MAX | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_MATCH | OP_TRIM
+            | OP_LOGICAL_STRING | OP_IF_REAL => (Step::Operator(program[cursor]), 1),
             // An opcode this has never seen used is a program it has not read.
             _ => return None,
         };
@@ -325,7 +335,7 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
             Step::Operator(OP_ATAN) => apply_function("ATAN", &mut stack)?,
             Step::Operator(OP_SQRT) => apply_function("SQRT", &mut stack)?,
             Step::Operator(OP_POW) => apply_binary_function("POW", &mut stack)?,
-            Step::Operator(OP_ABS) => apply_function("ABS", &mut stack)?,
+            Step::Operator(OP_ABS | OP_ABS_REAL) => apply_function("ABS", &mut stack)?,
             Step::Operator(OP_MAX) => apply_binary_function("MAX", &mut stack)?,
             Step::Operator(OP_MIN) => apply_binary_function("MIN", &mut stack)?,
             Step::Operator(OP_MATCH) => apply_binary_function("MAT", &mut stack)?,
@@ -520,7 +530,7 @@ fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
         OP_ASIN => stack.pop()?.number()?.asin().to_degrees(),
         OP_ATAN => stack.pop()?.number()?.atan().to_degrees(),
         OP_SQRT => stack.pop()?.number()?.sqrt(),
-        OP_ABS => stack.pop()?.number()?.abs(),
+        OP_ABS | OP_ABS_REAL => stack.pop()?.number()?.abs(),
         OP_ATANT => return None,
         _ => {
             let right = stack.pop()?.number()?;
@@ -1033,6 +1043,31 @@ mod tests {
         ];
         assert_eq!(render(&max).as_deref(), Some("( MAX ( 2 , 5 ) )"));
         assert_eq!(evaluate_words(&max, &MapParamEnv::new()), Some(5.0));
+    }
+
+    #[test]
+    fn breeches_cutter_programs_use_the_real_abs_opcode() {
+        // `/RBREECH-NGAP` (=15194/8524) PCTP, read back from ams7000 on 2026-09-19:
+        // `( ATTRIB DESP[42 ] + ABS ( ATTRIB DESP[11 ] ) )`, ABS encoded as 1007.
+        // With DESP[42] = 710 and DESP[11] = 100 (THREEWAY 1 of BRANCH /-CUP-S-3-M-1405)
+        // E3D's `holes off` RVM writes the cutter's top y-length as 810.
+        let words = [
+            34, 1, 101, 6, 21504, 0, 6, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701, 101, 6, 22528,
+            0, 4, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701, 1007, 802,
+        ];
+        assert_eq!(
+            render(&words).as_deref(),
+            Some("( ATTRIB DESP[42 ] + ABS ( ATTRIB DESP[11 ] ) )")
+        );
+        let env = MapParamEnv::new()
+            .set_attribute("DESP[42]", 710.0)
+            .set_attribute("DESP[11]", 100.0);
+        assert_eq!(evaluate_words(&words, &env), Some(810.0));
+        // A negative operand is what ABS is there for.
+        let env = MapParamEnv::new()
+            .set_attribute("DESP[42]", 710.0)
+            .set_attribute("DESP[11]", -352.5);
+        assert_eq!(evaluate_words(&words, &env), Some(1062.5));
     }
 
     /// Every distinct expression blob in the 2026-08-26 TTY sample, against
