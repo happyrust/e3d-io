@@ -59,11 +59,35 @@ pub struct AttributeFieldRecord {
     pub fields: Map<String, Value>,
 }
 
+/// 一个存储号在某个 noun 上真正对应的属性——见 [`NounCatalog::apply_attlib_storage_aliases`]。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StorageAlias {
+    /// E3D 在这个 noun 上认的短名（`DETR`）。
+    pub name: String,
+    /// 那个属性自己的名字 hash（`db1_hash("DETR")`），不是存储号。
+    pub attribute_hash: u32,
+    /// `q att` 印的抬头（`Detref`）。
+    pub heading: String,
+}
+
+/// 已知的「存储号沿用」：`(存成谁的号, 实际是哪个属性)`，都按 DB 短名写。
+///
+/// `DETR`（Detref，目录 noun 上指向 SDTE 的引用）在 `*vir.dat` 里占的是 `DETA`
+/// （Detail，设计 noun 上的布尔标志）的存储号 565843——两者在 attlib 里是两条独立记录、
+/// 两个名字 hash，只是 DETR 的槽位号沿用了老名字。哪些 noun 上 565843 是 DETR，不写死
+/// 在这里：由 attlib 的目录值列（[`e3d_attlib::parser::CatalogueValueList`]）按 noun
+/// 点名，这里只列「哪两个名字共用一个号」。
+const SHARED_STORAGE_IDS: [(&str, &str); 1] = [("DETA", "DETR")];
+
 #[derive(Debug, Clone, Default)]
 pub struct NounCatalog {
     nouns: Vec<CatalogNoun>,
     noun_indices: HashMap<u32, usize>,
     fields: HashMap<u32, AttributeFieldRecord>,
+    /// `(noun hash, 存储号)` → 这一格在这个 noun 上的真名。
+    storage_aliases: HashMap<(u32, u32), StorageAlias>,
+    /// 别名属性自己的名字 hash → 抬头，补 [`Self::query_heading`] 在导出里查不到的那几个。
+    alias_headings: HashMap<u32, String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,7 +177,88 @@ impl NounCatalog {
             nouns,
             noun_indices,
             fields: parsed_fields,
+            storage_aliases: HashMap::new(),
+            alias_headings: HashMap::new(),
         })
+    }
+
+    /// 按 attlib 给共用存储号的那几格起对名字（[`SHARED_STORAGE_IDS`]）。
+    ///
+    /// 活 E3D 导出的目录只按 hash 记名字：`.NET DbAttribute` 把 SPCO 上 565843 那一格
+    /// 解成了 `DETA`，`noun_attr_fields.json` 里连 `DETR` 这条记录都没有，所以面板在
+    /// SPCO / GPART / PRTELE 上印 `DETA`，E3D 那一页印的却是 `Detref`（2026-09-19
+    /// 活 E3D：这三个 noun 上 `Q DETA` 报 `does not have attribute DETA`，`Q DETR`
+    /// 答 `Detref …`；BRAN 上 `Q DETA` 答 `Detail false`、`Q DETR` 报错）。
+    ///
+    /// 规则：对 [`SHARED_STORAGE_IDS`] 里的每一对 `(存成谁的号, 实际属性)`，一个 noun
+    /// 的布局声明了那个存储号、**且** attlib 的目录值列在这个 noun 名下点了实际属性，
+    /// 这一格就按实际属性起名；抬头取 attlib 元数据记录里的 `Detref`，取不到退回短名。
+    /// 两个条件缺一不算：只看布局会把 BRAN 的 Detail 也改掉，只看 attlib 会给没有这一
+    /// 格的 noun 凭空起名。返回起了名的格数。
+    pub fn apply_attlib_storage_aliases(
+        &mut self,
+        attlib: &e3d_attlib::AttlibData,
+        metadata: &crate::attlib_metadata::AttributeMetadataCatalog,
+    ) -> usize {
+        let mut applied = 0;
+        for (stored_as, attribute) in SHARED_STORAGE_IDS {
+            let stored_hash = e3d_attlib::db1_hash(stored_as);
+            let attribute_hash = e3d_attlib::db1_hash(attribute);
+            let listed: Vec<&str> = attlib.catalogue_value_nouns(attribute_hash).collect();
+            if listed.is_empty() {
+                continue;
+            }
+            let heading = metadata
+                .report_name(attribute_hash)
+                .map_or_else(|| attribute.to_owned(), str::to_owned);
+            for noun in &self.nouns {
+                let declares_slot = noun.attrs.iter().any(|attr| attr.hash == stored_hash);
+                let named_by_attlib = listed
+                    .iter()
+                    .any(|written| noun_name_matches(noun, written));
+                if !(declares_slot && named_by_attlib) {
+                    continue;
+                }
+                self.storage_aliases.insert(
+                    (noun.noun_hash, stored_hash),
+                    StorageAlias {
+                        name: attribute.to_owned(),
+                        attribute_hash,
+                        heading: heading.clone(),
+                    },
+                );
+                applied += 1;
+            }
+            if applied > 0 {
+                self.alias_headings.insert(attribute_hash, heading);
+            }
+        }
+        applied
+    }
+
+    /// 这个 noun 上这一存储号的真名，没有别名就是 `None`（照存储号自己的名字印）。
+    pub fn storage_alias(&self, noun_hash: u32, stored_hash: u32) -> Option<&StorageAlias> {
+        self.storage_aliases.get(&(noun_hash, stored_hash))
+    }
+
+    /// 把抽取件里共用存储号的那几格改成这个 noun 上的真名（值与 hash 不动：值本来
+    /// 就按模板的两字 REF 读对了，hash 仍是槽位号，类型默认值那几步靠它配对）。
+    /// 返回改了名的格数。
+    pub fn apply_storage_aliases(&self, extraction: &mut ElementExtraction) -> usize {
+        if self.storage_aliases.is_empty() {
+            return 0;
+        }
+        let mut renamed = 0;
+        for extracted in &mut extraction.attributes {
+            let Some(alias) = self.storage_alias(extraction.noun_hash, extracted.hash) else {
+                continue;
+            };
+            if extracted.name != alias.name {
+                extracted.name = alias.name.clone();
+                renamed += 1;
+            }
+        }
+        renamed
     }
 
     pub fn read(
@@ -213,12 +318,13 @@ impl NounCatalog {
     ///
     /// [`AttributeMetadataCatalog`]: crate::attlib_metadata::AttributeMetadataCatalog
     pub fn query_heading(&self, hash: u32) -> Option<&str> {
-        self.fields
-            .get(&hash)?
+        let exported = self
             .fields
-            .get("QTXT")?
-            .get("s")?
-            .as_str()
+            .get(&hash)
+            .and_then(|record| record.fields.get("QTXT")?.get("s")?.as_str());
+        // 导出里没有的只有共用存储号的别名属性（`DETR`）：那条记录活 E3D 的 .NET
+        // 导出按 hash 去重时丢了，抬头从 attlib 元数据来。
+        exported.or_else(|| self.alias_headings.get(&hash).map(String::as_str))
     }
 
     /// Materialise defaults for descriptor rows that have no persisted
@@ -484,6 +590,24 @@ impl NounCatalog {
 
         ReconciledNoun { noun, attributes }
     }
+}
+
+/// attlib 目录值列里写的 noun 名字，是不是目录里这个 noun。
+///
+/// attlib 那一列存的是字串，写法不定：`GPART` 是全名，`PRTELEMENT` 比导出里的
+/// `PRTELE` 长，`SPCOM` 又只是 `SPCOMPONENT` 的前缀。先认全等（全名或短名），再认
+/// 前缀——两边谁长谁短都可能，但短的那个至少要 4 个字（E3D 短名的长度），免得
+/// `SP` 这种碎片配上一串 noun。
+fn noun_name_matches(noun: &CatalogNoun, written: &str) -> bool {
+    if noun.noun == written || noun.short_name == written {
+        return true;
+    }
+    let (short, long) = if noun.noun.len() <= written.len() {
+        (noun.noun.as_str(), written)
+    } else {
+        (written, noun.noun.as_str())
+    };
+    short.len() >= 4 && long.starts_with(short)
 }
 
 fn positive_real(extraction: &ElementExtraction, name: &str) -> bool {
@@ -848,5 +972,141 @@ mod tests {
         assert!(!is_positive_real(Some(&DescriptorValue::Real(0.0))));
         assert!(!is_positive_real(Some(&DescriptorValue::Unset)));
         assert!(is_positive_real(Some(&DescriptorValue::Real(50.0))));
+    }
+
+    #[test]
+    fn attlib_written_noun_names_match_by_full_short_or_prefix_only_when_long_enough() {
+        let noun = |full: &str, short: &str| CatalogNoun {
+            noun: full.into(),
+            short_name: short.into(),
+            noun_hash: db1_hash(short),
+            base: String::new(),
+            hard: String::new(),
+            is_udet: false,
+            is_pseudo: false,
+            is_world: false,
+            is_primary: true,
+            visible: true,
+            db_types: vec![2],
+            attrs: Vec::new(),
+        };
+        let spco = noun("SPCOMPONENT", "SPCO");
+        assert!(noun_name_matches(&spco, "SPCOM"));
+        assert!(noun_name_matches(&spco, "SPCO"));
+        assert!(noun_name_matches(&spco, "SPCOMPONENT"));
+        assert!(!noun_name_matches(&spco, "SP"));
+        assert!(!noun_name_matches(&spco, "SPEC"));
+        let prtele = noun("PRTELE", "PRTELE");
+        assert!(noun_name_matches(&prtele, "PRTELEMENT"));
+        assert!(!noun_name_matches(&noun("PRTWLD", "PRTWLD"), "PRTELEMENT"));
+        assert!(!noun_name_matches(&noun("BRANCH", "BRAN"), "GPART"));
+    }
+
+    /// e3d31 的真目录 + 真 attlib：565843 只在 SPCO / GPART / PRTELE 上改叫 `DETR`，
+    /// 抬头 `Detref`；BRAN 上照旧是 `DETA`。抽取件里那一格随之改名，hash 与值不动。
+    /// （2026-09-19 活 E3D 定标，见 `apply_attlib_storage_aliases` 的文档。）
+    #[test]
+    fn shared_storage_id_565843_is_detref_on_the_catalogue_nouns_only() {
+        let pack = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31");
+        let layout = format!("{pack}/catalog/noun_layout.json");
+        let fields = format!("{pack}/catalog/noun_attr_fields.json");
+        let attlib_path = format!("{pack}/binaries/attlib.dat");
+        if [&layout, &fields, &attlib_path]
+            .iter()
+            .any(|path| !Path::new(path).is_file())
+        {
+            eprintln!("skip: schema pack files missing under {pack}");
+            return;
+        }
+        let attlib = e3d_attlib::AttlibData::parse_file(&attlib_path).unwrap();
+        let metadata =
+            crate::attlib_metadata::AttributeMetadataCatalog::parse_file(&attlib_path, &attlib)
+                .unwrap();
+        let mut catalog = NounCatalog::read(&layout, &fields).unwrap();
+        let deta = db1_hash("DETA");
+        let detr = db1_hash("DETR");
+        assert_eq!(catalog.query_heading(deta), Some("Detail"));
+        assert_eq!(catalog.query_heading(detr), None, "导出里本来就没有 DETR");
+
+        assert_eq!(catalog.apply_attlib_storage_aliases(&attlib, &metadata), 3);
+        for short in ["SPCO", "GPART", "PRTELE"] {
+            let noun = catalog
+                .nouns
+                .iter()
+                .find(|noun| noun.short_name == short)
+                .unwrap();
+            let alias = catalog.storage_alias(noun.noun_hash, deta).unwrap();
+            assert_eq!(
+                (
+                    alias.name.as_str(),
+                    alias.attribute_hash,
+                    alias.heading.as_str()
+                ),
+                ("DETR", detr, "Detref"),
+                "{short}"
+            );
+        }
+        for short in ["BRAN", "PRTWLD"] {
+            let noun = catalog
+                .nouns
+                .iter()
+                .find(|noun| noun.short_name == short)
+                .unwrap();
+            assert!(
+                catalog.storage_alias(noun.noun_hash, deta).is_none(),
+                "{short}"
+            );
+        }
+        assert_eq!(catalog.query_heading(deta), Some("Detail"));
+        assert_eq!(catalog.query_heading(detr), Some("Detref"));
+
+        let spco = catalog
+            .nouns
+            .iter()
+            .find(|noun| noun.short_name == "SPCO")
+            .unwrap()
+            .noun_hash;
+        let descriptor = TemplateAttr::single_word(deta);
+        let mut extraction = ElementExtraction {
+            refno: RefNo::new(15192, 60087),
+            owner: RefNo::new(15192, 1),
+            noun_hash: spco,
+            noun_name: Some("SPCO".into()),
+            implicit_word_count: 0,
+            format_word_10: 0,
+            layout: crate::record::template::StorageLayout::Compact,
+            attributes: vec![ExtractedAttribute {
+                hash: deta,
+                name: "DETA".into(),
+                storage_type_code: 4,
+                semantic_type_code: Some(4),
+                semantic_size: Some(1),
+                layout: crate::record::template::StorageLayout::Compact,
+                storage: descriptor.storage(crate::record::template::StorageLayout::Compact),
+                status: AttributeExtractionStatus::Decoded,
+                value: Some(DescriptorValue::RefNo(RefNo::new(15192, 54179))),
+            }],
+        };
+        assert_eq!(catalog.apply_storage_aliases(&mut extraction), 1);
+        let row = &extraction.attributes[0];
+        assert_eq!(row.name, "DETR");
+        assert_eq!(row.hash, deta);
+        assert_eq!(
+            row.value,
+            Some(DescriptorValue::RefNo(RefNo::new(15192, 54179)))
+        );
+        assert_eq!(
+            catalog.apply_storage_aliases(&mut extraction),
+            0,
+            "再跑一遍不重复计数"
+        );
+
+        extraction.noun_hash = db1_hash("BRAN");
+        extraction.attributes[0].name = "DETA".into();
+        assert_eq!(
+            catalog.apply_storage_aliases(&mut extraction),
+            0,
+            "BRAN 上不改"
+        );
     }
 }
