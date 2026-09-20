@@ -3,11 +3,12 @@
 //! disjoint merge write.
 //!
 //! The construction is the plan's: C0 is the sample at session S; writer A
-//! commits S+1; writer B, still based on S, merges its own disjoint changes
-//! onto the file and commits S+2. A clean merge is the union of both; an
-//! overlap is refused — 562 a change over a delete, 590 a delete over a
-//! change, 561 a name already taken, and (this crate's limit) two changes to
-//! one element.
+//! commits S+1; writer B, still based on S, merges its own changes onto the
+//! file and commits S+2. A clean merge is the union of both; an overlap is
+//! refused — 562 a change over a delete, 590 a delete over a change, 561 a
+//! name already taken. Two changes to one element reconcile attribute by
+//! attribute and, on its member list, member by member — or whole, on a noun
+//! whose members are references (`GROU`).
 
 mod common;
 
@@ -19,13 +20,13 @@ use e3d_io::index::encode_name;
 use e3d_io::record::descriptor::DescriptorValue;
 use e3d_io::record::element::ParsedElement;
 use e3d_io::record::explicit::ExplicitValue;
-use e3d_io::record::template::{NounTemplate, TemplateProvider};
+use e3d_io::record::template::{MemberListKind, NounTemplate, TemplateProvider};
 use e3d_io::session::{DbView, SessionDate, SessionSelector};
 use e3d_io::write::merge::code;
 use e3d_io::write::record::put_real_vec_wide;
 use e3d_io::write::{
-    write_element_session, write_merge_session, ElementWrite, NamedEdit, NamedEditKind, RecordDraft,
-    SessionClock, SessionRequest, WriteError,
+    write_element_session, write_merge_session, write_merge_session_with, ElementWrite, MergeOptions, NamedEdit,
+    NamedEditKind, RecordDraft, SessionClock, SessionRequest, WriteError,
 };
 use e3d_io::{ReadOnlyEngine, RefNo};
 
@@ -478,6 +479,131 @@ fn a_moved_member_lands_after_its_anchor_when_merged() {
         (0, 1, 1),
         "one new box and the one owner modified"
     );
+}
+
+#[test]
+fn a_reference_list_noun_merges_its_members_whole() {
+    if common::missing(&[AMS8000, DESVIR]) {
+        return;
+    }
+    let mut provider = TemplateProvider::open(DESVIR, Some(DESIGN_TEMPLATE_TYPE)).expect("desvir");
+
+    // Word 3 of the template header tells the kinds apart: GROU's members are
+    // references, ZONE's and BRAN's are their children, a WELD owns nothing.
+    let mut kind = |noun: &str| {
+        provider
+            .template_for(db1_hash(noun))
+            .expect("load")
+            .expect("template")
+            .member_list_kind
+    };
+    assert_eq!(kind("GROU"), MemberListKind::Referenced);
+    assert_eq!(kind("ZONE"), MemberListKind::Owned);
+    assert_eq!(kind("BRAN"), MemberListKind::Owned);
+    assert_eq!(kind("WELD"), MemberListKind::None);
+
+    let cast = cast(AMS8000);
+    let (s0, s1, z0, z1) = (cast.subs[0], cast.subs[1], cast.zones[0], cast.zones[1]);
+
+    // With the schema at hand the group's list is one attribute: B's whole
+    // list replaces A's, and A's addition is gone.
+    let whole = group_merge(&mut provider, &cast, true);
+    assert_eq!(whole, vec![s0, s1, z1], "kind == 2: the writer's whole list, A's addition lost");
+
+    // Without it every noun merges member by member, and both additions land.
+    let by_member = group_merge(&mut provider, &cast, false);
+    assert_eq!(by_member, vec![s0, s1, z1, z0], "no schema: member by member, B's addition after its anchor");
+}
+
+/// On a fresh copy: a GPWL under the WORL and a GROU under it referring to
+/// the two SUBS (session S); A adds zone 0 to the group (S+1); B, based on S,
+/// adds zone 1 and merges (S+2), with or without the schema. Returns the
+/// group's merged member list, having checked the referenced elements are
+/// untouched and the diff sees one modified element.
+fn group_merge(provider: &mut TemplateProvider, cast: &Cast, with_schema: bool) -> Vec<RefNo> {
+    let copy = DbCopy::of(AMS8000);
+    let gpwl_template = provider.template_for(db1_hash("GPWL")).expect("gpwl").expect("template").clone();
+    let grou_template = provider.template_for(db1_hash("GROU")).expect("grou").expect("template").clone();
+    let (gpwl, grou) = (cast.fresh[0], cast.fresh[1]);
+    let (s0, s1, z0, z1) = (cast.subs[0], cast.subs[1], cast.zones[0], cast.zones[1]);
+
+    // Session S: WORL → GPWL → GROU, the group referring to two SUBS owned elsewhere.
+    {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let world = engine.world().expect("world").expect("has a WORL");
+        let mut world_draft = RecordDraft::from_record_bytes(&world.raw_bytes).expect("world draft");
+        world_draft.push_member(gpwl);
+        let gpwl_draft = fresh_element(&gpwl_template, gpwl, world.refno, vec![grou]);
+        let grou_draft = fresh_element(&grou_template, grou, gpwl, vec![s0, s1]);
+        write_element_session(
+            &copy.path,
+            &SessionRequest { user: "setup", comment: "a group world and a group", clock: Some(clock()) },
+            &[ElementWrite::Insert(gpwl_draft), ElementWrite::Insert(grou_draft), ElementWrite::Update(world_draft)],
+            &[],
+        )
+        .expect("setup writes S");
+    }
+    let s = DbView::open(&copy.path).unwrap().session().sesno;
+
+    // A adds zone 0 to the group: S+1.
+    {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let group = zone_with_member(&mut engine, grou, z0);
+        write_element_session(
+            &copy.path,
+            &SessionRequest { user: "A", comment: "A adds zone 0 to the group", clock: Some(clock()) },
+            &[ElementWrite::Update(group)],
+            &[],
+        )
+        .expect("A writes S+1");
+    }
+
+    // B, based on S, adds zone 1 to the group and merges.
+    {
+        let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+        let group = zone_with_member(&mut base, grou, z1);
+        let options = MergeOptions { templates: with_schema.then_some(&mut *provider) };
+        write_merge_session_with(
+            &copy.path,
+            &SessionRequest { user: "B", comment: "B adds zone 1 to the group", clock: Some(clock()) },
+            s,
+            &[ElementWrite::Update(group)],
+            &[],
+            options,
+        )
+        .expect("B merges S+2");
+    }
+
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+    // The referenced elements are untouched: still indexed, still owned by
+    // whoever owned them, not by the group.
+    for referenced in [s0, s1, z0, z1] {
+        let owner = engine.find_element(referenced).unwrap().expect("still indexed").header().owner;
+        assert_ne!(owner, grou, "{referenced} is referenced by the group, not owned by it");
+    }
+    let group = engine.find_element(grou).unwrap().expect("group indexed");
+    assert_eq!(group.header().owner, gpwl);
+    let members = ParsedElement::parse_as(&group.raw_bytes, engine.text_format()).unwrap().members;
+    drop(engine);
+
+    let mut view = DbView::open(&copy.path).expect("view");
+    let whole = view
+        .diff_sessions(SessionSelector::Exact(s), SessionSelector::Exact(s + 2))
+        .expect("diff");
+    assert_eq!(
+        (whole.tally().deleted, whole.tally().inserted, whole.tally().modified),
+        (0, 0, 1),
+        "S..S+2 modified the group once and nothing else"
+    );
+    members
+}
+
+/// A fresh unnamed element of `template`'s noun under `owner`, carrying the
+/// noun's default implicit record and the given members.
+fn fresh_element(template: &NounTemplate, refno: RefNo, owner: RefNo, members: Vec<RefNo>) -> RecordDraft {
+    let mut implicit = vec![0u32; 11];
+    implicit.extend_from_slice(&template.defaults.implicit);
+    RecordDraft::new(refno, template.noun_hash, owner, implicit, members, vec![]).expect("draft")
 }
 
 /// An element of `noun` with at least `min` members, and its member list.

@@ -425,11 +425,44 @@ pub fn pack_offset(word_offset: u32, ext: u16) -> u32 {
 /// shared sibling" anchor `sub_5B20CA0` uses. Members the writer did not
 /// touch keep the committed order, so two writers adding members to one
 /// owner both land, and a member both sides moved sits where the writer put
-/// it.
+/// it. This is [`three_way_with`] at [`MemberMerge::MemberByMember`]; a noun
+/// whose member list is a reference list takes [`MemberMerge::WholeList`].
 pub fn three_way(
     base: &RecordDraft,
     latest: &RecordDraft,
     working: &RecordDraft,
+) -> Result<RecordDraft, RecordEncodeError> {
+    three_way_with(base, latest, working, MemberMerge::MemberByMember)
+}
+
+/// How a three-way merge reconciles an element's member list — the two arms
+/// of `core.dll`'s `sub_5B224B0` on the noun's member-list `kind`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MemberMerge {
+    /// `kind != 2`: replay the writer's adds, removes and moves onto the
+    /// committed list, each after its preceding shared sibling
+    /// (`sub_5B20CA0`, [`merge_members`]). The default, and what every noun
+    /// whose members are its own children gets.
+    #[default]
+    MemberByMember,
+    /// `kind == 2`: the list is one attribute. If the writer changed it at
+    /// all, the writer's whole list replaces the committed one
+    /// (`sub_5B1F660`), so adds and removes the committed side made
+    /// meanwhile are lost — the same "writer wins" a clash on any other
+    /// attribute gets; if the writer left it alone, the committed list
+    /// stands. This is the arm for nouns whose members are references to
+    /// elements owned elsewhere — `GROU`, and `MDB`/`USLI` in the system
+    /// database ([`crate::record::template::MemberListKind::Referenced`]).
+    WholeList,
+}
+
+/// [`three_way`] with the member-list arm chosen by the caller, who knows the
+/// noun's [`MemberListKind`](crate::record::template::MemberListKind).
+pub fn three_way_with(
+    base: &RecordDraft,
+    latest: &RecordDraft,
+    working: &RecordDraft,
+    member_merge: MemberMerge,
 ) -> Result<RecordDraft, RecordEncodeError> {
     // Implicit region: latest's, with the words the writer changed overlaid.
     // The header words (0..11) are recomputed on encode, so only attribute
@@ -479,10 +512,15 @@ pub fn three_way(
     }
     let explicit_stream = rebuild_explicit_stream(&merged_fields);
 
-    // Members (A3b.4): the committed list with the writer's own adds, removes
-    // and moves replayed onto it, each anchored after its preceding shared
-    // sibling.
-    let members = merge_members(&base.members, &latest.members, &working.members);
+    // Members (A3b.4): by default the committed list with the writer's own
+    // adds, removes and moves replayed onto it, each anchored after its
+    // preceding shared sibling; a reference list is one attribute instead —
+    // the writer's whole list if the writer changed it, else the committed one.
+    let members = match member_merge {
+        MemberMerge::MemberByMember => merge_members(&base.members, &latest.members, &working.members),
+        MemberMerge::WholeList if working.members != base.members => working.members.clone(),
+        MemberMerge::WholeList => latest.members.clone(),
+    };
 
     let owner = if working.owner != base.owner {
         working.owner
@@ -977,6 +1015,37 @@ mod tests {
         let working = draft(vec![c, a, b]);
         let merged = three_way(&base, &latest, &working).unwrap();
         assert_eq!(merged.members(), &[a, b], "a move does not resurrect a member the other side removed");
+    }
+
+    /// The `kind == 2` arm: a reference list is one attribute — the writer's
+    /// whole list if the writer touched it, the committed list otherwise —
+    /// where the member-by-member arm would compose both sides.
+    #[test]
+    fn three_way_whole_list_takes_the_writers_list_when_it_changed() {
+        let refno = RefNo::new(1, 10);
+        let owner = RefNo::new(1, 1);
+        let m = |n| RefNo::new(1, n);
+        let (a, b, c, d) = (m(1), m(2), m(3), m(4));
+        let draft = |members: Vec<RefNo>| {
+            RecordDraft::new(refno, 0x861E0, owner, implicit(&[0]), members, vec![]).unwrap()
+        };
+
+        // base a b; committed side added c; writer added d.
+        let base = draft(vec![a, b]);
+        let latest = draft(vec![a, b, c]);
+        let working = draft(vec![a, b, d]);
+        let whole = three_way_with(&base, &latest, &working, MemberMerge::WholeList).unwrap();
+        assert_eq!(whole.members(), &[a, b, d], "the writer's list replaces the committed one; c is lost");
+        let by_member = three_way_with(&base, &latest, &working, MemberMerge::MemberByMember).unwrap();
+        assert_eq!(
+            by_member.members(),
+            &[a, b, d, c],
+            "member by member, both additions land — the writer's right after its anchor b"
+        );
+
+        // The writer left the list alone: the committed list stands.
+        let untouched = three_way_with(&base, &latest, &base, MemberMerge::WholeList).unwrap();
+        assert_eq!(untouched.members(), &[a, b, c], "an unchanged list keeps the committed side's additions");
     }
 
     /// `move_member_after` is the REORDER edit: after an anchor, to the

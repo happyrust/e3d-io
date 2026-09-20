@@ -42,10 +42,10 @@ use crate::refno::RefNo;
 use crate::session::SessionPage;
 
 pub use index_cow::{EditKind, IndexCowError, LeafEdit};
-pub use merge::{write_merge_session, MergeConflict};
+pub use merge::{write_merge_session, write_merge_session_with, MergeConflict, MergeOptions};
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
-pub use record::{PlacedRecord, RecordDraft, RecordEncodeError};
+pub use record::{MemberMerge, PlacedRecord, RecordDraft, RecordEncodeError};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
 
 /// Why a write did not happen. Nothing in this enum is returned after page 0
@@ -119,6 +119,9 @@ pub enum WriteError {
          (stage 2 does not split a record across pages)"
     )]
     RecordTooLong { words: usize, page_words: usize },
+    /// The schema templates a merge was given could not be read.
+    #[error("{0}")]
+    Template(#[from] crate::record::template::TemplateLoadError),
 }
 
 impl WriteError {

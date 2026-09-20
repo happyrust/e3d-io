@@ -12,23 +12,61 @@
 //! This module does that scan against the file's committed state and, when it
 //! is clean, writes the writer's edits on top of `latest` (their `BASESN`
 //! recording the base they merged from, A3a.8). Two writers editing one
-//! element are reconciled attribute by attribute (A3b, [`three_way`]): the
+//! element are reconciled attribute by attribute (A3b,
+//! [`three_way`](super::record::three_way)): the
 //! writer's change is rebased onto the committed record, so edits to different
 //! attributes compose and an edit to the same attribute is the writer's.
 //! Member lists reconcile the way A3b.4 does (`sub_5B1FF60`/`sub_5B20CA0`):
 //! the writer's adds, removes and moves are replayed onto the committed list,
-//! each anchored after its preceding shared sibling.
+//! each anchored after its preceding shared sibling — except on a noun whose
+//! template says its members are references (`GROU`; word 3 of the template
+//! header is 2), where the list is one attribute and the writer's whole list
+//! replaces the committed one (`sub_5B1F660`). Knowing the noun takes the
+//! schema's `*vir.dat`, so [`write_merge_session_with`] accepts a
+//! [`TemplateProvider`] through [`MergeOptions`]; without one every noun
+//! merges member by member.
 
 use std::collections::HashSet;
 
 use crate::index::named::name_table_hash;
 use crate::index::{IndexCandidate, IndexCursor, IndexDiff, NamedTable};
+use crate::record::template::{MemberListKind, TemplateProvider};
 use crate::refno::RefNo;
 use crate::session::DbView;
 
-use super::record::three_way;
+use super::record::{three_way_with, MemberMerge};
 use super::{stage_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft, SessionRequest, WriteError};
 use crate::ReadOnlyEngine;
+
+/// What a merge may consult beyond the file itself.
+#[derive(Default)]
+pub struct MergeOptions<'a> {
+    /// The schema templates for the database's type (`desvir.dat` for a
+    /// DESIGN database), used to tell a noun whose member list is a reference
+    /// list ([`MemberListKind::Referenced`]) — merged whole — from one whose
+    /// members are its children — merged member by member. `None` merges
+    /// every noun member by member.
+    pub templates: Option<&'a mut TemplateProvider>,
+}
+
+impl MergeOptions<'_> {
+    /// The member-list arm for an element of `noun_hash`: whole-list only when
+    /// the templates are at hand and say the noun's members are references;
+    /// a noun the templates do not know merges member by member.
+    fn member_merge_for(&mut self, noun_hash: u32) -> Result<MemberMerge, WriteError> {
+        let Some(templates) = self.templates.as_deref_mut() else {
+            return Ok(MemberMerge::MemberByMember);
+        };
+        let kind = templates
+            .template_for(noun_hash)?
+            .map_or(MemberListKind::Unknown, |template| template.member_list_kind);
+        Ok(if kind == MemberListKind::Referenced {
+            MemberMerge::WholeList
+        } else {
+            MemberMerge::MemberByMember
+        })
+    }
+}
 
 /// `core.dll`'s conflict codes, from message group 43 (`460 + code`).
 pub mod code {
@@ -91,6 +129,9 @@ impl WorkingChanges {
 /// of the latest session, exactly as [`write_element_session`] writes a plain
 /// change, with the session's `BASESN` set to `base_sesno`.
 ///
+/// This is [`write_merge_session_with`] at [`MergeOptions::default`]: every
+/// noun's member list merges member by member.
+///
 /// [`write_element_session`]: super::write_element_session
 pub fn write_merge_session(
     path: impl AsRef<std::path::Path>,
@@ -99,12 +140,26 @@ pub fn write_merge_session(
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
 ) -> Result<CommitReport, WriteError> {
+    write_merge_session_with(path, request, base_sesno, elements, name_edits, MergeOptions::default())
+}
+
+/// [`write_merge_session`] with [`MergeOptions`]: hand it the schema's
+/// templates and a noun whose members are references (`GROU`) has its list
+/// merged whole, the way `core.dll` does.
+pub fn write_merge_session_with(
+    path: impl AsRef<std::path::Path>,
+    request: &SessionRequest<'_>,
+    base_sesno: u32,
+    elements: &[ElementWrite],
+    name_edits: &[NamedEdit],
+    mut options: MergeOptions<'_>,
+) -> Result<CommitReport, WriteError> {
     let path = path.as_ref();
     let conflicts = scan_conflicts(path, base_sesno, elements, name_edits)?;
     if !conflicts.is_empty() {
         return Err(WriteError::MergeConflicts(conflicts));
     }
-    let rebased = rebase_updates(path, base_sesno, elements)?;
+    let rebased = rebase_updates(path, base_sesno, elements, &mut options)?;
     stage_session_with_base(path, request, &rebased, name_edits, Some(base_sesno))?.commit()
 }
 
@@ -115,6 +170,7 @@ fn rebase_updates(
     path: &std::path::Path,
     base_sesno: u32,
     elements: &[ElementWrite],
+    options: &mut MergeOptions<'_>,
 ) -> Result<Vec<ElementWrite>, WriteError> {
     let mut base = ReadOnlyEngine::open_at(path, base_sesno)?;
     let mut latest = ReadOnlyEngine::open(path)?;
@@ -128,7 +184,8 @@ fn rebase_updates(
                     (Some(base_view), Some(latest_view)) => {
                         let base_draft = RecordDraft::from_record_bytes(&base_view.raw_bytes)?;
                         let latest_draft = RecordDraft::from_record_bytes(&latest_view.raw_bytes)?;
-                        let merged = three_way(&base_draft, &latest_draft, working)?;
+                        let member_merge = options.member_merge_for(latest_draft.noun_hash)?;
+                        let merged = three_way_with(&base_draft, &latest_draft, working, member_merge)?;
                         // INDEX de-duplication (A3a, sub_5B07080): a merged
                         // record equal to the committed one is not written —
                         // its leaf keeps pointing at the record already there.
