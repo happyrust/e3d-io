@@ -11,15 +11,18 @@
 //! closed loop over that shape: a session that changes nothing — same index
 //! root, same claim root, same table directory — with its own number, chain
 //! link, clocks, user, comment and `BASESN`. [`stage_empty_session`] writes
-//! the new page and returns a [`Staged`] whose [`Staged::commit`] writes page
-//! 0; the two steps are separate so that a test can stop between them and read
-//! the file as a crash would have left it.
+//! the new page and returns a [`StagedSession`] whose [`StagedSession::commit`]
+//! writes page 0; the two steps are separate so that a test can stop between
+//! them and read the file as a crash would have left it. Stages 2 and 3 —
+//! element writes ([`stage_element_session`]) and merges — use the same
+//! two-phase [`StagedSession`].
 //!
 //! Not done here: the write-mode sentinel lock `core.dll` takes
 //! (`LockFileEx` on one byte at `0x7FFFFFF6FFFFFFFF`, A9). In its place
-//! [`Staged::commit`] re-reads page 0 and refuses when `LSPGNO` moved since
-//! staging, which catches a concurrent writer that finished first but not one
-//! that is mid-flight. Take the file out of E3D's write mode before writing.
+//! [`StagedSession::commit`] re-reads page 0 and refuses when `LSPGNO` moved
+//! since staging, which catches a concurrent writer that finished first but
+//! not one that is mid-flight. Take the file out of E3D's write mode before
+//! writing.
 
 pub mod index_cow;
 pub mod merge;
@@ -147,19 +150,22 @@ pub struct SessionRequest<'a> {
     pub clock: Option<SessionClock>,
 }
 
-/// The new pages are on disk; page 0 still names the old session.
+/// A staged session: every new page (data, index, name-table, session) is on
+/// disk and synced, but page 0 still names the old session, so a reader sees
+/// the previous session until [`StagedSession::commit`] writes page 0.
 ///
-/// Dropping this without [`Staged::commit`] leaves the file exactly as
-/// readable as before: the appended page is past the newest session's `end`
-/// and no pointer reaches it. [`Staged::rollback`] trims it off again.
+/// Dropping this without committing leaves the file exactly as readable as
+/// before: the appended pages are past the newest session's `end` and no
+/// pointer reaches them, which is what a crash between the two syncs would
+/// leave. [`StagedSession::rollback`] trims them off again.
 #[derive(Debug)]
-pub struct Staged {
+pub struct StagedSession {
     file: PageFile,
-    old: SessionSummary,
-    new_page: PageId,
-    new_sesno: u32,
+    previous: SessionSummary,
+    written: SessionSummary,
     page0: Vec<u8>,
     old_len_bytes: u64,
+    appended_pages: Vec<u32>,
 }
 
 /// The session a write is based on, as page 0 and its session page state it.
@@ -170,7 +176,7 @@ pub struct SessionSummary {
     pub end: PageId,
 }
 
-/// What [`Staged::commit`] leaves behind.
+/// What [`StagedSession::commit`] leaves behind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommitReport {
     pub path: PathBuf,
@@ -213,7 +219,8 @@ fn read_base(file: &mut PageFile) -> Result<(Vec<u8>, DbDescriptor, Vec<u8>, Ses
     Ok((page0, descriptor, session_bytes, session))
 }
 
-/// Append a session that changes nothing, leaving page 0 for [`Staged::commit`].
+/// Stage a session that changes nothing, leaving page 0 for
+/// [`StagedSession::commit`].
 ///
 /// The new page is `newest.end + 1` — the next page after the last one the
 /// newest session wrote, whatever the file's physical length says (a file
@@ -222,96 +229,43 @@ fn read_base(file: &mut PageFile) -> Result<(Vec<u8>, DbDescriptor, Vec<u8>, Ses
 pub fn stage_empty_session(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
-) -> Result<Staged, WriteError> {
-    let mut file = PageFile::open(path)?;
-    let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
-    let text = TextFormat::from_header(descriptor.header_format);
-
-    let new_page = PageId::new(PageId::PRIMARY, previous.end.page + 1);
-    let new_sesno = previous.sesno + 1;
-    let clock = request
-        .clock
-        .unwrap_or_else(|| SessionClock::now(previous.zone_offset_seconds().unwrap_or(0)));
-    let page = build_session_page(
-        &previous_bytes,
-        previous.page,
-        &NewSession {
-            page: new_page,
-            sesno: new_sesno,
-            end: new_page,
-            index_root: previous.index_root,
-            table_overrides: &[],
-            base_sesno: previous.sesno,
-            user: request.user,
-            comment: request.comment,
-            clock,
-            text,
-        },
-    )?;
-
-    // Page 0 after commit: LSPGNO → the new page; TMPLVN negated when it is
-    // still positive (A6.4: "第 9 字 TMPLVN >0 则取负"); nothing else.
-    pages::put_be_word(&mut page0, page0::LATEST_SES_PGNO, new_page.page);
-    pages::put_be_word(&mut page0, page0::EXT_NO, u32::from(new_page.ext));
-    let template_version = pages::be_word(&page0, page0::TEMPLATE_VERSION) as i32;
-    if template_version > 0 {
-        pages::put_be_word(
-            &mut page0,
-            page0::TEMPLATE_VERSION,
-            template_version.wrapping_neg() as u32,
-        );
-    }
-
-    let old_len_bytes = u64::from(file.physical_page_count()?) * file.page_size().bytes() as u64;
-    file.write_page(new_page.page, &page)?;
-    file.sync()?;
-
-    Ok(Staged {
-        file,
-        old: SessionSummary {
-            sesno: previous.sesno,
-            page: previous.page,
-            end: previous.end,
-        },
-        new_page,
-        new_sesno,
-        page0,
-        old_len_bytes,
-    })
+) -> Result<StagedSession, WriteError> {
+    stage_session_with_base(path, request, &[], &[], None)
 }
 
-impl Staged {
+impl StagedSession {
     /// The session this write is based on.
     pub fn previous(&self) -> SessionSummary {
-        self.old
+        self.previous
     }
 
     /// Where the staged session page lies and what number it carries.
     pub fn staged(&self) -> SessionSummary {
-        SessionSummary {
-            sesno: self.new_sesno,
-            page: self.new_page,
-            end: self.new_page,
-        }
+        self.written
     }
 
     pub fn page_size(&self) -> PageSize {
         self.file.page_size()
     }
 
+    /// The pages this staging appended, sorted.
+    pub fn appended_pages(&self) -> &[u32] {
+        &self.appended_pages
+    }
+
     /// Write page 0 and sync: the commit point.
     ///
     /// Page 0 is re-read first; if its `LSPGNO` no longer names the session
     /// this write was staged on, another writer got there and nothing is
-    /// written ([`WriteError::Moved`]). The staged page stays on disk,
-    /// unreachable, exactly as a crashed `core.dll` would leave one.
+    /// written ([`WriteError::Moved`]). The staged pages stay on disk,
+    /// unreachable, exactly as a crashed `core.dll` would leave them.
     pub fn commit(mut self) -> Result<CommitReport, WriteError> {
         let current = self.file.read_page(0)?;
         let found = pages::be_word(&current, page0::LATEST_SES_PGNO);
-        if found != self.old.page.page {
+        if found != self.previous.page.page {
             return Err(WriteError::Moved {
                 path: self.file.path().to_path_buf(),
-                expected: self.old.page.page,
+                expected: self.previous.page.page,
                 found,
             });
         }
@@ -323,9 +277,9 @@ impl Staged {
         self.file.sync()?;
         Ok(CommitReport {
             path: self.file.path().to_path_buf(),
-            previous: self.old,
-            written: self.staged(),
-            appended_pages: vec![self.new_page.page],
+            previous: self.previous,
+            written: self.written,
+            appended_pages: self.appended_pages,
         })
     }
 
@@ -344,7 +298,7 @@ impl Staged {
     }
 }
 
-/// [`stage_empty_session`] followed by [`Staged::commit`].
+/// [`stage_empty_session`] followed by [`StagedSession::commit`].
 pub fn write_empty_session(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
@@ -375,28 +329,40 @@ pub enum ElementWrite {
 /// Every new page — data, index and the session page — is appended after the
 /// previous session's last page and written before page 0, so a crash before
 /// the final page-0 write leaves the file reading as the previous session,
-/// exactly as [`write_empty_session`] does. `Staged`-style two-phase staging is
-/// not exposed for this path yet; the commit still re-reads page 0 and refuses
-/// on [`WriteError::Moved`].
+/// exactly as [`write_empty_session`] does. [`stage_element_session`] returns
+/// the [`StagedSession`] for a caller that wants to observe that mid-state.
 pub fn write_element_session(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
 ) -> Result<CommitReport, WriteError> {
-    write_session_with_base(path, request, elements, name_edits, None)
+    stage_element_session(path, request, elements, name_edits)?.commit()
 }
 
-/// The write core, shared by the plain and merge paths. `base_sesno` sets the
-/// session page's `BASESN`: the previous session for a plain write, the merge
-/// base for [`crate::write::merge::write_merge_session`].
-fn write_session_with_base(
+/// Stage a session that writes `elements`, leaving page 0 for
+/// [`StagedSession::commit`] — the two-phase form of [`write_element_session`].
+pub fn stage_element_session(
+    path: impl AsRef<Path>,
+    request: &SessionRequest<'_>,
+    elements: &[ElementWrite],
+    name_edits: &[NamedEdit],
+) -> Result<StagedSession, WriteError> {
+    stage_session_with_base(path, request, elements, name_edits, None)
+}
+
+/// The staging core, shared by the plain, empty and merge paths. `base_sesno`
+/// sets the session page's `BASESN`: the previous session for a plain write,
+/// the merge base for [`crate::write::merge::write_merge_session`]. Writes
+/// every new page and syncs, then hands back a [`StagedSession`] whose page 0
+/// is prepared but not yet written.
+pub(crate) fn stage_session_with_base(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
     base_sesno: Option<u32>,
-) -> Result<CommitReport, WriteError> {
+) -> Result<StagedSession, WriteError> {
     let mut file = PageFile::open(path)?;
     let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
     let text = TextFormat::from_header(descriptor.header_format);
@@ -550,21 +516,16 @@ fn write_session_with_base(
     )?;
     appended.push((session_page.page, page));
 
-    // --- write every new page, sync, then commit page 0 ---
+    // --- write every new page and sync; page 0 is left for the commit ---
+    // The file's length before the append, so a rollback can trim back to it.
+    let old_len_bytes = u64::from(file.physical_page_count()?) * file.page_size().bytes() as u64;
     for (page_no, bytes) in &appended {
         file.write_page(*page_no, bytes)?;
     }
     file.sync()?;
 
-    let current = file.read_page(0)?;
-    let found = pages::be_word(&current, page0::LATEST_SES_PGNO);
-    if found != previous.page.page {
-        return Err(WriteError::Moved {
-            path: file.path().to_path_buf(),
-            expected: previous.page.page,
-            found,
-        });
-    }
+    // Prepare page 0 (LSPGNO → the new session, TMPLVN negated when positive,
+    // A6.4) but do not write it: that is the commit point.
     pages::put_be_word(&mut page0, page0::LATEST_SES_PGNO, session_page.page);
     pages::put_be_word(&mut page0, page0::EXT_NO, u32::from(session_page.ext));
     let template_version = pages::be_word(&page0, page0::TEMPLATE_VERSION) as i32;
@@ -575,13 +536,11 @@ fn write_session_with_base(
             template_version.wrapping_neg() as u32,
         );
     }
-    file.write_page(0, &page0)?;
-    file.sync()?;
 
     let mut appended_pages: Vec<u32> = appended.iter().map(|(page_no, _)| *page_no).collect();
     appended_pages.sort_unstable();
-    Ok(CommitReport {
-        path: file.path().to_path_buf(),
+    Ok(StagedSession {
+        file,
         previous: SessionSummary {
             sesno: previous.sesno,
             page: previous.page,
@@ -592,6 +551,8 @@ fn write_session_with_base(
             page: session_page,
             end: session_page,
         },
+        page0,
+        old_len_bytes,
         appended_pages,
     })
 }

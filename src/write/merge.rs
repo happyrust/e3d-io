@@ -26,7 +26,7 @@ use crate::refno::RefNo;
 use crate::session::DbView;
 
 use super::record::three_way;
-use super::{write_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft, SessionRequest, WriteError};
+use super::{stage_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft, SessionRequest, WriteError};
 use crate::ReadOnlyEngine;
 
 /// `core.dll`'s conflict codes, from message group 43 (`460 + code`).
@@ -104,7 +104,7 @@ pub fn write_merge_session(
         return Err(WriteError::MergeConflicts(conflicts));
     }
     let rebased = rebase_updates(path, base_sesno, elements)?;
-    write_session_with_base(path, request, &rebased, name_edits, Some(base_sesno))
+    stage_session_with_base(path, request, &rebased, name_edits, Some(base_sesno))?.commit()
 }
 
 /// Rebase each of the writer's element updates onto the committed record, so a

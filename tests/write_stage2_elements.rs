@@ -17,7 +17,7 @@ use e3d_io::record::element::ParsedElement;
 use e3d_io::record::template::{NounTemplate, TemplateProvider};
 use e3d_io::session::{DbView, SessionDate, SessionSelector};
 use e3d_io::write::record::{put_real_vec_wide, put_real_wide};
-use e3d_io::write::{write_element_session, ElementWrite, RecordDraft, SessionClock, SessionRequest};
+use e3d_io::write::{stage_element_session, write_element_session, ElementWrite, RecordDraft, SessionClock, SessionRequest};
 use e3d_io::{ReadOnlyEngine, RefNo};
 
 const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
@@ -53,6 +53,14 @@ struct NewBox {
     refno: RefNo,
     pos: [f64; 3],
     dims: [f64; 3],
+}
+
+/// A fresh unnamed BOX under `owner`, POS set so it decodes.
+fn fresh_box(template: &NounTemplate, refno: RefNo, owner: RefNo) -> RecordDraft {
+    let mut implicit = vec![0u32; 11];
+    implicit.extend_from_slice(&template.defaults.implicit);
+    put_real_vec_wide(&mut implicit, wide_offset(template, "POS"), &[1.0, 2.0, 3.0]);
+    RecordDraft::new(refno, db1_hash("BOX"), owner, implicit, vec![], vec![]).expect("box draft")
 }
 
 #[test]
@@ -218,6 +226,93 @@ fn three_boxes_and_a_grown_zone_read_back_on_ams8000() {
     assert_prefix_unchanged(&copy.original, &bytes, page_bytes, old_last, PAGE0_COMMIT_WORDS);
     assert_eq!(page_word(&bytes, page_bytes, 0, 10), report.written.page.page);
     assert_appended_contiguous(&bytes, page_bytes, old_last, new_end as usize, &[3, 5, 7]);
+}
+
+/// The two-phase element write: after staging, the file still reads as the old
+/// session (a crash between the two syncs leaves it there); committing finishes
+/// it, and rolling back a fresh staging restores the bytes.
+#[test]
+fn a_staged_element_write_reads_as_the_old_session_until_commit() {
+    if common::missing(&[AMS8000, DESVIR]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS8000);
+    let mut provider = TemplateProvider::open(DESVIR, Some(DESIGN_TEMPLATE_TYPE)).expect("desvir");
+    let box_template = provider.template_for(db1_hash("BOX")).expect("box").expect("template").clone();
+    let cast_zone;
+    let fresh;
+    let (base_sesno, base_count, before_bytes) = {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let zone_hash = db1_hash("ZONE");
+        let mut zone = None;
+        let mut count = 0usize;
+        let mut max_word1 = 0u32;
+        let mut word0 = 24_384;
+        for element in engine.scan_elements(ScanTier::Header).expect("scan") {
+            let element = element.expect("header");
+            count += 1;
+            max_word1 = max_word1.max(element.refno.word1);
+            if zone.is_none() && element.noun_hash == zone_hash {
+                zone = Some(element.refno);
+                word0 = element.refno.word0;
+            }
+        }
+        cast_zone = zone.expect("a ZONE");
+        fresh = RefNo::new(word0, max_word1 + 3000);
+        (DbView::open(&copy.path).unwrap().session().sesno, count, copy.current_bytes())
+    };
+
+    // Stage a box insert + owner update, but do not commit.
+    let staged = {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let mut zone = RecordDraft::from_record_bytes(&engine.find_element(cast_zone).unwrap().unwrap().raw_bytes).unwrap();
+        zone.push_member(fresh);
+        stage_element_session(
+            &copy.path,
+            &SessionRequest { user: "e3dio", comment: "staged box", clock: Some(fixed_clock()) },
+            &[ElementWrite::Insert(fresh_box(&box_template, fresh, cast_zone)), ElementWrite::Update(zone)],
+            &[],
+        )
+        .expect("stage")
+    };
+    assert_eq!(staged.previous().sesno, base_sesno);
+    assert_eq!(staged.staged().sesno, base_sesno + 1);
+    assert!(staged.appended_pages().len() > 1, "an element write appends record and tree pages, not just the session page");
+
+    // The staged pages are on disk, but page 0 is not: readers still see the
+    // old session, and the box is not indexed yet.
+    {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open mid-state");
+        assert_eq!(engine.session().sesno, base_sesno, "readers still see the old session");
+        assert!(engine.find_element(fresh).unwrap().is_none(), "the box is not indexed until commit");
+        assert_eq!(engine.scan_elements(ScanTier::Header).unwrap().count(), base_count);
+    }
+
+    // Committing the same staging finishes the write.
+    let report = staged.commit().expect("commit");
+    assert_eq!(report.written.sesno, base_sesno + 1);
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open after commit");
+    assert_eq!(engine.session().sesno, base_sesno + 1);
+    assert!(engine.find_element(fresh).unwrap().is_some(), "the box is indexed after commit");
+
+    // A fresh staging rolled back restores the bytes.
+    let copy2 = DbCopy::of(AMS8000);
+    let staged = {
+        let mut engine = ReadOnlyEngine::open(&copy2.path).expect("open");
+        let mut zone = RecordDraft::from_record_bytes(&engine.find_element(cast_zone).unwrap().unwrap().raw_bytes).unwrap();
+        zone.push_member(fresh);
+        stage_element_session(
+            &copy2.path,
+            &SessionRequest { user: "e3dio", comment: "rolled back", clock: Some(fixed_clock()) },
+            &[ElementWrite::Insert(fresh_box(&box_template, fresh, cast_zone)), ElementWrite::Update(zone)],
+            &[],
+        )
+        .expect("stage")
+    };
+    assert_ne!(copy2.current_bytes().len(), copy2.original.len(), "staging grew the file");
+    staged.rollback().expect("rollback");
+    assert_eq!(copy2.current_bytes(), copy2.original, "rollback restores the bytes");
+    let _ = before_bytes;
 }
 
 fn attribute_value<'a>(
