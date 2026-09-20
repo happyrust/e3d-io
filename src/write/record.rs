@@ -193,6 +193,11 @@ impl RecordDraft {
         &self.members
     }
 
+    /// The whole implicit region, header included.
+    pub fn implicit(&self) -> &[u32] {
+        &self.implicit
+    }
+
     /// Set the value at wide word offset `offset`: the header-relative word,
     /// the way a descriptor's `wide.location.word_offset()` states it.
     pub fn implicit_word_mut(&mut self, offset: usize) -> Option<&mut u32> {
@@ -354,6 +359,92 @@ pub fn pack_offset(word_offset: u32, ext: u16) -> u32 {
     u32::from(ext) | (word_offset << 13)
 }
 
+/// Attribute-level three-way merge (`docs/plans/2026-09-20-dabacon-write-path-algorithms.md`
+/// A3b): rebase the writer's change onto the committed record.
+///
+/// `base` is the record the writer opened, `latest` the committed one, and
+/// `working` the writer's edited record. The result starts from `latest` and
+/// takes only what the writer actually changed (`base` → `working`): an
+/// implicit word, an explicit attribute or a member the writer left as it was
+/// keeps `latest`'s value, so a change to one attribute and a change to
+/// another compose. Where both changed the same thing the writer wins — the
+/// A3b rule for a plain `SAVEWORK` (`extract flush` gives the committed side;
+/// this crate does not do extract flush).
+///
+/// The member merge is the simple set delta — `latest`'s members plus the ones
+/// the writer added, less the ones it removed — not yet the anchor-ordered
+/// reconciliation of A3b.4.
+pub fn three_way(
+    base: &RecordDraft,
+    latest: &RecordDraft,
+    working: &RecordDraft,
+) -> Result<RecordDraft, RecordEncodeError> {
+    // Implicit region: latest's, with the words the writer changed overlaid.
+    // The header words (0..11) are recomputed on encode, so only attribute
+    // words matter.
+    let mut implicit = latest.implicit.clone();
+    let common = implicit
+        .len()
+        .min(base.implicit.len())
+        .min(working.implicit.len());
+    for index in HEADER_WORDS..common {
+        if working.implicit[index] != base.implicit[index] {
+            implicit[index] = working.implicit[index];
+        }
+    }
+
+    // Explicit attributes, keyed by hash: latest's, with the writer's changes
+    // (added, replaced or removed relative to base) applied.
+    let base_fields = base.parse_explicit_fields();
+    let working_fields = working.parse_explicit_fields();
+    let mut merged_fields = latest.parse_explicit_fields();
+    let value_of = |fields: &[(u32, u16, Vec<u32>)], hash: u32| {
+        fields.iter().find(|f| f.0 == hash).map(|f| (f.1, f.2.clone()))
+    };
+    let mut touched: Vec<u32> = base_fields
+        .iter()
+        .map(|f| f.0)
+        .chain(working_fields.iter().map(|f| f.0))
+        .collect();
+    touched.sort_unstable();
+    touched.dedup();
+    for hash in touched {
+        let in_base = value_of(&base_fields, hash);
+        let in_working = value_of(&working_fields, hash);
+        if in_base == in_working {
+            continue; // the writer did not change this attribute
+        }
+        match in_working {
+            Some((type_code, data)) => match merged_fields.iter_mut().find(|f| f.0 == hash) {
+                Some(slot) => {
+                    slot.1 = type_code;
+                    slot.2 = data;
+                }
+                None => merged_fields.push((hash, type_code, data)),
+            },
+            None => merged_fields.retain(|f| f.0 != hash),
+        }
+    }
+    let explicit_stream = rebuild_explicit_stream(&merged_fields);
+
+    // Members: latest's, plus the writer's additions, less its removals.
+    let mut members = latest.members.clone();
+    for member in &working.members {
+        if !base.members.contains(member) && !members.contains(member) {
+            members.push(*member);
+        }
+    }
+    members.retain(|member| working.members.contains(member) || !base.members.contains(member));
+
+    let owner = if working.owner != base.owner {
+        working.owner
+    } else {
+        latest.owner
+    };
+
+    RecordDraft::new(working.refno, latest.noun_hash, owner, implicit, members, explicit_stream)
+}
+
 /// Serialise explicit fields back into a stream: `[hash][type_code << 16 |
 /// data_words][data…]` per entry, the inverse of the reader's walk.
 fn rebuild_explicit_stream(fields: &[(u32, u16, Vec<u32>)]) -> Vec<u8> {
@@ -496,6 +587,44 @@ mod tests {
             crate::record::attrs::read_f64(&parsed.implicit_data, 29),
             Some(310.0)
         );
+    }
+
+    /// Attribute-level three-way: changes to different attributes compose, a
+    /// change to the same one is the writer's, and an attribute only the
+    /// committed side touched is kept.
+    #[test]
+    fn three_way_composes_disjoint_changes_and_prefers_the_writer_on_a_clash() {
+        let refno = RefNo::new(1, 10);
+        let owner = RefNo::new(1, 1);
+        let explicit = |hash: u32, value: u32| {
+            let mut s = Vec::new();
+            s.extend_from_slice(&hash.to_be_bytes());
+            s.extend_from_slice(&((0x0C00u32 << 16) | 1).to_be_bytes());
+            s.extend_from_slice(&value.to_be_bytes());
+            s
+        };
+
+        let base = RecordDraft::new(refno, 0x861E0, owner, implicit(&[10, 20, 30]), vec![], explicit(0xAA, 1)).unwrap();
+        // Committed side changed implicit word 12 and explicit 0xAA, and added 0xBB.
+        let mut latest_words = implicit(&[10, 20, 30]);
+        latest_words[12] = 120;
+        let mut latest_stream = explicit(0xAA, 2);
+        latest_stream.extend_from_slice(&explicit(0xBB, 9));
+        let latest = RecordDraft::new(refno, 0x861E0, owner, latest_words, vec![], latest_stream).unwrap();
+        // Writer changed implicit word 13 and explicit 0xAA to its own value.
+        let mut working_words = implicit(&[10, 20, 30]);
+        working_words[13] = 130;
+        let working = RecordDraft::new(refno, 0x861E0, owner, working_words, vec![], explicit(0xAA, 7)).unwrap();
+
+        let merged = three_way(&base, &latest, &working).unwrap();
+        assert_eq!(merged.implicit()[11], 10, "unchanged word keeps base/latest");
+        assert_eq!(merged.implicit()[12], 120, "committed-only change kept");
+        assert_eq!(merged.implicit()[13], 130, "writer-only change applied");
+
+        let fields = merged.parse_explicit_fields();
+        let value = |hash: u32| fields.iter().find(|f| f.0 == hash).map(|f| f.2[0]);
+        assert_eq!(value(0xAA), Some(7), "both changed 0xAA: the writer wins");
+        assert_eq!(value(0xBB), Some(9), "committed-only attribute is kept");
     }
 
     /// A record decoded from its own bytes and re-encoded is byte-for-byte the

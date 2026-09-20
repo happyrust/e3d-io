@@ -11,11 +11,12 @@
 //!
 //! This module does that scan against the file's committed state and, when it
 //! is clean, writes the writer's edits on top of `latest` (their `BASESN`
-//! recording the base they merged from, A3a.8). It is the scan and the
-//! disjoint-merge write; the per-attribute and per-member reconciliation of a
-//! *non-disjoint* change — two writers editing one element — is A3b, still to
-//! come, so an element both sides changed is refused here rather than
-//! silently resolved one way.
+//! recording the base they merged from, A3a.8). Two writers editing one
+//! element are reconciled attribute by attribute (A3b, [`three_way`]): the
+//! writer's change is rebased onto the committed record, so edits to different
+//! attributes compose and an edit to the same attribute is the writer's. The
+//! member reconciliation is still the simple set delta, not yet A3b.4's
+//! anchor order.
 
 use std::collections::HashSet;
 
@@ -24,7 +25,9 @@ use crate::index::{IndexCandidate, IndexCursor, IndexDiff, NamedTable};
 use crate::refno::RefNo;
 use crate::session::DbView;
 
-use super::{write_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, SessionRequest, WriteError};
+use super::record::three_way;
+use super::{write_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft, SessionRequest, WriteError};
+use crate::ReadOnlyEngine;
 
 /// `core.dll`'s conflict codes, from message group 43 (`460 + code`).
 pub mod code {
@@ -34,9 +37,6 @@ pub mod code {
     pub const CHANGED_UNDER_DELETE: u32 = 562;
     /// An element the writer deleted was changed by the committed session.
     pub const DELETED_UNDER_CHANGE: u32 = 590;
-    /// Not a `core.dll` code: two writers changed one element, which needs the
-    /// per-attribute merge (A3b) this crate does not do yet.
-    pub const OVERLAPPING_CHANGE: u32 = 0;
 }
 
 /// One reason a merge was refused.
@@ -103,7 +103,40 @@ pub fn write_merge_session(
     if !conflicts.is_empty() {
         return Err(WriteError::MergeConflicts(conflicts));
     }
-    write_session_with_base(path, request, elements, name_edits, Some(base_sesno))
+    let rebased = rebase_updates(path, base_sesno, elements)?;
+    write_session_with_base(path, request, &rebased, name_edits, Some(base_sesno))
+}
+
+/// Rebase each of the writer's element updates onto the committed record, so a
+/// change composes with what was committed since the base rather than
+/// overwriting it. Inserts and deletes pass through unchanged.
+fn rebase_updates(
+    path: &std::path::Path,
+    base_sesno: u32,
+    elements: &[ElementWrite],
+) -> Result<Vec<ElementWrite>, WriteError> {
+    let mut base = ReadOnlyEngine::open_at(path, base_sesno)?;
+    let mut latest = ReadOnlyEngine::open(path)?;
+    let mut out = Vec::with_capacity(elements.len());
+    for element in elements {
+        match element {
+            ElementWrite::Update(working) => {
+                let base_view = base.find_element(working.refno)?;
+                let latest_view = latest.find_element(working.refno)?;
+                match (base_view, latest_view) {
+                    (Some(base_view), Some(latest_view)) => {
+                        let base_draft = RecordDraft::from_record_bytes(&base_view.raw_bytes)?;
+                        let latest_draft = RecordDraft::from_record_bytes(&latest_view.raw_bytes)?;
+                        out.push(ElementWrite::Update(three_way(&base_draft, &latest_draft, working)?));
+                    }
+                    // Not indexed by both ends: apply the writer's record as is.
+                    _ => out.push(ElementWrite::Update(working.clone())),
+                }
+            }
+            other => out.push(other.clone()),
+        }
+    }
+    Ok(out)
 }
 
 /// The three-view conflict scan. Opens the base and latest sessions read-only
@@ -172,21 +205,8 @@ fn scan_conflicts(
             });
         }
     }
-    // Overlap this crate cannot yet merge: both sides changed one element (a
-    // modify on each). A3b would reconcile it attribute by attribute; until
-    // then it is refused rather than resolved one way.
-    for refno in &working.modified {
-        if theirs_changed.contains(refno) {
-            conflicts.push(MergeConflict {
-                code: code::OVERLAPPING_CHANGE,
-                refno: Some(*refno),
-                name: None,
-                detail: format!(
-                    "{refno} was changed on both sides; per-attribute merge (A3b) is not implemented yet"
-                ),
-            });
-        }
-    }
+    // A change on both sides is not a conflict: `three_way` reconciles it
+    // attribute by attribute at write time.
 
     // 561: a name I take is already in the latest NAME table for another element.
     let name_hash = name_table_hash();

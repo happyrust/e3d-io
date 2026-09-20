@@ -348,29 +348,73 @@ fn a_name_already_taken_is_refused_561() {
     );
 }
 
+/// The word at `word` of the element's implicit region.
+fn implicit_word(engine: &mut ReadOnlyEngine, refno: RefNo, word: usize) -> u32 {
+    let view = engine.find_element(refno).unwrap().unwrap();
+    let parsed = ParsedElement::parse_as(&view.raw_bytes, engine.text_format()).unwrap();
+    u32::from_be_bytes(parsed.implicit_data[word * 4..word * 4 + 4].try_into().unwrap())
+}
+
 #[test]
-fn two_changes_to_one_element_are_refused_pending_attribute_merge() {
+fn two_changes_to_one_element_merge_attribute_by_attribute() {
     if common::missing(&[AMS8000]) {
         return;
     }
-    let victim = std::cell::Cell::new(RefNo::new(0, 0));
-    refused_merge(
-        |engine, cast| {
-            victim.set(cast.subs[0]);
-            let mut draft = RecordDraft::from_record_bytes(&engine.find_element(cast.subs[0]).unwrap().unwrap().raw_bytes).unwrap();
-            if let Some(word) = draft.implicit_word_mut(11) {
-                *word ^= 1;
-            }
-            vec![ElementWrite::Update(draft)]
-        },
-        |base, _| {
-            let mut draft = RecordDraft::from_record_bytes(&base.find_element(victim.get()).unwrap().unwrap().raw_bytes).unwrap();
-            if let Some(word) = draft.implicit_word_mut(12) {
-                *word ^= 1;
-            }
-            (vec![ElementWrite::Update(draft)], vec![])
-        },
-        code::OVERLAPPING_CHANGE,
+    let copy = DbCopy::of(AMS8000);
+    let cast = cast(AMS8000);
+    let victim = cast.subs[0];
+    let s = DbView::open(&copy.path).unwrap().session().sesno;
+
+    // The two attribute words A and B will each change, and their base values.
+    let (a_word, b_word) = (11usize, 12usize);
+    let (base_a, base_b) = {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        (implicit_word(&mut engine, victim, a_word), implicit_word(&mut engine, victim, b_word))
+    };
+
+    // A commits S+1 changing word A of the element.
+    {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let mut draft = RecordDraft::from_record_bytes(&engine.find_element(victim).unwrap().unwrap().raw_bytes).unwrap();
+        *draft.implicit_word_mut(a_word).unwrap() = base_a ^ 0xABCD;
+        write_element_session(
+            &copy.path,
+            &SessionRequest { user: "A", comment: "A changes word A", clock: Some(clock()) },
+            &[ElementWrite::Update(draft)],
+            &[],
+        )
+        .expect("A writes S+1");
+    }
+
+    // B, based on S, changes word B of the same element, and merges.
+    {
+        let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+        let mut draft = RecordDraft::from_record_bytes(&base.find_element(victim).unwrap().unwrap().raw_bytes).unwrap();
+        *draft.implicit_word_mut(b_word).unwrap() = base_b ^ 0x1234;
+        write_merge_session(
+            &copy.path,
+            &SessionRequest { user: "B", comment: "B changes word B", clock: Some(clock()) },
+            s,
+            &[ElementWrite::Update(draft)],
+            &[],
+        )
+        .expect("B merges S+2");
+    }
+
+    // Both attribute changes survive on the one element.
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+    assert!(engine.find_element(victim).unwrap().is_some());
+    assert_eq!(implicit_word(&mut engine, victim, a_word), base_a ^ 0xABCD, "A's attribute survived");
+    assert_eq!(implicit_word(&mut engine, victim, b_word), base_b ^ 0x1234, "B's attribute merged in");
+
+    let mut view = DbView::open(&copy.path).expect("view");
+    let whole = view
+        .diff_sessions(SessionSelector::Exact(s), SessionSelector::Exact(s + 2))
+        .expect("diff");
+    assert_eq!(
+        (whole.tally().deleted, whole.tally().inserted, whole.tally().modified),
+        (0, 0, 1),
+        "the one element is modified once across S..S+2"
     );
 }
 
