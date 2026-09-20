@@ -189,6 +189,25 @@ impl RecordDraft {
         self.members.len() != before
     }
 
+    /// Move an existing member to directly after `after`, or to the front
+    /// when `after` is `None` — the list edit a `REORDER` makes. Returns
+    /// whether the move happened; it does not when either member is missing
+    /// or `after` is the member itself.
+    pub fn move_member_after(&mut self, member: RefNo, after: Option<RefNo>) -> bool {
+        let Some(current) = self.members.iter().position(|m| *m == member) else {
+            return false;
+        };
+        if after.is_some_and(|anchor| anchor == member || !self.members.contains(&anchor)) {
+            return false;
+        }
+        self.members.remove(current);
+        let slot = after
+            .and_then(|anchor| self.members.iter().position(|m| *m == anchor))
+            .map_or(0, |anchor| anchor + 1);
+        self.members.insert(slot, member);
+        true
+    }
+
     pub fn members(&self) -> &[RefNo] {
         &self.members
     }
@@ -398,12 +417,15 @@ pub fn pack_offset(word_offset: u32, ext: u16) -> u32 {
 /// A3b rule for a plain `SAVEWORK` (`extract flush` gives the committed side;
 /// this crate does not do extract flush).
 ///
-/// The member merge is A3b.4's: `latest`'s member list, with the writer's own
-/// removals dropped and its additions placed after the nearest member that
-/// precedes them in the writer's list and still survives in the merged one —
-/// the "preceding shared sibling" anchor `sub_5B20CA0` uses. Members neither
-/// side moved keep the committed order, so two writers adding members to one
-/// owner both land. The move case (`st 2`) is not reordered yet.
+/// The member merge is A3b.4's ([`merge_members`]): `latest`'s member list
+/// with the writer's own adds, removes and moves — what [`member_list_diff`]
+/// finds between `base` and `working` — replayed onto it in order, an added
+/// or moved member landing right after the nearest member that precedes it
+/// in the writer's list and still survives in the merged one, the "preceding
+/// shared sibling" anchor `sub_5B20CA0` uses. Members the writer did not
+/// touch keep the committed order, so two writers adding members to one
+/// owner both land, and a member both sides moved sits where the writer put
+/// it.
 pub fn three_way(
     base: &RecordDraft,
     latest: &RecordDraft,
@@ -457,27 +479,10 @@ pub fn three_way(
     }
     let explicit_stream = rebuild_explicit_stream(&merged_fields);
 
-    // Members (A3b.4): latest's list, with the writer's removals dropped and
-    // its additions anchored after the nearest preceding sibling that both the
-    // writer's list and the merged list still hold.
-    let mut members = latest.members.clone();
-    for member in &base.members {
-        if !working.members.contains(member) {
-            members.retain(|existing| existing != member); // the writer removed it
-        }
-    }
-    for (index, member) in working.members.iter().enumerate() {
-        if base.members.contains(member) || members.contains(member) {
-            continue; // not the writer's addition, or already present
-        }
-        let anchor = (0..index)
-            .rev()
-            .find_map(|earlier| members.iter().position(|existing| existing == &working.members[earlier]));
-        match anchor {
-            Some(position) => members.insert(position + 1, *member),
-            None => members.insert(0, *member),
-        }
-    }
+    // Members (A3b.4): the committed list with the writer's own adds, removes
+    // and moves replayed onto it, each anchored after its preceding shared
+    // sibling.
+    let members = merge_members(&base.members, &latest.members, &working.members);
 
     let owner = if working.owner != base.owner {
         working.owner
@@ -486,6 +491,153 @@ pub fn three_way(
     };
 
     RecordDraft::new(working.refno, latest.noun_hash, owner, implicit, members, explicit_stream)
+}
+
+/// One step of the ordered member-list diff `sub_5B1FF60` yields between a
+/// writer's base list and its working list — what the writer did to one
+/// member. `at` is the member's position in the working list, which is where
+/// [`merge_members`] takes its anchor from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberEdit {
+    /// `st 1`: in the working list, not in the base one — the writer added it.
+    Added { member: RefNo, at: usize },
+    /// `st 3`: in the base list, not in the working one — the writer removed
+    /// it.
+    Removed { member: RefNo },
+    /// `st 2`: in both lists at different places — the writer moved it.
+    Moved { member: RefNo, at: usize },
+}
+
+/// `sub_5B1FF60`: walk the writer's base and working member lists together
+/// and say, member by member, what the writer added, removed and moved.
+///
+/// Two cursors advance in step while the lists agree. A base member missing
+/// from the working list is a removal, a working member missing from the base
+/// list an addition. When both lists hold the members under the cursors but
+/// in different places, one of them moved, and `core.dll` picks which by
+/// distance: the base member's displacement (its working position against
+/// the base cursor) against the working member's (its base position against
+/// the working cursor). The further-displaced one is the move — a base member
+/// is deferred until the working cursor reaches it, a working member is
+/// emitted at once — so `[p q r s]` → `[q r s p]` is one move of `p`, not
+/// three. A move is emitted where the working cursor stands, so the edits
+/// come out in the writer's order and a moved member's anchor is the member
+/// before it in the writer's list.
+pub fn member_list_diff(base: &[RefNo], working: &[RefNo]) -> Vec<MemberEdit> {
+    let position_in = |list: &[RefNo], member: RefNo| list.iter().position(|m| *m == member);
+    let mut edits = Vec::new();
+    // The two scratch lists: moves already emitted from the working side (the
+    // base cursor skips them) and moves deferred from the base side (emitted
+    // when the working cursor reaches them).
+    let mut emitted: Vec<RefNo> = Vec::new();
+    let mut deferred: Vec<RefNo> = Vec::new();
+    let (mut i, mut j) = (0usize, 0usize);
+    while i < base.len() && j < working.len() {
+        let (a, b) = (base[i], working[j]);
+        if a == b {
+            i += 1;
+            j += 1;
+            continue;
+        }
+        let Some(a_in_working) = position_in(working, a) else {
+            edits.push(MemberEdit::Removed { member: a });
+            i += 1;
+            continue;
+        };
+        let Some(b_in_base) = position_in(base, b) else {
+            edits.push(MemberEdit::Added { member: b, at: j });
+            j += 1;
+            continue;
+        };
+        // Both present, in different places: one of them moved.
+        if emitted.contains(&a) {
+            i += 1;
+            continue;
+        }
+        if let Some(slot) = deferred.iter().position(|m| *m == b) {
+            deferred.swap_remove(slot);
+            emitted.push(b);
+            edits.push(MemberEdit::Moved { member: b, at: j });
+            j += 1;
+            continue;
+        }
+        if a_in_working.abs_diff(i) > b_in_base.abs_diff(j) {
+            deferred.push(a);
+            i += 1;
+        } else {
+            emitted.push(b);
+            edits.push(MemberEdit::Moved { member: b, at: j });
+            j += 1;
+        }
+    }
+    // One side ran out. Base leftovers are removals unless they were placed
+    // from the working side already; working leftovers are moves if they were
+    // deferred (or are in the base list at all), additions otherwise.
+    for &a in &base[i..] {
+        if !emitted.contains(&a) && position_in(working, a).is_none() {
+            edits.push(MemberEdit::Removed { member: a });
+        }
+    }
+    for (offset, &b) in working[j..].iter().enumerate() {
+        let at = j + offset;
+        if deferred.contains(&b) || position_in(base, b).is_some() {
+            edits.push(MemberEdit::Moved { member: b, at });
+        } else {
+            edits.push(MemberEdit::Added { member: b, at });
+        }
+    }
+    edits
+}
+
+/// A3b.4's member merge, `sub_5B20CA0`: the committed (`latest`) member list
+/// with the writer's edits — [`member_list_diff`] of `base` against
+/// `working` — replayed onto it in order.
+///
+/// A removal takes the member out of the list if it is still there. An
+/// addition goes in right after its anchor, the nearest member before it in
+/// the writer's list that the merged list holds (the preceding shared
+/// sibling), or at the front when none does; a member already present is
+/// left alone. A move takes the member out of wherever the committed list
+/// has it and puts it back after the same kind of anchor, so a member both
+/// sides moved ends up where the writer put it, and a move whose anchor the
+/// committed side removed falls back to the sibling before that. A moved
+/// member the committed side took out of the list is not put back — the
+/// writer only moved it, the other side removed it (inferred; `sub_5B21C10`
+/// looks the member up in the merged table before it shifts anything).
+/// Members the writer did not touch keep the committed order, so the
+/// committed side's own adds, removes and moves survive.
+pub fn merge_members(base: &[RefNo], latest: &[RefNo], working: &[RefNo]) -> Vec<RefNo> {
+    let mut merged = latest.to_vec();
+    for edit in member_list_diff(base, working) {
+        match edit {
+            MemberEdit::Removed { member } => merged.retain(|m| *m != member),
+            MemberEdit::Added { member, at } => {
+                if !merged.contains(&member) {
+                    let slot = anchor_slot(&merged, working, at);
+                    merged.insert(slot, member);
+                }
+            }
+            MemberEdit::Moved { member, at } => {
+                if let Some(current) = merged.iter().position(|m| *m == member) {
+                    merged.remove(current);
+                    let slot = anchor_slot(&merged, working, at);
+                    merged.insert(slot, member);
+                }
+            }
+        }
+    }
+    merged
+}
+
+/// Where the member at `at` in the writer's list lands in `merged`: right
+/// after the nearest member before it in the writer's list that `merged`
+/// holds, or at the front when none does.
+fn anchor_slot(merged: &[RefNo], working: &[RefNo], at: usize) -> usize {
+    working[..at]
+        .iter()
+        .rev()
+        .find_map(|earlier| merged.iter().position(|m| m == earlier))
+        .map_or(0, |anchor| anchor + 1)
 }
 
 /// An explicit text value's data words: a count word, then the bytes four to
@@ -718,6 +870,131 @@ mod tests {
             &[m(1), m(90), m(2), m(20)],
             "committed insert kept, writer insert anchored after b, writer delete honoured"
         );
+    }
+
+    /// `sub_5B1FF60`'s classification: a member that changed place is one
+    /// move of the further-displaced member, not a cascade; adds and removes
+    /// come out where the cursors meet them.
+    #[test]
+    fn member_list_diff_classifies_adds_removes_and_moves() {
+        let m = |n| RefNo::new(1, n);
+        let (p, q, r, s, x) = (m(1), m(2), m(3), m(4), m(9));
+
+        // p moved to the end: one move, deferred from the base side and
+        // emitted where the working cursor reaches it.
+        assert_eq!(
+            member_list_diff(&[p, q, r, s], &[q, r, s, p]),
+            vec![MemberEdit::Moved { member: p, at: 3 }]
+        );
+        // r moved to the front: one move, emitted at once from the working side.
+        assert_eq!(
+            member_list_diff(&[p, q, r, s], &[r, p, q, s]),
+            vec![MemberEdit::Moved { member: r, at: 0 }]
+        );
+        // Reversed ends: r comes forward, p goes back, q stays.
+        assert_eq!(
+            member_list_diff(&[p, q, r], &[r, q, p]),
+            vec![MemberEdit::Moved { member: r, at: 0 }, MemberEdit::Moved { member: p, at: 2 }]
+        );
+        // q replaced by x in place: a removal then an addition at q's slot.
+        assert_eq!(
+            member_list_diff(&[p, q, r], &[p, x, r]),
+            vec![MemberEdit::Removed { member: q }, MemberEdit::Added { member: x, at: 1 }]
+        );
+        // Unchanged lists have nothing to say.
+        assert!(member_list_diff(&[p, q], &[p, q]).is_empty());
+    }
+
+    /// Member three-way, the move case (`st 2`): the writer's moved member
+    /// lands right after its anchor in the committed list, and the committed
+    /// side's own insert keeps its place relative to the members around it.
+    #[test]
+    fn three_way_reorders_a_moved_member_after_its_anchor() {
+        let refno = RefNo::new(1, 10);
+        let owner = RefNo::new(1, 1);
+        let m = |n| RefNo::new(1, n);
+        let (a, b, c, d, x) = (m(1), m(2), m(3), m(4), m(90));
+        let draft = |members: Vec<RefNo>| {
+            RecordDraft::new(refno, 0x861E0, owner, implicit(&[0]), members, vec![]).unwrap()
+        };
+
+        // base: a b c d. Committed side inserted X after a. Writer moved d
+        // to sit right after a.
+        let base = draft(vec![a, b, c, d]);
+        let latest = draft(vec![a, x, b, c, d]);
+        let mut working = base.clone();
+        assert!(working.move_member_after(d, Some(a)));
+        assert_eq!(working.members(), &[a, d, b, c]);
+
+        let merged = three_way(&base, &latest, &working).unwrap();
+        assert_eq!(merged.members(), &[a, d, x, b, c], "d follows its anchor a; X keeps its committed place");
+    }
+
+    /// Both sides moved the same member: the writer's placement wins, the
+    /// A3b rule for a plain SAVEWORK.
+    #[test]
+    fn three_way_lets_the_writer_place_a_member_both_sides_moved() {
+        let refno = RefNo::new(1, 10);
+        let owner = RefNo::new(1, 1);
+        let m = |n| RefNo::new(1, n);
+        let (a, b, c, d) = (m(1), m(2), m(3), m(4));
+        let draft = |members: Vec<RefNo>| {
+            RecordDraft::new(refno, 0x861E0, owner, implicit(&[0]), members, vec![]).unwrap()
+        };
+
+        // base: a b c d. Committed side moved d to the front; writer moved d after b.
+        let base = draft(vec![a, b, c, d]);
+        let latest = draft(vec![d, a, b, c]);
+        let working = draft(vec![a, b, d, c]);
+
+        let merged = three_way(&base, &latest, &working).unwrap();
+        assert_eq!(merged.members(), &[a, b, d, c], "the writer's placement of d wins");
+    }
+
+    /// A move whose anchor the committed side removed falls back to the
+    /// sibling before it; a moved member the committed side took out of the
+    /// list is not put back.
+    #[test]
+    fn three_way_move_falls_back_to_the_previous_shared_sibling() {
+        let refno = RefNo::new(1, 10);
+        let owner = RefNo::new(1, 1);
+        let m = |n| RefNo::new(1, n);
+        let (a, b, c, d) = (m(1), m(2), m(3), m(4));
+        let draft = |members: Vec<RefNo>| {
+            RecordDraft::new(refno, 0x861E0, owner, implicit(&[0]), members, vec![]).unwrap()
+        };
+
+        // Writer moved a after c; committed side removed c → a lands after b.
+        let base = draft(vec![a, b, c, d]);
+        let latest = draft(vec![a, b, d]);
+        let working = draft(vec![b, c, a, d]);
+        let merged = three_way(&base, &latest, &working).unwrap();
+        assert_eq!(merged.members(), &[b, a, d], "anchor c is gone, a falls back behind b");
+
+        // Writer moved c to the front; committed side removed c → it stays gone.
+        let base = draft(vec![a, b, c]);
+        let latest = draft(vec![a, b]);
+        let working = draft(vec![c, a, b]);
+        let merged = three_way(&base, &latest, &working).unwrap();
+        assert_eq!(merged.members(), &[a, b], "a move does not resurrect a member the other side removed");
+    }
+
+    /// `move_member_after` is the REORDER edit: after an anchor, to the
+    /// front, and a no-op when a member is missing or the anchor is itself.
+    #[test]
+    fn move_member_after_reorders_in_place() {
+        let m = |n| RefNo::new(1, n);
+        let (a, b, c) = (m(1), m(2), m(3));
+        let mut draft = RecordDraft::new(m(10), 0x861E0, m(0), implicit(&[0]), vec![a, b, c], vec![]).unwrap();
+
+        assert!(draft.move_member_after(a, Some(c)));
+        assert_eq!(draft.members(), &[b, c, a]);
+        assert!(draft.move_member_after(c, None));
+        assert_eq!(draft.members(), &[c, b, a]);
+        assert!(!draft.move_member_after(m(99), Some(a)), "missing member");
+        assert!(!draft.move_member_after(a, Some(m(99))), "missing anchor");
+        assert!(!draft.move_member_after(a, Some(a)), "a member cannot anchor itself");
+        assert_eq!(draft.members(), &[c, b, a], "a refused move changes nothing");
     }
 
     /// `content_eq` sees past the header and explicit-stream padding, and

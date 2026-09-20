@@ -409,6 +409,94 @@ fn two_writers_add_members_to_one_owner() {
 }
 
 #[test]
+fn a_moved_member_lands_after_its_anchor_when_merged() {
+    if common::missing(&[AMS8000, DESVIR]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS8000);
+    let mut provider = TemplateProvider::open(DESVIR, Some(DESIGN_TEMPLATE_TYPE)).expect("desvir");
+    let box_template = provider.template_for(db1_hash("BOX")).expect("box").expect("template").clone();
+    let cast = cast(AMS8000);
+    let new_box = cast.fresh[0];
+    let s = DbView::open(&copy.path).unwrap().session().sesno;
+
+    // An owner with at least three members, so a move is not just a swap.
+    let (owner, base_members) = {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        owner_with_members(&mut engine, db1_hash("ZONE"), 3)
+    };
+    let (first, last) = (base_members[0], *base_members.last().unwrap());
+
+    // A appends a box to the owner: the committed list is base + box.
+    {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let zone = zone_with_member(&mut engine, owner, new_box);
+        write_element_session(
+            &copy.path,
+            &SessionRequest { user: "A", comment: "A adds a box", clock: Some(clock()) },
+            &[ElementWrite::Insert(fresh_box(&box_template, new_box, owner)), ElementWrite::Update(zone)],
+            &[],
+        )
+        .expect("A writes S+1");
+    }
+
+    // B, based on S, moves the owner's first member behind its last, and merges.
+    {
+        let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+        let view = base.find_element(owner).expect("owner").expect("exists");
+        let mut draft = RecordDraft::from_record_bytes(&view.raw_bytes).expect("draft");
+        assert_eq!(draft.members(), &base_members[..], "B's base list is the one scanned");
+        assert!(draft.move_member_after(first, Some(last)));
+        write_merge_session(
+            &copy.path,
+            &SessionRequest { user: "B", comment: "B reorders a member", clock: Some(clock()) },
+            s,
+            &[ElementWrite::Update(draft)],
+            &[],
+        )
+        .expect("B merges S+2");
+    }
+
+    // The moved member sits right after its anchor, the old tail; A's box,
+    // which B never saw, keeps its committed place behind it.
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+    let zone = engine.find_element(owner).unwrap().unwrap();
+    let members = ParsedElement::parse_as(&zone.raw_bytes, engine.text_format()).unwrap().members;
+    let mut expected: Vec<RefNo> = base_members[1..].to_vec();
+    expected.push(first);
+    expected.push(new_box);
+    assert_eq!(members, expected, "st 2: first member re-anchored after the old last, A's box still behind");
+    assert!(engine.find_element(new_box).unwrap().is_some(), "A's box is still indexed");
+    drop(engine);
+
+    let mut view = DbView::open(&copy.path).expect("view");
+    let whole = view
+        .diff_sessions(SessionSelector::Exact(s), SessionSelector::Exact(s + 2))
+        .expect("diff");
+    assert_eq!(
+        (whole.tally().deleted, whole.tally().inserted, whole.tally().modified),
+        (0, 1, 1),
+        "one new box and the one owner modified"
+    );
+}
+
+/// An element of `noun` with at least `min` members, and its member list.
+fn owner_with_members(engine: &mut ReadOnlyEngine, noun: u32, min: usize) -> (RefNo, Vec<RefNo>) {
+    for element in engine.scan_elements(ScanTier::Full).expect("scan") {
+        let element = element.expect("element");
+        if element.noun_hash != noun {
+            continue;
+        }
+        if let Some(parsed) = element.parsed.as_ref() {
+            if parsed.members.len() >= min {
+                return (element.refno, parsed.members.clone());
+            }
+        }
+    }
+    panic!("no {noun:#x} with {min} members");
+}
+
+#[test]
 fn a_merge_that_converges_to_the_committed_value_writes_no_record() {
     if common::missing(&[AMS8000]) {
         return;

@@ -14,9 +14,10 @@
 //! recording the base they merged from, A3a.8). Two writers editing one
 //! element are reconciled attribute by attribute (A3b, [`three_way`]): the
 //! writer's change is rebased onto the committed record, so edits to different
-//! attributes compose and an edit to the same attribute is the writer's. The
-//! member reconciliation is still the simple set delta, not yet A3b.4's
-//! anchor order.
+//! attributes compose and an edit to the same attribute is the writer's.
+//! Member lists reconcile the way A3b.4 does (`sub_5B1FF60`/`sub_5B20CA0`):
+//! the writer's adds, removes and moves are replayed onto the committed list,
+//! each anchored after its preceding shared sibling.
 
 use std::collections::HashSet;
 
