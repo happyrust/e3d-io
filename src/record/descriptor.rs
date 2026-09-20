@@ -224,6 +224,43 @@ pub struct ElementExtraction {
 }
 
 impl ElementExtraction {
+    /// Approximate heap footprint in bytes: the noun name plus every extracted
+    /// attribute with its name and the payload behind its value (text, arrays).
+    /// Lengths, not capacities — an estimate for cache accounting
+    /// (`DbSet::element_cache_stats`); the inline part is
+    /// `size_of::<ElementExtraction>()` on the caller's side.
+    pub fn approx_heap_bytes(&self) -> usize {
+        let attributes: usize = self
+            .attributes
+            .iter()
+            .map(|attribute| {
+                std::mem::size_of::<ExtractedAttribute>()
+                    + attribute.name.len()
+                    + match &attribute.value {
+                        Some(DescriptorValue::Text(text)) => text.len(),
+                        Some(DescriptorValue::Word { text, .. }) => {
+                            text.as_ref().map_or(0, String::len)
+                        }
+                        Some(DescriptorValue::IntArray(values)) => values.len() * 4,
+                        Some(DescriptorValue::RealArray(values)) => values.len() * 8,
+                        Some(DescriptorValue::RefNoArray(values)) => values.len() * 8,
+                        Some(DescriptorValue::WordArray(values)) => values.len() * 4,
+                        Some(DescriptorValue::BoolArray(values)) => values.len(),
+                        Some(DescriptorValue::RawWords(values)) => values.len() * 4,
+                        Some(
+                            DescriptorValue::Unset
+                            | DescriptorValue::Bool(_)
+                            | DescriptorValue::Int(_)
+                            | DescriptorValue::Real(_)
+                            | DescriptorValue::RefNo(_),
+                        )
+                        | None => 0,
+                    }
+            })
+            .sum();
+        self.noun_name.as_ref().map_or(0, String::len) + attributes
+    }
+
     /// 按名字找属性，大小写不敏感，取**第一条**同名的。
     ///
     /// 就是顺序扫。2026-09-04 试过给它建一张「大小写无关指纹 → 下标」的排序索引，

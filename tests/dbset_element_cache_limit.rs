@@ -153,4 +153,27 @@ fn the_element_cache_limit_clears_the_whole_pool_when_full_and_zero_means_unboun
     assert_eq!(plain.element_cache_limit(), 0, "没开缓存也报 0");
     assert_eq!(plain.element(target).element_type().unwrap(), "SITE");
     assert_eq!(plain.cached_element_count(), 0);
+
+    // 观测：`element_cache_stats` 查时现算——条数与 `cached_element_count` 同一口径，字节是估算
+    // （每条至少一个 `ParsedElement` 的内联大小），上限跟着报；没开缓存全是 0。
+    let stats = unbounded.element_cache_stats();
+    assert_eq!(
+        (stats.parsed_entries, stats.extraction_entries, stats.limit),
+        (2, 0, 0),
+        "{stats:?}"
+    );
+    assert!(
+        stats.approx_bytes >= 2 * std::mem::size_of::<e3d_io::record::element::ParsedElement>(),
+        "{stats:?}"
+    );
+    let one = capped.element_cache_stats();
+    assert_eq!((one.parsed_entries, one.limit), (1, 1), "{one:?}");
+    assert!(
+        one.approx_bytes < stats.approx_bytes,
+        "一条比两条少: {one:?} vs {stats:?}"
+    );
+    assert_eq!(
+        plain.element_cache_stats(),
+        e3d_io::ElementCacheStats::default()
+    );
 }

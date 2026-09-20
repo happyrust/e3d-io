@@ -288,6 +288,19 @@ struct ElementCache {
     extraction: HashMap<RefNo, Arc<ElementExtraction>>,
 }
 
+/// A snapshot of the pool-level element cache ([`DbSet::element_cache_stats`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ElementCacheStats {
+    /// Parsed records held (the number the entry cap counts).
+    pub parsed_entries: usize,
+    /// Descriptor extractions held (a subset of the parsed keys).
+    pub extraction_entries: usize,
+    /// Approximate bytes behind both tables; see the method for what is counted.
+    pub approx_bytes: usize,
+    /// The entry cap in force (`0` = unbounded, also when the cache is off).
+    pub limit: usize,
+}
+
 impl std::fmt::Debug for DbSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let dbnos = self.db_numbers();
@@ -549,6 +562,53 @@ impl DbSet {
                     .sum()
             })
             .unwrap_or_default()
+    }
+
+    /// What the pool-level element cache holds right now, with an **approximate**
+    /// byte footprint — computed by walking every cached entry when asked, never
+    /// stored anywhere. Per entry: the `Arc` block, the map slot and key, the
+    /// inline struct and its heap payload ([`ParsedElement::approx_heap_bytes`] /
+    /// [`ElementExtraction::approx_heap_bytes`]). Lengths, not capacities: the
+    /// number is for a health page to relate to RSS, not an allocator audit.
+    /// Walks each database's cache under its read lock, so it costs O(entries);
+    /// call it at observation rate, not per element.
+    pub fn element_cache_stats(&self) -> ElementCacheStats {
+        // A `HashMap<RefNo, Arc<T>>` slot: key + pointer + control byte, rounded.
+        const SLOT: usize = std::mem::size_of::<RefNo>() + std::mem::size_of::<usize>() + 8;
+        // `Arc<T>` allocation header: strong + weak counts.
+        const ARC: usize = 2 * std::mem::size_of::<usize>();
+        let mut stats = ElementCacheStats {
+            limit: self.element_cache_limit,
+            ..ElementCacheStats::default()
+        };
+        let Some(databases) = self
+            .element_cache
+            .as_ref()
+            .and_then(|cache| cache.read().ok())
+        else {
+            return stats;
+        };
+        for cache in databases.values().filter_map(|cache| cache.read().ok()) {
+            stats.parsed_entries += cache.parsed.len();
+            stats.extraction_entries += cache.extraction.len();
+            stats.approx_bytes += cache
+                .parsed
+                .values()
+                .map(|parsed| {
+                    SLOT + ARC + std::mem::size_of::<ParsedElement>() + parsed.approx_heap_bytes()
+                })
+                .sum::<usize>();
+            stats.approx_bytes += cache
+                .extraction
+                .values()
+                .map(|extraction| {
+                    SLOT + ARC
+                        + std::mem::size_of::<ElementExtraction>()
+                        + extraction.approx_heap_bytes()
+                })
+                .sum::<usize>();
+        }
+        stats
     }
 
     fn cache_of(&self, dbno: u32) -> Option<Arc<RwLock<ElementCache>>> {

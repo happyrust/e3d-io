@@ -20,7 +20,9 @@ pub use dabacon_tags::{
     project_dabacon_tags, DatabaseDabaconTagReport, ProjectDabaconTagIssue,
     ProjectDabaconTagReport, SessionDabaconTag,
 };
-pub use db_element::{DbElement, DbElementError, DbFilePin, DbFileResolver, DbSet, MemberCursor};
+pub use db_element::{
+    DbElement, DbElementError, DbFilePin, DbFileResolver, DbSet, ElementCacheStats, MemberCursor,
+};
 pub use db_param_env::DbElementParamEnv;
 pub use engine::{
     database_header_diagnostics, DatabaseHeaderDiagnostics, ElementScan, ReadOnlyEngine, ScanTier,

@@ -35,6 +35,35 @@ pub struct ParsedElement {
 }
 
 impl ParsedElement {
+    /// Approximate heap footprint of this record in bytes: the implicit bytes,
+    /// the member list and every explicit attribute with the payload behind
+    /// its value (text, arrays). Lengths, not capacities — a size estimate
+    /// for cache accounting (`DbSet::element_cache_stats`), not an allocator
+    /// audit; the inline part is `size_of::<ParsedElement>()` on the caller's
+    /// side.
+    pub fn approx_heap_bytes(&self) -> usize {
+        use crate::record::explicit::ExplicitValue;
+        let attributes: usize = self
+            .explicit_attributes
+            .iter()
+            .map(|attribute| {
+                std::mem::size_of::<ExplicitAttribute>()
+                    + match &attribute.value {
+                        ExplicitValue::Text(text) => text.len(),
+                        ExplicitValue::IntArray(values) => values.len() * 4,
+                        ExplicitValue::RealArray(values) => values.len() * 8,
+                        ExplicitValue::RefNoArray(values) => values.len() * 8,
+                        ExplicitValue::RawWords(values) => values.len() * 4,
+                        ExplicitValue::Integer(_)
+                        | ExplicitValue::Real(_)
+                        | ExplicitValue::Bool(_)
+                        | ExplicitValue::RefNo(_) => 0,
+                    }
+            })
+            .sum();
+        self.implicit_data.len() + self.members.len() * 8 + attributes
+    }
+
     /// [`ParsedElement::parse_as`] without the header's `FORMAT` word: text
     /// is guessed at from its bytes. Prefer `parse_as` with
     /// [`crate::ReadOnlyEngine::text_format`] when an engine is at hand.
