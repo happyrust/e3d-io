@@ -80,6 +80,10 @@ pub struct NewSession<'a> {
     /// `INDEX` root (words 7/8): the new tree's root when this session changed
     /// it, or the previous session's root carried over when it did not.
     pub index_root: PageId,
+    /// `CLAIM` root (words 9/10): the new primary-element claim tree's root
+    /// when this session touched a primary, or the previous session's root
+    /// carried over when it did not.
+    pub claim_root: PageId,
     /// Table-directory roots to rewrite: `(name_hash, new_root)`. The `NAME`
     /// table moves here when a name was written, a reverse-reference table or
     /// `TYPEX` when a key was filed or withdrawn; every other table is carried
@@ -141,11 +145,12 @@ pub fn build_session_page(
     // OWNSES (+0x10) is carried over: 0xFFFFFFFF on every master file sampled.
     put_be_word(&mut page, at::END_PGNO, new.end.page);
     put_be_word(&mut page, at::END_EXTNO, u32::from(new.end.ext));
-    // INDEX root (+0x1C/+0x20): the new tree when the session changed it, the
-    // old one carried over otherwise. CLAIM root (+0x24/+0x28) is always
-    // carried over — nothing this crate writes touches a claim tree.
+    // INDEX root (+0x1C/+0x20) and CLAIM root (+0x24/+0x28): each is the new
+    // tree when this session changed it, the old one carried over otherwise.
     put_be_word(&mut page, at::INDEX_ROOT_PGNO, new.index_root.page);
     put_be_word(&mut page, at::INDEX_ROOT_EXTNO, u32::from(new.index_root.ext));
+    put_be_word(&mut page, at::CLAIM_PGNO, new.claim_root.page);
+    put_be_word(&mut page, at::CLAIM_EXTNO, u32::from(new.claim_root.ext));
     put_be_word(&mut page, at::PRISES, PRISES_PLAIN_SAVEWORK);
 
     write_date(&mut page, at::DATE_LEN, at::DATE, new.clock.local, false);

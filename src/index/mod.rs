@@ -38,6 +38,7 @@
 //! A multi-extent database would carry `ext != 1` here; this module keeps
 //! `flag` observable for that day and otherwise does not act on it.
 
+pub mod claim;
 pub mod cursor;
 pub mod diff;
 pub mod named;
@@ -56,6 +57,7 @@ pub use diff::{
     CompletedIndexDiff, DiffDiagnostics, DiffTally, FlagOnlyDrift, IndexCandidate, IndexDiff,
     KeyChange, Pruning,
 };
+pub use claim::{ClaimEntry, ClaimTable, ClaimTableError, ClaimWalk};
 pub use named::{
     encode_name, name_table_hash, NamedEntry, NamedKey, NamedTable, NamedTableError, NamedWalk,
 };

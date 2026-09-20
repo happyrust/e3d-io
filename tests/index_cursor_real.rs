@@ -367,9 +367,13 @@ fn choosing_a_child_has_one_implementation() {
         vec![
             "index/diff.rs".to_string(),
             "index/mod.rs".to_string(),
+            // The claim tree is keyed by the same 2-word refno the index is,
+            // so its copy-on-write writer orders keys through the same
+            // `cmp_refno` rather than carrying its own.
+            "write/claim_cow.rs".to_string(),
             "write/index_cow.rs".to_string(),
         ],
-        "key ordering is unsigned in one place; the writer inserts by that same order"
+        "key ordering is unsigned in one place; the writers insert by that same order"
     );
 }
 

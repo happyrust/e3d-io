@@ -234,6 +234,19 @@ pub struct NounTemplate {
     /// Header word 3 of the payload, typed; [`MemberListKind::Unknown`] on a
     /// template not parsed from a payload.
     pub member_list_kind: MemberListKind,
+    /// Whether this noun is a **primary** element — one of the name-bearing,
+    /// navigable hierarchy nouns (`SITE`, `ZONE`, `EQUI`, `PIPE`, `BRAN`,
+    /// `STRU`, `SUBS`, `SCTN`, …) that `core.dll` keys the `(5, 7618377)`
+    /// claim tree by, as opposed to the components and primitives beneath them
+    /// (`BOX`, `CYLI`, `GROU`, …).
+    ///
+    /// From word 4 of the payload header: `sub_5B059C0` reads exactly this
+    /// word (`*(*(CE+16)+16)`) to decide whether an element is its own primary
+    /// or must walk up to one. On `ams8000_0001` the word is 1 on every noun
+    /// keying the claim tree and 0 on every noun that does not, bar the single
+    /// `MNUM` counter — 3 129 of 3 130 primaries partition by it. `false` on a
+    /// template not parsed from a payload.
+    pub is_primary: bool,
 }
 
 impl NounTemplate {
@@ -244,6 +257,7 @@ impl NounTemplate {
             attrs: Vec::new(),
             defaults: NounDefaults::default(),
             member_list_kind: MemberListKind::Unknown,
+            is_primary: false,
         }
     }
 
@@ -274,6 +288,7 @@ impl NounTemplate {
             attrs,
             defaults: NounDefaults::default(),
             member_list_kind: MemberListKind::Unknown,
+            is_primary: false,
         })
     }
 
@@ -367,6 +382,7 @@ impl NounTemplate {
             attrs,
             defaults: NounDefaults::default(),
             member_list_kind: MemberListKind::from_word(payload[3]),
+            is_primary: payload[4] != 0,
         })
     }
 

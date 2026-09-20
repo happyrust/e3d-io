@@ -24,6 +24,8 @@
 //! not one that is mid-flight. Take the file out of E3D's write mode before
 //! writing.
 
+pub mod claim;
+pub mod claim_cow;
 pub mod index_cow;
 pub mod keyed_cow;
 pub mod merge;
@@ -45,6 +47,8 @@ use crate::record::text::TextFormat;
 use crate::refno::RefNo;
 use crate::session::SessionPage;
 
+pub use claim::{plan_claim_edits, Touched, TouchKind};
+pub use claim_cow::{ClaimCowError, ClaimEdit, ClaimEditKind};
 pub use index_cow::{EditKind, IndexCowError, LeafEdit};
 pub use keyed_cow::{KeyedCowError, KeyedEdit, KeyedEditKind, KeyedKey};
 pub use merge::{write_merge_session, write_merge_session_with, MergeConflict, MergeOptions};
@@ -122,6 +126,8 @@ pub enum WriteError {
     NameTable(#[from] NamedCowError),
     #[error("{0}")]
     KeyedTable(#[from] KeyedCowError),
+    #[error("{0}")]
+    ClaimTable(#[from] ClaimCowError),
     #[error(
         "the session page's table directory holds {count} tables and has room for {room}; \
          a new reverse-reference table cannot be listed"
@@ -411,38 +417,47 @@ pub fn stage_element_session_with(
     stage_session_with_base(path, request, elements, name_edits, None, options.templates)
 }
 
-/// The keyed-table work of one staging: the element list as it will be
-/// written (a new element given its `TYPEX`) and the per-table edits the
-/// writes imply, from the records they replace to the records they write.
-struct KeyedTableWork {
+/// The side-table work of one staging: the element list as it will be written
+/// (a new element given its `TYPEX`), the per-table keyed edits the writes
+/// imply ([`reverse`]), and the claim-tree edits ([`claim`]) for the primaries
+/// they touch.
+struct SideTableWork {
     elements: Vec<ElementWrite>,
-    edits: reverse::TableEdits,
+    keyed: reverse::TableEdits,
+    claims: Vec<claim_cow::ClaimEdit>,
 }
 
-/// Plan the keyed-table edits of `elements` against the file's newest
-/// session, reading the records an update or delete replaces. Every record's
-/// keys are derived by [`reverse::table_keys`] under its noun's template; a
-/// noun the templates do not know contributes nothing on either side.
-fn plan_keyed_tables(
+/// How deep the claim owner-climb may go before giving up — more than any
+/// dabacon hierarchy is deep, so it bounds a cyclic chain without cutting a
+/// real one short.
+const CLAIM_MAX_CLIMB: usize = 256;
+
+/// Plan the keyed-table and claim-tree edits of `elements` against the file's
+/// newest session, reading the records an update or delete replaces. Every
+/// record's keys are derived by [`reverse::table_keys`] under its noun's
+/// template; the claim edits by [`claim::plan_claim_edits`], which climbs the
+/// owner chain (through the batch and then the file) to each touched element's
+/// primary. A noun the templates do not know contributes nothing on either
+/// side.
+fn plan_side_tables(
     path: &Path,
     elements: &[ElementWrite],
     templates: &mut TemplateProvider,
-) -> Result<KeyedTableWork, WriteError> {
+) -> Result<SideTableWork, WriteError> {
+    // The session this write becomes, for the claim sessions filed below.
+    let new_sesno = crate::session::DbView::open(path)?.session().sesno + 1;
+    // One read-only view of the newest session, for the records an update or
+    // delete replaces and for the owner-climb the claim plan needs.
+    let mut engine = crate::ReadOnlyEngine::open(path)?;
     let mut old: HashMap<RefNo, RecordDraft> = HashMap::new();
-    let replaced: Vec<RefNo> = elements
-        .iter()
-        .filter_map(|element| match element {
-            ElementWrite::Update(draft) => Some(draft.refno),
-            ElementWrite::Delete(refno) => Some(*refno),
-            ElementWrite::Insert(_) => None,
-        })
-        .collect();
-    if !replaced.is_empty() {
-        let mut engine = crate::ReadOnlyEngine::open(path)?;
-        for refno in replaced {
-            if let Some(view) = engine.find_element(refno)? {
-                old.insert(refno, RecordDraft::from_record_bytes(&view.raw_bytes)?);
-            }
+    for element in elements {
+        let refno = match element {
+            ElementWrite::Update(draft) => draft.refno,
+            ElementWrite::Delete(refno) => *refno,
+            ElementWrite::Insert(_) => continue,
+        };
+        if let Some(view) = engine.find_element(refno)? {
+            old.insert(refno, RecordDraft::from_record_bytes(&view.raw_bytes)?);
         }
     }
 
@@ -456,8 +471,9 @@ fn plan_keyed_tables(
         })
     }
     let none = std::collections::BTreeSet::new();
-    let mut edits = reverse::TableEdits::default();
+    let mut keyed = reverse::TableEdits::default();
     let mut prepared = Vec::with_capacity(elements.len());
+    let mut touched: Vec<claim::Touched> = Vec::with_capacity(elements.len());
     for element in elements {
         match element {
             ElementWrite::Insert(draft) => {
@@ -466,7 +482,13 @@ fn plan_keyed_tables(
                     reverse::ensure_typex(&mut draft, template);
                 }
                 let after = keys_of(templates, &draft)?;
-                edits.transition(&none, &after);
+                keyed.transition(&none, &after);
+                touched.push(claim::Touched {
+                    refno: draft.refno,
+                    noun_hash: draft.noun_hash,
+                    owner: draft.owner,
+                    kind: claim::TouchKind::Insert,
+                });
                 prepared.push(ElementWrite::Insert(draft));
             }
             ElementWrite::Update(draft) => {
@@ -475,21 +497,67 @@ fn plan_keyed_tables(
                     None => none.clone(),
                 };
                 let after = keys_of(templates, draft)?;
-                edits.transition(&before, &after);
+                keyed.transition(&before, &after);
+                touched.push(claim::Touched {
+                    refno: draft.refno,
+                    noun_hash: draft.noun_hash,
+                    owner: draft.owner,
+                    kind: claim::TouchKind::Update,
+                });
                 prepared.push(element.clone());
             }
             ElementWrite::Delete(refno) => {
                 if let Some(previous) = old.get(refno) {
                     let before = keys_of(templates, previous)?;
-                    edits.transition(&before, &none);
+                    keyed.transition(&before, &none);
+                    touched.push(claim::Touched {
+                        refno: *refno,
+                        noun_hash: previous.noun_hash,
+                        owner: previous.owner,
+                        kind: claim::TouchKind::Delete,
+                    });
                 }
                 prepared.push(element.clone());
             }
         }
     }
-    Ok(KeyedTableWork {
+
+    // Claim edits: climb each touched element to its primary. `is_primary`
+    // reads the noun's template word 4; the ancestor lookup reads the newest
+    // session for an owner the batch does not carry. A read error there ends a
+    // climb rather than failing the write — the claim tree is advisory, and a
+    // genuinely unreadable file fails the record and index work instead.
+    let mut climb_error: Option<WriteError> = None;
+    let claims = {
+        let is_primary = |noun: u32| -> bool {
+            templates
+                .template_for(noun)
+                .map(|template| template.is_some_and(|t| t.is_primary))
+                .unwrap_or(false)
+        };
+        let ancestor = |refno: RefNo| -> Option<(u32, RefNo)> {
+            match engine.find_element(refno) {
+                Ok(Some(view)) => {
+                    let header = view.header();
+                    Some((header.noun_hash, header.owner))
+                }
+                Ok(None) => None,
+                Err(error) => {
+                    climb_error.get_or_insert_with(|| error.into());
+                    None
+                }
+            }
+        };
+        claim::plan_claim_edits(&touched, new_sesno, is_primary, ancestor, CLAIM_MAX_CLIMB)
+    };
+    if let Some(error) = climb_error {
+        return Err(error);
+    }
+
+    Ok(SideTableWork {
         elements: prepared,
-        edits,
+        keyed,
+        claims,
     })
 }
 
@@ -507,13 +575,13 @@ pub(crate) fn stage_session_with_base(
     base_sesno: Option<u32>,
     templates: Option<&mut TemplateProvider>,
 ) -> Result<StagedSession, WriteError> {
-    // The keyed-table plan reads the newest session's records through the
-    // read side, so it is made before the write handle is opened.
-    let keyed = match templates {
-        Some(templates) => Some(plan_keyed_tables(path.as_ref(), elements, templates)?),
+    // The keyed-table and claim plan reads the newest session's records
+    // through the read side, so it is made before the write handle is opened.
+    let side = match templates {
+        Some(templates) => Some(plan_side_tables(path.as_ref(), elements, templates)?),
         None => None,
     };
-    let elements: &[ElementWrite] = keyed.as_ref().map_or(elements, |work| work.elements.as_slice());
+    let elements: &[ElementWrite] = side.as_ref().map_or(elements, |work| work.elements.as_slice());
 
     let mut file = PageFile::open(path)?;
     let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
@@ -648,8 +716,8 @@ pub(crate) fn stage_session_with_base(
     // attribute touched, each rewritten copy-on-write; a table the directory
     // has none of is built for its first key and listed behind the others ---
     let mut table_additions: Vec<(u32, PageId)> = Vec::new();
-    if let Some(work) = &keyed {
-        for (table, edits) in work.edits.iter() {
+    if let Some(work) = &side {
+        for (table, edits) in work.keyed.iter() {
             let root = previous.table_root(table);
             // Withdrawing keys from a table that does not exist is nothing to
             // do (core's 523 is tolerated on a delete); only an insert builds one.
@@ -675,6 +743,27 @@ pub(crate) fn stage_session_with_base(
         }
     }
 
+    // --- the claim tree: the primary-element session index, one CoW pass over
+    // the previous session's tree; carried over when nothing primary changed ---
+    let claim_root = match &side {
+        Some(work) if !work.claims.is_empty() => {
+            let rewrite = {
+                let mut read_page = |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
+                let mut alloc = || {
+                    let page = next;
+                    next += 1;
+                    page
+                };
+                claim_cow::rewrite_claim_table(previous.claim, page_words, &work.claims, &mut read_page, &mut alloc, page_limit)?
+            };
+            for page in rewrite.pages {
+                appended.push(page);
+            }
+            rewrite.root
+        }
+        _ => previous.claim,
+    };
+
     // --- the session page, last, naming the new index root ---
     let new_sesno = previous.sesno + 1;
     let session_page = PageId::new(ext, next);
@@ -689,6 +778,7 @@ pub(crate) fn stage_session_with_base(
             sesno: new_sesno,
             end: session_page,
             index_root,
+            claim_root,
             table_overrides: &table_overrides,
             table_additions: &table_additions,
             base_sesno: base_sesno.unwrap_or(previous.sesno),
