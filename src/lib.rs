@@ -15,6 +15,7 @@ pub mod schema;
 pub mod session;
 pub mod tty;
 pub mod uda_catalog;
+pub mod write;
 
 pub use dabacon_tags::{
     project_dabacon_tags, DatabaseDabaconTagReport, ProjectDabaconTagIssue,

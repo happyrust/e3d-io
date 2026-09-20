@@ -1,6 +1,6 @@
 # 计划：给 e3d-io 加 DABACON 写入（分三阶段，每阶段在副本库上写、用现有读侧往返验收）
 
-状态：草案，待评审（2026-09-20）
+状态：草案，待评审（2026-09-20）；阶段 0 与阶段 1 已落地并通过 §2 验收（见 §7 2026-09-20 第二条），§5 的八个决策点按默认值执行
 日期：2026-09-20
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`（与 `../e3d-attlib` 同级，path 依赖可解）
 依据：`docs/evidence/2026-09-20-core-dll-dabacon-write-path-algorithms.md`（下称「算法清单」，引用其小节号 A1–A12、§2、§4、§5、§6）
@@ -76,7 +76,7 @@
 1. **打开写句柄**：`OpenOptions::read(true).write(true)`；Windows 上（feature `win-lock`，默认关）按 A9 对 `0x7FFFFFF6FFFFFFFF` 处 1 字节 `LockFileEx` 独占，提交后解锁 + `FlushFileBuffers`。非 Windows 用文件内容层面的乐观检查：提交前重读页 0，`LSPGNO` 变了就放弃（§5 Q6）。
 2. **页分配器**：`next = old_session.end.page + 1`，只增不回退；写页 = 大端整页、`offset = (pageno) × page_bytes`（页号 0-based，即 core 的 `blk−1`），**缓存在内存直到 commit**。
 3. **会话页构造**（按 §2 表逐字填）：类型 3；第 1/2 字 = 旧页 0 的 `LSPGNO`（链上一会话）；第 3 字 sesno = 旧最新会话 sesno + 1；第 4 字 OWNSES 抄旧会话页第 4 字（样本全为 `0xFFFFFFFF`，§5 Q2）；第 5/6 字 = 本次末页（= 会话页自身页号，空会话时）；第 7/8 INDEX 根、第 9/10 CLAIM 根 = 抄旧会话页（空会话不动树）；第 11 字 = 1；第 12–16 字 DATE、第 25–29 字 UDATE 按 `SessionDate` 的逆运算写本机时钟；第 30+ USER、第 40+ DESC 按现有 `parse_as` 的逆运算（长度字 + 4 字节/字打包，FORMAT≠1 时经现有 `text` 模块的逆向；阶段 1 只允许 ASCII，非 ASCII 报错）；第 199/200+ 表目录 = 抄旧会话页 `tables`（顺序保持：用户表、CLAIM、INDEX）；第 503/504 DBVRSN = 8 字节自有标识（§5 Q3）；第 505 = 抄旧会话页；第 506–510 = 抄旧会话页但第 508 字 `BASESN` = 旧 sesno。
-4. **刷盘顺序**：新页按页号升序写 → 页 0 改第 10/11 字（新会话页 pageno、ext=1），第 9 字 >0 取负、第 94/96 字清零（第 14/15 字不动，因为我们不维护属性 7；§5 Q4）→ 写页 0 → `sync_all()`。
+4. **刷盘顺序**：新页按页号升序写 → 页 0 改第 10/11 字（新会话页 pageno、ext=1），第 9 字 >0 取负（第 14/15 字不动，因为我们不维护属性 7；§5 Q4）→ 写页 0 → `sync_all()`。**第 94/96 字不动**：算法清单 A6.4 说 core 存盘时清零，但 E3D 刚存过的 `ams8000_0001` 页 0 第 94 字是 2，说明那两字的读法还没坐实，宁可不碰。
 5. 崩溃注入点：在「新页已写、页 0 未写」处提供一个测试钩子，验证此时读侧仍看到旧会话。
 
 **不做**：任何树页、数据页；页 1；CLAIM。
@@ -85,7 +85,7 @@
 - 在 `ams8000_0001` 副本上写空会话（comment `"e3d-io stage1"`）→ `DbView::open(copy)`：`session().sesno == 282`、`session().previous == Some(旧 LSPGNO 页)`、`session().end.page == 新会话页号`、`index_root`/`claim`/`tables` 与会话 281 相同、`comment == "e3d-io stage1"`、`user` 为写入值、`date`/`utc_date` 解出来与写入时刻同秒；`descriptor().latest_ses_pgno == 新页号`。
 - `walk_sessions()` 得到 282 条，newest→oldest 严格递减、尾为 1；`sessions()` 同。
 - `diff_sessions(281, 282).tally()` 全零；`scan_elements(Full)` 元素数与 281 相同；`find_element(任意 10 个已知 refno)` 的 `(page, offset)` 与之前一致。
-- 字节：`assert_prefix_unchanged(旧, 新, until=旧 end, except_page0_words=[9,10,11,94,96])`；新文件只多一页；`physical_page_count` +1。
+- 字节：`assert_prefix_unchanged(旧, 新, until=旧 end, except_page0_words=[9,10,11])`；新文件只多一页；`physical_page_count` +1。
 - 崩溃钩子：页 0 未写的中间态文件，`DbView::open` 看到的仍是会话 281，`walk_sessions()` 仍 281 条。
 - 把副本喂给现有语料门（`index_page_decode` 三个契约测试改成可指定文件）不红。
 - **人工门（可选，非阻塞）**：用 E3D 3.1 Design 以 `DOPENR` 打开副本，`q sessions` 能看到 282 且能 `q att` 元素——记录结果到本计划 §7。
@@ -196,3 +196,6 @@ src/page/io.rs            PageWriter（读写句柄、整页大端写、sync）�
 ## 7. 观察记录（随阶段推进填写）
 
 - 2026-09-20：计划起草；worktree `write-path` 建于 `7a51c95`，算法清单入库为 `bb315af`。
+- 2026-09-20：**阶段 0 + 1 落地。** 新模块 `src/write/{mod,pages,session_page}.rs`（`PageFile` 读写句柄、`build_session_page` = `SessionPage::parse_as` 的逆、`stage_empty_session` → `Staged::commit` 两步提交、`rollback`、提交前重读页 0 的乐观检查 `WriteError::Moved`）；读侧只把 `session::at` / `meta::descriptor::at` 两个偏移表放成 `pub(crate)` 并加了 `PRISES` 常量，其余一行未动。脚手架 `tests/common/write_fixture.rs`（`DbCopy`、`assert_prefix_unchanged`、`assert_appended_contiguous`）。
+  验收 `tests/write_stage1_empty_session.rs` 6 项全绿：`ams8000_0001`（**当天已是会话 640、16 476 页**，非计划里写的 281）→ 641，`ams5100_0001` 27 → 28；`walk_sessions` +1 且旧链原样、`diff_sessions(old, new)` 三态全零、前 10 个元素地址不变、旧页字节只有页 0 第 10 字变（第 9 字本来就是 −1、第 11 字仍是 1）、新文件恰多一页且类型 3；中间态（新页已写、页 0 未写）读出的仍是旧会话；`rollback` 后字节全等；页 0 被别人先改 → `Moved` 拒写。全套 `cargo test` 273 + 集成全部通过；clippy 对新文件零告警。
+  改动了两处计划口径：页 0 第 94/96 字不再清零（E3D 刚写的样本第 94 字 = 2）；会话页 `DBVRSN` 写 `e3dio001`（Q3 默认）。人工门（E3D 打开副本）未做。

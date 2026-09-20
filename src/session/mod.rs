@@ -72,7 +72,10 @@ pub use diff::{ChangeKind, ChangedElement, ChangedElements, SessionDiff};
 /// `PREVSP` names, and `FRSTSP` — the first page this session wrote — is the
 /// previous page's `LASTSP` + 1, or this page's own `LASTSP` when there is no
 /// previous session.
-mod at {
+///
+/// `pub(crate)` so that [`crate::write`] builds a session page from the same
+/// offsets this module reads one by; the two must never drift apart.
+pub(crate) mod at {
     pub const PAGE_TYPE: usize = 0x00;
     pub const LAST_SES_PGNO: usize = 0x04;
     pub const LAST_SES_EXTNO: usize = 0x08;
@@ -84,6 +87,9 @@ mod at {
     pub const INDEX_ROOT_EXTNO: usize = 0x20;
     pub const CLAIM_PGNO: usize = 0x24;
     pub const CLAIM_EXTNO: usize = 0x28;
+    /// `PRISES` — primary session flag, 1 on every sampled page. Not read
+    /// here; [`crate::write`] writes it.
+    pub const PRISES: usize = 0x2C;
     /// `DATE`: word count at +0x30 (always 4 when stated), the four words at
     /// +0x34 — `year, month, day * 24 + hour, minute * 60 + second`, local
     /// wall clock. `core.dll` reads it through `DB_DB::GetSessionDateTime` →
