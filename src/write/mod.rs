@@ -134,8 +134,8 @@ pub enum WriteError {
     )]
     TableDirectoryFull { count: u32, room: u32 },
     #[error(
-        "a record of {words} words does not fit on a {page_words}-word page \
-         (stage 2 does not split a record across pages)"
+        "a record's header and implicit region are {words} words, more than a {page_words}-word \
+         page can hold; the implicit region cannot span pages (only the tail blocks do)"
     )]
     RecordTooLong { words: usize, page_words: usize },
     /// The schema templates a write was given could not be read.
@@ -561,6 +561,192 @@ fn plan_side_tables(
     })
 }
 
+/// Words of a tail block's header (`[kind|words][owner.0][owner.1][cont.0][cont.1]`).
+const BLOCK_HEADER_WORDS: usize = crate::record::block::HEADER_BYTES / 4;
+
+/// A fresh element-data page: `(page_no, bytes, used)` with word 0 the page
+/// type and `used` at 1, past it.
+fn new_data_page(next: &mut u32, page_words: usize) -> (u32, Vec<u8>, usize) {
+    let page_no = *next;
+    *next += 1;
+    let mut bytes = vec![0u8; page_words * 4];
+    bytes[0..4].copy_from_slice(&PageType::ElementData.as_raw().to_be_bytes());
+    (page_no, bytes, 1)
+}
+
+fn put_word(bytes: &mut [u8], word: usize, value: u32) {
+    bytes[word * 4..word * 4 + 4].copy_from_slice(&value.to_be_bytes());
+}
+
+/// Place one record's bytes onto the bump-packed data pages, splitting its
+/// member and explicit blocks across pages when they do not fit
+/// (`docs/plans/2026-09-20-dabacon-write-plan.md` §2 阶段 2b; the reader's
+/// `record::block` continuation, `record::read_record`).
+///
+/// The eleven-word header and the implicit region go down contiguously — the
+/// index leaf points at the header, and the reader reads the implicit region
+/// off the one page, so it cannot span (a record whose implicit region alone
+/// overruns a page is [`WriteError::RecordTooLong`]). Each tail block is then
+/// laid down as one or more segments: a segment fills to the page boundary and,
+/// when payload is left, states in its header where the rest continues, exactly
+/// the `(page, packed)` link `record::gather` follows. The header's two slots
+/// are back-patched to where each block's first segment landed, so the record
+/// reads back whole however many pages it took.
+#[allow(clippy::too_many_arguments)]
+fn place_record(
+    draft: &RecordDraft,
+    kind: EditKind,
+    page_words: usize,
+    ext: u16,
+    current: &mut Option<(u32, Vec<u8>, usize)>,
+    appended: &mut Vec<(u32, Vec<u8>)>,
+    next: &mut u32,
+    edits: &mut Vec<LeafEdit>,
+) -> Result<(), WriteError> {
+    let implicit = draft.implicit();
+    let header_words = implicit.len();
+    // The header and implicit region are one contiguous run and cannot span.
+    if header_words > page_words - 1 {
+        return Err(WriteError::RecordTooLong { words: header_words, page_words });
+    }
+
+    let member_payload: Vec<u32> = draft
+        .members()
+        .iter()
+        .flat_map(|member| [member.word0, member.word1])
+        .collect();
+    let explicit_payload: Vec<u32> = draft
+        .explicit_stream_words();
+
+    // The header page: reuse the open bump page when the header and implicit
+    // region still fit, else flush it and start fresh.
+    let mut working = match current.take() {
+        Some((page_no, bytes, used)) if used + header_words <= page_words => (page_no, bytes, used),
+        Some((page_no, bytes, _)) => {
+            appended.push((page_no, bytes));
+            new_data_page(next, page_words)
+        }
+        None => new_data_page(next, page_words),
+    };
+    let header_page = working.0;
+    let header_off = working.2;
+
+    // Header (slots 6..9 back-patched once the blocks land) then the implicit
+    // region past the header verbatim.
+    let member_words = draft.members().len() * 2;
+    let explicit_words = explicit_payload.len();
+    let format = record::wide_format_word(member_words, explicit_words);
+    for (index, word) in implicit.iter().enumerate() {
+        put_word(&mut working.1, header_off + index, *word);
+    }
+    put_word(&mut working.1, header_off, header_words as u32);
+    put_word(&mut working.1, header_off + 1, draft.refno.word0);
+    put_word(&mut working.1, header_off + 2, draft.refno.word1);
+    put_word(&mut working.1, header_off + 3, draft.noun_hash);
+    put_word(&mut working.1, header_off + 4, draft.owner.word0);
+    put_word(&mut working.1, header_off + 5, draft.owner.word1);
+    for slot in 6..10 {
+        put_word(&mut working.1, header_off + slot, 0);
+    }
+    put_word(&mut working.1, header_off + 10, format);
+    working.2 += header_words;
+
+    edits.push(LeafEdit {
+        refno: draft.refno,
+        page_no: header_page,
+        packed: record::pack_offset(header_off as u32, ext),
+        kind,
+    });
+
+    // The two tail blocks, members then explicit — the order `encode` uses.
+    let mut done: Vec<(u32, Vec<u8>)> = Vec::new();
+    let member_addr = place_block(2, &member_payload, draft.refno, page_words, ext, &mut working, &mut done, next);
+    let explicit_addr = place_block(1, &explicit_payload, draft.refno, page_words, ext, &mut working, &mut done, next);
+
+    // Back-patch the header slots into whichever page still holds the header.
+    let header_buf = if working.0 == header_page {
+        &mut working.1
+    } else {
+        &mut done
+            .iter_mut()
+            .find(|(page_no, _)| *page_no == header_page)
+            .expect("the header page is either the working page or one already set aside")
+            .1
+    };
+    put_word(header_buf, header_off + 6, explicit_addr.0);
+    put_word(header_buf, header_off + 7, explicit_addr.1);
+    put_word(header_buf, header_off + 8, member_addr.0);
+    put_word(header_buf, header_off + 9, member_addr.1);
+
+    for page in done {
+        appended.push(page);
+    }
+    *current = Some(working);
+    Ok(())
+}
+
+/// Lay one tail block's payload down as segments, returning `(page_no, packed)`
+/// of its first segment — the address the record header's slot names, or
+/// `(0, 0)` for an empty block. A segment that cannot hold the rest of the
+/// payload states the `(page, packed)` where it continues; the continuation
+/// opens a fresh page at word 1.
+#[allow(clippy::too_many_arguments)]
+fn place_block(
+    kind_word: u32,
+    payload: &[u32],
+    owner: RefNo,
+    page_words: usize,
+    ext: u16,
+    working: &mut (u32, Vec<u8>, usize),
+    done: &mut Vec<(u32, Vec<u8>)>,
+    next: &mut u32,
+) -> (u32, u32) {
+    if payload.is_empty() {
+        return (0, 0);
+    }
+    let mut remaining = payload;
+    let mut first_addr = None;
+    loop {
+        // A segment needs its header and at least one payload word; a page
+        // with less left is flushed and the segment starts on a fresh one.
+        if page_words - working.2 < BLOCK_HEADER_WORDS + 1 {
+            let full = std::mem::replace(working, new_data_page(next, page_words));
+            done.push((full.0, full.1));
+        }
+        let seg_off = working.2;
+        if first_addr.is_none() {
+            first_addr = Some((working.0, record::pack_offset(seg_off as u32, ext)));
+        }
+        let capacity = page_words - working.2 - BLOCK_HEADER_WORDS;
+        let take = remaining.len().min(capacity);
+        let continues = take < remaining.len();
+        // The continuation page is drawn now so the segment header can name it.
+        let cont = if continues {
+            let cont_page = *next;
+            (cont_page, record::pack_offset(1, ext))
+        } else {
+            (0, 0)
+        };
+        put_word(&mut working.1, seg_off, (kind_word << 16) | (BLOCK_HEADER_WORDS + take) as u32);
+        put_word(&mut working.1, seg_off + 1, owner.word0);
+        put_word(&mut working.1, seg_off + 2, owner.word1);
+        put_word(&mut working.1, seg_off + 3, cont.0);
+        put_word(&mut working.1, seg_off + 4, cont.1);
+        for (index, word) in remaining[..take].iter().enumerate() {
+            put_word(&mut working.1, seg_off + BLOCK_HEADER_WORDS + index, *word);
+        }
+        working.2 += BLOCK_HEADER_WORDS + take;
+        if !continues {
+            return first_addr.expect("a non-empty block set its first address");
+        }
+        // Move to the continuation page — the one the segment just named.
+        let full = std::mem::replace(working, new_data_page(next, page_words));
+        done.push((full.0, full.1));
+        debug_assert_eq!(working.0, cont.0, "the continuation page is the one just drawn");
+        remaining = &remaining[take..];
+    }
+}
+
 /// The staging core, shared by the plain, empty and merge paths. `base_sesno`
 /// sets the session page's `BASESN`: the previous session for a plain write,
 /// the merge base for [`crate::write::merge::write_merge_session`]. With
@@ -600,51 +786,13 @@ pub(crate) fn stage_session_with_base(
     let mut edits: Vec<LeafEdit> = Vec::new();
     {
         let mut current: Option<(u32, Vec<u8>, usize)> = None;
-        let place = |draft: &RecordDraft,
-                         kind: EditKind,
-                         current: &mut Option<(u32, Vec<u8>, usize)>,
-                         appended: &mut Vec<(u32, Vec<u8>)>,
-                         next: &mut u32,
-                         edits: &mut Vec<LeafEdit>|
-         -> Result<(), WriteError> {
-            let len = draft.encoded_len_words();
-            if len > page_words - 1 {
-                return Err(WriteError::RecordTooLong { words: len, page_words });
-            }
-            let need_new = match current {
-                Some((_, _, used)) => *used + len > page_words,
-                None => true,
-            };
-            if need_new {
-                if let Some((page_no, bytes, _)) = current.take() {
-                    appended.push((page_no, bytes));
-                }
-                let page_no = *next;
-                *next += 1;
-                let mut bytes = vec![0u8; page_words * 4];
-                bytes[0..4].copy_from_slice(&PageType::ElementData.as_raw().to_be_bytes());
-                *current = Some((page_no, bytes, 1));
-            }
-            let (page_no, bytes, used) = current.as_mut().expect("a page is open");
-            let placed = draft.encode(*page_no, *used as u32, ext);
-            bytes[*used * 4..*used * 4 + placed.bytes.len()].copy_from_slice(&placed.bytes);
-            *used += len;
-            edits.push(LeafEdit {
-                refno: placed.refno,
-                page_no: placed.page_no,
-                packed: record::pack_offset(placed.word_offset, ext),
-                kind,
-            });
-            Ok(())
-        };
-
         for element in elements {
             match element {
                 ElementWrite::Insert(draft) => {
-                    place(draft, EditKind::Insert, &mut current, &mut appended, &mut next, &mut edits)?
+                    place_record(draft, EditKind::Insert, page_words, ext, &mut current, &mut appended, &mut next, &mut edits)?
                 }
                 ElementWrite::Update(draft) => {
-                    place(draft, EditKind::Update, &mut current, &mut appended, &mut next, &mut edits)?
+                    place_record(draft, EditKind::Update, page_words, ext, &mut current, &mut appended, &mut next, &mut edits)?
                 }
                 ElementWrite::Delete(refno) => edits.push(LeafEdit {
                     refno: *refno,

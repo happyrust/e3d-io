@@ -226,6 +226,15 @@ impl RecordDraft {
         &self.implicit
     }
 
+    /// The explicit attribute stream as big-endian words — the payload of the
+    /// explicit tail block, before any block header.
+    pub fn explicit_stream_words(&self) -> Vec<u32> {
+        self.explicit_stream
+            .chunks_exact(4)
+            .map(|word| u32::from_be_bytes(word.try_into().expect("stream is whole words")))
+            .collect()
+    }
+
     /// Whether two records carry the same content — noun, owner, members, the
     /// implicit region past its header (the header words are addresses and the
     /// format word, recomputed on encode) and the explicit attributes as
@@ -429,7 +438,7 @@ impl RecordDraft {
             words[8] = page;
             words[9] = pack_offset(members_at, ext);
         }
-        words[10] = WIDE_LAYOUT_FLAG | member_words as u32 | ((explicit_words as u32) << 14);
+        words[10] = wide_format_word(member_words, explicit_words);
 
         let mut bytes = Vec::with_capacity(self.encoded_len_words() * 4);
         for word in &words {
@@ -459,6 +468,16 @@ impl RecordDraft {
             bytes,
         }
     }
+}
+
+/// Word 10 of a record header, the storage-format word, in the wide layout
+/// every element uses: `0x20000000 | member_words | (explicit_stream_words <<
+/// 14)`. `member_words` is `members × 2`, `explicit_stream_words` the explicit
+/// stream's word count — the same fields whether the record is laid on one
+/// page or split across several, so the placer and [`RecordDraft::encode`]
+/// compute it here.
+pub fn wide_format_word(member_words: usize, explicit_stream_words: usize) -> u32 {
+    WIDE_LAYOUT_FLAG | member_words as u32 | ((explicit_stream_words as u32) << 14)
 }
 
 /// The packed second word of a `(page, packed)` address: `ext | (offset << 13)`
