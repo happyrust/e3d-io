@@ -21,7 +21,9 @@
 //! staging, which catches a concurrent writer that finished first but not one
 //! that is mid-flight. Take the file out of E3D's write mode before writing.
 
+pub mod index_cow;
 pub mod pages;
+pub mod record;
 pub mod session_page;
 
 use std::path::{Path, PathBuf};
@@ -33,7 +35,9 @@ use crate::page::{PageId, PageSize, PageType};
 use crate::record::text::TextFormat;
 use crate::session::SessionPage;
 
+pub use index_cow::{IndexCowError, LeafEdit};
 pub use pages::PageFile;
+pub use record::{PlacedRecord, RecordDraft, RecordEncodeError};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
 
 /// Why a write did not happen. Nothing in this enum is returned after page 0
@@ -92,6 +96,15 @@ pub enum WriteError {
         physical: u32,
         end: u32,
     },
+    #[error("{0}")]
+    Record(#[from] RecordEncodeError),
+    #[error("{0}")]
+    IndexCow(#[from] IndexCowError),
+    #[error(
+        "a record of {words} words does not fit on a {page_words}-word page \
+         (stage 2 does not split a record across pages)"
+    )]
+    RecordTooLong { words: usize, page_words: usize },
 }
 
 impl WriteError {
@@ -215,6 +228,7 @@ pub fn stage_empty_session(
             page: new_page,
             sesno: new_sesno,
             end: new_page,
+            index_root: previous.index_root,
             base_sesno: previous.sesno,
             user: request.user,
             comment: request.comment,
@@ -324,4 +338,183 @@ pub fn write_empty_session(
     request: &SessionRequest<'_>,
 ) -> Result<CommitReport, WriteError> {
     stage_empty_session(path, request)?.commit()
+}
+
+/// One element to write: the record, and whether it is new to the index.
+///
+/// `insert` adds a key the tree does not have (a new element); otherwise the
+/// element already exists and its record moves — the index entry's value is
+/// rewritten to the new location, which is how `core.dll` records a change
+/// (A2, §4.5: a record is never edited in place, it is rewritten and the
+/// index leaf re-pointed).
+#[derive(Debug, Clone)]
+pub struct ElementWrite {
+    pub draft: RecordDraft,
+    pub insert: bool,
+}
+
+/// Append a session that writes `elements`: new element records on fresh data
+/// pages, the RefNo index rewritten copy-on-write to point at them, then the
+/// session page and the page-0 commit (`docs/plans/2026-09-20-dabacon-write-plan.md`
+/// §2 阶段 2).
+///
+/// Every new page — data, index and the session page — is appended after the
+/// previous session's last page and written before page 0, so a crash before
+/// the final page-0 write leaves the file reading as the previous session,
+/// exactly as [`write_empty_session`] does. `Staged`-style two-phase staging is
+/// not exposed for this path yet; the commit still re-reads page 0 and refuses
+/// on [`WriteError::Moved`].
+pub fn write_element_session(
+    path: impl AsRef<Path>,
+    request: &SessionRequest<'_>,
+    elements: &[ElementWrite],
+) -> Result<CommitReport, WriteError> {
+    let mut file = PageFile::open(path)?;
+    let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
+    let text = TextFormat::from_header(descriptor.header_format);
+    let page_words = file.page_size().words() as usize;
+    let ext = PageId::PRIMARY;
+
+    // Pages are drawn in order from just past the previous session's last one:
+    // data pages first, then the index pages the rewrite makes, then the
+    // session page last (A5/A6).
+    let mut next = previous.end.page + 1;
+    let mut appended: Vec<(u32, Vec<u8>)> = Vec::new();
+
+    // --- data pages: bump-pack every record, remembering where each landed ---
+    let mut placements: Vec<(PlacedRecord, bool)> = Vec::new();
+    {
+        let mut current: Option<(u32, Vec<u8>, usize)> = None;
+        for element in elements {
+            let len = element.draft.encoded_len_words();
+            if len > page_words - 1 {
+                return Err(WriteError::RecordTooLong { words: len, page_words });
+            }
+            let need_new = match &current {
+                Some((_, _, used)) => used + len > page_words,
+                None => true,
+            };
+            if need_new {
+                if let Some((page_no, bytes, _)) = current.take() {
+                    appended.push((page_no, bytes));
+                }
+                let page_no = next;
+                next += 1;
+                let mut bytes = vec![0u8; page_words * 4];
+                bytes[0..4].copy_from_slice(&PageType::ElementData.as_raw().to_be_bytes());
+                current = Some((page_no, bytes, 1));
+            }
+            let (page_no, bytes, used) = current.as_mut().expect("a page is open");
+            let placed = element.draft.encode(*page_no, *used as u32, ext);
+            bytes[*used * 4..*used * 4 + placed.bytes.len()].copy_from_slice(&placed.bytes);
+            *used += len;
+            placements.push((placed, element.insert));
+        }
+        if let Some((page_no, bytes, _)) = current.take() {
+            appended.push((page_no, bytes));
+        }
+    }
+
+    // --- index: one copy-on-write pass for every record's new leaf value ---
+    let edits: Vec<LeafEdit> = placements
+        .iter()
+        .map(|(placed, insert)| LeafEdit {
+            refno: placed.refno,
+            page_no: placed.page_no,
+            packed: record::pack_offset(placed.word_offset, ext),
+            insert: *insert,
+        })
+        .collect();
+
+    let page_limit = file.physical_page_count()?.max(1);
+    let rewrite = {
+        let mut read_page = |page_no: u32| {
+            file.read_page(page_no)
+                .map_err(|error| error.to_string())
+        };
+        let mut alloc = || {
+            let page = next;
+            next += 1;
+            page
+        };
+        index_cow::rewrite_index(
+            previous.index_root,
+            page_words,
+            &edits,
+            &mut read_page,
+            &mut alloc,
+            page_limit,
+        )?
+    };
+    for page in rewrite.pages {
+        appended.push(page);
+    }
+
+    // --- the session page, last, naming the new index root ---
+    let new_sesno = previous.sesno + 1;
+    let session_page = PageId::new(ext, next);
+    let clock = request
+        .clock
+        .unwrap_or_else(|| SessionClock::now(previous.zone_offset_seconds().unwrap_or(0)));
+    let page = build_session_page(
+        &previous_bytes,
+        previous.page,
+        &NewSession {
+            page: session_page,
+            sesno: new_sesno,
+            end: session_page,
+            index_root: rewrite.root,
+            base_sesno: previous.sesno,
+            user: request.user,
+            comment: request.comment,
+            clock,
+            text,
+        },
+    )?;
+    appended.push((session_page.page, page));
+
+    // --- write every new page, sync, then commit page 0 ---
+    for (page_no, bytes) in &appended {
+        file.write_page(*page_no, bytes)?;
+    }
+    file.sync()?;
+
+    let current = file.read_page(0)?;
+    let found = pages::be_word(&current, page0::LATEST_SES_PGNO);
+    if found != previous.page.page {
+        return Err(WriteError::Moved {
+            path: file.path().to_path_buf(),
+            expected: previous.page.page,
+            found,
+        });
+    }
+    pages::put_be_word(&mut page0, page0::LATEST_SES_PGNO, session_page.page);
+    pages::put_be_word(&mut page0, page0::EXT_NO, u32::from(session_page.ext));
+    let template_version = pages::be_word(&page0, page0::TEMPLATE_VERSION) as i32;
+    if template_version > 0 {
+        pages::put_be_word(
+            &mut page0,
+            page0::TEMPLATE_VERSION,
+            template_version.wrapping_neg() as u32,
+        );
+    }
+    file.write_page(0, &page0)?;
+    file.sync()?;
+
+    let mut appended_pages: Vec<u32> = appended.iter().map(|(page_no, _)| *page_no).collect();
+    appended_pages.sort_unstable();
+    Ok(CommitReport {
+        path: file.path().to_path_buf(),
+        previous: SessionSummary {
+            sesno: previous.sesno,
+            page: previous.page,
+            end: previous.end,
+        },
+        written: SessionSummary {
+            sesno: new_sesno,
+            page: session_page,
+            end: session_page,
+        },
+        appended_pages,
+    })
 }

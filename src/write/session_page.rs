@@ -77,6 +77,9 @@ pub struct NewSession<'a> {
     /// `LASTSP`: the last page this session wrote (the session page itself
     /// when nothing else was written).
     pub end: PageId,
+    /// `INDEX` root (words 7/8): the new tree's root when this session changed
+    /// it, or the previous session's root carried over when it did not.
+    pub index_root: PageId,
     /// `BASESN`: the session this one was written on top of.
     pub base_sesno: u32,
     /// `USER`, ASCII only in stage 1; at most nine words (36 bytes).
@@ -127,7 +130,11 @@ pub fn build_session_page(
     // OWNSES (+0x10) is carried over: 0xFFFFFFFF on every master file sampled.
     put_be_word(&mut page, at::END_PGNO, new.end.page);
     put_be_word(&mut page, at::END_EXTNO, u32::from(new.end.ext));
-    // INDEX and CLAIM roots (+0x1C..+0x28) are carried over: stage 1 changes no tree.
+    // INDEX root (+0x1C/+0x20): the new tree when the session changed it, the
+    // old one carried over otherwise. CLAIM root (+0x24/+0x28) is always
+    // carried over — nothing this crate writes touches a claim tree.
+    put_be_word(&mut page, at::INDEX_ROOT_PGNO, new.index_root.page);
+    put_be_word(&mut page, at::INDEX_ROOT_EXTNO, u32::from(new.index_root.ext));
     put_be_word(&mut page, at::PRISES, PRISES_PLAIN_SAVEWORK);
 
     write_date(&mut page, at::DATE_LEN, at::DATE, new.clock.local, false);
