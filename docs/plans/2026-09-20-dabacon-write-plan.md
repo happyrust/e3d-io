@@ -1,6 +1,6 @@
 # 计划：给 e3d-io 加 DABACON 写入（分三阶段，每阶段在副本库上写、用现有读侧往返验收）
 
-状态：草案，待评审（2026-09-20）；阶段 0/1 已落地，阶段 2 用例 A（新增 3 个 BOX + 改 ZONE 成员）已落地并通过 §2 验收（见 §7 2026-09-20 各条），§5 的八个决策点按默认值执行
+状态：草案，待评审（2026-09-20）；阶段 0/1、阶段 2（用例 A/B/C/D = 增/改/删/命名）、阶段 3（三视图冲突扫描 + 不相交合并 + A3b 属性级 + A3b.4 成员级 + INDEX 去重）均已落地并通过 §2 验收，两段 stage/commit 已铺到全部写路径；**Q8 E3D 人工门已 PASS**（真 E3D 3.1 Design 认下 e3d-io 写的会话，见 §7 末条）。§5 的八个决策点按默认值执行；余下见各条「未做」
 日期：2026-09-20
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`（与 `../e3d-attlib` 同级，path 依赖可解）
 依据：`docs/evidence/2026-09-20-core-dll-dabacon-write-path-algorithms.md`（下称「算法清单」，引用其小节号 A1–A12、§2、§4、§5、§6）
@@ -240,4 +240,4 @@ src/page/io.rs            PageWriter（读写句柄、整页大端写、sync）�
   - **人工配方**（用户在自己的 E3D 里跑，建议用一次性项目副本、别碰生产）：① 拷一份 `AvevaMarineSample` 项目到新名字（或至少备份它的 `ams000\ams8000_0001`）；② 用 e3d-io 的写路径往那份 `ams8000_0001` 追加一个会话（`write_element_session` 加一个 BOX + owner 成员，或 `write_empty_session` 追加空会话——可写个几行的 bin 调库，或把 `tests/write_stage2_elements.rs` 的用例指向该文件的副本）；③ E3D 3.1 Design 打开那个一次性项目、进 DESIGN 模块，`Q SESSIONS`（或 `Q DB CURRENT SESSIONS`）与在新 BOX 上 `Q ATT`。
   - **PASS 判据**：`Q SESSIONS` 列出新会话，用户名 = 我写的 `USER`（如 `e3dio`）、日期为写入时刻、`DBVRSN`/引擎标签能认（我写 `e3dio001`，E3D 可能标为未知引擎但仍应能读）；新 BOX 的 `Q ATT` 给出写进去的 POS/XLEN/YLEN/ZLEN，owner 指向那个 ZONE。若 E3D 拒开、报 INDEX/一致性错、或某字校验失败——把库名、会话号、报错原文记回本节，据此回头核对会话页字段（§4 风险表里 OWNSES/第 505 字/页 1 桶表几项本就是推断/未维护）。
   - 已备好夹具：`src/bin/e3d-write-box.rs`（`cargo run --bin e3d-write-box -- <db>` 往库里追一个带 BOX 的会话、打印会话号/BOX refno/几何/开项目要跑的两条 Q），加一次性脚本 `%TEMP%\e3dio_gate\prepare.ps1`（E3D 没在跑才动手 → 备份 `ams8000_0001` → 跑 bin → 打印步骤）与 `restore.ps1`（还原备份）。bin 已在 `%TEMP%` 的 `ams8000_0001` 副本上验过能写出（会话 641、BOX 24384/31483 挂在 ZONE 24384/47 下），真样本未动。
-  - 现状：**待用户在 E3D 里跑那两条 Q**；跑完把现象补进本条。
+  - **现状：PASS（用户已在 E3D 3.1 Design 里跑过）。** 真引擎打开带 e3d-io 追加会话的 `ams8000_0001`：`Q SESSIONS` 列出了那个新会话（用户 `e3dio`），新 BOX 的 `Q ATT` 给出写进去的 POS/XLEN/YLEN/ZLEN、owner 指向那个 ZONE——**AVEVA 自己的读侧认下了 e3d-io 写的会话与元素**。这是对整条写路径（阶段 1–3 写出的文件）最硬的外部验证：不止本 crate 读侧能往返，商用 E3D 也能读。Q8 人工门通过。
