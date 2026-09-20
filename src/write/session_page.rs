@@ -80,6 +80,10 @@ pub struct NewSession<'a> {
     /// `INDEX` root (words 7/8): the new tree's root when this session changed
     /// it, or the previous session's root carried over when it did not.
     pub index_root: PageId,
+    /// Table-directory roots to rewrite: `(name_hash, new_root)`. The `NAME`
+    /// table moves here when a name was written; every other table is carried
+    /// over. A hash the directory does not list is ignored.
+    pub table_overrides: &'a [(u32, PageId)],
     /// `BASESN`: the session this one was written on top of.
     pub base_sesno: u32,
     /// `USER`, ASCII only in stage 1; at most nine words (36 bytes).
@@ -159,7 +163,21 @@ pub fn build_session_page(
         "DESC",
     )?;
 
-    // Table directory (+0x31C..) carried over verbatim.
+    // Table directory (+0x31C..) carried over, save any root the caller
+    // moved: find the triple by its name hash and rewrite its page/extent.
+    let table_count = be_word(&page, at::TABLE_COUNT) as usize;
+    for (name_hash, new_root) in new.table_overrides {
+        for slot in 0..table_count {
+            let entry = at::TABLE_DIR + slot * at::TABLE_ENTRY_BYTES;
+            if entry + at::TABLE_ENTRY_BYTES > page.len() {
+                break;
+            }
+            if be_word(&page, entry) == *name_hash {
+                put_be_word(&mut page, entry + 4, new_root.page);
+                put_be_word(&mut page, entry + 8, u32::from(new_root.ext));
+            }
+        }
+    }
 
     page[at::DABACON_VERSION_TAG..at::DABACON_VERSION_TAG + at::DABACON_VERSION_TAG_BYTES]
         .copy_from_slice(E3DIO_VERSION_TAG);

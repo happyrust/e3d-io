@@ -137,6 +137,7 @@ fn three_boxes_and_a_grown_zone_read_back_on_ams8000() {
         &copy.path,
         &SessionRequest { user: "e3dio", comment: "e3d-io stage2 three boxes", clock: Some(fixed_clock()) },
         &elements,
+        &[],
     )
     .expect("write the element session");
     assert_eq!(report.written.sesno, base_sesno + 1);

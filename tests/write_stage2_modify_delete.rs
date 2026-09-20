@@ -123,6 +123,7 @@ fn modifying_five_subs_reports_one_real_and_one_text_change_each() {
         &copy.path,
         &SessionRequest { user: "e3dio", comment: "e3d-io stage2 modify five subs", clock: Some(fixed_clock()) },
         &elements,
+        &[],
     )
     .expect("write");
     let new_end = *report.appended_pages.iter().max().unwrap();
@@ -262,6 +263,7 @@ fn deleting_two_leaves_removes_them_and_leaves_their_old_records_readable() {
         &copy.path,
         &SessionRequest { user: "e3dio", comment: "e3d-io stage2 delete two leaves", clock: Some(fixed_clock()) },
         &elements,
+        &[],
     )
     .expect("write");
     let new_end = *report.appended_pages.iter().max().unwrap();

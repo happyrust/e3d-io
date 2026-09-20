@@ -22,6 +22,7 @@
 //! that is mid-flight. Take the file out of E3D's write mode before writing.
 
 pub mod index_cow;
+pub mod named_cow;
 pub mod pages;
 pub mod record;
 pub mod session_page;
@@ -37,6 +38,7 @@ use crate::refno::RefNo;
 use crate::session::SessionPage;
 
 pub use index_cow::{EditKind, IndexCowError, LeafEdit};
+pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
 pub use record::{PlacedRecord, RecordDraft, RecordEncodeError};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
@@ -97,10 +99,14 @@ pub enum WriteError {
         physical: u32,
         end: u32,
     },
+    #[error("a name was written but the session has no NAME table (hash {name_hash:#x})")]
+    NoNameTable { name_hash: u32 },
     #[error("{0}")]
     Record(#[from] RecordEncodeError),
     #[error("{0}")]
     IndexCow(#[from] IndexCowError),
+    #[error("{0}")]
+    NameTable(#[from] NamedCowError),
     #[error(
         "a record of {words} words does not fit on a {page_words}-word page \
          (stage 2 does not split a record across pages)"
@@ -230,6 +236,7 @@ pub fn stage_empty_session(
             sesno: new_sesno,
             end: new_page,
             index_root: previous.index_root,
+            table_overrides: &[],
             base_sesno: previous.sesno,
             user: request.user,
             comment: request.comment,
@@ -371,6 +378,7 @@ pub fn write_element_session(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
     elements: &[ElementWrite],
+    name_edits: &[NamedEdit],
 ) -> Result<CommitReport, WriteError> {
     let mut file = PageFile::open(path)?;
     let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
@@ -449,27 +457,56 @@ pub fn write_element_session(
     }
 
     let page_limit = file.physical_page_count()?.max(1);
-    let rewrite = {
-        let mut read_page = |page_no: u32| {
-            file.read_page(page_no)
-                .map_err(|error| error.to_string())
+    // A names-only session leaves the refno index alone: no element moved, so
+    // its root and every one of its pages stay.
+    let index_root = if edits.is_empty() {
+        previous.index_root
+    } else {
+        let rewrite = {
+            let mut read_page = |page_no: u32| {
+                file.read_page(page_no)
+                    .map_err(|error| error.to_string())
+            };
+            let mut alloc = || {
+                let page = next;
+                next += 1;
+                page
+            };
+            index_cow::rewrite_index(
+                previous.index_root,
+                page_words,
+                &edits,
+                &mut read_page,
+                &mut alloc,
+                page_limit,
+            )?
         };
-        let mut alloc = || {
-            let page = next;
-            next += 1;
-            page
-        };
-        index_cow::rewrite_index(
-            previous.index_root,
-            page_words,
-            &edits,
-            &mut read_page,
-            &mut alloc,
-            page_limit,
-        )?
+        for page in rewrite.pages {
+            appended.push(page);
+        }
+        rewrite.root
     };
-    for page in rewrite.pages {
-        appended.push(page);
+
+    // --- the NAME table: a second copy-on-write pass when a name was written ---
+    let mut table_overrides: Vec<(u32, PageId)> = Vec::new();
+    if !name_edits.is_empty() {
+        let name_hash = crate::index::named::name_table_hash();
+        let root = previous
+            .table_root(name_hash)
+            .ok_or(WriteError::NoNameTable { name_hash })?;
+        let named = {
+            let mut read_page = |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
+            let mut alloc = || {
+                let page = next;
+                next += 1;
+                page
+            };
+            named_cow::rewrite_named_table(root, page_words, name_edits, &mut read_page, &mut alloc, page_limit)?
+        };
+        for page in named.pages {
+            appended.push(page);
+        }
+        table_overrides.push((name_hash, named.root));
     }
 
     // --- the session page, last, naming the new index root ---
@@ -485,7 +522,8 @@ pub fn write_element_session(
             page: session_page,
             sesno: new_sesno,
             end: session_page,
-            index_root: rewrite.root,
+            index_root,
+            table_overrides: &table_overrides,
             base_sesno: previous.sesno,
             user: request.user,
             comment: request.comment,
