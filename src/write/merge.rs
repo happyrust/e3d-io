@@ -34,7 +34,7 @@ use crate::record::template::{MemberListKind, TemplateProvider};
 use crate::refno::RefNo;
 use crate::session::DbView;
 
-use super::record::{three_way_with, MemberMerge};
+use super::record::{three_way_with_mode, MemberMerge, MergeMode};
 use super::{stage_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft, SessionRequest, WriteError};
 use crate::ReadOnlyEngine;
 
@@ -49,6 +49,12 @@ pub struct MergeOptions<'a> {
     /// is written ([`super::WriteOptions`]). `None` merges every noun member
     /// by member and carries the tables over untouched.
     pub templates: Option<&'a mut TemplateProvider>,
+    /// Break a same-attribute clash the extract-flush way — the committed
+    /// (latest) side wins — rather than the plain `SAVEWORK` way where the
+    /// writer wins ([`MergeMode`]). This is `core.dll`'s fourth claims-manager
+    /// slot (`DXSWK2`): flushing an extract back to the master keeps what the
+    /// master gained since the extract was taken. `false` is plain `SAVEWORK`.
+    pub extract_flush: bool,
 }
 
 impl MergeOptions<'_> {
@@ -176,6 +182,11 @@ fn rebase_updates(
     elements: &[ElementWrite],
     options: &mut MergeOptions<'_>,
 ) -> Result<Vec<ElementWrite>, WriteError> {
+    let mode = if options.extract_flush {
+        MergeMode::ExtractFlush
+    } else {
+        MergeMode::PlainSaveWork
+    };
     let mut base = ReadOnlyEngine::open_at(path, base_sesno)?;
     let mut latest = ReadOnlyEngine::open(path)?;
     let mut out = Vec::with_capacity(elements.len());
@@ -189,7 +200,7 @@ fn rebase_updates(
                         let base_draft = RecordDraft::from_record_bytes(&base_view.raw_bytes)?;
                         let latest_draft = RecordDraft::from_record_bytes(&latest_view.raw_bytes)?;
                         let member_merge = options.member_merge_for(latest_draft.noun_hash)?;
-                        let merged = three_way_with(&base_draft, &latest_draft, working, member_merge)?;
+                        let merged = three_way_with_mode(&base_draft, &latest_draft, working, member_merge, mode)?;
                         // INDEX de-duplication (A3a, sub_5B07080): a merged
                         // record equal to the committed one is not written —
                         // its leaf keeps pointing at the record already there.

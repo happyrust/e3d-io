@@ -538,33 +538,82 @@ pub enum MemberMerge {
     WholeList,
 }
 
+/// Which way a same-thing clash breaks in a three-way merge — the plain
+/// `SAVEWORK` the corpus is written by, or the extract-flush variant.
+///
+/// Both compose changes to different attributes the same way; they differ only
+/// when the writer and the committed session changed the *same* attribute,
+/// owner, or whole member list relative to the base:
+///
+/// * [`PlainSaveWork`](MergeMode::PlainSaveWork) — `core.dll`'s `a6 = 0`
+///   `SAVEWORK` — lets the writer's value win (`sub_5B0D950` writes the working
+///   value with no base↔latest check; A3b.2).
+/// * [`ExtractFlush`](MergeMode::ExtractFlush) — the fourth claims-manager slot
+///   (`DXSWK2`, extract flush) — keeps the committed value: `sub_5B0D950`,
+///   `sub_5B1F660` and `sub_5B211C0` each first compare base↔latest and, when
+///   the committed session changed it too, skip the writer's change. Flushing
+///   an extract back to the master must not clobber what the master gained
+///   meanwhile, so on a clash the master (latest) wins.
+///
+/// No installed database is an extract, so this is exercised by constructed
+/// three-view scenarios rather than against E3D-written extract data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MergeMode {
+    /// The writer wins a clash (plain `SAVEWORK`).
+    #[default]
+    PlainSaveWork,
+    /// The committed side wins a clash (extract flush, the fourth slot).
+    ExtractFlush,
+}
+
 /// [`three_way`] with the member-list arm chosen by the caller, who knows the
-/// noun's [`MemberListKind`](crate::record::template::MemberListKind).
+/// noun's [`MemberListKind`](crate::record::template::MemberListKind). The
+/// clash tie-break is plain `SAVEWORK` ([`MergeMode::PlainSaveWork`]).
 pub fn three_way_with(
     base: &RecordDraft,
     latest: &RecordDraft,
     working: &RecordDraft,
     member_merge: MemberMerge,
 ) -> Result<RecordDraft, RecordEncodeError> {
+    three_way_with_mode(base, latest, working, member_merge, MergeMode::PlainSaveWork)
+}
+
+/// [`three_way_with`] with the clash tie-break chosen too: [`MergeMode`] says
+/// whether the writer or the committed side wins where both changed the same
+/// attribute, owner or whole member list relative to `base`.
+pub fn three_way_with_mode(
+    base: &RecordDraft,
+    latest: &RecordDraft,
+    working: &RecordDraft,
+    member_merge: MemberMerge,
+    mode: MergeMode,
+) -> Result<RecordDraft, RecordEncodeError> {
+    let flush = mode == MergeMode::ExtractFlush;
+
     // Implicit region: latest's, with the words the writer changed overlaid.
     // The header words (0..11) are recomputed on encode, so only attribute
-    // words matter.
+    // words matter. Under extract flush a word the committed session also
+    // changed keeps the committed value.
     let mut implicit = latest.implicit.clone();
     let common = implicit
         .len()
         .min(base.implicit.len())
         .min(working.implicit.len());
     for index in HEADER_WORDS..common {
-        if working.implicit[index] != base.implicit[index] {
+        let writer_changed = working.implicit[index] != base.implicit[index];
+        let latest_changed = latest.implicit[index] != base.implicit[index];
+        if writer_changed && !(flush && latest_changed) {
             implicit[index] = working.implicit[index];
         }
     }
 
     // Explicit attributes, keyed by hash: latest's, with the writer's changes
-    // (added, replaced or removed relative to base) applied.
+    // (added, replaced or removed relative to base) applied. Under extract
+    // flush an attribute the committed session also changed keeps its value.
     let base_fields = base.parse_explicit_fields();
     let working_fields = working.parse_explicit_fields();
-    let mut merged_fields = latest.parse_explicit_fields();
+    let latest_fields = latest.parse_explicit_fields();
+    let mut merged_fields = latest_fields.clone();
     let value_of = |fields: &[(u32, u16, Vec<u32>)], hash: u32| {
         fields.iter().find(|f| f.0 == hash).map(|f| (f.1, f.2.clone()))
     };
@@ -580,6 +629,9 @@ pub fn three_way_with(
         let in_working = value_of(&working_fields, hash);
         if in_base == in_working {
             continue; // the writer did not change this attribute
+        }
+        if flush && value_of(&latest_fields, hash) != in_base {
+            continue; // the committed session changed it too — it wins
         }
         match in_working {
             Some((type_code, data)) => match merged_fields.iter_mut().find(|f| f.0 == hash) {
@@ -597,14 +649,23 @@ pub fn three_way_with(
     // Members (A3b.4): by default the committed list with the writer's own
     // adds, removes and moves replayed onto it, each anchored after its
     // preceding shared sibling; a reference list is one attribute instead —
-    // the writer's whole list if the writer changed it, else the committed one.
+    // the writer's whole list if the writer changed it, else the committed one,
+    // and under extract flush the committed list when it changed the list too.
     let members = match member_merge {
         MemberMerge::MemberByMember => merge_members(&base.members, &latest.members, &working.members),
-        MemberMerge::WholeList if working.members != base.members => working.members.clone(),
+        MemberMerge::WholeList if working.members != base.members => {
+            if flush && latest.members != base.members {
+                latest.members.clone()
+            } else {
+                working.members.clone()
+            }
+        }
         MemberMerge::WholeList => latest.members.clone(),
     };
 
-    let owner = if working.owner != base.owner {
+    // Owner: the writer's when it moved the element, unless extract flush and
+    // the committed session moved it too (`sub_5B211C0`), where latest wins.
+    let owner = if working.owner != base.owner && !(flush && latest.owner != base.owner) {
         working.owner
     } else {
         latest.owner
@@ -960,6 +1021,73 @@ mod tests {
         let value = |hash: u32| fields.iter().find(|f| f.0 == hash).map(|f| f.2[0]);
         assert_eq!(value(0xAA), Some(7), "both changed 0xAA: the writer wins");
         assert_eq!(value(0xBB), Some(9), "committed-only attribute is kept");
+    }
+
+    /// The same three views under extract flush: disjoint changes still
+    /// compose, but where the writer and the committed side changed the same
+    /// attribute the committed value is kept — the opposite tie-break.
+    #[test]
+    fn extract_flush_keeps_the_committed_value_on_a_clash() {
+        let refno = RefNo::new(1, 10);
+        let owner = RefNo::new(1, 1);
+        let explicit = |hash: u32, value: u32| {
+            let mut s = Vec::new();
+            s.extend_from_slice(&hash.to_be_bytes());
+            s.extend_from_slice(&((0x0C00u32 << 16) | 1).to_be_bytes());
+            s.extend_from_slice(&value.to_be_bytes());
+            s
+        };
+        let base = RecordDraft::new(refno, 0x861E0, owner, implicit(&[10, 20, 30]), vec![], explicit(0xAA, 1)).unwrap();
+        let mut latest_words = implicit(&[10, 20, 30]);
+        latest_words[12] = 120;
+        let latest = RecordDraft::new(refno, 0x861E0, owner, latest_words, vec![], explicit(0xAA, 2)).unwrap();
+        let mut working_words = implicit(&[10, 20, 30]);
+        working_words[12] = 121; // clashes with the committed word-12 change
+        working_words[13] = 130; // disjoint
+        let working = RecordDraft::new(refno, 0x861E0, owner, working_words, vec![], explicit(0xAA, 7)).unwrap();
+
+        let merged = three_way_with_mode(&base, &latest, &working, MemberMerge::MemberByMember, MergeMode::ExtractFlush).unwrap();
+        assert_eq!(merged.implicit()[12], 120, "both changed word 12: extract flush keeps the committed value");
+        assert_eq!(merged.implicit()[13], 130, "the disjoint writer change still composes");
+        let fields = merged.parse_explicit_fields();
+        assert_eq!(
+            fields.iter().find(|f| f.0 == 0xAA).map(|f| f.2[0]),
+            Some(2),
+            "both changed 0xAA: extract flush keeps the committed value"
+        );
+    }
+
+    /// Extract flush on owner and on a whole (reference) member list: the
+    /// committed side wins each when it changed it too, and the writer still
+    /// wins where the committed side left it at the base.
+    #[test]
+    fn extract_flush_keeps_the_committed_owner_and_whole_list() {
+        let refno = RefNo::new(1, 10);
+        let m = |n| RefNo::new(1, n);
+        let draft = |owner: RefNo, members: Vec<RefNo>| {
+            RecordDraft::new(refno, 0x861E0, owner, implicit(&[0]), members, vec![]).unwrap()
+        };
+        let base = draft(m(1), vec![m(5), m(6)]);
+        // Committed side moved the element to owner 2 and changed the list.
+        let latest = draft(m(2), vec![m(5), m(6), m(7)]);
+        // Writer moved it to owner 3 and changed the list to its own.
+        let working = draft(m(3), vec![m(5), m(8)]);
+
+        let flushed = three_way_with_mode(&base, &latest, &working, MemberMerge::WholeList, MergeMode::ExtractFlush).unwrap();
+        assert_eq!(flushed.owner, m(2), "both moved owner: extract flush keeps the committed owner");
+        assert_eq!(flushed.members(), &[m(5), m(6), m(7)], "both changed the reference list: committed list kept");
+
+        // Plain SAVEWORK on the same views: the writer wins both.
+        let plain = three_way_with(&base, &latest, &working, MemberMerge::WholeList).unwrap();
+        assert_eq!(plain.owner, m(3), "plain SAVEWORK: the writer's owner wins");
+        assert_eq!(plain.members(), &[m(5), m(8)], "plain SAVEWORK: the writer's whole list wins");
+
+        // Committed side left the owner and list at the base: the writer wins
+        // even under extract flush, because there is no clash.
+        let latest_untouched = draft(m(1), vec![m(5), m(6)]);
+        let flushed2 = three_way_with_mode(&base, &latest_untouched, &working, MemberMerge::WholeList, MergeMode::ExtractFlush).unwrap();
+        assert_eq!(flushed2.owner, m(3), "no committed owner change: the writer's owner applies");
+        assert_eq!(flushed2.members(), &[m(5), m(8)], "no committed list change: the writer's list applies");
     }
 
     /// Member three-way: both sides added a member to one owner, and the

@@ -563,7 +563,7 @@ fn group_merge(provider: &mut TemplateProvider, cast: &Cast, with_schema: bool) 
     {
         let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
         let group = zone_with_member(&mut base, grou, z1);
-        let options = MergeOptions { templates: with_schema.then_some(&mut *provider) };
+        let options = MergeOptions { templates: with_schema.then_some(&mut *provider), ..Default::default() };
         write_merge_session_with(
             &copy.path,
             &SessionRequest { user: "B", comment: "B adds zone 1 to the group", clock: Some(clock()) },
@@ -820,7 +820,7 @@ fn a_merge_keeps_the_reverse_reference_tables_in_step() {
             s,
             &[ElementWrite::Update(draft)],
             &[],
-            MergeOptions { templates: Some(&mut provider) },
+            MergeOptions { templates: Some(&mut provider), ..Default::default() },
         )
         .expect("B merges S+2");
     }
@@ -848,6 +848,65 @@ fn a_merge_keeps_the_reverse_reference_tables_in_step() {
         (0, 1, 2),
         "A's box and zone, B's referrer"
     );
+}
+
+/// Extract flush flips the same-attribute tie-break. A (committed) and B
+/// (writer, based on S) change the same implicit word of one element; the
+/// plain merge keeps B's value, the extract-flush merge keeps A's — otherwise
+/// the two writes are identical.
+#[test]
+fn an_extract_flush_merge_keeps_the_committed_value_where_plain_keeps_the_writers() {
+    if common::missing(&[AMS8000]) {
+        return;
+    }
+    // Run the same A-then-B construction twice, once plain and once flushed.
+    let outcome = |flush: bool| -> u32 {
+        let copy = DbCopy::of(AMS8000);
+        let cast = cast(AMS8000);
+        let victim = cast.subs[0];
+        let s = DbView::open(&copy.path).unwrap().session().sesno;
+        let word = 12usize;
+        let base_value = implicit_word(&mut ReadOnlyEngine::open(&copy.path).unwrap(), victim, word);
+
+        // A commits S+1, setting the word to a committed value.
+        {
+            let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+            let mut draft = RecordDraft::from_record_bytes(&engine.find_element(victim).unwrap().unwrap().raw_bytes).unwrap();
+            *draft.implicit_word_mut(word).unwrap() = base_value ^ 0x0AAA;
+            write_element_session(
+                &copy.path,
+                &SessionRequest { user: "A", comment: "A sets the word", clock: Some(clock()) },
+                &[ElementWrite::Update(draft)],
+                &[],
+            )
+            .expect("A writes S+1");
+        }
+        // B, based on S, sets the same word to its own value and merges.
+        {
+            let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+            let mut draft = RecordDraft::from_record_bytes(&base.find_element(victim).unwrap().unwrap().raw_bytes).unwrap();
+            *draft.implicit_word_mut(word).unwrap() = base_value ^ 0x5000;
+            write_merge_session_with(
+                &copy.path,
+                &SessionRequest { user: "B", comment: "B sets the word", clock: Some(clock()) },
+                s,
+                &[ElementWrite::Update(draft)],
+                &[],
+                MergeOptions { extract_flush: flush, ..Default::default() },
+            )
+            .expect("B merges S+2");
+        }
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        implicit_word(&mut engine, victim, word)
+    };
+
+    let base_value = {
+        let copy = DbCopy::of(AMS8000);
+        let cast = cast(AMS8000);
+        implicit_word(&mut ReadOnlyEngine::open(&copy.path).unwrap(), cast.subs[0], 12)
+    };
+    assert_eq!(outcome(false), base_value ^ 0x5000, "plain SAVEWORK keeps the writer B's value");
+    assert_eq!(outcome(true), base_value ^ 0x0AAA, "extract flush keeps the committed A's value");
 }
 
 /// A `(owner, leaf)` pair: an element of `owner_noun` with a 0-member child in
