@@ -35,8 +35,19 @@ const HEADER_DWORDS: usize = 7;
 const ENTRY_DWORDS: usize = 4;
 const SENTINEL_WORD: u32 = 0x8000_0001;
 
-/// One change to the leaf level: a key and the record address it should point
-/// at, and whether the key is new.
+/// What a [`LeafEdit`] does to its key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditKind {
+    /// Add a key the tree does not have (a new element).
+    Insert,
+    /// Replace the value under a key it does have (a record that moved).
+    Update,
+    /// Remove a key (a deleted element). `page_no`/`packed` are ignored.
+    Delete,
+}
+
+/// One change to the leaf level: a key, what to do with it, and — for an
+/// insert or an update — the record address it should point at.
 #[derive(Debug, Clone, Copy)]
 pub struct LeafEdit {
     pub refno: RefNo,
@@ -45,9 +56,7 @@ pub struct LeafEdit {
     /// The packed second word of the leaf value: `ext | (word_offset << 13)`
     /// with the offset in 4-byte words ([`super::record::pack_offset`]).
     pub packed: u32,
-    /// `true` to add a key the tree does not have; `false` to replace the
-    /// value under a key it does.
-    pub insert: bool,
+    pub kind: EditKind,
 }
 
 /// The new tree: its root, and every page the rewrite produced.
@@ -71,6 +80,8 @@ pub enum IndexCowError {
     },
     #[error("{refno} was to be updated but the tree has no such key")]
     UpdateMissing { refno: RefNo },
+    #[error("{refno} was to be deleted but the tree has no such key")]
+    DeleteMissing { refno: RefNo },
     #[error("{refno} was to be inserted but the tree already has it")]
     DuplicateInsert { refno: RefNo },
     #[error("an internal page routes {refno} to a child it does not list")]
@@ -191,13 +202,23 @@ impl Cow<'_> {
     ) -> Result<Vec<IndexEntry>, IndexCowError> {
         for edit in edits {
             let position = entries.iter().position(|e| e.refno == edit.refno);
-            match (edit.insert, position) {
-                (true, Some(_)) => return Err(IndexCowError::DuplicateInsert { refno: edit.refno }),
-                (false, None) => return Err(IndexCowError::UpdateMissing { refno: edit.refno }),
-                (false, Some(index)) => {
+            match (edit.kind, position) {
+                (EditKind::Insert, Some(_)) => {
+                    return Err(IndexCowError::DuplicateInsert { refno: edit.refno })
+                }
+                (EditKind::Update, None) => {
+                    return Err(IndexCowError::UpdateMissing { refno: edit.refno })
+                }
+                (EditKind::Delete, None) => {
+                    return Err(IndexCowError::DeleteMissing { refno: edit.refno })
+                }
+                (EditKind::Update, Some(index)) => {
                     entries[index] = leaf_entry(edit.refno, edit.page_no, edit.packed);
                 }
-                (true, None) => {
+                (EditKind::Delete, Some(index)) => {
+                    entries.remove(index);
+                }
+                (EditKind::Insert, None) => {
                     let at = entries
                         .iter()
                         .position(|e| cmp_refno(e.refno, edit.refno) == std::cmp::Ordering::Greater)
@@ -398,12 +419,12 @@ mod tests {
         out
     }
 
-    fn edit(refno: RefNo, page_no: u32, insert: bool) -> LeafEdit {
+    fn edit(refno: RefNo, page_no: u32, kind: EditKind) -> LeafEdit {
         LeafEdit {
             refno,
             page_no,
             packed: (1 << 13) | 1,
-            insert,
+            kind,
         }
     }
 
@@ -423,7 +444,7 @@ mod tests {
             ],
         );
 
-        let result = rewrite(&mut store, root, &[edit(RefNo::new(30, 0), 9, true)]);
+        let result = rewrite(&mut store, root, &[edit(RefNo::new(30, 0), 9, EditKind::Insert)]);
         let keys: Vec<RefNo> = leaves(&store, result.root.page)
             .into_iter()
             .map(|(refno, _, _)| refno)
@@ -460,7 +481,7 @@ mod tests {
                 refno: RefNo::new(20, 0),
                 page_no: 999,
                 packed: (44 << 13) | 1,
-                insert: false,
+                kind: EditKind::Update,
             }],
         );
         let updated = leaves(&store, result.root.page)
@@ -469,6 +490,46 @@ mod tests {
             .unwrap();
         assert_eq!(updated.1, 999, "the value's page moved");
         assert_eq!(updated.2, 44 << 1, "and its 2-byte word offset with it");
+    }
+
+    #[test]
+    fn a_delete_removes_the_key_and_leaves_the_others() {
+        let mut store = Store {
+            pages: HashMap::new(),
+            next: 100,
+        };
+        let leaf = store.leaf(&[
+            (RefNo::new(10, 0), 5),
+            (RefNo::new(20, 0), 6),
+            (RefNo::new(30, 0), 7),
+        ]);
+
+        let result = rewrite(&mut store, leaf, &[edit(RefNo::new(20, 0), 0, EditKind::Delete)]);
+        let keys: Vec<RefNo> = leaves(&store, result.root.page)
+            .into_iter()
+            .map(|(refno, _, _)| refno)
+            .collect();
+        assert_eq!(keys, vec![RefNo::new(10, 0), RefNo::new(30, 0)], "the middle key is gone");
+
+        // Deleting a key the tree does not have is an error, not a silent no-op.
+        let snapshot: HashMap<u32, Vec<u8>> = store.pages.clone();
+        let mut next = store.next;
+        let mut read = |page_no: u32| snapshot.get(&page_no).cloned().ok_or_else(|| format!("no page {page_no}"));
+        let mut alloc = || {
+            let page = next;
+            next += 1;
+            page
+        };
+        let error = rewrite_index(
+            PageId::primary(result.root.page),
+            PAGE_WORDS,
+            &[edit(RefNo::new(99, 0), 0, EditKind::Delete)],
+            &mut read,
+            &mut alloc,
+            1000,
+        )
+        .unwrap_err();
+        assert!(matches!(error, IndexCowError::DeleteMissing { .. }), "{error}");
     }
 
     #[test]
@@ -481,7 +542,7 @@ mod tests {
         let entries: Vec<(RefNo, u32)> = (0..6).map(|i| (RefNo::new(i * 10, 0), 500 + i)).collect();
         let leaf = store.leaf(&entries);
 
-        let result = rewrite(&mut store, leaf, &[edit(RefNo::new(5, 0), 900, true)]);
+        let result = rewrite(&mut store, leaf, &[edit(RefNo::new(5, 0), 900, EditKind::Insert)]);
         // The root is no longer the leaf: it split and a new root points at
         // the pieces.
         assert_ne!(result.root.page, leaf);

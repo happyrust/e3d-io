@@ -46,6 +46,8 @@ pub enum RecordEncodeError {
     ImplicitTooShort { got: usize },
     #[error("the explicit stream is {len} bytes, not a whole number of 4-byte words")]
     ExplicitNotDwordAligned { len: usize },
+    #[error("an explicit text may only be set to ASCII for now, got {text:?}")]
+    ExplicitTextNotAscii { text: String },
     #[error("{refno}: gathered record is {len} bytes, too short for an {HEADER_WORDS}-word header")]
     RecordTooShort { refno: RefNo, len: usize },
     #[error("{refno}: implicit length {words} words runs past the {len}-byte record")]
@@ -179,6 +181,14 @@ impl RecordDraft {
         self.members.push(member);
     }
 
+    /// Remove a member, keeping the rest in order. Returns whether it was
+    /// there.
+    pub fn remove_member(&mut self, member: RefNo) -> bool {
+        let before = self.members.len();
+        self.members.retain(|m| *m != member);
+        self.members.len() != before
+    }
+
     pub fn members(&self) -> &[RefNo] {
         &self.members
     }
@@ -187,6 +197,68 @@ impl RecordDraft {
     /// the way a descriptor's `wide.location.word_offset()` states it.
     pub fn implicit_word_mut(&mut self, offset: usize) -> Option<&mut u32> {
         self.implicit.get_mut(offset)
+    }
+
+    /// Overwrite the real at wide word offset `offset` (two words, Fortran
+    /// order). Panics if the offset runs past the implicit region.
+    pub fn set_real_wide(&mut self, offset: usize, value: f64) {
+        put_real_wide(&mut self.implicit, offset, value);
+    }
+
+    /// Replace the value of the explicit text attribute keyed by `hash` with
+    /// `text`, keeping its type code. Returns whether such an attribute was
+    /// there. ASCII only for now — under either header `FORMAT` it stores as
+    /// its own bytes, the same rule the session-page writer keeps.
+    pub fn set_explicit_text_ascii(
+        &mut self,
+        hash: u32,
+        text: &str,
+    ) -> Result<bool, RecordEncodeError> {
+        if !text.is_ascii() {
+            return Err(RecordEncodeError::ExplicitTextNotAscii {
+                text: text.to_owned(),
+            });
+        }
+        let mut fields = self.parse_explicit_fields();
+        let Some(field) = fields.iter_mut().find(|(field_hash, _, _)| *field_hash == hash) else {
+            return Ok(false);
+        };
+        let bytes = text.as_bytes();
+        let mut data = Vec::with_capacity(1 + bytes.len().div_ceil(4));
+        data.push(bytes.len() as u32);
+        for chunk in bytes.chunks(4) {
+            let mut word = [0u8; 4];
+            word[..chunk.len()].copy_from_slice(chunk);
+            data.push(u32::from_be_bytes(word));
+        }
+        field.2 = data;
+        self.explicit_stream = rebuild_explicit_stream(&fields);
+        Ok(true)
+    }
+
+    /// The explicit stream as `(hash, type_code, data_words)` fields.
+    fn parse_explicit_fields(&self) -> Vec<(u32, u16, Vec<u32>)> {
+        let words: Vec<u32> = self
+            .explicit_stream
+            .chunks_exact(4)
+            .map(|w| u32::from_be_bytes(w.try_into().unwrap()))
+            .collect();
+        let mut fields = Vec::new();
+        let mut cursor = 0;
+        while cursor + 2 <= words.len() {
+            let hash = words[cursor];
+            if hash == 0 {
+                break;
+            }
+            let type_code = (words[cursor + 1] >> 16) as u16;
+            let data_words = (words[cursor + 1] & 0xFFFF) as usize;
+            let Some(data) = words.get(cursor + 2..cursor + 2 + data_words) else {
+                break;
+            };
+            fields.push((hash, type_code, data.to_vec()));
+            cursor += 2 + data_words;
+        }
+        fields
     }
 
     /// The whole record's length in words: implicit region plus both blocks.
@@ -280,6 +352,21 @@ impl RecordDraft {
 /// index and block readers unpack it.
 pub fn pack_offset(word_offset: u32, ext: u16) -> u32 {
     u32::from(ext) | (word_offset << 13)
+}
+
+/// Serialise explicit fields back into a stream: `[hash][type_code << 16 |
+/// data_words][data…]` per entry, the inverse of the reader's walk.
+fn rebuild_explicit_stream(fields: &[(u32, u16, Vec<u32>)]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for (hash, type_code, data) in fields {
+        bytes.extend_from_slice(&hash.to_be_bytes());
+        let header = (u32::from(*type_code) << 16) | data.len() as u32;
+        bytes.extend_from_slice(&header.to_be_bytes());
+        for word in data {
+            bytes.extend_from_slice(&word.to_be_bytes());
+        }
+    }
+    bytes
 }
 
 fn push_block_header(bytes: &mut Vec<u8>, kind: BlockKind, words: usize, owner: RefNo) {

@@ -118,7 +118,7 @@ fn three_boxes_and_a_grown_zone_read_back_on_ams8000() {
         put_real_wide(&mut implicit, ylen_at, b.dims[1]);
         put_real_wide(&mut implicit, zlen_at, b.dims[2]);
         let draft = RecordDraft::new(b.refno, box_hash, zone_refno, implicit, vec![], vec![]).expect("box draft");
-        elements.push(ElementWrite { draft, insert: true });
+        elements.push(ElementWrite::Insert(draft));
     }
 
     // --- the ZONE, re-emitted with the three boxes appended to its members ---
@@ -129,7 +129,7 @@ fn three_boxes_and_a_grown_zone_read_back_on_ams8000() {
         for b in &boxes {
             draft.push_member(b.refno);
         }
-        elements.push(ElementWrite { draft, insert: false });
+        elements.push(ElementWrite::Update(draft));
     }
 
     // --- write the session ---

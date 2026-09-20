@@ -33,9 +33,10 @@ use crate::meta::descriptor::at as page0;
 use crate::meta::DbDescriptor;
 use crate::page::{PageId, PageSize, PageType};
 use crate::record::text::TextFormat;
+use crate::refno::RefNo;
 use crate::session::SessionPage;
 
-pub use index_cow::{IndexCowError, LeafEdit};
+pub use index_cow::{EditKind, IndexCowError, LeafEdit};
 pub use pages::PageFile;
 pub use record::{PlacedRecord, RecordDraft, RecordEncodeError};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
@@ -340,17 +341,19 @@ pub fn write_empty_session(
     stage_empty_session(path, request)?.commit()
 }
 
-/// One element to write: the record, and whether it is new to the index.
+/// One element change in a session.
 ///
-/// `insert` adds a key the tree does not have (a new element); otherwise the
-/// element already exists and its record moves — the index entry's value is
-/// rewritten to the new location, which is how `core.dll` records a change
-/// (A2, §4.5: a record is never edited in place, it is rewritten and the
-/// index leaf re-pointed).
+/// `Insert` adds a new element (a key the tree does not have); `Update`
+/// rewrites an existing element's record and re-points its index leaf at the
+/// new location (a record is never edited in place — A2, §4.5); `Delete`
+/// removes a key. A deleted element's old record bytes stay on disk,
+/// unreferenced, so `read_element_direct` at the old address still reads them
+/// (§4.5: the page is not reused).
 #[derive(Debug, Clone)]
-pub struct ElementWrite {
-    pub draft: RecordDraft,
-    pub insert: bool,
+pub enum ElementWrite {
+    Insert(RecordDraft),
+    Update(RecordDraft),
+    Delete(RefNo),
 }
 
 /// Append a session that writes `elements`: new element records on fresh data
@@ -381,50 +384,69 @@ pub fn write_element_session(
     let mut next = previous.end.page + 1;
     let mut appended: Vec<(u32, Vec<u8>)> = Vec::new();
 
-    // --- data pages: bump-pack every record, remembering where each landed ---
-    let mut placements: Vec<(PlacedRecord, bool)> = Vec::new();
+    // --- data pages: bump-pack every written record, and collect the index
+    // edits (a delete writes no record, only removes a key) ---
+    let mut edits: Vec<LeafEdit> = Vec::new();
     {
         let mut current: Option<(u32, Vec<u8>, usize)> = None;
-        for element in elements {
-            let len = element.draft.encoded_len_words();
+        let place = |draft: &RecordDraft,
+                         kind: EditKind,
+                         current: &mut Option<(u32, Vec<u8>, usize)>,
+                         appended: &mut Vec<(u32, Vec<u8>)>,
+                         next: &mut u32,
+                         edits: &mut Vec<LeafEdit>|
+         -> Result<(), WriteError> {
+            let len = draft.encoded_len_words();
             if len > page_words - 1 {
                 return Err(WriteError::RecordTooLong { words: len, page_words });
             }
-            let need_new = match &current {
-                Some((_, _, used)) => used + len > page_words,
+            let need_new = match current {
+                Some((_, _, used)) => *used + len > page_words,
                 None => true,
             };
             if need_new {
                 if let Some((page_no, bytes, _)) = current.take() {
                     appended.push((page_no, bytes));
                 }
-                let page_no = next;
-                next += 1;
+                let page_no = *next;
+                *next += 1;
                 let mut bytes = vec![0u8; page_words * 4];
                 bytes[0..4].copy_from_slice(&PageType::ElementData.as_raw().to_be_bytes());
-                current = Some((page_no, bytes, 1));
+                *current = Some((page_no, bytes, 1));
             }
             let (page_no, bytes, used) = current.as_mut().expect("a page is open");
-            let placed = element.draft.encode(*page_no, *used as u32, ext);
+            let placed = draft.encode(*page_no, *used as u32, ext);
             bytes[*used * 4..*used * 4 + placed.bytes.len()].copy_from_slice(&placed.bytes);
             *used += len;
-            placements.push((placed, element.insert));
+            edits.push(LeafEdit {
+                refno: placed.refno,
+                page_no: placed.page_no,
+                packed: record::pack_offset(placed.word_offset, ext),
+                kind,
+            });
+            Ok(())
+        };
+
+        for element in elements {
+            match element {
+                ElementWrite::Insert(draft) => {
+                    place(draft, EditKind::Insert, &mut current, &mut appended, &mut next, &mut edits)?
+                }
+                ElementWrite::Update(draft) => {
+                    place(draft, EditKind::Update, &mut current, &mut appended, &mut next, &mut edits)?
+                }
+                ElementWrite::Delete(refno) => edits.push(LeafEdit {
+                    refno: *refno,
+                    page_no: 0,
+                    packed: 0,
+                    kind: EditKind::Delete,
+                }),
+            }
         }
         if let Some((page_no, bytes, _)) = current.take() {
             appended.push((page_no, bytes));
         }
     }
-
-    // --- index: one copy-on-write pass for every record's new leaf value ---
-    let edits: Vec<LeafEdit> = placements
-        .iter()
-        .map(|(placed, insert)| LeafEdit {
-            refno: placed.refno,
-            page_no: placed.page_no,
-            packed: record::pack_offset(placed.word_offset, ext),
-            insert: *insert,
-        })
-        .collect();
 
     let page_limit = file.physical_page_count()?.max(1);
     let rewrite = {
