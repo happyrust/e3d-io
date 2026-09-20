@@ -22,6 +22,7 @@
 //! that is mid-flight. Take the file out of E3D's write mode before writing.
 
 pub mod index_cow;
+pub mod merge;
 pub mod named_cow;
 pub mod pages;
 pub mod record;
@@ -38,6 +39,7 @@ use crate::refno::RefNo;
 use crate::session::SessionPage;
 
 pub use index_cow::{EditKind, IndexCowError, LeafEdit};
+pub use merge::{write_merge_session, MergeConflict};
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
 pub use record::{PlacedRecord, RecordDraft, RecordEncodeError};
@@ -101,6 +103,8 @@ pub enum WriteError {
     },
     #[error("a name was written but the session has no NAME table (hash {name_hash:#x})")]
     NoNameTable { name_hash: u32 },
+    #[error("merge refused by {} conflict(s): {}", .0.len(), MergeConflict::summary(.0))]
+    MergeConflicts(Vec<MergeConflict>),
     #[error("{0}")]
     Record(#[from] RecordEncodeError),
     #[error("{0}")]
@@ -380,6 +384,19 @@ pub fn write_element_session(
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
 ) -> Result<CommitReport, WriteError> {
+    write_session_with_base(path, request, elements, name_edits, None)
+}
+
+/// The write core, shared by the plain and merge paths. `base_sesno` sets the
+/// session page's `BASESN`: the previous session for a plain write, the merge
+/// base for [`crate::write::merge::write_merge_session`].
+fn write_session_with_base(
+    path: impl AsRef<Path>,
+    request: &SessionRequest<'_>,
+    elements: &[ElementWrite],
+    name_edits: &[NamedEdit],
+    base_sesno: Option<u32>,
+) -> Result<CommitReport, WriteError> {
     let mut file = PageFile::open(path)?;
     let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
     let text = TextFormat::from_header(descriptor.header_format);
@@ -524,7 +541,7 @@ pub fn write_element_session(
             end: session_page,
             index_root,
             table_overrides: &table_overrides,
-            base_sesno: previous.sesno,
+            base_sesno: base_sesno.unwrap_or(previous.sesno),
             user: request.user,
             comment: request.comment,
             clock,
