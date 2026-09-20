@@ -158,6 +158,72 @@ fn renaming_elements_moves_them_in_the_name_table() {
     assert_appended_contiguous(&bytes, page_bytes, old_end as usize, new_end as usize, &[3, 5, 7]);
 }
 
+/// The type code a `FORMAT 1` text (`NAME`) is stored under.
+const TEXT_TYPE: u16 = 0x3C00;
+
+#[test]
+fn naming_a_previously_unnamed_element_adds_it_to_the_table() {
+    if common::missing(&[AMS8000]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS8000);
+    let name_hash = db1_hash("NAME");
+    let new_name = "/E3DIO-FIRST-NAME";
+
+    // An element that carries no NAME, and the base facts.
+    let (refno, base_sesno, old_end) = {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let unnamed = engine
+            .scan_elements(ScanTier::Named)
+            .expect("scan")
+            .filter_map(|e| {
+                let e = e.expect("element");
+                e.name.is_none().then_some(e.refno)
+            })
+            .next()
+            .expect("some element has no NAME");
+        assert!(stored_name(&mut engine, unnamed).is_none(), "the element really has no NAME");
+        assert!(engine.find_by_name(new_name).expect("lookup").is_none(), "the new name is free");
+        let view = DbView::open(&copy.path).unwrap();
+        (unnamed, view.session().sesno, view.session().end.page)
+    };
+
+    // Add the NAME to the record, and insert it into the table.
+    let (elements, name_edits) = {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let mut draft = RecordDraft::from_record_bytes(&engine.find_element(refno).unwrap().unwrap().raw_bytes).unwrap();
+        draft.add_explicit_text_ascii(name_hash, TEXT_TYPE, new_name).expect("add NAME");
+        (
+            vec![ElementWrite::Update(draft)],
+            vec![NamedEdit { key: encode_name(new_name), refno, kind: NamedEditKind::Insert }],
+        )
+    };
+    let report = write_element_session(
+        &copy.path,
+        &SessionRequest { user: "e3dio", comment: "e3d-io name an element", clock: Some(fixed_clock()) },
+        &elements,
+        &name_edits,
+    )
+    .expect("write");
+    let new_end = *report.appended_pages.iter().max().unwrap();
+
+    // The element now answers to the name, both through the table and on its
+    // own record, and the table still agrees with the elements.
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+    assert_eq!(engine.find_by_name(new_name).expect("lookup"), Some(refno));
+    assert_eq!(stored_name(&mut engine, refno).as_deref(), Some(new_name), "the record carries the NAME now");
+    let table_after = table_map(&mut engine);
+    let elements_after = element_name_map(&mut engine);
+    assert_eq!(table_after, elements_after, "table and elements agree");
+    assert_eq!(table_after.get(new_name), Some(&refno));
+
+    let bytes = copy.current_bytes();
+    let page_bytes = 4 * page_word(&copy.original, 2048, 0, 13) as usize;
+    assert_prefix_unchanged(&copy.original, &bytes, page_bytes, old_end as usize, PAGE0_COMMIT_WORDS);
+    assert_appended_contiguous(&bytes, page_bytes, old_end as usize, new_end as usize, &[3, 5, 7]);
+    let _ = base_sesno;
+}
+
 #[test]
 fn a_name_already_taken_is_refused_and_nothing_is_written() {
     if common::missing(&[AMS8000]) {

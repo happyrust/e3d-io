@@ -235,26 +235,37 @@ impl RecordDraft {
         hash: u32,
         text: &str,
     ) -> Result<bool, RecordEncodeError> {
-        if !text.is_ascii() {
-            return Err(RecordEncodeError::ExplicitTextNotAscii {
-                text: text.to_owned(),
-            });
-        }
+        let data = ascii_text_data(text)?;
         let mut fields = self.parse_explicit_fields();
         let Some(field) = fields.iter_mut().find(|(field_hash, _, _)| *field_hash == hash) else {
             return Ok(false);
         };
-        let bytes = text.as_bytes();
-        let mut data = Vec::with_capacity(1 + bytes.len().div_ceil(4));
-        data.push(bytes.len() as u32);
-        for chunk in bytes.chunks(4) {
-            let mut word = [0u8; 4];
-            word[..chunk.len()].copy_from_slice(chunk);
-            data.push(u32::from_be_bytes(word));
-        }
         field.2 = data;
         self.explicit_stream = rebuild_explicit_stream(&fields);
         Ok(true)
+    }
+
+    /// Add a text attribute the element does not carry, or replace it if it
+    /// does — the way an element gains a `NAME` it never had. `type_code` is
+    /// the stored type (`0x3C00` for a `FORMAT 1` text, the shape `NAME`
+    /// takes). ASCII only, like [`Self::set_explicit_text_ascii`].
+    pub fn add_explicit_text_ascii(
+        &mut self,
+        hash: u32,
+        type_code: u16,
+        text: &str,
+    ) -> Result<(), RecordEncodeError> {
+        let data = ascii_text_data(text)?;
+        let mut fields = self.parse_explicit_fields();
+        match fields.iter_mut().find(|(field_hash, _, _)| *field_hash == hash) {
+            Some(field) => {
+                field.1 = type_code;
+                field.2 = data;
+            }
+            None => fields.push((hash, type_code, data)),
+        }
+        self.explicit_stream = rebuild_explicit_stream(&fields);
+        Ok(())
     }
 
     /// The explicit stream as `(hash, type_code, data_words)` fields.
@@ -475,6 +486,26 @@ pub fn three_way(
     };
 
     RecordDraft::new(working.refno, latest.noun_hash, owner, implicit, members, explicit_stream)
+}
+
+/// An explicit text value's data words: a count word, then the bytes four to
+/// a word, NUL-padded — the `[len][packed text]` a `0x3C00`/`0x2800` reader
+/// decodes.
+fn ascii_text_data(text: &str) -> Result<Vec<u32>, RecordEncodeError> {
+    if !text.is_ascii() {
+        return Err(RecordEncodeError::ExplicitTextNotAscii {
+            text: text.to_owned(),
+        });
+    }
+    let bytes = text.as_bytes();
+    let mut data = Vec::with_capacity(1 + bytes.len().div_ceil(4));
+    data.push(bytes.len() as u32);
+    for chunk in bytes.chunks(4) {
+        let mut word = [0u8; 4];
+        word[..chunk.len()].copy_from_slice(chunk);
+        data.push(u32::from_be_bytes(word));
+    }
+    Ok(data)
 }
 
 /// Serialise explicit fields back into a stream: `[hash][type_code << 16 |
