@@ -371,9 +371,12 @@ pub fn pack_offset(word_offset: u32, ext: u16) -> u32 {
 /// A3b rule for a plain `SAVEWORK` (`extract flush` gives the committed side;
 /// this crate does not do extract flush).
 ///
-/// The member merge is the simple set delta — `latest`'s members plus the ones
-/// the writer added, less the ones it removed — not yet the anchor-ordered
-/// reconciliation of A3b.4.
+/// The member merge is A3b.4's: `latest`'s member list, with the writer's own
+/// removals dropped and its additions placed after the nearest member that
+/// precedes them in the writer's list and still survives in the merged one —
+/// the "preceding shared sibling" anchor `sub_5B20CA0` uses. Members neither
+/// side moved keep the committed order, so two writers adding members to one
+/// owner both land. The move case (`st 2`) is not reordered yet.
 pub fn three_way(
     base: &RecordDraft,
     latest: &RecordDraft,
@@ -427,14 +430,27 @@ pub fn three_way(
     }
     let explicit_stream = rebuild_explicit_stream(&merged_fields);
 
-    // Members: latest's, plus the writer's additions, less its removals.
+    // Members (A3b.4): latest's list, with the writer's removals dropped and
+    // its additions anchored after the nearest preceding sibling that both the
+    // writer's list and the merged list still hold.
     let mut members = latest.members.clone();
-    for member in &working.members {
-        if !base.members.contains(member) && !members.contains(member) {
-            members.push(*member);
+    for member in &base.members {
+        if !working.members.contains(member) {
+            members.retain(|existing| existing != member); // the writer removed it
         }
     }
-    members.retain(|member| working.members.contains(member) || !base.members.contains(member));
+    for (index, member) in working.members.iter().enumerate() {
+        if base.members.contains(member) || members.contains(member) {
+            continue; // not the writer's addition, or already present
+        }
+        let anchor = (0..index)
+            .rev()
+            .find_map(|earlier| members.iter().position(|existing| existing == &working.members[earlier]));
+        match anchor {
+            Some(position) => members.insert(position + 1, *member),
+            None => members.insert(0, *member),
+        }
+    }
 
     let owner = if working.owner != base.owner {
         working.owner
@@ -625,6 +641,36 @@ mod tests {
         let value = |hash: u32| fields.iter().find(|f| f.0 == hash).map(|f| f.2[0]);
         assert_eq!(value(0xAA), Some(7), "both changed 0xAA: the writer wins");
         assert_eq!(value(0xBB), Some(9), "committed-only attribute is kept");
+    }
+
+    /// Member three-way: both sides added a member to one owner, and the
+    /// writer's lands after its preceding shared sibling; a member the writer
+    /// removed is gone even though the committed side kept it.
+    #[test]
+    fn three_way_anchors_added_members_and_honours_removals() {
+        let refno = RefNo::new(1, 10);
+        let owner = RefNo::new(1, 1);
+        let m = |n| RefNo::new(1, n);
+        let draft = |members: Vec<RefNo>| {
+            RecordDraft::new(refno, 0x861E0, owner, implicit(&[0]), members, vec![]).unwrap()
+        };
+
+        // base: a b c. Committed side added X after a and removed nothing.
+        let base = draft(vec![m(1), m(2), m(3)]);
+        let latest = draft(vec![m(1), m(90), m(2), m(3)]);
+        // Writer added Y after b and removed c.
+        let working = draft(vec![m(1), m(2), m(20), m(3)]);
+        let mut working = working;
+        working.remove_member(m(3));
+        // working is now a b Y.
+
+        let merged = three_way(&base, &latest, &working).unwrap();
+        // X stays (committed), Y lands after b, c is gone (writer removed it).
+        assert_eq!(
+            merged.members(),
+            &[m(1), m(90), m(2), m(20)],
+            "committed insert kept, writer insert anchored after b, writer delete honoured"
+        );
     }
 
     /// A record decoded from its own bytes and re-encoded is byte-for-byte the

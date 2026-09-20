@@ -348,6 +348,66 @@ fn a_name_already_taken_is_refused_561() {
     );
 }
 
+#[test]
+fn two_writers_add_members_to_one_owner() {
+    if common::missing(&[AMS8000, DESVIR]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS8000);
+    let mut provider = TemplateProvider::open(DESVIR, Some(DESIGN_TEMPLATE_TYPE)).expect("desvir");
+    let box_template = provider.template_for(db1_hash("BOX")).expect("box").expect("template").clone();
+    let cast = cast(AMS8000);
+    let owner = cast.zones[0];
+    let (box_a, box_b) = (cast.fresh[0], cast.fresh[1]);
+    let s = DbView::open(&copy.path).unwrap().session().sesno;
+
+    // A adds box_a under the owner.
+    {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let zone = zone_with_member(&mut engine, owner, box_a);
+        write_element_session(
+            &copy.path,
+            &SessionRequest { user: "A", comment: "A adds box A", clock: Some(clock()) },
+            &[ElementWrite::Insert(fresh_box(&box_template, box_a, owner)), ElementWrite::Update(zone)],
+            &[],
+        )
+        .expect("A writes S+1");
+    }
+
+    // B, based on S, adds box_b under the same owner, and merges.
+    {
+        let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+        let zone = zone_with_member(&mut base, owner, box_b);
+        write_merge_session(
+            &copy.path,
+            &SessionRequest { user: "B", comment: "B adds box B", clock: Some(clock()) },
+            s,
+            &[ElementWrite::Insert(fresh_box(&box_template, box_b, owner)), ElementWrite::Update(zone)],
+            &[],
+        )
+        .expect("B merges S+2");
+    }
+
+    // Both members are under the owner, and both boxes are indexed.
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+    assert!(engine.find_element(box_a).unwrap().is_some(), "A's box is indexed");
+    assert!(engine.find_element(box_b).unwrap().is_some(), "B's box is indexed");
+    let zone = engine.find_element(owner).unwrap().unwrap();
+    let members = ParsedElement::parse_as(&zone.raw_bytes, engine.text_format()).unwrap().members;
+    assert!(members.contains(&box_a), "A's member survived the merge");
+    assert!(members.contains(&box_b), "B's member merged in");
+
+    let mut view = DbView::open(&copy.path).expect("view");
+    let whole = view
+        .diff_sessions(SessionSelector::Exact(s), SessionSelector::Exact(s + 2))
+        .expect("diff");
+    assert_eq!(
+        (whole.tally().deleted, whole.tally().inserted, whole.tally().modified),
+        (0, 2, 1),
+        "two new boxes and the one owner modified"
+    );
+}
+
 /// The word at `word` of the element's implicit region.
 fn implicit_word(engine: &mut ReadOnlyEngine, refno: RefNo, word: usize) -> u32 {
     let view = engine.find_element(refno).unwrap().unwrap();
