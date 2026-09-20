@@ -40,6 +40,7 @@
 
 pub mod cursor;
 pub mod diff;
+pub mod named;
 pub mod reference;
 
 use std::cmp::Ordering;
@@ -54,6 +55,9 @@ pub use cursor::{
 pub use diff::{
     CompletedIndexDiff, DiffDiagnostics, DiffTally, FlagOnlyDrift, IndexCandidate, IndexDiff,
     KeyChange, Pruning,
+};
+pub use named::{
+    encode_name, name_table_hash, NamedEntry, NamedKey, NamedTable, NamedTableError, NamedWalk,
 };
 pub use reference::{ReferenceEntry, ReferenceTable, ReferenceTableError, ReferenceWalk};
 
