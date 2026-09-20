@@ -1,0 +1,7 @@
+# 行尾约定：仓库里一律 LF，检出也是 LF（不分平台）。
+# 背景：2026-09-20 之前索引全是 LF、工作树却有 98 个文件是 CRLF / 混杂，全靠 stat 缓存才不显示为 modified，
+# 谁 touch 一下（各会话常用 LastWriteTime=Get-Date 逼 cargo 重编）它就冒出来变成假改动。
+* text=auto eol=lf
+
+# E3D schema 二进制字典：不做任何行尾 / 差异处理。
+*.dat binary
