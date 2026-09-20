@@ -127,7 +127,13 @@ fn rebase_updates(
                     (Some(base_view), Some(latest_view)) => {
                         let base_draft = RecordDraft::from_record_bytes(&base_view.raw_bytes)?;
                         let latest_draft = RecordDraft::from_record_bytes(&latest_view.raw_bytes)?;
-                        out.push(ElementWrite::Update(three_way(&base_draft, &latest_draft, working)?));
+                        let merged = three_way(&base_draft, &latest_draft, working)?;
+                        // INDEX de-duplication (A3a, sub_5B07080): a merged
+                        // record equal to the committed one is not written —
+                        // its leaf keeps pointing at the record already there.
+                        if !merged.content_eq(&latest_draft) {
+                            out.push(ElementWrite::Update(merged));
+                        }
                     }
                     // Not indexed by both ends: apply the writer's record as is.
                     _ => out.push(ElementWrite::Update(working.clone())),

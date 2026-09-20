@@ -408,6 +408,71 @@ fn two_writers_add_members_to_one_owner() {
     );
 }
 
+#[test]
+fn a_merge_that_converges_to_the_committed_value_writes_no_record() {
+    if common::missing(&[AMS8000]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS8000);
+    let cast = cast(AMS8000);
+    let victim = cast.subs[0];
+    let s = DbView::open(&copy.path).unwrap().session().sesno;
+    let base_word = {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        implicit_word(&mut engine, victim, 11)
+    };
+    let converged = base_word ^ 0xABCD;
+
+    // A commits word 11 = converged.
+    {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let mut draft = RecordDraft::from_record_bytes(&engine.find_element(victim).unwrap().unwrap().raw_bytes).unwrap();
+        *draft.implicit_word_mut(11).unwrap() = converged;
+        write_element_session(
+            &copy.path,
+            &SessionRequest { user: "A", comment: "A sets the value", clock: Some(clock()) },
+            &[ElementWrite::Update(draft)],
+            &[],
+        )
+        .expect("A writes S+1");
+    }
+
+    // B, based on S, sets word 11 to the same value A landed on, then merges.
+    let report = {
+        let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+        let mut draft = RecordDraft::from_record_bytes(&base.find_element(victim).unwrap().unwrap().raw_bytes).unwrap();
+        *draft.implicit_word_mut(11).unwrap() = converged;
+        write_merge_session(
+            &copy.path,
+            &SessionRequest { user: "B", comment: "B converges", clock: Some(clock()) },
+            s,
+            &[ElementWrite::Update(draft)],
+            &[],
+        )
+        .expect("B merges S+2")
+    };
+
+    // The merged record equals what A committed, so nothing was written for it:
+    // the session appended one page, its own session page, and no record or
+    // tree copy.
+    assert_eq!(report.appended_pages.len(), 1, "only the session page was appended");
+
+    let mut view = DbView::open(&copy.path).expect("view");
+    let just_b = view
+        .diff_sessions(SessionSelector::Exact(s + 1), SessionSelector::Exact(s + 2))
+        .expect("diff");
+    assert_eq!(
+        (just_b.tally().deleted, just_b.tally().inserted, just_b.tally().modified),
+        (0, 0, 0),
+        "S+1..S+2 changed nothing — the element was de-duplicated"
+    );
+    drop(view);
+
+    // The element still reads the converged value, at the address A gave it.
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+    assert_eq!(implicit_word(&mut engine, victim, 11), converged);
+}
+
 /// The word at `word` of the element's implicit region.
 fn implicit_word(engine: &mut ReadOnlyEngine, refno: RefNo, word: usize) -> u32 {
     let view = engine.find_element(refno).unwrap().unwrap();

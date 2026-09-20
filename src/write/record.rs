@@ -198,6 +198,22 @@ impl RecordDraft {
         &self.implicit
     }
 
+    /// Whether two records carry the same content — noun, owner, members, the
+    /// implicit region past its header (the header words are addresses and the
+    /// format word, recomputed on encode) and the explicit attributes as
+    /// fields (so a difference in stream padding does not count).
+    ///
+    /// This is what INDEX de-duplication (`sub_5B07080`, A3a) tests: a merged
+    /// record equal to the committed one is not written, and its index leaf
+    /// keeps pointing at the record already on disk.
+    pub fn content_eq(&self, other: &RecordDraft) -> bool {
+        self.noun_hash == other.noun_hash
+            && self.owner == other.owner
+            && self.members == other.members
+            && self.implicit.get(HEADER_WORDS..) == other.implicit.get(HEADER_WORDS..)
+            && self.parse_explicit_fields() == other.parse_explicit_fields()
+    }
+
     /// Set the value at wide word offset `offset`: the header-relative word,
     /// the way a descriptor's `wide.location.word_offset()` states it.
     pub fn implicit_word_mut(&mut self, offset: usize) -> Option<&mut u32> {
@@ -671,6 +687,30 @@ mod tests {
             &[m(1), m(90), m(2), m(20)],
             "committed insert kept, writer insert anchored after b, writer delete honoured"
         );
+    }
+
+    /// `content_eq` sees past the header and explicit-stream padding, and
+    /// catches a real difference.
+    #[test]
+    fn content_eq_normalises_header_and_padding() {
+        let refno = RefNo::new(1, 10);
+        let owner = RefNo::new(1, 1);
+        let mut stream = Vec::new();
+        stream.extend_from_slice(&0xAAu32.to_be_bytes());
+        stream.extend_from_slice(&((0x0C00u32 << 16) | 1).to_be_bytes());
+        stream.extend_from_slice(&7u32.to_be_bytes());
+        let a = RecordDraft::new(refno, 0x861E0, owner, implicit(&[1, 2, 3]), vec![RefNo::new(1, 5)], stream.clone()).unwrap();
+
+        // Same content, read back from a's own bytes: equal.
+        let placed = a.encode(9, 5, PageId::PRIMARY);
+        let round_trip = RecordDraft::from_record_bytes(&placed.bytes).unwrap();
+        assert!(a.content_eq(&round_trip), "a record equals its own round trip");
+
+        // A different attribute value is not equal.
+        let mut other_stream = stream.clone();
+        other_stream[8..12].copy_from_slice(&8u32.to_be_bytes());
+        let different = RecordDraft::new(refno, 0x861E0, owner, implicit(&[1, 2, 3]), vec![RefNo::new(1, 5)], other_stream).unwrap();
+        assert!(!a.content_eq(&different), "a changed attribute is not equal");
     }
 
     /// A record decoded from its own bytes and re-encoded is byte-for-byte the
