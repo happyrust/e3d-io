@@ -67,10 +67,21 @@ impl std::fmt::Display for RefNo {
 
 /// Encoded page address returned by B+tree index search.
 ///
-/// Layout recovered from sub_5AEB6B0 LABEL_87:
+/// Layout recovered from sub_5AEB6B0 LABEL_87, and confirmed on the write side
+/// (`sub_5AE9DF0`: `word1 = ext | (word_offset << 13)`) and in the record
+/// copier (`sub_5AE9960`: `page = get_page(word0, word1 & 0x1FFF)`,
+/// `record = page + 4 * ((word1 >> 13) & 0xFFF)`):
 /// - word0 = page_number
-/// - word1 bits[0:12] = slot_offset (& 0x1FFF)
-/// - word1 bits[13:24] = slot_index ((>> 13) & 0xFFF)
+/// - word1 bits 0..=12 (`& 0x1FFF`) = `slot_offset` — misnamed: this is the
+///   **extent number** of the page (1 = the primary file, 0 = an unsaved temp
+///   page)
+/// - word1 bits 13..=24 (`>> 13 & 0xFFF`) = `slot_index` — misnamed: the
+///   record's offset from the top of the page in **4-byte words**
+///
+/// The field names predate that reading and are kept for the callers that
+/// spell them. `index::IndexEntry` reads the same word as `offset_words`
+/// (2-byte words, `>> 12`) plus `flag`, which coincides with this layout while
+/// the extent number is below 4096 — it is 1 on every sample database.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PageAddress {
     pub page_number: u32,

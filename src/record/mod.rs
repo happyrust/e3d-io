@@ -645,8 +645,9 @@ mod tests {
         read_record(&mut cache, PageId::primary(page), offset_words)
     }
 
-    /// Addresses in a header or a continuation are `(page_no, packed)` and
-    /// `packed` counts 2-byte words.
+    /// Addresses in a header or a continuation are `(page_no, packed)`;
+    /// `packed` is `offset_words << 12 | flag` with `offset_words` in 2-byte
+    /// words — core.dll's `ext | (4-byte word offset << 13)` with `ext = 1`.
     fn address(page: u32, byte: usize) -> (u32, u32) {
         (page, ((byte as u32 / 2) << 12) | 1)
     }

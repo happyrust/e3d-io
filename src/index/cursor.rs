@@ -40,14 +40,18 @@ use crate::session::DbView;
 
 /// Where a record lives, as the index states it.
 ///
-/// `offset_words` counts **2-byte** words from the top of `page`, which is the
-/// unit the leaf value uses; [`RecordLoc::byte_offset`] is the only conversion.
+/// `offset_words` counts **2-byte** words from the top of `page`; it is twice
+/// the 4-byte word offset core.dll keeps in bits 13.. of the leaf value
+/// (`sub_5AE9960`: `page + 4 * ((packed >> 13) & 0xFFF)`), read at bit 12 so
+/// the doubling is free. [`RecordLoc::byte_offset`] is the only conversion.
 ///
-/// The leaf value is two dwords, `page_no` and `packed`, and carries no extent
-/// of its own, so `page.ext` is inherited from the index page that named it.
-/// Every sample database is single-extent, so nothing in the corpus can tell
-/// that apart from taking the extent out of the RefNo — which is why this is
-/// stated rather than decided.
+/// The leaf value is two dwords, `page_no` and `packed`. Its low 13 bits are
+/// the extent number of the page the record sits in (`packed & 0x1FFF` in
+/// core.dll; `sub_5AE9DF0` writes the extent of the current output page
+/// there), surfaced here as [`RecordLoc::flag`]. This crate does not act on
+/// it: `page.ext` is inherited from the index page that named the record,
+/// which is the same thing on every sample database — all single-extent,
+/// `flag == 1` throughout — and would not be on a multi-extent one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RecordPosition {
     pub page: PageId,
@@ -58,9 +62,11 @@ pub struct RecordPosition {
 pub struct RecordLoc {
     pub page: PageId,
     pub offset_words: u32,
-    /// Low 12 bits of `packed`. Reads 1 on all 940 694 leaf entries of the
-    /// corpus. It takes no part in routing, existence, or core.dll's modified
-    /// classification; observing it is all this crate does with it.
+    /// Low 12 bits of `packed`: the extent number of the record's page, as
+    /// core.dll writes it (`ext | word_offset << 13`; its field is 13 bits
+    /// wide). Reads 1 on all 940 694 leaf entries of the corpus — every sample
+    /// is single-extent. It takes no part in routing, existence, or core.dll's
+    /// modified classification; observing it is all this crate does with it.
     pub flag: u16,
 }
 
@@ -74,7 +80,8 @@ impl RecordLoc {
         }
     }
 
-    /// The uninterpreted low bits of the packed leaf value.
+    /// The low bits of the packed leaf value — the extent number, see
+    /// [`RecordLoc::flag`].
     pub const fn raw_flag(self) -> u16 {
         self.flag
     }

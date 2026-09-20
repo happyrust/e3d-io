@@ -32,12 +32,28 @@ fn is_unset_word(word: u32) -> bool {
 ///
 /// `core.dll` sizes every value through `dbl_6453DF8[storage_type_code]`, a
 /// table of elements-per-dword: a scalar occupies `1 / ratio` words and an
-/// array of `n` occupies `ceil(n / ratio)`. That table is filled in at
-/// startup, so it is not readable from the binary — but the same ratio is
-/// recoverable from descriptor geometry, because `storage_words` is exactly
-/// `1 + ceil(logical_count / ratio)` for an array. Fitting it over all 35734
-/// descriptors in the 20 shipped `*vir.dat` files leaves no row unexplained
-/// (`tools/probe_type_widths.py`).
+/// array of `n` occupies `ceil(n / ratio)`. The table sits in `.bss` and is
+/// filled at startup by `sub_5AE4A90` (called from `sub_5AE31E0`) — but from
+/// constants: eight 16-byte `.rdata` literals at `0x5D8B9B0..=0x5D8BA20` plus
+/// two `0.5` immediates, so it can be read out of the E3D 3.1 IDB after all.
+/// Read that way (type: elements per dword) it is
+///
+/// ```text
+///  0: 0     1: 0     2: 0.5   3: 1     4: 0.5   5: 32    6: 0.5   7: 1
+///  8: 0.5   9: 32   10: 4    11: 0.25 12: 0.5  13: 0.5  14: 1    15: 4
+/// 16: 0.5  17: 0.5  18: 1    19: 4    20: 1    21: 0.5  22: 4    23: 4
+/// ```
+///
+/// The same ratio is recoverable from descriptor geometry, because
+/// `storage_words` is exactly `1 + ceil(logical_count / ratio)` for an array.
+/// Fitting it over all 35734 descriptors in the 20 shipped `*vir.dat` files
+/// leaves no row unexplained (`tools/probe_type_widths.py`) and agrees with the
+/// table above on every type a descriptor uses — 2..=10 and 14..=19. Types 11,
+/// 12, 13 and 20..=23 never appear in a descriptor: 20..=23 are the
+/// out-of-record array kinds whose payload `sub_5AE9960` copies by its
+/// `(page_no, packed)` address, so nothing below needs a shape for them. Type
+/// 14's `1` is only a fallback; its real width comes from the descriptor, in
+/// core.dll too.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageShape {
     /// 2, 6 — `f64` in a wide record, `f32` in a compact one.
@@ -55,6 +71,31 @@ pub enum StorageShape {
     BitSet,
     /// 10, 15, 19 — four characters per word; the count word counts
     /// characters, not words. `BRAN.NAME` declares 200 characters in 51 words.
+    ///
+    /// **Type 19 is misread here, and the misreading is dormant.** core.dll
+    /// stores a type-19 value as a list of strings — it is the on-disk form
+    /// of the `std::vector<std::string>` that `db_cxx_put_str_vector` (routine
+    /// 640, `sub_5AAA8B0` → `sub_5AD5060`) takes. That routine packs each
+    /// string four characters to a word (after the project charset conversion
+    /// when header attribute 18 is not UTF-8) and builds
+    /// `[item_count] { [index][word_count][byte_length][packed text × word_count] }*`
+    /// — a 0-based item index, the item's word count and its byte length
+    /// ahead of every string — which `4SCEA` (`sub_5AB7B90`, its `type == 19`
+    /// branch) writes into an explicit entry headed `word_count | 19 << 26`,
+    /// and the explicit reader (`sub_5AB4CF0`, `case 19`) hands back verbatim:
+    /// no separate count word, and a length counted in words, never divided
+    /// by the width table. Type 23 is the same value moved out of the record
+    /// into a hunk (`sub_5AB5BC0` treats 19 and 23 as one type, as it does
+    /// 6/21, 7/20 and 10/22). Decoding that as `Characters` would take the
+    /// item count for a character count and the item headers for text.
+    /// It has never happened: every type-19 descriptor in the schema files
+    /// (`ROKEYS`/`ROVALS` on FIXING, PFIT and the HR* nouns, `CLAURI`,
+    /// `DIURIS`, `TADFLT`, `VLOCDE`, `CFGTAV`, …) is unset on every element of
+    /// the 1 000+ E3D 3.1 databases installed here — 9 421 ROKEYS/ROVALS
+    /// slots, 116 688 `TABITE.CLAURI`, 6 586 `UDA.TADFLT` — and most have no
+    /// implicit slot at all (word offset 0), so a value could only ever arrive
+    /// as an explicit entry. E3D 2.1's templates have no type 19. A list shape
+    /// for 19/23 should wait for a database that actually carries one.
     Characters,
     /// 14 — a fixed-width record whose width the descriptor states itself as
     /// `(compact.storage_words - 1) / logical_count`. That division is exact

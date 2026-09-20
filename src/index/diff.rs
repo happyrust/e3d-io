@@ -19,8 +19,8 @@
 //! * **Deletion is a key-set difference.** Not a tombstone bit and not
 //!   `owner.children` containment: the callee set of core.dll's
 //!   `elementsDeletedBetween` holds no owner, children or primary-list call,
-//!   and the leaf `flag` reads 1 on all 940 694 entries of the corpus, so
-//!   there is nothing there to read a deletion out of either.
+//!   and the leaf `flag` — the extent number of the record's page, 1 on all
+//!   940 694 entries of the corpus — carries no deletion either.
 //!
 //! The differ merges two enumerations in key order. It has **no descent of its
 //! own**: pages become nodes through [`read_node`], leaf values become

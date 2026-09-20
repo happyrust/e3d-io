@@ -56,16 +56,21 @@ impl BlockKind {
 ///
 /// The same encoding an index leaf value uses. `offset_words` counts 2-byte
 /// words from the top of the page and [`Address::byte_offset`] is the only
-/// conversion. Both slots in a record header and the continuation field of
-/// every block are written this way, which is why they are read here rather
-/// than three times over.
+/// conversion. core.dll packs the word as `ext | (word_offset << 13)` with the
+/// offset in 4-byte words (`sub_5AE9DF0`, unpacked by `sub_5AE9960`); reading
+/// it at bit 12 in 2-byte words lands on the same byte while `ext < 4096`,
+/// and `flag` is that extent number's low 12 bits. Both slots in a record
+/// header and the continuation field of every block are written this way,
+/// which is why they are read here rather than three times over.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Address {
     pub page_no: u32,
     pub offset_words: u32,
-    /// Low 12 bits of the packed word. Reads 1 on all 158 526 block
-    /// continuations in the corpus, exactly as it does on an index leaf value,
-    /// and takes no part in addressing.
+    /// Low 12 bits of the packed word: the extent number of the file that
+    /// holds `page_no` (core.dll's field is 13 bits wide). Reads 1 on all
+    /// 158 526 block continuations in the corpus, exactly as it does on an
+    /// index leaf value — every sample is single-extent — and takes no part
+    /// in addressing here.
     pub flag: u16,
 }
 

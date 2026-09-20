@@ -21,13 +21,22 @@
 //!   `<= target`. Every comment in the old code said "greatest"; only the code
 //!   was right.
 //!
-//! `packed` splits at bit 12 into `offset_words << 12 | flag`. Every other split
-//! from bit 8 to bit 16 is refuted by the 940 694 leaf entries in that corpus:
-//! at bit 11 and below, between 426 924 and 849 009 of them place the record
-//! start past the end of the page it names; at bit 13 and above, between
-//! 433 395 and 523 893 place it off a 4-byte boundary. At bit 12, neither
-//! happens even once. `flag` itself is 1 on all 940 694 of them — the corpus
-//! says nothing more about it, so neither does this module.
+//! `packed` is read here as `offset_words << 12 | flag`, with `offset_words`
+//! in 2-byte words. That is a re-scaling of what core.dll writes, not its own
+//! layout. `sub_5AE9DF0` packs a leaf value as `ext | (word_offset << 13)` and
+//! `sub_5AE9960` unpacks it as `ext = packed & 0x1FFF` — 13 bits, the extent
+//! the record's page lives in (1 = the primary file, 0 = a not-yet-saved temp
+//! page) — and `record = page + 4 * ((packed >> 13) & 0xFFF)` — 12 bits of
+//! **4-byte** words. `2 * (packed >> 12)` and `4 * (packed >> 13)` are the
+//! same byte offset whenever bit 12, the top bit of `ext`, is clear, i.e.
+//! `ext < 4096`; `flag` is then the low 12 bits of `ext`. The corpus cannot
+//! tell the two readings apart: `flag` is 1 on all 940 694 leaf entries
+//! because every sample is single-extent, and the split measurement that
+//! refuted bit 13 assumed 2-byte units — in core.dll's 4-byte units bit 13
+//! is exactly the split. Bits 8 to 11 stay refuted in either unit: between
+//! 426 924 and 849 009 of the entries would start past the end of their page.
+//! A multi-extent database would carry `ext != 1` here; this module keeps
+//! `flag` observable for that day and otherwise does not act on it.
 
 pub mod cursor;
 pub mod diff;
@@ -123,8 +132,10 @@ impl From<IndexPageError> for E3dReaderError {
 /// One index entry: a key and what it addresses.
 ///
 /// In a leaf the address is a record — `page_no` plus `offset_words`, which
-/// counts 2-byte words from the start of that page. In an internal page it is
-/// the child page holding every key from `refno` up to the next entry's key.
+/// counts 2-byte words from the start of that page (twice core.dll's 4-byte
+/// word offset; see the module doc), and `flag`, the low 12 bits of the extent
+/// number of that page — 1 on every sample. In an internal page it is the
+/// child page holding every key from `refno` up to the next entry's key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IndexEntry {
     pub refno: RefNo,
@@ -141,17 +152,19 @@ impl IndexEntry {
         self.refno.word0 == SENTINEL_WORD && self.refno.word1 == SENTINEL_WORD
     }
 
-    /// **The 13/12 split below is not a reading of `offset_words`.** It is the
-    /// bit layout of a RefNo's `word1` ([`PageAddress::from_word1`]), applied
-    /// here to a field that the corpus says is a single count of 2-byte words
-    /// from the top of the page. On a 2048-byte page every real offset fits in
-    /// the low 13 bits, so `slot_index` comes out zero and nothing has noticed.
+    /// **The 13/12 split below is applied to the wrong word.** [`PageAddress`]
+    /// is core.dll's own decode of a leaf value's second word (`sub_5AE9960`):
+    /// `word1 & 0x1FFF` is the extent number of the page and
+    /// `(word1 >> 13) & 0xFFF` the record's offset in 4-byte words. Applied to
+    /// `packed` it would give `(ext, word_offset)`; applied to `offset_words`
+    /// — already shifted, and in 2-byte units — it gives nothing. On a
+    /// 2048-byte page every `offset_words` fits in 13 bits, so `slot_index`
+    /// comes out zero and nothing has noticed.
     ///
     /// It survives only because `ElementRecordView::address` is written and
     /// never read — the record reader addresses bytes with `page_no` and its
-    /// own byte offset. Retire the field rather than invent a meaning for this
-    /// split; guessing one would make it a sixth reading of a field that took
-    /// 429 databases to settle.
+    /// own byte offset. Retire the field, or rebuild it from the packed word
+    /// (`(offset_words << 12) | flag`) if a caller ever needs the extent.
     pub fn to_page_address(&self) -> PageAddress {
         PageAddress {
             page_number: self.page_no,
