@@ -81,9 +81,16 @@ pub struct NewSession<'a> {
     /// it, or the previous session's root carried over when it did not.
     pub index_root: PageId,
     /// Table-directory roots to rewrite: `(name_hash, new_root)`. The `NAME`
-    /// table moves here when a name was written; every other table is carried
+    /// table moves here when a name was written, a reverse-reference table or
+    /// `TYPEX` when a key was filed or withdrawn; every other table is carried
     /// over. A hash the directory does not list is ignored.
     pub table_overrides: &'a [(u32, PageId)],
+    /// Tables the directory does not list yet, appended behind the existing
+    /// entries: `(name_hash, root)` — a reverse-reference table created for
+    /// an attribute's first non-null value, as `sub_5AFF6D0` does (the
+    /// directory grows in creation order; `ams8000_0001` lists `HSTU`, `SPRE`,
+    /// `LSTU`, `CATR`, `ISPE` behind `NAME`, `TYPEX`, `SPAMAP`).
+    pub table_additions: &'a [(u32, PageId)],
     /// `BASESN`: the session this one was written on top of.
     pub base_sesno: u32,
     /// `USER`, ASCII only in stage 1; at most nine words (36 bytes).
@@ -178,6 +185,22 @@ pub fn build_session_page(
             }
         }
     }
+    // New tables go behind the existing triples. The directory ends where the
+    // DAB tag begins; a page that cannot hold another triple refuses rather
+    // than overwriting the tag.
+    let room = (at::DABACON_VERSION_TAG - at::TABLE_DIR) / at::TABLE_ENTRY_BYTES;
+    let mut count = table_count;
+    for (name_hash, root) in new.table_additions {
+        if count >= room {
+            return Err(WriteError::TableDirectoryFull { count: count as u32, room: room as u32 });
+        }
+        let entry = at::TABLE_DIR + count * at::TABLE_ENTRY_BYTES;
+        put_be_word(&mut page, entry, *name_hash);
+        put_be_word(&mut page, entry + 4, root.page);
+        put_be_word(&mut page, entry + 8, u32::from(root.ext));
+        count += 1;
+    }
+    put_be_word(&mut page, at::TABLE_COUNT, count as u32);
 
     page[at::DABACON_VERSION_TAG..at::DABACON_VERSION_TAG + at::DABACON_VERSION_TAG_BYTES]
         .copy_from_slice(E3DIO_VERSION_TAG);

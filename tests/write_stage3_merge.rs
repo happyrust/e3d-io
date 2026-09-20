@@ -17,6 +17,7 @@ use common::{ATTLIB, DESVIR};
 use e3d_attlib::{db1_hash, AttlibData};
 use e3d_io::engine::ScanTier;
 use e3d_io::index::encode_name;
+use e3d_io::index::reference::ReferenceTable;
 use e3d_io::record::descriptor::DescriptorValue;
 use e3d_io::record::element::ParsedElement;
 use e3d_io::record::explicit::ExplicitValue;
@@ -25,8 +26,8 @@ use e3d_io::session::{DbView, SessionDate, SessionSelector};
 use e3d_io::write::merge::code;
 use e3d_io::write::record::put_real_vec_wide;
 use e3d_io::write::{
-    write_element_session, write_merge_session, write_merge_session_with, ElementWrite, MergeOptions, NamedEdit,
-    NamedEditKind, RecordDraft, SessionClock, SessionRequest, WriteError,
+    reference_value, set_reference, write_element_session, write_merge_session, write_merge_session_with, ElementWrite,
+    MergeOptions, NamedEdit, NamedEditKind, RecordDraft, SessionClock, SessionRequest, WriteError,
 };
 use e3d_io::{ReadOnlyEngine, RefNo};
 
@@ -754,6 +755,98 @@ fn two_changes_to_one_element_merge_attribute_by_attribute() {
         (whole.tally().deleted, whole.tally().inserted, whole.tally().modified),
         (0, 0, 1),
         "the one element is modified once across S..S+2"
+    );
+}
+
+/// The keyed tables follow a merge as they follow a plain write: A commits a
+/// box (S+1, no table moves); B, based on S, points the first `SPRE` edge's
+/// referrer at another specification and merges with the schema at hand (S+2)
+/// — the `SPRE` table loses `[A, R]`, gains `[B, R]`, and every other table
+/// keeps its root page.
+#[test]
+fn a_merge_keeps_the_reverse_reference_tables_in_step() {
+    if common::missing(&[AMS8000, DESVIR]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS8000);
+    let mut provider = TemplateProvider::open(DESVIR, Some(DESIGN_TEMPLATE_TYPE)).expect("desvir");
+    let box_template = provider.template_for(db1_hash("BOX")).expect("box").expect("box template").clone();
+    let cast = cast(AMS8000);
+    let spre = db1_hash("SPRE");
+    let s = DbView::open(&copy.path).unwrap().session().sesno;
+
+    let edges = |view: &mut DbView| -> Vec<[u32; 4]> {
+        ReferenceTable::open(view, spre)
+            .expect("SPRE table")
+            .iter()
+            .map(|e| {
+                let e = e.unwrap();
+                [e.target.word0, e.target.word1, e.referrer.word0, e.referrer.word1]
+            })
+            .collect()
+    };
+    let (before, roots_before) = {
+        let mut view = DbView::open(&copy.path).unwrap();
+        let roots: Vec<(u32, u32)> = view.tables().iter().map(|t| (t.name_hash, t.root.page)).collect();
+        (edges(&mut view), roots)
+    };
+    let first = before[0];
+    let (a, r) = (RefNo::new(first[0], first[1]), RefNo::new(first[2], first[3]));
+    let b = RefNo::new(a.word0, a.word1 + 7);
+
+    // A commits S+1: a box under zone[0].
+    {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let zone = zone_with_member(&mut engine, cast.zones[0], cast.fresh[0]);
+        write_element_session(
+            &copy.path,
+            &SessionRequest { user: "A", comment: "A adds a box", clock: Some(clock()) },
+            &[ElementWrite::Insert(fresh_box(&box_template, cast.fresh[0], cast.zones[0])), ElementWrite::Update(zone)],
+            &[],
+        )
+        .expect("A writes S+1");
+    }
+
+    // B, based on S, re-points R's SPRE and merges with the schema.
+    {
+        let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+        let mut draft = RecordDraft::from_record_bytes(&base.find_element(r).unwrap().unwrap().raw_bytes).unwrap();
+        let template = provider.template_for(draft.noun_hash).unwrap().expect("R's template").clone();
+        assert_eq!(reference_value(&draft, &template, spre), Some(a));
+        assert!(set_reference(&mut draft, &template, spre, b));
+        write_merge_session_with(
+            &copy.path,
+            &SessionRequest { user: "B", comment: "B re-points an SPRE", clock: Some(clock()) },
+            s,
+            &[ElementWrite::Update(draft)],
+            &[],
+            MergeOptions { templates: Some(&mut provider) },
+        )
+        .expect("B merges S+2");
+    }
+
+    let mut view = DbView::open(&copy.path).expect("view");
+    assert_eq!(view.session().sesno, s + 2);
+    let after = edges(&mut view);
+    let mut expected: Vec<[u32; 4]> = before.iter().copied().filter(|k| *k != first).collect();
+    expected.push([b.word0, b.word1, r.word0, r.word1]);
+    expected.sort();
+    assert_eq!(after, expected, "SPRE lost [A, R] and gained [B, R]");
+    for (table, root) in &roots_before {
+        let now = view.table_root(*table).expect("table kept").page;
+        if *table == spre {
+            assert_ne!(now, *root, "SPRE was rewritten");
+        } else {
+            assert_eq!(now, *root, "table {table} kept its root through both sessions");
+        }
+    }
+    let whole = view
+        .diff_sessions(SessionSelector::Exact(s), SessionSelector::Exact(s + 2))
+        .expect("diff");
+    assert_eq!(
+        (whole.tally().deleted, whole.tally().inserted, whole.tally().modified),
+        (0, 1, 2),
+        "A's box and zone, B's referrer"
     );
 }
 

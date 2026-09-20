@@ -17,6 +17,11 @@
 //! it accept a member list whose members do not name this element as owner?
 //! Keeping it a separate session tells the two questions apart if E3D balks.
 //!
+//! Both sessions are written with the schema at hand (`WriteOptions`), so the
+//! keyed tables follow: a `BOX` lists no `TYPEX` in its template and files no
+//! key, while the `GPWL` and `GROU` get their `TYPEX` field and key the way
+//! E3D's own elements carry them.
+//!
 //! It writes the database **in place**, so point it at a copy (or a backed-up
 //! project DB); the write is an append plus the page-0 commit, so restoring the
 //! original bytes undoes it. It prints the session numbers, the RefNos and
@@ -27,7 +32,7 @@ use std::process::ExitCode;
 use e3d_io::engine::ScanTier;
 use e3d_io::record::template::{MemberListKind, NounTemplate, TemplateProvider};
 use e3d_io::write::record::{put_real_vec_wide, put_real_wide};
-use e3d_io::write::{write_element_session, ElementWrite, RecordDraft, SessionRequest};
+use e3d_io::write::{write_element_session_with, ElementWrite, RecordDraft, SessionRequest, WriteOptions};
 use e3d_io::{ReadOnlyEngine, RefNo};
 
 const DEFAULT_DESVIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/desvir.dat");
@@ -124,7 +129,7 @@ fn run() -> Result<(), String> {
     let mut zone_draft = draft_of(&db, zone_refno, "the ZONE")?;
     zone_draft.push_member(fresh);
 
-    let report = write_element_session(
+    let report = write_element_session_with(
         &db,
         &SessionRequest {
             user: "e3dio",
@@ -133,6 +138,9 @@ fn run() -> Result<(), String> {
         },
         &[ElementWrite::Insert(box_draft), ElementWrite::Update(zone_draft)],
         &[],
+        WriteOptions {
+            templates: Some(&mut provider),
+        },
     )
     .map_err(|e| e.to_string())?;
 
@@ -191,7 +199,7 @@ fn write_group(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box
     let members = vec![zone_refno, box_refno];
     let grou_draft = fresh_element(&grou_template, grou, gpwl, members.clone())?;
 
-    let report = write_element_session(
+    let report = write_element_session_with(
         db,
         &SessionRequest {
             user: "e3dio",
@@ -200,6 +208,9 @@ fn write_group(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box
         },
         &[ElementWrite::Insert(gpwl_draft), ElementWrite::Insert(grou_draft), ElementWrite::Update(world_draft)],
         &[],
+        WriteOptions {
+            templates: Some(provider),
+        },
     )
     .map_err(|e| e.to_string())?;
 

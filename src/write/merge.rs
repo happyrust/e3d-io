@@ -44,8 +44,10 @@ pub struct MergeOptions<'a> {
     /// The schema templates for the database's type (`desvir.dat` for a
     /// DESIGN database), used to tell a noun whose member list is a reference
     /// list ([`MemberListKind::Referenced`]) — merged whole — from one whose
-    /// members are its children — merged member by member. `None` merges
-    /// every noun member by member.
+    /// members are its children — merged member by member, and to keep the
+    /// keyed tables (`TYPEX`, the reverse-reference tables) in step with what
+    /// is written ([`super::WriteOptions`]). `None` merges every noun member
+    /// by member and carries the tables over untouched.
     pub templates: Option<&'a mut TemplateProvider>,
 }
 
@@ -160,7 +162,9 @@ pub fn write_merge_session_with(
         return Err(WriteError::MergeConflicts(conflicts));
     }
     let rebased = rebase_updates(path, base_sesno, elements, &mut options)?;
-    stage_session_with_base(path, request, &rebased, name_edits, Some(base_sesno))?.commit()
+    // The same templates keep the keyed tables (`TYPEX`, the reverse-reference
+    // tables) in step with the records the merge writes on top of latest.
+    stage_session_with_base(path, request, &rebased, name_edits, Some(base_sesno), options.templates)?.commit()
 }
 
 /// Rebase each of the writer's element updates onto the committed record, so a

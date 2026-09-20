@@ -25,27 +25,33 @@
 //! writing.
 
 pub mod index_cow;
+pub mod keyed_cow;
 pub mod merge;
 pub mod named_cow;
 pub mod pages;
 pub mod record;
+pub mod reverse;
 pub mod session_page;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::error::SessionError;
 use crate::meta::descriptor::at as page0;
 use crate::meta::DbDescriptor;
 use crate::page::{PageId, PageSize, PageType};
+use crate::record::template::TemplateProvider;
 use crate::record::text::TextFormat;
 use crate::refno::RefNo;
 use crate::session::SessionPage;
 
 pub use index_cow::{EditKind, IndexCowError, LeafEdit};
+pub use keyed_cow::{KeyedCowError, KeyedEdit, KeyedEditKind, KeyedKey};
 pub use merge::{write_merge_session, write_merge_session_with, MergeConflict, MergeOptions};
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
 pub use record::{MemberMerge, PlacedRecord, RecordDraft, RecordEncodeError};
+pub use reverse::{ensure_typex, reference_value, set_reference, table_keys, typex_table_hash};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
 
 /// Why a write did not happen. Nothing in this enum is returned after page 0
@@ -114,14 +120,38 @@ pub enum WriteError {
     IndexCow(#[from] IndexCowError),
     #[error("{0}")]
     NameTable(#[from] NamedCowError),
+    #[error("{0}")]
+    KeyedTable(#[from] KeyedCowError),
+    #[error(
+        "the session page's table directory holds {count} tables and has room for {room}; \
+         a new reverse-reference table cannot be listed"
+    )]
+    TableDirectoryFull { count: u32, room: u32 },
     #[error(
         "a record of {words} words does not fit on a {page_words}-word page \
          (stage 2 does not split a record across pages)"
     )]
     RecordTooLong { words: usize, page_words: usize },
-    /// The schema templates a merge was given could not be read.
+    /// The schema templates a write was given could not be read.
     #[error("{0}")]
     Template(#[from] crate::record::template::TemplateLoadError),
+}
+
+/// What an element write may consult beyond the file itself.
+///
+/// With the schema's templates at hand the write keeps the keyed tables the
+/// way `core.dll` does ([`reverse`]): a new element of a noun whose template
+/// lists `TYPEX` gets its `TYPEX` field and key, and every type-16 reference
+/// attribute set, changed, cleared or deleted with its element files or
+/// withdraws its edge in the table named after the attribute — creating the
+/// table when the directory has none. Without templates the tables are
+/// carried over untouched, as before: a new element is then not found by
+/// type, and its references have no reverse entry.
+#[derive(Default)]
+pub struct WriteOptions<'a> {
+    /// `desvir.dat`'s templates for a DESIGN database, `catvir.dat`'s for a
+    /// CATALOGUE one.
+    pub templates: Option<&'a mut TemplateProvider>,
 }
 
 impl WriteError {
@@ -233,7 +263,7 @@ pub fn stage_empty_session(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
 ) -> Result<StagedSession, WriteError> {
-    stage_session_with_base(path, request, &[], &[], None)
+    stage_session_with_base(path, request, &[], &[], None, None)
 }
 
 impl StagedSession {
@@ -334,6 +364,10 @@ pub enum ElementWrite {
 /// the final page-0 write leaves the file reading as the previous session,
 /// exactly as [`write_empty_session`] does. [`stage_element_session`] returns
 /// the [`StagedSession`] for a caller that wants to observe that mid-state.
+///
+/// This is [`write_element_session_with`] at [`WriteOptions::default`]: the
+/// keyed tables (`TYPEX`, the reverse-reference tables) are carried over
+/// untouched.
 pub fn write_element_session(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
@@ -341,6 +375,18 @@ pub fn write_element_session(
     name_edits: &[NamedEdit],
 ) -> Result<CommitReport, WriteError> {
     stage_element_session(path, request, elements, name_edits)?.commit()
+}
+
+/// [`write_element_session`] with [`WriteOptions`]: hand it the schema's
+/// templates and the keyed tables are kept the way `core.dll` keeps them.
+pub fn write_element_session_with(
+    path: impl AsRef<Path>,
+    request: &SessionRequest<'_>,
+    elements: &[ElementWrite],
+    name_edits: &[NamedEdit],
+    options: WriteOptions<'_>,
+) -> Result<CommitReport, WriteError> {
+    stage_element_session_with(path, request, elements, name_edits, options)?.commit()
 }
 
 /// Stage a session that writes `elements`, leaving page 0 for
@@ -351,21 +397,124 @@ pub fn stage_element_session(
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
 ) -> Result<StagedSession, WriteError> {
-    stage_session_with_base(path, request, elements, name_edits, None)
+    stage_session_with_base(path, request, elements, name_edits, None, None)
+}
+
+/// [`stage_element_session`] with [`WriteOptions`].
+pub fn stage_element_session_with(
+    path: impl AsRef<Path>,
+    request: &SessionRequest<'_>,
+    elements: &[ElementWrite],
+    name_edits: &[NamedEdit],
+    options: WriteOptions<'_>,
+) -> Result<StagedSession, WriteError> {
+    stage_session_with_base(path, request, elements, name_edits, None, options.templates)
+}
+
+/// The keyed-table work of one staging: the element list as it will be
+/// written (a new element given its `TYPEX`) and the per-table edits the
+/// writes imply, from the records they replace to the records they write.
+struct KeyedTableWork {
+    elements: Vec<ElementWrite>,
+    edits: reverse::TableEdits,
+}
+
+/// Plan the keyed-table edits of `elements` against the file's newest
+/// session, reading the records an update or delete replaces. Every record's
+/// keys are derived by [`reverse::table_keys`] under its noun's template; a
+/// noun the templates do not know contributes nothing on either side.
+fn plan_keyed_tables(
+    path: &Path,
+    elements: &[ElementWrite],
+    templates: &mut TemplateProvider,
+) -> Result<KeyedTableWork, WriteError> {
+    let mut old: HashMap<RefNo, RecordDraft> = HashMap::new();
+    let replaced: Vec<RefNo> = elements
+        .iter()
+        .filter_map(|element| match element {
+            ElementWrite::Update(draft) => Some(draft.refno),
+            ElementWrite::Delete(refno) => Some(*refno),
+            ElementWrite::Insert(_) => None,
+        })
+        .collect();
+    if !replaced.is_empty() {
+        let mut engine = crate::ReadOnlyEngine::open(path)?;
+        for refno in replaced {
+            if let Some(view) = engine.find_element(refno)? {
+                old.insert(refno, RecordDraft::from_record_bytes(&view.raw_bytes)?);
+            }
+        }
+    }
+
+    fn keys_of(
+        templates: &mut TemplateProvider,
+        draft: &RecordDraft,
+    ) -> Result<std::collections::BTreeSet<reverse::TableKey>, WriteError> {
+        Ok(match templates.template_for(draft.noun_hash)? {
+            Some(template) => reverse::table_keys(draft, template),
+            None => std::collections::BTreeSet::new(),
+        })
+    }
+    let none = std::collections::BTreeSet::new();
+    let mut edits = reverse::TableEdits::default();
+    let mut prepared = Vec::with_capacity(elements.len());
+    for element in elements {
+        match element {
+            ElementWrite::Insert(draft) => {
+                let mut draft = draft.clone();
+                if let Some(template) = templates.template_for(draft.noun_hash)? {
+                    reverse::ensure_typex(&mut draft, template);
+                }
+                let after = keys_of(templates, &draft)?;
+                edits.transition(&none, &after);
+                prepared.push(ElementWrite::Insert(draft));
+            }
+            ElementWrite::Update(draft) => {
+                let before = match old.get(&draft.refno) {
+                    Some(previous) => keys_of(templates, previous)?,
+                    None => none.clone(),
+                };
+                let after = keys_of(templates, draft)?;
+                edits.transition(&before, &after);
+                prepared.push(element.clone());
+            }
+            ElementWrite::Delete(refno) => {
+                if let Some(previous) = old.get(refno) {
+                    let before = keys_of(templates, previous)?;
+                    edits.transition(&before, &none);
+                }
+                prepared.push(element.clone());
+            }
+        }
+    }
+    Ok(KeyedTableWork {
+        elements: prepared,
+        edits,
+    })
 }
 
 /// The staging core, shared by the plain, empty and merge paths. `base_sesno`
 /// sets the session page's `BASESN`: the previous session for a plain write,
-/// the merge base for [`crate::write::merge::write_merge_session`]. Writes
-/// every new page and syncs, then hands back a [`StagedSession`] whose page 0
-/// is prepared but not yet written.
+/// the merge base for [`crate::write::merge::write_merge_session`]. With
+/// `templates` the keyed tables are maintained ([`reverse`]); without, they
+/// are carried over. Writes every new page and syncs, then hands back a
+/// [`StagedSession`] whose page 0 is prepared but not yet written.
 pub(crate) fn stage_session_with_base(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
     base_sesno: Option<u32>,
+    templates: Option<&mut TemplateProvider>,
 ) -> Result<StagedSession, WriteError> {
+    // The keyed-table plan reads the newest session's records through the
+    // read side, so it is made before the write handle is opened.
+    let keyed = match templates {
+        Some(templates) => Some(plan_keyed_tables(path.as_ref(), elements, templates)?),
+        None => None,
+    };
+    let elements: &[ElementWrite] = keyed.as_ref().map_or(elements, |work| work.elements.as_slice());
+
     let mut file = PageFile::open(path)?;
     let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
     let text = TextFormat::from_header(descriptor.header_format);
@@ -495,6 +644,37 @@ pub(crate) fn stage_session_with_base(
         table_overrides.push((name_hash, named.root));
     }
 
+    // --- the keyed tables: TYPEX and one reverse-reference table per type-16
+    // attribute touched, each rewritten copy-on-write; a table the directory
+    // has none of is built for its first key and listed behind the others ---
+    let mut table_additions: Vec<(u32, PageId)> = Vec::new();
+    if let Some(work) = &keyed {
+        for (table, edits) in work.edits.iter() {
+            let root = previous.table_root(table);
+            // Withdrawing keys from a table that does not exist is nothing to
+            // do (core's 523 is tolerated on a delete); only an insert builds one.
+            if root.is_none() && edits.iter().all(|edit| edit.kind == KeyedEditKind::Delete) {
+                continue;
+            }
+            let rewrite = {
+                let mut read_page = |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
+                let mut alloc = || {
+                    let page = next;
+                    next += 1;
+                    page
+                };
+                keyed_cow::rewrite_keyed_table(root, table, page_words, edits, &mut read_page, &mut alloc, page_limit)?
+            };
+            for page in rewrite.pages {
+                appended.push(page);
+            }
+            match root {
+                Some(_) => table_overrides.push((table, rewrite.root)),
+                None => table_additions.push((table, rewrite.root)),
+            }
+        }
+    }
+
     // --- the session page, last, naming the new index root ---
     let new_sesno = previous.sesno + 1;
     let session_page = PageId::new(ext, next);
@@ -510,6 +690,7 @@ pub(crate) fn stage_session_with_base(
             end: session_page,
             index_root,
             table_overrides: &table_overrides,
+            table_additions: &table_additions,
             base_sesno: base_sesno.unwrap_or(previous.sesno),
             user: request.user,
             comment: request.comment,

@@ -36,6 +36,15 @@ const HEADER_WORDS: usize = 11;
 /// element uses.
 const WIDE_LAYOUT_FLAG: u32 = 0x2000_0000;
 
+/// The explicit-stream type code of a type-16 reference attribute: the
+/// storage type shifted by ten, as every explicit field's header states it
+/// (`crate::record::explicit` decodes `0x4000` as a RefNo).
+pub const REFERENCE_TYPE_CODE: u16 = 16 << 10;
+
+/// The explicit-stream type code of a type-14 keyed attribute (`TYPEX`):
+/// data is a count word then the elements.
+pub const KEYED_TYPE_CODE: u16 = 14 << 10;
+
 /// Block header words: `[kind:u16 | words:u16][owner.0][owner.1][cont.0][cont.1]`.
 const BLOCK_HEADER_WORDS: usize = HEADER_BYTES / 4;
 
@@ -285,6 +294,60 @@ impl RecordDraft {
         }
         self.explicit_stream = rebuild_explicit_stream(&fields);
         Ok(())
+    }
+
+    /// The explicit attribute keyed by `hash`, as its stored type code and
+    /// data words, or `None` when the element does not carry it.
+    pub fn explicit_words(&self, hash: u32) -> Option<(u16, Vec<u32>)> {
+        self.parse_explicit_fields()
+            .into_iter()
+            .find(|(field_hash, _, _)| *field_hash == hash)
+            .map(|(_, type_code, data)| (type_code, data))
+    }
+
+    /// Set an explicit attribute's stored words verbatim: replaced in place
+    /// when the element carries it, appended to the stream when it does not.
+    pub fn set_explicit_words(&mut self, hash: u32, type_code: u16, data: Vec<u32>) {
+        self.upsert_explicit(hash, type_code, data, false);
+    }
+
+    /// [`Self::set_explicit_words`], but a field the element lacks goes to the
+    /// **front** of the stream — where `core.dll` puts `TYPEX`, which it sets
+    /// before anything else at element creation (every `TYPEX`-carrying record
+    /// of `ams8000_0001` opens its stream with it).
+    pub fn set_explicit_words_first(&mut self, hash: u32, type_code: u16, data: Vec<u32>) {
+        self.upsert_explicit(hash, type_code, data, true);
+    }
+
+    /// Set a reference attribute that lives in the explicit stream: type code
+    /// [`REFERENCE_TYPE_CODE`], the two RefNo words as data.
+    pub fn set_explicit_refno(&mut self, hash: u32, value: RefNo) {
+        self.set_explicit_words(hash, REFERENCE_TYPE_CODE, vec![value.word0, value.word1]);
+    }
+
+    /// Remove an explicit attribute. Returns whether it was there.
+    pub fn remove_explicit(&mut self, hash: u32) -> bool {
+        let mut fields = self.parse_explicit_fields();
+        let before = fields.len();
+        fields.retain(|(field_hash, _, _)| *field_hash != hash);
+        if fields.len() == before {
+            return false;
+        }
+        self.explicit_stream = rebuild_explicit_stream(&fields);
+        true
+    }
+
+    fn upsert_explicit(&mut self, hash: u32, type_code: u16, data: Vec<u32>, at_front: bool) {
+        let mut fields = self.parse_explicit_fields();
+        match fields.iter_mut().find(|(field_hash, _, _)| *field_hash == hash) {
+            Some(field) => {
+                field.1 = type_code;
+                field.2 = data;
+            }
+            None if at_front => fields.insert(0, (hash, type_code, data)),
+            None => fields.push((hash, type_code, data)),
+        }
+        self.explicit_stream = rebuild_explicit_stream(&fields);
     }
 
     /// The explicit stream as `(hash, type_code, data_words)` fields.
