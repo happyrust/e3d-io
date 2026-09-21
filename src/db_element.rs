@@ -37,7 +37,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
-use crate::element_name;
+use crate::element_name::{self, ElementName};
 use crate::engine::{ReadOnlyEngine, ResolveError, ScanTier};
 use crate::error::E3dReaderError;
 use crate::record::catalogue_eval::{AttributeNumber, ExpressionForm, ParamEnv};
@@ -930,6 +930,24 @@ impl DbElement {
         Ok(element_name::stored_name(&parsed))
     }
 
+    /// E3D 给这个元素显示的名字，短 / 全两种形态一起给（[`crate::element_name`]）。
+    ///
+    /// 存了 NAME 就是它；没存就按位置拼：`short` 是模型树一行里的 `SITE 2`、`BEND 3`，
+    /// `full` 是 `FLNM` 整条 `BEND 3 of BRANCH /C-IY-1R330-B`（WORLD 不进名字）。
+    /// 无名时要读属主链、并沿属主成员表数一次同名词序号——整批兄弟要名字用
+    /// [`Self::member_names`]，那两样东西整批是共用的。
+    pub fn display_name(&self) -> Result<ElementName, DbElementError> {
+        element_name::element_name(self)
+    }
+
+    /// 全部成员连同各自的显示名，文件原序（成员语义同 [`Self::members`]）。
+    ///
+    /// 列模型树的一层就调这条：每个成员一次记录读（列树本来要读它的 noun 与 NAME），
+    /// 属主那条尾巴只算一次，同名词序号一趟数完；全员有名字时连属主链都不读。
+    pub fn member_names(&self) -> Result<Vec<(DbElement, ElementName)>, DbElementError> {
+        element_name::member_names(self)
+    }
+
     /// 自己是不是 `ancestor` 的后代：owner 链上溯逐级比对。
     ///
     /// 跨库 owner（实测语料 6 库 588k 元素为零例，但那是语料不是格式保证）
@@ -1506,7 +1524,8 @@ impl Iterator for MemberCursor {
     }
 }
 
-fn noun_name(noun_hash: u32) -> String {
+/// 短名词（`BRAN`）；反哈希不出（UDET 等）给十六进制，不编一个。
+pub(crate) fn noun_name(noun_hash: u32) -> String {
     e3d_attlib::db1_dehash(noun_hash).unwrap_or_else(|| format!("0x{noun_hash:08X}"))
 }
 

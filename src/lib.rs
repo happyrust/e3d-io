@@ -24,6 +24,7 @@ pub use db_element::{
     DbElement, DbElementError, DbFilePin, DbFileResolver, DbSet, ElementCacheStats, MemberCursor,
 };
 pub use db_param_env::DbElementParamEnv;
+pub use element_name::{ElementName, NameLink};
 pub use engine::{
     database_header_diagnostics, DatabaseHeaderDiagnostics, ElementScan, ReadOnlyEngine, ScanTier,
     ScannedElement,
