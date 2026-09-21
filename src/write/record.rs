@@ -713,8 +713,8 @@ pub fn pack_offset(word_offset: u32, ext: u16) -> u32 {
 /// implicit word, an explicit attribute or a member the writer left as it was
 /// keeps `latest`'s value, so a change to one attribute and a change to
 /// another compose. Where both changed the same thing the writer wins — the
-/// A3b rule for a plain `SAVEWORK` (`extract flush` gives the committed side;
-/// this crate does not do extract flush).
+/// A3b rule for a plain `SAVEWORK` (extract flush gives the committed side:
+/// [`MergeMode::ExtractFlush`] through [`three_way_with_mode`]).
 ///
 /// The member merge is A3b.4's ([`merge_members`]): `latest`'s member list
 /// with the writer's own adds, removes and moves — what [`member_list_diff`]
@@ -795,15 +795,80 @@ pub fn three_way_with(
     three_way_with_mode(base, latest, working, member_merge, MergeMode::PlainSaveWork)
 }
 
+/// Where a member element stands in the two committed views a merge consults
+/// — what `sub_5B20CA0` looks up about a member the writer added (`st 1`)
+/// before it lets the addition through.
+///
+/// The lookups are `4GTE` on the member itself in the base and in the latest
+/// session, and its `OWNREF` (record header words 4/5) where it is indexed;
+/// an element the session does not index (`4GTE` error 10) reads as owner
+/// `(0, 0)`. Whether the addition goes through is
+/// [`MemberStanding::blocks_addition`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MemberStanding {
+    /// The member's owner in the base session; `None` when the base session
+    /// does not index the element.
+    pub base_owner: Option<RefNo>,
+    /// The member's owner in the latest session; `None` when the latest
+    /// session does not index the element.
+    pub latest_owner: Option<RefNo>,
+}
+
+impl MemberStanding {
+    /// Whether `sub_5B20CA0` leaves the writer's addition of this member out
+    /// of the merged list.
+    ///
+    /// Under plain `SAVEWORK` a member the base session indexes and the latest
+    /// does not — the committed side deleted the element — is not added. Under
+    /// extract flush (the fourth slot, `a13`) the test is the member's
+    /// `OWNREF` in base against latest, an unindexed element reading as
+    /// `(0, 0)`: a member the committed side re-parented (or deleted, or
+    /// created) since the base is not added, so the list agrees with the
+    /// owner `sub_5B211C0` keeps for it. Neither test looks at the writer's
+    /// own view.
+    pub fn blocks_addition(self, mode: MergeMode) -> bool {
+        match mode {
+            MergeMode::PlainSaveWork => self.base_owner.is_some() && self.latest_owner.is_none(),
+            MergeMode::ExtractFlush => {
+                let unindexed = RefNo::new(0, 0);
+                self.base_owner.unwrap_or(unindexed) != self.latest_owner.unwrap_or(unindexed)
+            }
+        }
+    }
+}
+
 /// [`three_way_with`] with the clash tie-break chosen too: [`MergeMode`] says
 /// whether the writer or the committed side wins where both changed the same
 /// attribute, owner or whole member list relative to `base`.
+///
+/// Nothing is known here about where the member elements themselves stand, so
+/// every member the writer added is let through; [`three_way_with_standing`]
+/// takes that knowledge.
 pub fn three_way_with_mode(
     base: &RecordDraft,
     latest: &RecordDraft,
     working: &RecordDraft,
     member_merge: MemberMerge,
     mode: MergeMode,
+) -> Result<RecordDraft, RecordEncodeError> {
+    three_way_with_standing(base, latest, working, member_merge, mode, |_| None)
+}
+
+/// [`three_way_with_mode`] told, through `standing`, where each member element
+/// stands in the base and latest sessions, so a member the writer added can be
+/// gated the way `sub_5B20CA0` gates it before inserting (`st 1`): not added
+/// when the committed side deleted the element, nor — under extract flush —
+/// when it changed the element's owner ([`MemberStanding::blocks_addition`]).
+/// `standing` answering `None` for a member means nothing is known about it
+/// and it is added. Only the member-by-member arm consults it; a whole
+/// reference list is one attribute and carries no such gate.
+pub fn three_way_with_standing(
+    base: &RecordDraft,
+    latest: &RecordDraft,
+    working: &RecordDraft,
+    member_merge: MemberMerge,
+    mode: MergeMode,
+    mut standing: impl FnMut(RefNo) -> Option<MemberStanding>,
 ) -> Result<RecordDraft, RecordEncodeError> {
     let flush = mode == MergeMode::ExtractFlush;
 
@@ -865,11 +930,17 @@ pub fn three_way_with_mode(
 
     // Members (A3b.4): by default the committed list with the writer's own
     // adds, removes and moves replayed onto it, each anchored after its
-    // preceding shared sibling; a reference list is one attribute instead —
-    // the writer's whole list if the writer changed it, else the committed one,
-    // and under extract flush the committed list when it changed the list too.
+    // preceding shared sibling — an addition first passing `sub_5B20CA0`'s
+    // gate on where the member element itself stands; a reference list is one
+    // attribute instead — the writer's whole list if the writer changed it,
+    // else the committed one, and under extract flush the committed list when
+    // it changed the list too.
     let members = match member_merge {
-        MemberMerge::MemberByMember => merge_members(&base.members, &latest.members, &working.members),
+        MemberMerge::MemberByMember => {
+            merge_members_with(&base.members, &latest.members, &working.members, |member| {
+                standing(member).is_some_and(|standing| standing.blocks_addition(mode))
+            })
+        }
         MemberMerge::WholeList if working.members != base.members => {
             if flush && latest.members != base.members {
                 latest.members.clone()
@@ -1017,12 +1088,33 @@ pub fn member_list_diff(base: &[RefNo], working: &[RefNo]) -> Vec<MemberEdit> {
 /// looks the member up in the merged table before it shifts anything).
 /// Members the writer did not touch keep the committed order, so the
 /// committed side's own adds, removes and moves survive.
+///
+/// Every addition is let through; [`merge_members_with`] takes the gate
+/// `sub_5B20CA0` puts before one.
 pub fn merge_members(base: &[RefNo], latest: &[RefNo], working: &[RefNo]) -> Vec<RefNo> {
+    merge_members_with(base, latest, working, |_| false)
+}
+
+/// [`merge_members`] with `sub_5B20CA0`'s gate on each addition (`st 1`):
+/// before a member the writer added is looked for in the merged list and
+/// inserted, `blocked(member)` is asked, and a blocked member is left out —
+/// `core.dll` asks it of where the member element itself stands in the base
+/// and latest sessions ([`MemberStanding::blocks_addition`]). Removals and
+/// moves carry no gate.
+pub fn merge_members_with(
+    base: &[RefNo],
+    latest: &[RefNo],
+    working: &[RefNo],
+    mut blocked: impl FnMut(RefNo) -> bool,
+) -> Vec<RefNo> {
     let mut merged = latest.to_vec();
     for edit in member_list_diff(base, working) {
         match edit {
             MemberEdit::Removed { member } => merged.retain(|m| *m != member),
             MemberEdit::Added { member, at } => {
+                if blocked(member) {
+                    continue;
+                }
                 if !merged.contains(&member) {
                     let slot = anchor_slot(&merged, working, at);
                     merged.insert(slot, member);
@@ -1388,6 +1480,91 @@ mod tests {
             &[m(1), m(90), m(2), m(20)],
             "committed insert kept, writer insert anchored after b, writer delete honoured"
         );
+    }
+
+    /// `sub_5B20CA0`'s gate on an addition (`st 1`), on where the member
+    /// element stands in base and latest: plain `SAVEWORK` leaves out a member
+    /// the committed side deleted; extract flush also leaves out one whose
+    /// owner the committed side changed; a member nothing is known about, or
+    /// one both sessions index under the same owner, goes in. Removals and
+    /// moves are not gated.
+    #[test]
+    fn an_added_member_is_gated_on_where_it_stands_in_base_and_latest() {
+        let m = |n| RefNo::new(1, n);
+        let (kept, deleted, moved, fresh) = (m(20), m(21), m(22), m(23));
+        let owner_p = m(1);
+        let owner_q = m(2);
+        let standing_of = |member: RefNo| -> Option<MemberStanding> {
+            match member {
+                // Indexed by both, same owner.
+                x if x == kept => Some(MemberStanding { base_owner: Some(owner_p), latest_owner: Some(owner_p) }),
+                // The committed side deleted it since the base.
+                x if x == deleted => Some(MemberStanding { base_owner: Some(owner_p), latest_owner: None }),
+                // The committed side moved it from P to Q since the base.
+                x if x == moved => Some(MemberStanding { base_owner: Some(owner_p), latest_owner: Some(owner_q) }),
+                // Nothing known (the writer's own new element, say).
+                _ => None,
+            }
+        };
+
+        // The gate itself.
+        assert!(!standing_of(kept).unwrap().blocks_addition(MergeMode::PlainSaveWork));
+        assert!(!standing_of(kept).unwrap().blocks_addition(MergeMode::ExtractFlush));
+        assert!(standing_of(deleted).unwrap().blocks_addition(MergeMode::PlainSaveWork), "deleted under me: not added");
+        assert!(standing_of(deleted).unwrap().blocks_addition(MergeMode::ExtractFlush), "deleted reads as owner (0,0) ≠ P");
+        assert!(!standing_of(moved).unwrap().blocks_addition(MergeMode::PlainSaveWork), "plain SAVEWORK does not look at OWNREF");
+        assert!(standing_of(moved).unwrap().blocks_addition(MergeMode::ExtractFlush), "extract flush: owner P ≠ Q, not added");
+        // An element indexed by neither session (both read (0,0)) passes even
+        // under extract flush.
+        let unindexed = MemberStanding { base_owner: None, latest_owner: None };
+        assert!(!unindexed.blocks_addition(MergeMode::ExtractFlush));
+        // One the committed side created since the base (base (0,0), latest
+        // owner Q) is blocked under extract flush, not under plain SAVEWORK.
+        let created = MemberStanding { base_owner: None, latest_owner: Some(owner_q) };
+        assert!(created.blocks_addition(MergeMode::ExtractFlush));
+        assert!(!created.blocks_addition(MergeMode::PlainSaveWork));
+
+        // Through the member merge: base `a b`, committed side unchanged; the
+        // writer appends kept, deleted, moved, fresh and removes b.
+        let (a, b) = (m(1), m(2));
+        let base = [a, b];
+        let latest = [a, b];
+        let working = [a, kept, deleted, moved, fresh];
+        let plain = merge_members_with(&base, &latest, &working, |member| {
+            standing_of(member).is_some_and(|s| s.blocks_addition(MergeMode::PlainSaveWork))
+        });
+        assert_eq!(plain, vec![a, kept, moved, fresh], "plain: the deleted member stays out, b removed, the rest anchored in order");
+        let flushed = merge_members_with(&base, &latest, &working, |member| {
+            standing_of(member).is_some_and(|s| s.blocks_addition(MergeMode::ExtractFlush))
+        });
+        assert_eq!(flushed, vec![a, kept, fresh], "extract flush: the re-parented member stays out too");
+        assert_eq!(merge_members(&base, &latest, &working), vec![a, kept, deleted, moved, fresh], "ungated: everything in");
+
+        // A move of a member whose owner changed is not gated: base `a b c`,
+        // writer moves c to the front, c re-parented in latest.
+        let c = moved;
+        let reordered = merge_members_with(&[a, b, c], &[a, b, c], &[c, a, b], |member| {
+            assert_ne!(member, c, "moves are not asked about");
+            standing_of(member).is_some_and(|s| s.blocks_addition(MergeMode::ExtractFlush))
+        });
+        assert_eq!(reordered, vec![c, a, b]);
+
+        // Through the record-level three-way, the gate follows the mode.
+        let refno = RefNo::new(1, 10);
+        let draft = |members: Vec<RefNo>| {
+            RecordDraft::new(refno, 0x861E0, owner_p, implicit(&[0]), members, vec![]).unwrap()
+        };
+        let (base_d, latest_d, working_d) = (draft(vec![a, b]), draft(vec![a, b]), draft(vec![a, b, deleted, moved]));
+        let plain = three_way_with_standing(&base_d, &latest_d, &working_d, MemberMerge::MemberByMember, MergeMode::PlainSaveWork, standing_of).unwrap();
+        assert_eq!(plain.members(), &[a, b, moved]);
+        let flushed = three_way_with_standing(&base_d, &latest_d, &working_d, MemberMerge::MemberByMember, MergeMode::ExtractFlush, standing_of).unwrap();
+        assert_eq!(flushed.members(), &[a, b]);
+        // The whole-list arm is one attribute and has no gate.
+        let whole = three_way_with_standing(&base_d, &latest_d, &working_d, MemberMerge::WholeList, MergeMode::ExtractFlush, standing_of).unwrap();
+        assert_eq!(whole.members(), &[a, b, deleted, moved]);
+        // Without standing, nothing is gated (the `three_way_with_mode` path).
+        let ungated = three_way_with_mode(&base_d, &latest_d, &working_d, MemberMerge::MemberByMember, MergeMode::ExtractFlush).unwrap();
+        assert_eq!(ungated.members(), &[a, b, deleted, moved]);
     }
 
     /// `sub_5B1FF60`'s classification: a member that changed place is one

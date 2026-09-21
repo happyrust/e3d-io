@@ -18,7 +18,11 @@
 //! attributes compose and an edit to the same attribute is the writer's.
 //! Member lists reconcile the way A3b.4 does (`sub_5B1FF60`/`sub_5B20CA0`):
 //! the writer's adds, removes and moves are replayed onto the committed list,
-//! each anchored after its preceding shared sibling — except on a noun whose
+//! each anchored after its preceding shared sibling — an addition first
+//! passing `sub_5B20CA0`'s gate on the member element itself, looked up in the
+//! base and latest sessions: not added when the committed side deleted it,
+//! nor, under extract flush, when the committed side changed its owner
+//! ([`MemberStanding`]) — except on a noun whose
 //! template says its members are references (`GROU`; word 3 of the template
 //! header is 2), where the list is one attribute and the writer's whole list
 //! replaces the committed one (`sub_5B1F660`). Knowing the noun takes the
@@ -26,7 +30,7 @@
 //! [`TemplateProvider`] through [`MergeOptions`]; without one every noun
 //! merges member by member.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::index::named::name_table_hash;
 use crate::index::{IndexCandidate, IndexCursor, IndexDiff, NamedTable};
@@ -34,7 +38,7 @@ use crate::record::template::{MemberListKind, TemplateProvider};
 use crate::refno::RefNo;
 use crate::session::DbView;
 
-use super::record::{three_way_with_mode, MemberMerge, MergeMode};
+use super::record::{member_list_diff, three_way_with_standing, MemberEdit, MemberMerge, MemberStanding, MergeMode};
 use super::{stage_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft, SessionRequest, WriteError};
 use crate::ReadOnlyEngine;
 
@@ -200,7 +204,23 @@ fn rebase_updates(
                         let base_draft = RecordDraft::from_record_bytes(&base_view.raw_bytes)?;
                         let latest_draft = RecordDraft::from_record_bytes(&latest_view.raw_bytes)?;
                         let member_merge = options.member_merge_for(latest_draft.noun_hash)?;
-                        let merged = three_way_with_mode(&base_draft, &latest_draft, working, member_merge, mode)?;
+                        // `sub_5B20CA0`'s lookups for each member the writer
+                        // added, done up front so a read failure is this
+                        // function's error rather than a silent "unknown".
+                        let standing = match member_merge {
+                            MemberMerge::MemberByMember => {
+                                member_standing(&mut base, &mut latest, base_draft.members(), working.members())?
+                            }
+                            MemberMerge::WholeList => HashMap::new(),
+                        };
+                        let merged = three_way_with_standing(
+                            &base_draft,
+                            &latest_draft,
+                            working,
+                            member_merge,
+                            mode,
+                            |member| standing.get(&member).copied(),
+                        )?;
                         // INDEX de-duplication (A3a, sub_5B07080): a merged
                         // record equal to the committed one is not written —
                         // its leaf keeps pointing at the record already there.
@@ -214,6 +234,31 @@ fn rebase_updates(
             }
             other => out.push(other.clone()),
         }
+    }
+    Ok(out)
+}
+
+/// Where each member the writer added to a list stands in the base and latest
+/// sessions — `sub_5B20CA0`'s `4GTE` on the member itself in each view, and
+/// its `OWNREF` where indexed — keyed by member. Only additions
+/// ([`MemberEdit::Added`] in the diff of the writer's base list against its
+/// working list) are looked up; removals and moves carry no gate.
+fn member_standing(
+    base: &mut ReadOnlyEngine,
+    latest: &mut ReadOnlyEngine,
+    base_members: &[RefNo],
+    working_members: &[RefNo],
+) -> Result<HashMap<RefNo, MemberStanding>, WriteError> {
+    let mut out = HashMap::new();
+    for edit in member_list_diff(base_members, working_members) {
+        let MemberEdit::Added { member, .. } = edit else {
+            continue;
+        };
+        let owner_in = |engine: &mut ReadOnlyEngine| -> Result<Option<RefNo>, WriteError> {
+            Ok(engine.find_element(member)?.map(|view| view.header().owner))
+        };
+        let standing = MemberStanding { base_owner: owner_in(base)?, latest_owner: owner_in(latest)? };
+        out.insert(member, standing);
     }
     Ok(out)
 }

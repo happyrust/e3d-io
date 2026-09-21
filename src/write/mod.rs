@@ -55,7 +55,7 @@ pub use keyed_cow::{KeyedCowError, KeyedEdit, KeyedEditKind, KeyedKey};
 pub use merge::{write_merge_session, write_merge_session_with, MergeConflict, MergeOptions};
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
-pub use record::{HunkDraft, MemberMerge, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError};
+pub use record::{HunkDraft, MemberMerge, MemberStanding, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError};
 pub use reverse::{ensure_typex, reference_value, set_reference, table_keys, typex_table_hash};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
 

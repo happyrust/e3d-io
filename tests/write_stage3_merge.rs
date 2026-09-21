@@ -909,6 +909,206 @@ fn an_extract_flush_merge_keeps_the_committed_value_where_plain_keeps_the_writer
     assert_eq!(outcome(true), base_value ^ 0x0AAA, "extract flush keeps the committed A's value");
 }
 
+/// The element's member list as of the given engine.
+fn members_of(engine: &mut ReadOnlyEngine, refno: RefNo) -> Vec<RefNo> {
+    let view = engine.find_element(refno).expect("read").expect("indexed");
+    ParsedElement::parse_as(&view.raw_bytes, engine.text_format()).expect("parse").members
+}
+
+/// The element's owner as of the given engine.
+fn owner_of(engine: &mut ReadOnlyEngine, refno: RefNo) -> RefNo {
+    engine.find_element(refno).expect("read").expect("indexed").header().owner
+}
+
+/// The `(deleted, inserted, modified)` tally between two sessions.
+fn tally(path: &std::path::Path, from: u32, to: u32) -> (u64, u64, u64) {
+    let mut view = DbView::open(path).expect("view");
+    let diff = view
+        .diff_sessions(SessionSelector::Exact(from), SessionSelector::Exact(to))
+        .expect("diff");
+    let tally = diff.tally();
+    (tally.deleted, tally.inserted, tally.modified)
+}
+
+/// `sub_5B20CA0`'s gate on an addition (`st 1`), plain `SAVEWORK` arm: a
+/// member the writer added to a list is left out when the committed side
+/// deleted the element since the base.
+///
+/// A deletes a leaf M (out of its owner P's list and out of the index) and
+/// commits S+1. B, based on S, appends M to another owner O's list without
+/// touching M itself — the shape a reference list takes, and the only shape
+/// that reaches the gate: had B changed M too, the scan would have refused the
+/// merge as 562. Merged, O's list is the committed one; M is not put back in,
+/// so the merged O equals the committed O and the INDEX de-duplication writes
+/// no record at all. Extract flush gates the same case (M reads as owner
+/// `(0,0)` in latest, ≠ P in base).
+#[test]
+fn an_added_member_the_committed_side_deleted_is_left_out_when_merged() {
+    if common::missing(&[AMS8000]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS8000);
+    let cast = cast(AMS8000);
+    let s = DbView::open(&copy.path).unwrap().session().sesno;
+    let other_owner = cast.zones[1];
+
+    // A: delete leaf M from under its owner P.
+    let (owner_p, leaf) = {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let (owner_p, leaf) = leaf_under(&mut engine, db1_hash("BRAN"));
+        assert!(!members_of(&mut engine, other_owner).contains(&leaf), "M is not already under O");
+        let mut p = RecordDraft::from_record_bytes(&engine.find_element(owner_p).unwrap().unwrap().raw_bytes).unwrap();
+        p.remove_member(leaf);
+        write_element_session(
+            &copy.path,
+            &SessionRequest { user: "A", comment: "A deletes M", clock: Some(clock()) },
+            &[ElementWrite::Delete(leaf), ElementWrite::Update(p)],
+            &[],
+        )
+        .expect("A writes S+1");
+        (owner_p, leaf)
+    };
+    let committed_o = members_of(&mut ReadOnlyEngine::open(&copy.path).unwrap(), other_owner);
+    assert!(
+        ReadOnlyEngine::open(&copy.path).unwrap().find_element(leaf).unwrap().is_none(),
+        "M is out of the index at S+1"
+    );
+
+    // B, based on S, appends M to O's list, plain and then flushed.
+    for (flush, expected_sesno) in [(false, s + 2), (true, s + 3)] {
+        let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+        let o = zone_with_member(&mut base, other_owner, leaf);
+        let report = write_merge_session_with(
+            &copy.path,
+            &SessionRequest { user: "B", comment: "B adds the deleted M to O", clock: Some(clock()) },
+            s,
+            &[ElementWrite::Update(o)],
+            &[],
+            MergeOptions { extract_flush: flush, ..Default::default() },
+        )
+        .expect("B merges");
+        assert_eq!(report.written.sesno, expected_sesno);
+        // M was gated out, so the merged O equals the committed O: nothing but
+        // the session page was written.
+        assert_eq!(report.appended_pages.len(), 1, "flush={flush}: only the session page was appended");
+        assert_eq!(tally(&copy.path, expected_sesno - 1, expected_sesno), (0, 0, 0), "flush={flush}: no element changed");
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        assert_eq!(members_of(&mut engine, other_owner), committed_o, "flush={flush}: O's list is the committed one, without M");
+        assert!(engine.find_element(leaf).unwrap().is_none(), "flush={flush}: M stays deleted");
+        assert!(!members_of(&mut engine, owner_p).contains(&leaf), "flush={flush}: P's list stays without M");
+    }
+}
+
+/// `sub_5B20CA0`'s gate on an addition (`st 1`), fourth-slot arm: under
+/// extract flush a member the writer added is left out when the committed side
+/// changed the element's `OWNREF` since the base — so the list agrees with the
+/// owner `sub_5B211C0` keeps for it; plain `SAVEWORK` does not look at the
+/// owner and adds it.
+///
+/// A moves leaf M from P to Q (M's owner, P's and Q's lists) and commits S+1.
+/// B, based on S, moves the same M from P to O. Flushed: M keeps the committed
+/// owner Q, O's list does not gain M, P's list loses it on both sides — every
+/// merged record equals its committed one and no record is written. Plain: M
+/// takes B's owner O and O's list gains M.
+#[test]
+fn an_added_member_the_committed_side_re_parented_is_left_out_under_extract_flush() {
+    if common::missing(&[AMS8000]) {
+        return;
+    }
+    struct Outcome {
+        appended: usize,
+        changed: (u64, u64, u64),
+        m_owner: RefNo,
+        o_members: Vec<RefNo>,
+        committed_o: Vec<RefNo>,
+        leaf: RefNo,
+        owner_o: RefNo,
+        owner_q: RefNo,
+    }
+    let outcome = |flush: bool| -> Outcome {
+        let copy = DbCopy::of(AMS8000);
+        let cast = cast(AMS8000);
+        let (owner_o, owner_q) = (cast.zones[0], cast.zones[1]);
+        let s = DbView::open(&copy.path).unwrap().session().sesno;
+
+        // A: move M from P to Q.
+        let (owner_p, leaf) = {
+            let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+            let (owner_p, leaf) = leaf_under(&mut engine, db1_hash("BRAN"));
+            assert!(owner_p != owner_o && owner_p != owner_q);
+            let mut m = RecordDraft::from_record_bytes(&engine.find_element(leaf).unwrap().unwrap().raw_bytes).unwrap();
+            m.owner = owner_q;
+            let mut p = RecordDraft::from_record_bytes(&engine.find_element(owner_p).unwrap().unwrap().raw_bytes).unwrap();
+            p.remove_member(leaf);
+            let q = zone_with_member(&mut engine, owner_q, leaf);
+            write_element_session(
+                &copy.path,
+                &SessionRequest { user: "A", comment: "A moves M to Q", clock: Some(clock()) },
+                &[ElementWrite::Update(m), ElementWrite::Update(p), ElementWrite::Update(q)],
+                &[],
+            )
+            .expect("A writes S+1");
+            (owner_p, leaf)
+        };
+        let committed_o = members_of(&mut ReadOnlyEngine::open(&copy.path).unwrap(), owner_o);
+
+        // B, based on S, moves the same M from P to O and merges.
+        let report = {
+            let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+            let mut m = RecordDraft::from_record_bytes(&base.find_element(leaf).unwrap().unwrap().raw_bytes).unwrap();
+            assert_eq!(m.owner, owner_p, "at S, M is under P");
+            m.owner = owner_o;
+            let mut p = RecordDraft::from_record_bytes(&base.find_element(owner_p).unwrap().unwrap().raw_bytes).unwrap();
+            p.remove_member(leaf);
+            let o = zone_with_member(&mut base, owner_o, leaf);
+            write_merge_session_with(
+                &copy.path,
+                &SessionRequest { user: "B", comment: "B moves M to O", clock: Some(clock()) },
+                s,
+                &[ElementWrite::Update(m), ElementWrite::Update(p), ElementWrite::Update(o)],
+                &[],
+                MergeOptions { extract_flush: flush, ..Default::default() },
+            )
+            .expect("B merges S+2")
+        };
+
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        assert!(!members_of(&mut engine, owner_p).contains(&leaf), "flush={flush}: both sides took M out of P");
+        assert!(members_of(&mut engine, owner_q).contains(&leaf), "flush={flush}: Q's committed list holds M");
+        Outcome {
+            appended: report.appended_pages.len(),
+            changed: tally(&copy.path, s + 1, s + 2),
+            m_owner: owner_of(&mut engine, leaf),
+            o_members: members_of(&mut engine, owner_o),
+            committed_o,
+            leaf,
+            owner_o,
+            owner_q,
+        }
+    };
+
+    // Extract flush: the committed owner Q stands, O does not gain M, and the
+    // merge writes nothing — every merged record equals the committed one.
+    let flushed = outcome(true);
+    assert_eq!(flushed.m_owner, flushed.owner_q, "extract flush: both moved M, the committed owner Q stands");
+    assert_eq!(flushed.o_members, flushed.committed_o, "extract flush: M's owner changed under B, so O's list does not gain M");
+    assert!(!flushed.o_members.contains(&flushed.leaf));
+    assert_eq!(flushed.appended, 1, "extract flush: only the session page was appended");
+    assert_eq!(flushed.changed, (0, 0, 0), "extract flush: S+1..S+2 changed nothing");
+
+    // Plain SAVEWORK: the writer's owner O wins and O's list gains M at the
+    // end, where B put it.
+    let plain = outcome(false);
+    assert_eq!(plain.m_owner, plain.owner_o, "plain: M's owner is B's O");
+    assert_eq!(
+        plain.o_members,
+        [plain.committed_o.as_slice(), &[plain.leaf]].concat(),
+        "plain: O's list is the committed one plus M"
+    );
+    assert!(plain.appended > 1, "plain: records were written");
+    assert_eq!(plain.changed, (0, 0, 2), "plain: M (owner) and O (list) changed; P equals the committed P");
+}
+
 /// A `(owner, leaf)` pair: an element of `owner_noun` with a 0-member child in
 /// its list.
 fn leaf_under(engine: &mut ReadOnlyEngine, owner_noun: u32) -> (RefNo, RefNo) {
