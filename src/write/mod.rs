@@ -56,7 +56,9 @@ pub use merge::{write_merge_session, write_merge_session_with, MergeConflict, Me
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
 pub use record::{HunkDraft, MemberMerge, MemberStanding, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError};
-pub use reverse::{ensure_typex, reference_value, set_reference, table_keys, typex_table_hash};
+pub use reverse::{
+    ensure_typex, reference_array, reference_value, set_reference, set_reference_array, table_keys, typex_table_hash,
+};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
 
 /// Why a write did not happen. Nothing in this enum is returned after page 0

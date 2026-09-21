@@ -13,7 +13,9 @@ mod common;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use common::write_fixture::{assert_appended_contiguous, assert_prefix_unchanged, page_word, DbCopy, AMS8000};
+use common::write_fixture::{
+    assert_appended_contiguous, assert_prefix_unchanged, page_word, DbCopy, AMS251142, AMS8000,
+};
 use common::DESVIR;
 use e3d_attlib::{db1_dehash, db1_hash};
 use e3d_io::engine::ScanTier;
@@ -22,10 +24,11 @@ use e3d_io::record::element::ParsedElement;
 use e3d_io::record::explicit::ExplicitValue;
 use e3d_io::record::template::{NounTemplate, TemplateProvider};
 use e3d_io::session::{DbView, SessionDate, SessionSelector};
-use e3d_io::write::record::{KEYED_TYPE_CODE, REFERENCE_TYPE_CODE};
+use e3d_io::write::record::{KEYED_TYPE_CODE, REFERENCE_ARRAY_TYPE_CODE, REFERENCE_TYPE_CODE};
 use e3d_io::write::{
-    reference_value, set_reference, table_keys, typex_table_hash, write_element_session, write_element_session_with,
-    ElementWrite, RecordDraft, SessionClock, SessionRequest, WriteOptions,
+    reference_array, reference_value, set_reference, set_reference_array, table_keys, typex_table_hash,
+    write_element_session, write_element_session_with, ElementWrite, RecordDraft, SessionClock, SessionRequest,
+    WriteOptions,
 };
 use e3d_io::{ReadOnlyEngine, RefNo};
 
@@ -384,6 +387,184 @@ fn changing_a_reference_moves_its_edge_and_deleting_the_element_withdraws_all_it
     drop(view);
     let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
     assert!(engine.find_element(r).unwrap().is_none(), "{r} is gone from the index");
+}
+
+/// A type-17 reference array files one edge per entry (`sub_5AB91B0` case 17,
+/// `sub_5AB3620`): on the cable-tray database, every key the first `HCREF`
+/// referrer `R` makes is in its table; replacing one entry of `R`'s `HCREF`
+/// moves exactly that edge and copies no other table; deleting `R` withdraws
+/// every key it made — its `HCREF` and `TCREF` edges and its `TYPEX` key —
+/// and no one else's.
+#[test]
+fn a_reference_array_moves_one_edge_per_entry_and_a_deleted_referrer_withdraws_them_all() {
+    if common::missing(&[AMS251142, DESVIR]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS251142);
+    let mut provider = templates();
+    let (hcref, tcref) = (db1_hash("HCREF"), db1_hash("TCREF"));
+
+    let (before, roots_before, sesno) = {
+        let mut view = DbView::open(&copy.path).expect("open");
+        (keyed_tables(&mut view), roots(&view), view.session().sesno)
+    };
+    assert!(
+        before.contains_key(&hcref) && before.contains_key(&tcref),
+        "the cable-tray database files HCREF and TCREF: {:?}",
+        before.keys().map(|k| name(*k)).collect::<Vec<_>>()
+    );
+
+    // R: the first HCREF referrer that has both an HCREF and a TCREF set, so
+    // that the delete has two arrays' worth of edges to withdraw.
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+    let mut chosen = None;
+    for key in &before[&hcref] {
+        let r = RefNo::new(key[2], key[3]);
+        let draft = draft_of(&mut engine, r);
+        let template = template(&mut provider, draft.noun_hash);
+        let hcref_targets = reference_array(&draft, &template, hcref).unwrap_or_default();
+        let tcref_targets = reference_array(&draft, &template, tcref).unwrap_or_default();
+        if !hcref_targets.is_empty() && !tcref_targets.is_empty() {
+            chosen = Some((r, draft, template, hcref_targets, tcref_targets));
+            break;
+        }
+    }
+    let (r, r_draft, r_template, hcref_targets, tcref_targets) = chosen.expect("a referrer with HCREF and TCREF set");
+    let r_attr = r_template.attrs.iter().find(|a| a.hash == hcref).expect("template lists HCREF");
+    assert_eq!(r_attr.storage_type_code, 17, "HCREF is a type-17 array on {}", name(r_draft.noun_hash));
+    assert_eq!(r_attr.wide.location.word_offset(), 0, "explicit-resident");
+    let (_, hcref_data) = r_draft.explicit_words(hcref).expect("HCREF stored explicitly");
+    assert_eq!(hcref_data[0] as usize, hcref_targets.len(), "the count word says how many are set");
+
+    // Every key R makes is in its table now — HCREF and TCREF edges, one per
+    // entry, and the TYPEX key.
+    let r_keys_before = table_keys(&r_draft, &r_template);
+    for target in &hcref_targets {
+        assert!(r_keys_before.contains(&(hcref, [target.word0, target.word1, r.word0, r.word1])));
+    }
+    for target in &tcref_targets {
+        assert!(r_keys_before.contains(&(tcref, [target.word0, target.word1, r.word0, r.word1])));
+    }
+    assert!(r_keys_before.iter().any(|(table, _)| *table == typex_table_hash()), "{} lists TYPEX", name(r_draft.noun_hash));
+    for (table, key) in &r_keys_before {
+        assert!(before[table].contains(key), "{} holds {key:?} before", name(*table));
+    }
+    let owner = r_draft.owner;
+    drop(engine);
+
+    // --- S+1: the first HCREF entry A becomes B; the rest of the array stays ---
+    let a = hcref_targets[0];
+    let b = RefNo::new(a.word0, a.word1 + 500_000);
+    assert!(!before[&hcref].contains(&[b.word0, b.word1, r.word0, r.word1]), "B is a fresh target");
+    let mut new_targets = hcref_targets.clone();
+    new_targets[0] = b;
+    let mut changed = r_draft.clone();
+    assert!(set_reference_array(&mut changed, &r_template, hcref, &new_targets));
+    assert_eq!(reference_array(&changed, &r_template, hcref), Some(new_targets.clone()));
+    let report = write_element_session_with(
+        &copy.path,
+        &SessionRequest { user: "e3dio", comment: "e3d-io tables: re-point one HCREF entry", clock: Some(clock()) },
+        &[ElementWrite::Update(changed)],
+        &[],
+        WriteOptions { templates: Some(&mut provider) },
+    )
+    .expect("write S+1");
+    assert_eq!(tally(&copy.path, sesno, sesno + 1), (0, 0, 1));
+    assert_bytes(&copy.original, &copy, &report);
+    let bytes_after1 = copy.current_bytes();
+
+    let mut view = DbView::open(&copy.path).expect("reopen");
+    let after1 = keyed_tables(&mut view);
+    let roots_after1 = roots(&view);
+    let (gone, came): (Key, Key) = ([a.word0, a.word1, r.word0, r.word1], [b.word0, b.word1, r.word0, r.word1]);
+    for (table, keys) in &before {
+        let mut expected = keys.clone();
+        if *table == hcref {
+            // A is withdrawn only if no other entry of R still names it.
+            if !new_targets.contains(&a) {
+                expected.remove(&gone);
+            }
+            expected.insert(came);
+        }
+        assert_eq!(&after1[table], &expected, "{} keys after the change", name(*table));
+        if *table != hcref {
+            assert_eq!(roots_after1[table], roots_before[table], "{} was not even copied", name(*table));
+        }
+    }
+    {
+        let mut table = ReferenceTable::open(&mut view, hcref).unwrap();
+        assert!(table.referrers_of(b).unwrap().contains(&r), "{r} now references {b}");
+        if !new_targets.contains(&a) {
+            assert!(!table.referrers_of(a).unwrap().contains(&r), "{r} no longer references {a}");
+        }
+    }
+    drop(view);
+    {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open written");
+        let record = engine.find_element(r).expect("lookup").expect("indexed");
+        let parsed = ParsedElement::parse_as(&record.raw_bytes, engine.text_format()).expect("parse");
+        let field = parsed.explicit_attributes.iter().find(|f| f.hash == hcref).expect("HCREF stored");
+        assert_eq!(field.type_code, REFERENCE_ARRAY_TYPE_CODE, "17 << 10, as every corpus field states");
+        let written = RecordDraft::from_record_bytes(&record.raw_bytes).unwrap();
+        assert_eq!(reference_array(&written, &r_template, hcref), Some(new_targets.clone()));
+        assert_eq!(reference_array(&written, &r_template, tcref), Some(tcref_targets.clone()), "TCREF untouched");
+    }
+
+    // --- S+2: R is deleted (and taken out of its owner's members) ---
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+    let mut owner_draft = draft_of(&mut engine, owner);
+    assert!(owner_draft.remove_member(r), "{owner} lists {r}");
+    drop(engine);
+    let report = write_element_session_with(
+        &copy.path,
+        &SessionRequest { user: "e3dio", comment: "e3d-io tables: delete a cable-tray referrer", clock: Some(clock()) },
+        &[ElementWrite::Delete(r), ElementWrite::Update(owner_draft)],
+        &[],
+        WriteOptions { templates: Some(&mut provider) },
+    )
+    .expect("write S+2");
+    assert_eq!(tally(&copy.path, sesno + 1, sesno + 2), (1, 0, 1));
+    assert_bytes(&bytes_after1, &copy, &report);
+
+    let mut view = DbView::open(&copy.path).expect("reopen");
+    let after2 = keyed_tables(&mut view);
+    let mut withdrawn = 0usize;
+    for (table, keys) in &after1 {
+        let expected: BTreeSet<Key> = keys
+            .iter()
+            .copied()
+            .filter(|key| {
+                let mine = if *table == typex_table_hash() {
+                    (key[1], key[2]) == (r.word0, r.word1)
+                } else {
+                    (key[2], key[3]) == (r.word0, r.word1)
+                };
+                withdrawn += usize::from(mine);
+                !mine
+            })
+            .collect();
+        assert_eq!(&after2[table], &expected, "{} keys after the delete", name(*table));
+    }
+    let distinct_hcref: BTreeSet<(u32, u32)> = new_targets.iter().map(|t| (t.word0, t.word1)).collect();
+    let distinct_tcref: BTreeSet<(u32, u32)> = tcref_targets.iter().map(|t| (t.word0, t.word1)).collect();
+    assert!(
+        withdrawn > distinct_hcref.len() + distinct_tcref.len(),
+        "R made {} HCREF, {} TCREF edges and a TYPEX key; {withdrawn} went",
+        distinct_hcref.len(),
+        distinct_tcref.len()
+    );
+    assert!(!ReferenceTable::open(&mut view, hcref).unwrap().referrers_of(b).unwrap().contains(&r));
+    drop(view);
+    let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+    assert!(engine.find_element(r).unwrap().is_none(), "{r} is gone from the index");
+    eprintln!(
+        "{}: R = {} {r} with {} HCREF and {} TCREF entries; tables before {:?}; {withdrawn} keys withdrawn on delete",
+        AMS251142,
+        name(r_draft.noun_hash),
+        hcref_targets.len(),
+        tcref_targets.len(),
+        before.iter().map(|(t, keys)| (name(*t), keys.len())).collect::<Vec<_>>()
+    );
 }
 
 /// A `BOX` — whose template lists no `TYPEX` — gets neither field nor key,

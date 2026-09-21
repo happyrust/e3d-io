@@ -17,6 +17,19 @@
 //!   the 975 set type-16 values sampled has its edge and every edge sampled
 //!   has its value; the six type-4 attributes with 1 397 set values have no
 //!   table at all.
+//! * **Type 17** (a reference array: `HCREF`, `TCREF`, `MDSYSF`, `CONNRE`,
+//!   `DESLNK`, `COCORE`, …): every non-null entry `t` of the array on element
+//!   `e` is its own key `[t.0, t.1, e.0, e.1]` in the table named by the
+//!   attribute's hash — `sub_5AB3620` withdraws types 16 and 17 alike, "every
+//!   non-zero pair, one `3CTE` each". Over the 609 DESI / CATA databases
+//!   installed here every one of the 3 191 non-null entries set has its edge
+//!   and every edge maps back to an entry (`docs/plans/2026-09-21-write-path-next-steps.md`
+//!   §7 S4b); the three databases holding `CONNRE` values but no `CONNRE`
+//!   table hold only null entries, so no key was ever filed and no table ever
+//!   built. The array is `[count][pair × count]` at the descriptor's wide
+//!   word offset when implicit-resident (`DESLNK` on `CYMLNK`), else an
+//!   explicit field of type code `17 << 10` whose data may keep more pairs
+//!   than the count says.
 //! * **`TYPEX`**: a noun whose template lists `TYPEX` (storage type 14, one
 //!   element of one word) carries `[1, noun]` in its explicit stream and the
 //!   key `[noun, e.0, e.1, 0]` in the `TYPEX` table; a noun whose template
@@ -32,14 +45,17 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use e3d_attlib::db1_hash;
 
-use crate::record::template::NounTemplate;
+use crate::record::template::{NounTemplate, TemplateAttr};
 use crate::refno::RefNo;
 
 use super::keyed_cow::{KeyedEdit, KeyedEditKind, KeyedKey};
-use super::record::{RecordDraft, KEYED_TYPE_CODE};
+use super::record::{RecordDraft, KEYED_TYPE_CODE, REFERENCE_ARRAY_TYPE_CODE};
 
 /// Storage type of a single-reference attribute that files a reverse table.
 pub const REFERENCE_STORAGE_TYPE: u32 = 16;
+/// Storage type of a reference-array attribute that files a reverse table,
+/// one edge per non-null entry.
+pub const REFERENCE_ARRAY_STORAGE_TYPE: u32 = 17;
 /// Storage type of a keyed table attribute (`TYPEX`).
 pub const KEYED_STORAGE_TYPE: u32 = 14;
 
@@ -60,10 +76,10 @@ pub type TableKey = (u32, KeyedKey);
 ///
 /// `TYPEX` comes from the record itself — the explicit `TYPEX` field, one
 /// key per element it lists (there is always one). The reference keys come
-/// from the template's type-16 attributes: an implicit-resident one is read
-/// at its descriptor's word offset in the record's layout, an explicit one by
-/// its hash in the stream. A null reference (both words zero) and an unset
-/// marker make no key.
+/// from the template's type-16 and type-17 attributes: an implicit-resident
+/// one is read at its descriptor's word offset in the record's layout, an
+/// explicit one by its hash in the stream; a type-17 array files one key per
+/// entry. A null reference (both words zero) and an unset marker make no key.
 pub fn table_keys(draft: &RecordDraft, template: &NounTemplate) -> BTreeSet<TableKey> {
     let mut keys = BTreeSet::new();
     let me = draft.refno;
@@ -79,17 +95,114 @@ pub fn table_keys(draft: &RecordDraft, template: &NounTemplate) -> BTreeSet<Tabl
         }
     }
 
-    for attr in template
-        .attrs
-        .iter()
-        .filter(|attr| attr.storage_type_code == REFERENCE_STORAGE_TYPE)
-    {
-        let Some(target) = reference_value(draft, template, attr.hash) else {
-            continue;
-        };
-        keys.insert((attr.hash, [target.word0, target.word1, me.word0, me.word1]));
+    for attr in &template.attrs {
+        match attr.storage_type_code {
+            REFERENCE_STORAGE_TYPE => {
+                if let Some(target) = reference_value(draft, template, attr.hash) {
+                    keys.insert((attr.hash, [target.word0, target.word1, me.word0, me.word1]));
+                }
+            }
+            REFERENCE_ARRAY_STORAGE_TYPE => {
+                for target in reference_array(draft, template, attr.hash).unwrap_or_default() {
+                    keys.insert((attr.hash, [target.word0, target.word1, me.word0, me.word1]));
+                }
+            }
+            _ => {}
+        }
     }
     keys
+}
+
+fn array_attr(template: &NounTemplate, hash: u32) -> Option<&TemplateAttr> {
+    template
+        .attrs
+        .iter()
+        .find(|attr| attr.hash == hash && attr.storage_type_code == REFERENCE_ARRAY_STORAGE_TYPE)
+}
+
+/// How many `(word0, word1)` pairs an implicit-resident array slot holds
+/// behind its count word.
+fn implicit_array_capacity(attr: &TemplateAttr) -> usize {
+    (attr.wide.storage_words.saturating_sub(1) / 2) as usize
+}
+
+/// The **non-null** entries of the type-17 attribute `hash` on `draft`, in
+/// stored order — the targets its reverse table holds an edge for. `None`
+/// when the attribute is not set (no explicit field, or an implicit count of
+/// zero or an unset marker), and when `template` does not list `hash` as a
+/// type-17 attribute. Null pairs and unset markers inside the array are
+/// skipped, as `sub_5AB3620` skips them.
+///
+/// Read in the **wide** layout, like [`reference_value`]. Only `count`
+/// pairs are read, however many the field has room for.
+pub fn reference_array(draft: &RecordDraft, template: &NounTemplate, hash: u32) -> Option<Vec<RefNo>> {
+    let attr = array_attr(template, hash)?;
+    let offset = attr.wide.location.word_offset() as usize;
+    let words: Vec<u32> = if offset != 0 {
+        let implicit = draft.implicit();
+        let count = *implicit.get(offset)?;
+        if count == 0 || UNSET_WORDS.contains(&count) {
+            return None;
+        }
+        let count = (count as usize).min(implicit_array_capacity(attr));
+        implicit.get(offset..=offset + 2 * count)?.to_vec()
+    } else {
+        let (_, data) = draft.explicit_words(hash)?;
+        data
+    };
+    let count = words.first().copied().unwrap_or(0) as usize;
+    let pairs = words.get(1..).unwrap_or(&[]);
+    let pairs = &pairs[..pairs.len().min(2 * count)];
+    let (pairs, _odd) = pairs.as_chunks::<2>();
+    let targets = pairs
+        .iter()
+        .filter(|&&[word0, word1]| !UNSET_WORDS.contains(&word0) && !(word0 == 0 && word1 == 0))
+        .map(|&[word0, word1]| RefNo::new(word0, word1))
+        .collect();
+    Some(targets)
+}
+
+/// Set the type-17 attribute `hash` on `draft` to `targets` — `[count][pair ×
+/// count]` in the implicit slot when the descriptor places it there, else an
+/// explicit field of type code `17 << 10` — so that the next write files one
+/// reverse-table key per non-null entry. An empty `targets` clears an
+/// explicit field and zeroes an implicit slot. Returns `false`, changing
+/// nothing, when `template` does not list `hash` as a type-17 attribute or
+/// an implicit slot has no room for that many entries.
+pub fn set_reference_array(draft: &mut RecordDraft, template: &NounTemplate, hash: u32, targets: &[RefNo]) -> bool {
+    let Some(attr) = array_attr(template, hash) else {
+        return false;
+    };
+    let offset = attr.wide.location.word_offset() as usize;
+    if offset != 0 {
+        let capacity = implicit_array_capacity(attr);
+        if targets.len() > capacity || draft.implicit().len() < offset + 1 + 2 * capacity {
+            return false;
+        }
+        let mut words = vec![0u32; 1 + 2 * capacity];
+        words[0] = targets.len() as u32;
+        for (i, target) in targets.iter().enumerate() {
+            words[1 + 2 * i] = target.word0;
+            words[2 + 2 * i] = target.word1;
+        }
+        for (i, word) in words.into_iter().enumerate() {
+            match draft.implicit_word_mut(offset + i) {
+                Some(slot) => *slot = word,
+                None => return false,
+            }
+        }
+    } else if targets.is_empty() {
+        draft.remove_explicit(hash);
+    } else {
+        let mut data = Vec::with_capacity(1 + 2 * targets.len());
+        data.push(targets.len() as u32);
+        for target in targets {
+            data.push(target.word0);
+            data.push(target.word1);
+        }
+        draft.set_explicit_words(hash, REFERENCE_ARRAY_TYPE_CODE, data);
+    }
+    true
 }
 
 /// The value of the type-16 attribute `hash` on `draft`, or `None` when it is
@@ -257,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn keys_come_from_typex_and_type_16_values_only() {
+    fn keys_come_from_typex_and_table_reference_values_only() {
         let template = template();
         let mut draft = draft();
         assert!(table_keys(&draft, &template).is_empty(), "nothing set, nothing filed");
@@ -291,6 +404,89 @@ mod tests {
         *draft.implicit_word_mut(30).unwrap() = 0x8000_0001;
         let keys = table_keys(&draft, &template);
         assert_eq!(keys, BTreeSet::from([(typex_table_hash(), [ZONE, 24_384, 47, 0])]));
+    }
+
+    /// A type-17 descriptor: `storage_words` is the slot's size (count word
+    /// plus two per pair), `wide_offset` 0 for an explicit-resident one.
+    fn array_attr(hash: u32, wide_offset: u32, storage_words: u32) -> TemplateAttr {
+        let mut attr = attr(hash, REFERENCE_ARRAY_STORAGE_TYPE, wide_offset);
+        attr.compact.storage_words = storage_words;
+        attr.wide.storage_words = storage_words;
+        attr.logical_count = (storage_words - 1) / 2;
+        attr
+    }
+
+    #[test]
+    fn a_reference_array_files_one_key_per_non_null_entry() {
+        use crate::write::record::REFERENCE_ARRAY_TYPE_CODE;
+        let hcref = db1_hash("HCREF");
+        let deslnk = db1_hash("DESLNK");
+        let mut template = NounTemplate::new(db1_hash("CWBRAN"));
+        template.attrs = vec![
+            attr(typex_table_hash(), KEYED_STORAGE_TYPE, 0),
+            array_attr(hcref, 0, 201),  // explicit-resident, room for 100 pairs
+            array_attr(deslnk, 30, 7),  // implicit-resident at wide word 30, room for 3
+            attr(SPRE, REFERENCE_STORAGE_TYPE, 0),
+        ];
+        let mut implicit = vec![0u32; 40];
+        implicit[10] = 0x2000_0000;
+        let me = RefNo::new(2_013_287_686, 36);
+        let mut draft = RecordDraft::new(me, db1_hash("CWBRAN"), RefNo::new(2_013_287_686, 3), implicit, vec![], vec![]).unwrap();
+        assert_eq!(reference_array(&draft, &template, hcref), None, "no field, not set");
+        assert_eq!(reference_array(&draft, &template, deslnk), None, "count 0, not set");
+        assert!(table_keys(&draft, &template).is_empty());
+
+        // Explicit: `[count][pairs]` under `17 << 10`, one key per entry.
+        let (t1, t2) = (RefNo::new(2_013_287_686, 75), RefNo::new(2_013_287_686, 87));
+        assert!(set_reference_array(&mut draft, &template, hcref, &[t1, t2]));
+        assert_eq!(
+            draft.explicit_words(hcref),
+            Some((REFERENCE_ARRAY_TYPE_CODE, vec![2, t1.word0, t1.word1, t2.word0, t2.word1]))
+        );
+        assert_eq!(reference_array(&draft, &template, hcref), Some(vec![t1, t2]));
+
+        // Implicit: the count word then the pairs, the rest of the slot zeroed.
+        let t3 = RefNo::new(2_013_286_765, 5);
+        assert!(set_reference_array(&mut draft, &template, deslnk, &[t3]));
+        assert_eq!(draft.implicit()[30..37], [1, t3.word0, t3.word1, 0, 0, 0, 0]);
+        assert_eq!(reference_array(&draft, &template, deslnk), Some(vec![t3]));
+        assert!(
+            !set_reference_array(&mut draft, &template, deslnk, &[t3, t3, t3, t3]),
+            "four pairs do not fit a slot sized for three"
+        );
+        assert_eq!(draft.implicit()[30..37], [1, t3.word0, t3.word1, 0, 0, 0, 0], "a refused set changes nothing");
+        assert!(!set_reference_array(&mut draft, &template, SPRE, &[t1]), "a type-16 attribute is not an array");
+
+        let keys = table_keys(&draft, &template);
+        assert_eq!(
+            keys,
+            BTreeSet::from([
+                (hcref, [t1.word0, t1.word1, me.word0, me.word1]),
+                (hcref, [t2.word0, t2.word1, me.word0, me.word1]),
+                (deslnk, [t3.word0, t3.word1, me.word0, me.word1]),
+            ])
+        );
+
+        // Null and unset entries inside the array make no key, and a field
+        // that keeps more pairs than its count says (four of the corpus's
+        // 2 754) is read by the count.
+        draft.set_explicit_words(
+            hcref,
+            REFERENCE_ARRAY_TYPE_CODE,
+            vec![3, t1.word0, t1.word1, 0, 0, 0x8000_0001, 7, t2.word0, t2.word1, 9, 9],
+        );
+        assert_eq!(reference_array(&draft, &template, hcref), Some(vec![t1]), "count 3: t1, a null, an unset marker");
+        let keys = table_keys(&draft, &template);
+        assert!(keys.contains(&(hcref, [t1.word0, t1.word1, me.word0, me.word1])));
+        assert!(!keys.contains(&(hcref, [t2.word0, t2.word1, me.word0, me.word1])), "past the count");
+
+        // Clearing: an empty array removes the explicit field and zeroes the
+        // implicit slot; neither files a key.
+        assert!(set_reference_array(&mut draft, &template, hcref, &[]));
+        assert!(draft.explicit_words(hcref).is_none());
+        assert!(set_reference_array(&mut draft, &template, deslnk, &[]));
+        assert_eq!(draft.implicit()[30..37], [0; 7]);
+        assert!(table_keys(&draft, &template).is_empty());
     }
 
     #[test]

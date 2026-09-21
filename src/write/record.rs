@@ -59,6 +59,14 @@ const WIDE_LAYOUT_FLAG: u32 = 0x2000_0000;
 /// (`crate::record::explicit` decodes `0x4000` as a RefNo).
 pub const REFERENCE_TYPE_CODE: u16 = 16 << 10;
 
+/// The explicit-stream type code of a type-17 reference array (`HCREF`,
+/// `TCREF`, `MDSYSF`, `CONNRE`, …): data is a count word then that many
+/// `(word0, word1)` pairs — the 2 754 such fields in the corpus all state
+/// `0x4400`, and four of them keep more pairs than the count says (a slot
+/// sized for the descriptor's capacity), so the count, not the length, says
+/// how many are set.
+pub const REFERENCE_ARRAY_TYPE_CODE: u16 = 17 << 10;
+
 /// The explicit-stream type code of a type-14 keyed attribute (`TYPEX`):
 /// data is a count word then the elements.
 pub const KEYED_TYPE_CODE: u16 = 14 << 10;

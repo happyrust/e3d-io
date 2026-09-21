@@ -20,6 +20,12 @@ pub const AMS8000: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\am
 /// A small design database from the same sample, for the quick path.
 pub const AMS5100: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001";
 
+/// A cable-tray design database of the Marine sample (305 KB), one of the 24
+/// installed databases with type-17 reference arrays set (`HCREF` / `TCREF`
+/// on `CWBRAN`, `CTWALL`, …) and the `HCREF` / `TCREF` / `CONNRE` tables that
+/// file them, one edge per array entry.
+pub const AMS251142: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001";
+
 /// A private copy of `source` to write on.
 pub struct DbCopy {
     _dir: TempDir,

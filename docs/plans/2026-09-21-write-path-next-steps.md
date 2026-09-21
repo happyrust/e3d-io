@@ -1,6 +1,6 @@
 # 计划：e3d-io 写路径收口与下一步（阶段 0–3 已落地之后）
 
-状态：评审通过（2026-09-21，用户在面板上批「Q1–Q7 全按推荐项定」；Plannotator 门另行 Approve）→ **S2 已落地**（§7 2026-09-21 条：漂移红测试改沿链找、clippy 0 error、类型 15/17/18 普查——15 非 NAME 无声明、18 语料 0 设值、**17 在 24 个库里设了值且都有以属性名命名的表 → 新增 S4b**）；S1 合入 `main` 待用户看完面板再开
+状态：评审通过（2026-09-21，用户在面板上批「Q1–Q7 全按推荐项定」；Plannotator 门另行 Approve）→ **S2 已落地**（§7 2026-09-21 条：漂移红测试改沿链找、clippy 0 error、类型 15/17/18 普查——15 非 NAME 无声明、18 语料 0 设值、**17 在 24 个库里设了值且都有以属性名命名的表 → 新增 S4b**）→ **S4b 已落地**（类型 17 反向表随写维护；语料 3 191 条边正反全对上）；S1 合入 `main` 待用户看完面板再开
 日期：2026-09-21
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`，HEAD `eebe21f`（2026-09-21 12:24），自分叉点 `7a51c95` 起 30 个提交；`main` 领先它 2 个提交（`d51c3dd` / `4a76d2a`，池级元素缓存的上限与统计，只碰 `db_element.rs`）
 依据：`docs/plans/2026-09-20-dabacon-write-plan.md`（下称「写计划」，其 §7 观察记录是进度的第一手账）、`docs/evidence/2026-09-20-core-dll-dabacon-write-path-algorithms.md`（「算法清单」）、`docs/evidence/2026-09-21-e3d-tty-gate-write-path.md`（「TTY 门」）
@@ -128,7 +128,7 @@
 | UDA 表 UDATAB / UDAFTB / UUIDAR | 拿到一个带这三张表的项目库 |
 | 类型 15 非 NAME | **不做**：DESI / CATA 模板里没有一个（DRTYPT / DRSTYT / RDFIRI 是别的库类型的） |
 | 类型 18 `UDASTB` 集合合并 | **不做**：DESI 868 / CATA 146 个 noun 声明，语料 2.09 M + 6.85 M 元素 **0** 设值；触发 = 语料里出现设了值的 `UDASTB` |
-| 类型 17 索引表 | 已进 S4b |
+| 类型 17 索引表 | **已落地（S4b，§7）**。留待：A3b 对数组属性逐槽（元素 k）三方与 17 写入撞 23 → 576 的冲突——触发 = 出现两边并发改同一数组的场景 |
 | extract 模型、页 1 桶表、Central、多 extent、E3D 2.1、部分存盘 | 需求出现再议 |
 | E3D 自造 hunk 样本 | 不专门做 |
 
@@ -184,3 +184,8 @@ S1 → S2 → S3（收口，1 天）→ **S4**（2–3 天）→ S4b（半天）
     - **类型 15 非 NAME：DESI / CATA 模板里一个都没有**（DRTYPT / DRSTYT / RDFIRI 是别的库类型）。→ 不做。
     - **类型 18：只有 `UDASTB`**（cnt 1000、只能 explicit），DESI 868 / CATA 146 个 noun 声明，**8.9 M 元素里 0 个设值**。→ 不做，记触发。
     - **类型 17：DESI 20 个 + CATA 1 个属性**，全部 explicit-only，除 `CONNRE`（HNODE 有 implicit 槽）与 `DESLNK`（CYMLNK 有）。设了值的：`HCREF` **1 151** 元素 / 24 库、`TCREF` 857 / 22（CTWALL / CWBRAN / HANDRA / RBRAN）、`MDSYSF` 291 / 24（29 个 noun：AHU / BATT / BRAN / CABLE …）、`CONNRE` 165 / 19、`DESLNK` 116 / 2、`STRREF` 6 / 1、`ROUTND` 2 / 2；CATA `COCORE` 282 / 3（`acp7046_0001`）；其余 13 个属性 0 设值。**设了值的库里，表目录都有以该属性名命名的表**（HCREF 24/24、TCREF 22/22、MDSYSF 24/24、COCORE 3/3、DESLNK 2/2、STRREF 1/1、ROUTND 2/2；`CONNRE` 16/19——无表的 3 个库 `ams251158` / `aps250176` / `aps250520` 只在 RNODE 上各有 1 / 4 / 4 个 explicit 项，疑为全空引用、无键即无表，S4b 普查时核）。例：`ams251142_0001` 表目录 = `NAME TYPEX TCREF SPAMAP POSREF SPRE HCREF CONNRE`。→ 与算法清单 §5「17 = ref 数组 + 以属性 hash 命名的索引表」互证，**新增 S4b**。
+- 2026-09-21：**S4b 落地——类型 17 反向引用表随写维护。**
+  - **不变量普查先行**（`%TEMP%\e3dio_census\src\bin\type17_invariant.rs`，未入库；同一 609 库）：对每个设了值的类型 17 字段取全部非空项，到同名表里找边 `[t, 自身]`；再反向把表里每条边映回字段。结果 **8 个属性 3 191 条期望边 → 3 191 条全在表里；表里 3 191 条边 → 3 191 条全映回值；0 缺 0 多**（COCORE 564、HCREF 1 164、TCREF 871、ROUTND 4、CONNRE 119、STRREF 12、MDSYSF 301、DESLNK 116）。数组里 **0 个 unset 标记**；`CONNRE` 165 项里 46 个空 `(0,0)`，三个「无表却有值」的库其 CONNRE 项**全部是空引用**（非空 0 个）——无键即无表，坐实。explicit 字段 2 754 个 type_code **全部 `0x4400`**（= 17<<10）、布局 `[count][pair×count]`；**4 个字段（aps250514 ×2、aps250517 ×2）存了 21 字却只 count 1**——槽按容量 10 对预留、按 count 读，写侧因此按 count 不按长度取项。DESLNK 116 个全部走 implicit 槽（CYMLNK 偏移非 0）。12 s。
+  - 落地：`write::reverse` 加 `REFERENCE_ARRAY_STORAGE_TYPE = 17`、`reference_array(draft, template, hash) -> Option<Vec<RefNo>>`（implicit：偏移处 `[count][pairs]`，count 按槽容量 `(storage_words−1)/2` 截；explicit：`explicit_words` 的 data 按 count 取；空对与 unset 标记跳过）、`set_reference_array(draft, template, hash, &[RefNo]) -> bool`（implicit 写 count + 对、槽余零填、超容量拒且不动；explicit 空表删项、否则 `[n][pairs]` 以 `REFERENCE_ARRAY_TYPE_CODE = 17<<10` 写，与语料 2 754 个字段一致）；`table_keys` 对模板里每个类型 17 属性按项出键 `[t, 自身]`。`write::record` 加常量 `REFERENCE_ARRAY_TYPE_CODE`。建表 / 目录追加 / 差集删插 / 删元素撤键全部复用 `keyed_cow` 与 `stage_session_with_base` 现有路径，一行未改。
+  - 验收：单测 `reverse::a_reference_array_files_one_key_per_non_null_entry`（explicit 与 implicit 两档、每项一键、空对与 unset 不出键、count 之外的对不读、超容量拒写不动、空表清项 / 清槽、类型 16 属性拒）；集成 `tests/write_stage2_tables.rs::a_reference_array_moves_one_edge_per_entry_and_a_deleted_referrer_withdraws_them_all`（`ams251142_0001` 副本，表 SPRE 128 / HCREF 42 / TCREF 34 / TYPEX 362 / CONNRE 10 / POSREF 282 条键）：取首个同时设了 HCREF 与 TCREF 的引用者 `CWBRAN 2013287686/36`，先核它出的每个键都在表里；S+1 把 HCREF 首项 A 换成 B → HCREF 表恰好 −`[A,R]` +`[B,R]`、**其余表连根页号都没动**、记录读回 type_code `0x4400`、TCREF 原样、diff 改 1；S+2 删 R（并出 owner 表）→ 每张表恰好少掉引用者为 R 的键（HCREF 边 + TCREF 边 + TYPEX 键 = 3）、R 出索引、diff 删 1 改 1；两轮字节前缀不变、新页连续。全套：`cargo test --lib` **330** 通过、写路径 **37** 条全绿、clippy 写路径文件 0 warning、cargo doc 仍 24 条。
+  - 仍未做（类型 17 相关，记入 §2 C）：A3b 的 `sub_5B0D950` 对数组属性按**元素 k 逐槽**三读一写（17 的元素数 = `(size−1)/2`），两边改同一数组的**不同槽**时 core 两者都留；本 crate 的 `three_way` 按**整个属性**比，同一数组两边都改则写者整段赢。`sub_5AB8DC0` 写 17 时回 23 → 冲突 576 也未建模（`keyed_cow` 插已有键幂等）。语料里没有并发改同一数组的样本可坐实，先记下。
