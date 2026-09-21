@@ -28,7 +28,9 @@
 //! replaces the committed one (`sub_5B1F660`). Knowing the noun takes the
 //! schema's `*vir.dat`, so [`write_merge_session_with`] accepts a
 //! [`TemplateProvider`] through [`MergeOptions`]; without one every noun
-//! merges member by member.
+//! merges member by member. An element the merge re-parents is also taken
+//! out of the member list of the owner the committed record named, the way
+//! `sub_5B211C0` does it, whether or not the writer handed that owner in.
 
 use std::collections::{HashMap, HashSet};
 
@@ -180,6 +182,13 @@ pub fn write_merge_session_with(
 /// Rebase each of the writer's element updates onto the committed record, so a
 /// change composes with what was committed since the base rather than
 /// overwriting it. Inserts and deletes pass through unchanged.
+///
+/// An element the merge re-parents — the writer moved it and the merge took
+/// the writer's owner — is also taken out of the member list of the owner the
+/// committed record named, `sub_5B211C0`'s fix-up ([`detach_from_committed_owner`]),
+/// so the writer need not have handed that owner's record in: when the
+/// committed side had moved the element elsewhere meanwhile, the writer could
+/// not have known which list to take it out of.
 fn rebase_updates(
     path: &std::path::Path,
     base_sesno: u32,
@@ -194,6 +203,9 @@ fn rebase_updates(
     let mut base = ReadOnlyEngine::open_at(path, base_sesno)?;
     let mut latest = ReadOnlyEngine::open(path)?;
     let mut out = Vec::with_capacity(elements.len());
+    // `(element, the owner the committed record names)` for each element the
+    // merge re-parents; fixed up after every update is rebased.
+    let mut re_parented: Vec<(RefNo, RefNo)> = Vec::new();
     for element in elements {
         match element {
             ElementWrite::Update(working) => {
@@ -221,6 +233,16 @@ fn rebase_updates(
                             mode,
                             |member| standing.get(&member).copied(),
                         )?;
+                        // `sub_5B211C0`: the writer moved the element (base ≠
+                        // working owner) and the merge kept the writer's owner
+                        // — plain `SAVEWORK` unless the committed side had
+                        // already moved it to the same place, extract flush
+                        // unless the committed side moved it at all — so the
+                        // owner the committed record names must let go of it.
+                        let writer_moved = working.owner != base_draft.owner;
+                        if writer_moved && merged.owner == working.owner && merged.owner != latest_draft.owner {
+                            re_parented.push((working.refno, latest_draft.owner));
+                        }
                         // INDEX de-duplication (A3a, sub_5B07080): a merged
                         // record equal to the committed one is not written —
                         // its leaf keeps pointing at the record already there.
@@ -235,7 +257,45 @@ fn rebase_updates(
             other => out.push(other.clone()),
         }
     }
+    for (member, committed_owner) in re_parented {
+        detach_from_committed_owner(&mut out, &mut latest, committed_owner, member)?;
+    }
     Ok(out)
+}
+
+/// `sub_5B211C0`'s member-list fix-up for an element the merge re-parents: on
+/// the owner the *committed* record names (`4GTE` it in the merged state),
+/// locate the element in its member list (`4FA` with `FIRST`) and delete that
+/// entry (`sub_5AEB0B0` + `sub_5AB3F30`); an owner no longer indexed (error
+/// 10) or a list without the element (error 6) is tolerated and nothing is
+/// done. In the merged state the owner is whatever the batch already carries
+/// for it — its rebased update (or insert) loses the member, a delete needs
+/// nothing — else the committed record, read and re-emitted without the
+/// member as one more update.
+fn detach_from_committed_owner(
+    out: &mut Vec<ElementWrite>,
+    latest: &mut ReadOnlyEngine,
+    committed_owner: RefNo,
+    member: RefNo,
+) -> Result<(), WriteError> {
+    for element in out.iter_mut() {
+        match element {
+            ElementWrite::Update(draft) | ElementWrite::Insert(draft) if draft.refno == committed_owner => {
+                draft.remove_member(member);
+                return Ok(());
+            }
+            ElementWrite::Delete(refno) if *refno == committed_owner => return Ok(()),
+            _ => {}
+        }
+    }
+    let Some(view) = latest.find_element(committed_owner)? else {
+        return Ok(());
+    };
+    let mut draft = RecordDraft::from_record_bytes(&view.raw_bytes)?;
+    if draft.remove_member(member) {
+        out.push(ElementWrite::Update(draft));
+    }
+    Ok(())
 }
 
 /// Where each member the writer added to a list stands in the base and latest

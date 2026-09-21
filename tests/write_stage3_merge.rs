@@ -1009,7 +1009,9 @@ fn an_added_member_the_committed_side_deleted_is_left_out_when_merged() {
 /// B, based on S, moves the same M from P to O. Flushed: M keeps the committed
 /// owner Q, O's list does not gain M, P's list loses it on both sides — every
 /// merged record equals its committed one and no record is written. Plain: M
-/// takes B's owner O and O's list gains M.
+/// takes B's owner O, O's list gains M, and — `sub_5B211C0`'s fix-up — Q, the
+/// owner the committed record named and whose record B never handed in, loses
+/// M from its list.
 #[test]
 fn an_added_member_the_committed_side_re_parented_is_left_out_under_extract_flush() {
     if common::missing(&[AMS8000]) {
@@ -1021,6 +1023,7 @@ fn an_added_member_the_committed_side_re_parented_is_left_out_under_extract_flus
         m_owner: RefNo,
         o_members: Vec<RefNo>,
         committed_o: Vec<RefNo>,
+        q_holds_m: bool,
         leaf: RefNo,
         owner_o: RefNo,
         owner_q: RefNo,
@@ -1074,13 +1077,13 @@ fn an_added_member_the_committed_side_re_parented_is_left_out_under_extract_flus
 
         let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
         assert!(!members_of(&mut engine, owner_p).contains(&leaf), "flush={flush}: both sides took M out of P");
-        assert!(members_of(&mut engine, owner_q).contains(&leaf), "flush={flush}: Q's committed list holds M");
         Outcome {
             appended: report.appended_pages.len(),
             changed: tally(&copy.path, s + 1, s + 2),
             m_owner: owner_of(&mut engine, leaf),
             o_members: members_of(&mut engine, owner_o),
             committed_o,
+            q_holds_m: members_of(&mut engine, owner_q).contains(&leaf),
             leaf,
             owner_o,
             owner_q,
@@ -1093,11 +1096,13 @@ fn an_added_member_the_committed_side_re_parented_is_left_out_under_extract_flus
     assert_eq!(flushed.m_owner, flushed.owner_q, "extract flush: both moved M, the committed owner Q stands");
     assert_eq!(flushed.o_members, flushed.committed_o, "extract flush: M's owner changed under B, so O's list does not gain M");
     assert!(!flushed.o_members.contains(&flushed.leaf));
+    assert!(flushed.q_holds_m, "extract flush: Q's committed list keeps M");
     assert_eq!(flushed.appended, 1, "extract flush: only the session page was appended");
     assert_eq!(flushed.changed, (0, 0, 0), "extract flush: S+1..S+2 changed nothing");
 
-    // Plain SAVEWORK: the writer's owner O wins and O's list gains M at the
-    // end, where B put it.
+    // Plain SAVEWORK: the writer's owner O wins, O's list gains M at the end
+    // where B put it, and Q — the owner the committed record named, whose
+    // record B never handed in — lets go of M.
     let plain = outcome(false);
     assert_eq!(plain.m_owner, plain.owner_o, "plain: M's owner is B's O");
     assert_eq!(
@@ -1105,8 +1110,89 @@ fn an_added_member_the_committed_side_re_parented_is_left_out_under_extract_flus
         [plain.committed_o.as_slice(), &[plain.leaf]].concat(),
         "plain: O's list is the committed one plus M"
     );
+    assert!(!plain.q_holds_m, "plain: M is taken out of Q's list (sub_5B211C0), though B never touched Q");
     assert!(plain.appended > 1, "plain: records were written");
-    assert_eq!(plain.changed, (0, 0, 2), "plain: M (owner) and O (list) changed; P equals the committed P");
+    assert_eq!(plain.changed, (0, 0, 3), "plain: M (owner), O (list) and Q (list) changed; P equals the committed P");
+}
+
+/// `sub_5B211C0`'s fix-up on its own: an element the merge re-parents is taken
+/// out of the member list of the owner the committed record names, whether or
+/// not the writer handed that owner's record in, and once only when it did.
+///
+/// A commits an unrelated change. B, based on S, moves leaf M from P to O —
+/// handing in M and O only, or M, P and O — plain or flushed (the committed
+/// side left M's owner alone, so both modes take B's owner). Merged: P's list
+/// is without M, O's has it, M's owner is O, and exactly M, O and P changed.
+#[test]
+fn re_parenting_an_element_takes_it_out_of_the_committed_owners_list() {
+    if common::missing(&[AMS8000]) {
+        return;
+    }
+    for (flush, hand_in_p) in [(false, false), (true, false), (false, true)] {
+        let copy = DbCopy::of(AMS8000);
+        let cast = cast(AMS8000);
+        let owner_o = cast.zones[0];
+        let s = DbView::open(&copy.path).unwrap().session().sesno;
+        let case = format!("flush={flush}, hand_in_p={hand_in_p}");
+
+        // A: an unrelated change, so B's write is a real merge.
+        let (owner_p, leaf) = {
+            let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+            let (owner_p, leaf) = leaf_under(&mut engine, db1_hash("BRAN"));
+            assert_ne!(owner_p, owner_o);
+            let mut subs = RecordDraft::from_record_bytes(&engine.find_element(cast.subs[0]).unwrap().unwrap().raw_bytes).unwrap();
+            *subs.implicit_word_mut(11).unwrap() ^= 1;
+            write_element_session(
+                &copy.path,
+                &SessionRequest { user: "A", comment: "A changes something else", clock: Some(clock()) },
+                &[ElementWrite::Update(subs)],
+                &[],
+            )
+            .expect("A writes S+1");
+            (owner_p, leaf)
+        };
+        let committed_p = members_of(&mut ReadOnlyEngine::open(&copy.path).unwrap(), owner_p);
+        let committed_o = members_of(&mut ReadOnlyEngine::open(&copy.path).unwrap(), owner_o);
+        assert!(committed_p.contains(&leaf));
+
+        // B, based on S, moves M from P to O.
+        let report = {
+            let mut base = ReadOnlyEngine::open_at(&copy.path, s).expect("base");
+            let mut m = RecordDraft::from_record_bytes(&base.find_element(leaf).unwrap().unwrap().raw_bytes).unwrap();
+            m.owner = owner_o;
+            let mut elements = vec![ElementWrite::Update(m), ElementWrite::Update(zone_with_member(&mut base, owner_o, leaf))];
+            if hand_in_p {
+                let mut p = RecordDraft::from_record_bytes(&base.find_element(owner_p).unwrap().unwrap().raw_bytes).unwrap();
+                p.remove_member(leaf);
+                elements.push(ElementWrite::Update(p));
+            }
+            write_merge_session_with(
+                &copy.path,
+                &SessionRequest { user: "B", comment: "B moves M to O", clock: Some(clock()) },
+                s,
+                &elements,
+                &[],
+                MergeOptions { extract_flush: flush, ..Default::default() },
+            )
+            .expect("B merges S+2")
+        };
+
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        assert_eq!(owner_of(&mut engine, leaf), owner_o, "{case}: M's owner is O");
+        assert_eq!(
+            members_of(&mut engine, owner_o),
+            [committed_o.as_slice(), &[leaf]].concat(),
+            "{case}: O's list gained M at the end"
+        );
+        let p_members = members_of(&mut engine, owner_p);
+        assert_eq!(
+            p_members,
+            committed_p.iter().copied().filter(|m| *m != leaf).collect::<Vec<_>>(),
+            "{case}: P's list is the committed one without M, the rest in order"
+        );
+        assert_eq!(tally(&copy.path, s + 1, s + 2), (0, 0, 3), "{case}: exactly M, O and P changed");
+        assert!(report.appended_pages.len() > 1, "{case}: records were written");
+    }
 }
 
 /// A `(owner, leaf)` pair: an element of `owner_noun` with a 0-member child in
