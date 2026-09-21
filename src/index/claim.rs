@@ -112,7 +112,7 @@ fn order(refno: RefNo) -> (u32, u32) {
 }
 
 fn decode(page: PageId, data: &[u8]) -> Result<Node, ClaimTableError> {
-    if data.len() % DWORD != 0 {
+    if !data.len().is_multiple_of(DWORD) {
         return Err(ClaimTableError::PageNotDwordAligned { page, len: data.len() });
     }
     if data.len() < HEADER_DWORDS * DWORD {
@@ -142,7 +142,7 @@ fn decode(page: PageId, data: &[u8]) -> Result<Node, ClaimTableError> {
     }
     let stride_dwords = u64::from(key_dwords) + if level == 0 { u64::from(VALUE_DWORDS) } else { u64::from(CHILD_DWORDS) };
     let used_dwords = usable_dwords as u64 - u64::from(free_dwords);
-    if used_dwords % stride_dwords != 0 {
+    if !used_dwords.is_multiple_of(stride_dwords) {
         return Err(ClaimTableError::FreeSpaceNotEntryAligned { page, used_dwords, stride_dwords });
     }
     let count = (used_dwords / stride_dwords) as usize;

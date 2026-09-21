@@ -283,10 +283,7 @@ impl RecordDraft {
     /// The explicit attribute stream as big-endian words — the payload of the
     /// explicit tail block, before any block header.
     pub fn explicit_stream_words(&self) -> Vec<u32> {
-        self.explicit_stream
-            .chunks_exact(4)
-            .map(|word| u32::from_be_bytes(word.try_into().expect("stream is whole words")))
-            .collect()
+        stream_words(&self.explicit_stream)
     }
 
     /// Whether two records carry the same content — noun, owner, members, the
@@ -520,10 +517,7 @@ impl RecordDraft {
                 field.2 = HunkRef { page_no: *page, packed: *packed, ..entry }.to_words().to_vec();
             }
         }
-        rebuild_explicit_stream(&fields)
-            .chunks_exact(4)
-            .map(|word| u32::from_be_bytes(word.try_into().expect("stream is whole words")))
-            .collect()
+        stream_words(&rebuild_explicit_stream(&fields))
     }
 
     /// Remove an explicit attribute. Returns whether it was there. A pending
@@ -576,11 +570,7 @@ impl RecordDraft {
 
     /// The explicit stream as `(hash, type_code, data_words)` fields.
     fn parse_explicit_fields(&self) -> Vec<(u32, u16, Vec<u32>)> {
-        let words: Vec<u32> = self
-            .explicit_stream
-            .chunks_exact(4)
-            .map(|w| u32::from_be_bytes(w.try_into().unwrap()))
-            .collect();
+        let words = stream_words(&self.explicit_stream);
         let mut fields = Vec::new();
         let mut cursor = 0;
         while cursor + 2 <= words.len() {
@@ -1146,6 +1136,15 @@ fn anchor_slot(merged: &[RefNo], working: &[RefNo], at: usize) -> usize {
 /// An explicit text value's data words: a count word, then the bytes four to
 /// a word, NUL-padded — the `[len][packed text]` a `0x3C00`/`0x2800` reader
 /// decodes.
+/// An explicit stream's bytes as its big-endian words. The stream is whole
+/// words — every entry states its length in words — so the remainder is
+/// empty; a trailing partial word, were there one, is left out the way
+/// `chunks_exact(4)` left it out.
+fn stream_words(stream: &[u8]) -> Vec<u32> {
+    let (words, _rest) = stream.as_chunks::<4>();
+    words.iter().map(|word| u32::from_be_bytes(*word)).collect()
+}
+
 fn ascii_text_data(text: &str) -> Result<Vec<u32>, RecordEncodeError> {
     if !text.is_ascii() {
         return Err(RecordEncodeError::ExplicitTextNotAscii {
@@ -1166,10 +1165,10 @@ fn ascii_text_data(text: &str) -> Result<Vec<u32>, RecordEncodeError> {
 /// A string list's stored words and the element count `core.dll` reports for
 /// it: `[n] { [i][words][bytes][packed text × words] }*` as `sub_5AD5060`
 /// builds it — item index from 0, the item's packed word count, its byte
-/// length, then the bytes four to a word NUL-padded — and `1 + Σ(4 × words_i
-/// + 3)`, the running total it hands `4SCEA` as the value's length (what a
+/// length, then the bytes four to a word NUL-padded — and the running total
+/// `1 + Σ(4 × words_i + 3)` it hands `4SCEA` as the value's length (what a
 /// type-23 directory entry's count word carries). ASCII only, like
-/// [`ascii_text_data`]: under either header `FORMAT` the bytes store as they
+/// `ascii_text_data`: under either header `FORMAT` the bytes store as they
 /// are.
 pub fn text_list_data_ascii<I, S>(items: I) -> Result<(Vec<u32>, u32), RecordEncodeError>
 where
