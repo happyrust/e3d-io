@@ -432,6 +432,30 @@ impl ReadOnlyEngine {
             .map_err(|source| E3dReaderError::Other(source.to_string()))
     }
 
+    /// The `NAME` table of the selected session — every stored name and the
+    /// element it belongs to — or `None` when the session names no such table.
+    ///
+    /// See [`crate::index::named`] for the page layout; this is the table
+    /// `core.dll` keeps a type-15 attribute's uniqueness in.
+    pub fn name_table(&mut self) -> Option<crate::index::NamedTable<'_>> {
+        let hash = crate::index::name_table_hash();
+        let root = self.session.table_root(hash)?;
+        Some(crate::index::NamedTable::at_root(&mut self.cache, root, hash))
+    }
+
+    /// The element stored under exactly `name` (leading `/` included), by one
+    /// descent of the `NAME` table — no element scan.
+    ///
+    /// `Ok(None)` means the table has no such name, or the session has no
+    /// `NAME` table at all; a table that is there and cannot be read is an
+    /// `Err`.
+    pub fn find_by_name(&mut self, name: &str) -> Result<Option<RefNo>, E3dReaderError> {
+        let Some(mut table) = self.name_table() else {
+            return Ok(None);
+        };
+        Ok(table.lookup_name(name)?)
+    }
+
     /// Find one RefNo in the index of the selected session.
     ///
     /// Delegates to [`IndexCursor`], which is the crate's only descent.

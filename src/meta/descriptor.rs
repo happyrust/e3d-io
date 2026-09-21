@@ -3,7 +3,11 @@ use crate::error::E3dReaderError;
 use crate::page::{PageId, PageSize, PageType};
 
 /// Byte offsets inside page 0, all big-endian words.
-mod at {
+///
+/// `pub(crate)` so that [`crate::write`] commits through the same offsets this
+/// module reads: the write side changes `LATEST_SES_PGNO` / `EXT_NO` and, when
+/// positive, `TEMPLATE_VERSION`, and nothing else on the page.
+pub(crate) mod at {
     pub const PAGE_TYPE: usize = 0x00;
     pub const NOUN: usize = 0x04;
     pub const DB_NUM: usize = 0x08;

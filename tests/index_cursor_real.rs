@@ -318,7 +318,10 @@ fn a_tree_that_points_back_at_itself_is_refused_by_both_paths() {
 /// cycle guard and no level check, a differ that had both, a debug copy with a
 /// hard-coded RefNo in it, and a printing one — and they disagreed about where
 /// the sentinel sits. Routing lives in one function; nothing outside the index
-/// module may pick a child page.
+/// module may pick a child page — save the copy-on-write writer
+/// (`write/index_cow.rs`), which builds a new tree the reader will descend and
+/// so must route keys by the very same rule, reusing `choose_child` rather
+/// than carrying a fifth copy.
 #[test]
 fn choosing_a_child_has_one_implementation() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -352,13 +355,25 @@ fn choosing_a_child_has_one_implementation() {
     );
     assert_eq!(
         callers.iter().cloned().collect::<Vec<_>>(),
-        vec!["index/cursor.rs".to_string(), "index/mod.rs".to_string()],
-        "only the index module may choose a child page"
+        vec![
+            "index/cursor.rs".to_string(),
+            "index/mod.rs".to_string(),
+            "write/index_cow.rs".to_string(),
+        ],
+        "only the index module and the copy-on-write writer may choose a child page"
     );
     assert_eq!(
         comparers.iter().cloned().collect::<Vec<_>>(),
-        vec!["index/diff.rs".to_string(), "index/mod.rs".to_string()],
-        "key ordering is unsigned in one place; a second comparison is a second tree order"
+        vec![
+            "index/diff.rs".to_string(),
+            "index/mod.rs".to_string(),
+            // The claim tree is keyed by the same 2-word refno the index is,
+            // so its copy-on-write writer orders keys through the same
+            // `cmp_refno` rather than carrying its own.
+            "write/claim_cow.rs".to_string(),
+            "write/index_cow.rs".to_string(),
+        ],
+        "key ordering is unsigned in one place; the writers insert by that same order"
     );
 }
 
@@ -370,6 +385,11 @@ fn choosing_a_child_has_one_implementation() {
 /// page is a node, at which level, and reading its entries. If that step were
 /// copied into `index/diff.rs`, the differ could accept a page the walk
 /// rejects — and then a key present in both trees would come back deleted.
+///
+/// The copy-on-write writer (`write/index_cow.rs`) reads nodes too — it copies
+/// the pages on the path to each edited leaf — and it does so through the same
+/// `IndexNode::decode`, so a page it writes is one the walk will read back the
+/// same way. It reuses the decoder rather than carrying its own.
 #[test]
 fn reading_a_page_as_a_node_has_one_implementation() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -407,8 +427,12 @@ fn reading_a_page_as_a_node_has_one_implementation() {
     );
     assert_eq!(
         decoders.iter().cloned().collect::<Vec<_>>(),
-        vec!["index/cursor.rs".to_string(), "index/mod.rs".to_string()],
-        "nothing outside the decoder and the tree walk may turn a page into a node"
+        vec![
+            "index/cursor.rs".to_string(),
+            "index/mod.rs".to_string(),
+            "write/index_cow.rs".to_string(),
+        ],
+        "nothing outside the decoder, the tree walk and the copy-on-write writer may turn a page into a node"
     );
 }
 

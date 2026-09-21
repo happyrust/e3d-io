@@ -182,12 +182,71 @@ impl NounDefaults {
     }
 }
 
+/// What a noun's member list is, from word 3 of its template payload header
+/// (`*vir.dat` chunk 0).
+///
+/// `core.dll`'s merge reads this word as the member-list `kind` and treats
+/// `2` alone as "the list is one attribute: overwrite it whole" (`sub_5B224B0`
+/// → `sub_5B1F660`, A3b.4). A survey of the 20 shipped E3D 3.1 schema files
+/// bears the reading out: the word is 0 on nouns that own nothing (`TP`,
+/// `WELD`, `NBOX`, `TEXT`… — 347 of `desvir.dat`'s 994 nouns), 1 on nouns
+/// whose members are their own children (`ZONE`, `PIPE`, `BRAN`… — 646), and
+/// 2 only on the nouns whose members are references to elements owned
+/// elsewhere: `GROU` in `desvir.dat` and `catvir.dat`, `MDB` and `USLI` in
+/// `sysvir.dat`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MemberListKind {
+    /// The template did not come from a `*vir.dat` payload (or the word was
+    /// not read), so nothing is known; merge treats it as [`Owned`].
+    ///
+    /// [`Owned`]: MemberListKind::Owned
+    #[default]
+    Unknown,
+    /// 0: the noun has no member list.
+    None,
+    /// 1: an owned member list — the members are this element's children.
+    Owned,
+    /// 2: a reference list — the members are elements owned elsewhere, and a
+    /// merge overwrites the list whole rather than member by member.
+    Referenced,
+    /// Any other value, kept verbatim.
+    Other(u32),
+}
+
+impl MemberListKind {
+    /// The kind header word 3 states.
+    pub fn from_word(word: u32) -> Self {
+        match word {
+            0 => Self::None,
+            1 => Self::Owned,
+            2 => Self::Referenced,
+            other => Self::Other(other),
+        }
+    }
+}
+
 /// Noun-correct ordered attribute schema loaded from a `*vir.dat` payload.
 #[derive(Debug, Clone, Default)]
 pub struct NounTemplate {
     pub noun_hash: u32,
     pub attrs: Vec<TemplateAttr>,
     pub defaults: NounDefaults,
+    /// Header word 3 of the payload, typed; [`MemberListKind::Unknown`] on a
+    /// template not parsed from a payload.
+    pub member_list_kind: MemberListKind,
+    /// Whether this noun is a **primary** element — one of the name-bearing,
+    /// navigable hierarchy nouns (`SITE`, `ZONE`, `EQUI`, `PIPE`, `BRAN`,
+    /// `STRU`, `SUBS`, `SCTN`, …) that `core.dll` keys the `(5, 7618377)`
+    /// claim tree by, as opposed to the components and primitives beneath them
+    /// (`BOX`, `CYLI`, `GROU`, …).
+    ///
+    /// From word 4 of the payload header: `sub_5B059C0` reads exactly this
+    /// word (`*(*(CE+16)+16)`) to decide whether an element is its own primary
+    /// or must walk up to one. On `ams8000_0001` the word is 1 on every noun
+    /// keying the claim tree and 0 on every noun that does not, bar the single
+    /// `MNUM` counter — 3 129 of 3 130 primaries partition by it. `false` on a
+    /// template not parsed from a payload.
+    pub is_primary: bool,
 }
 
 impl NounTemplate {
@@ -197,6 +256,8 @@ impl NounTemplate {
             noun_hash,
             attrs: Vec::new(),
             defaults: NounDefaults::default(),
+            member_list_kind: MemberListKind::Unknown,
+            is_primary: false,
         }
     }
 
@@ -226,6 +287,8 @@ impl NounTemplate {
             noun_hash,
             attrs,
             defaults: NounDefaults::default(),
+            member_list_kind: MemberListKind::Unknown,
+            is_primary: false,
         })
     }
 
@@ -318,6 +381,8 @@ impl NounTemplate {
             noun_hash,
             attrs,
             defaults: NounDefaults::default(),
+            member_list_kind: MemberListKind::from_word(payload[3]),
+            is_primary: payload[4] != 0,
         })
     }
 
@@ -530,6 +595,27 @@ mod tests {
     fn from_attlib_noun_map_returns_none_when_no_entries() {
         let attlib = AttlibData::default();
         assert!(NounTemplate::from_attlib_noun_map(&attlib, 0x123).is_none());
+    }
+
+    /// Header word 3 is the member-list kind; a template not parsed from a
+    /// payload does not know it.
+    #[test]
+    fn member_list_kind_comes_from_header_word_3() {
+        let mut payload = vec![0u32; 24];
+        payload[9] = 1;
+        payload[14..24].copy_from_slice(&[0xAA, 10, 2, 1, 1, 11, 0, 2, 11, 0]);
+        for (word, kind) in [
+            (0, MemberListKind::None),
+            (1, MemberListKind::Owned),
+            (2, MemberListKind::Referenced),
+            (7, MemberListKind::Other(7)),
+        ] {
+            payload[3] = word;
+            let t = NounTemplate::from_template_payload(&payload, 0x123).unwrap();
+            assert_eq!(t.member_list_kind, kind, "word 3 = {word}");
+        }
+        assert_eq!(NounTemplate::new(0x123).member_list_kind, MemberListKind::Unknown);
+        assert_eq!(NounTemplate::default().member_list_kind, MemberListKind::Unknown);
     }
 
     #[test]

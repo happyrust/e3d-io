@@ -42,10 +42,16 @@
 //!
 //! Not every directory table is a reference table. `TYPEX` shares the 4-dword
 //! key shape and is *not* one — 2 610 190 of its keys' second halves are not
-//! refnos of the file at all. Membership is decided by the dictionary, not by
-//! the shape: a table is a reference table when its name is an `ELEMENT`-typed
-//! attribute. This module refuses to guess, so [`ReferenceTable::open`] takes
-//! the name hash the caller has already decided on.
+//! refnos of the file at all: its key is `[noun_hash, refno.word0,
+//! refno.word1, 0]`, the type-14 keyed-attribute shape `[value, self, k]`
+//! (`sub_5AB91B0`), filed for every element whose noun template lists
+//! `TYPEX`. Membership is decided by the dictionary, not by the shape: a table
+//! is a reference table when its name is a **storage type 16** attribute —
+//! the single-reference type `sub_5AB8D20` routes through the table writer;
+//! type-4 and type-8 references (`CREF`, `HREF`, `TREF`, `PSPE`…) have no
+//! table. This module refuses to guess, so [`ReferenceTable::open`] takes the
+//! name hash the caller has already decided on. The write side keeps both
+//! kinds in [`crate::write::reverse`].
 
 use std::collections::HashSet;
 

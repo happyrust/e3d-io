@@ -169,27 +169,53 @@ fn a_merged_chain_bases_sessions_on_numbers_it_no_longer_retains() {
     let chain = retained_sessions(E3D31_AMS7000);
     assert_session_invariants(E3D31_AMS7000, &chain);
 
-    // `ams7000_0001` keeps only 1, 237, 238, 262 and 263 (see
-    // `SessionSelector::AtOrBefore`): a gap in the retained numbers is where
-    // MERGE CHANGES ran, and the session after the gap was still written on
-    // top of the one right before it, which the chain no longer holds.
+    // `ams7000_0001` kept only 1, 237, 238, 262 and 263 when this was written
+    // (see `SessionSelector::AtOrBefore`): a gap in the retained numbers is
+    // where MERGE CHANGES ran, and the session after the gap was still written
+    // on top of the one right before it, which the chain no longer holds.
+    //
+    // The file is live: every time E3D opens the sample project it appends a
+    // `Saving Meta Data.` session (REASON 15, based on nothing) on top, so the
+    // *newest* session is not the one this test is about. It walks the chain
+    // for the first session written over a gap instead, and states why when
+    // the file has been rewritten into a shape that has none.
     let numbers: Vec<u32> = chain.iter().map(|s| s.sesno).collect();
-    let has_gap = chain
+    let over_a_gap = chain
         .windows(2)
-        .any(|pair| pair[0].sesno > pair[1].sesno + 1);
+        .find(|pair| Stacking::of(&pair[0], &pair[1]) == Stacking::OverAGap);
+    let Some(pair) = over_a_gap else {
+        eprintln!(
+            "SKIP {E3D31_AMS7000}: no retained session is based on a number the chain \
+             folded away — the live file was rewritten; retained {numbers:?}, \
+             stacking (direct, over a gap, reverted, unbased) = {:?}",
+            stacking_census(&chain)
+        );
+        return;
+    };
+    let (newer, older) = (&pair[0], &pair[1]);
+    let tail = newer.tail.expect("full page");
     assert!(
-        has_gap,
-        "{E3D31_AMS7000}: expected a merged chain, got {numbers:?}"
+        newer.sesno > older.sesno + 1,
+        "{E3D31_AMS7000}: session {} sits right behind {}, no gap to base across",
+        newer.sesno,
+        older.sesno
     );
-    let newest = &chain[0];
-    let tail = newest.tail.expect("full page");
     assert_eq!(
         tail.base_sesno + 1,
-        newest.sesno,
-        "the newest SAVEWORK sits on its predecessor"
+        newer.sesno,
+        "{E3D31_AMS7000}: the SAVEWORK after the gap sits on its immediate predecessor, \
+         which the chain no longer retains"
+    );
+    assert!(
+        !numbers.contains(&tail.base_sesno),
+        "{E3D31_AMS7000}: BASESN {} of session {} is still retained, so nothing was folded away",
+        tail.base_sesno,
+        newer.sesno
     );
     eprintln!(
-        "{E3D31_AMS7000}: retained {numbers:?}, users {:?}",
+        "{E3D31_AMS7000}: retained {numbers:?}, session {} based on folded-away {}, users {:?}",
+        newer.sesno,
+        tail.base_sesno,
         distinct_users(&chain)
     );
 }

@@ -11,6 +11,8 @@
 
 #![allow(dead_code)]
 
+pub mod write_fixture;
+
 use std::path::Path;
 
 use e3d_io::engine::ScanTier;

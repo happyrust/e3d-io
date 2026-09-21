@@ -1,0 +1,97 @@
+-- e3d-io gate, round 2, as run on 2026-09-21 (docs/evidence/2026-09-21-e3d-tty-gate-write-path.md,
+-- 第二轮). Paths and refnos are those of that run on the D:/e3dio-gate copy after
+-- tools/e3d/write_gate.ps1; adjust before re-use. This macro SAVEWORKs, so the driver needs its
+-- stateful mode:
+--   l3_suite --check-driver <this file> --project-dir <copy> --output <dir>
+--            --target-db-file <copy>/ams000/ams8000_0001 --aios-project AMS
+--
+-- E3D itself edits the attributes e3d-io stored as hunks, touches a
+-- neighbour, and SAVEWORKs — so the next session on the chain is E3D's, written over ours.
+-- EQUI 1 24384/31486: DESC / DESP / UUIDIA (all hunks from e3d-io) get new values from E3D.
+-- EQUI 2 24384/31487: only FUNC is set; its three hunk attributes are left alone.
+-- FIXING 24384/31488: only DESC is set; ROKEYS (inline 19) / ROVALS (hunk 23) left alone.
+-- The driver's wrapper owns the session (no QUIT here); one SAVEWORK.
+
+ALPHA LOG "D:/e3dio-gate/logs/90_mutate_equi1.log" OVER
+$P MUT-90-BEGIN
+=24384/31486
+handle any
+  $P MUT-90-NAV-ERROR $!!error.text
+endhandle
+Q REF
+DESC 'E3D rewrote this DESC after e3d-io had stored it as a hunk'
+handle any
+  $P MUT-90-DESC-ERROR $!!error.text
+endhandle
+DESP 7.5 8.5 9.5
+handle any
+  $P MUT-90-DESP-ERROR $!!error.text
+endhandle
+UUIDIA 5 6 7 8
+handle any
+  $P MUT-90-UUIDIA-ERROR $!!error.text
+endhandle
+Q DESC
+Q DESP
+Q UUIDIA
+$P MUT-90-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-gate/logs/91_mutate_equi2.log" OVER
+$P MUT-91-BEGIN
+=24384/31487
+handle any
+  $P MUT-91-NAV-ERROR $!!error.text
+endhandle
+Q REF
+FUNC 'E3D-TOUCHED'
+handle any
+  $P MUT-91-FUNC-ERROR $!!error.text
+endhandle
+Q FUNC
+Q DESC
+Q UUIDIA
+$P MUT-91-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-gate/logs/92_mutate_fixing.log" OVER
+$P MUT-92-BEGIN
+=24384/31488
+handle any
+  $P MUT-92-NAV-ERROR $!!error.text
+endhandle
+Q REF
+DESC 'E3D touched the FIXING'
+handle any
+  $P MUT-92-DESC-ERROR $!!error.text
+endhandle
+Q DESC
+Q ROKEYS
+Q ROVALS
+$P MUT-92-END
+ALPHA LOG END
+
+SAVEWORK 'e3d-io gate round 2: E3D edits hunk attributes of EQUI 1, touches EQUI 2 and the FIXING'
+
+ALPHA LOG "D:/e3dio-gate/logs/93_after_save.log" OVER
+$P MUT-93-BEGIN
+=24384/31486
+Q DESC
+Q DESP
+Q UUIDIA
+=24384/31487
+Q FUNC
+Q DESC
+Q DESP
+Q UUIDIA
+=24384/31488
+Q DESC
+Q ROKEYS
+Q ROVALS
+Q SESSION
+$P MUT-93-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-gate/write_mutate.log" OVER
+$P E3DIO-MUTATE-DONE see D:/e3dio-gate/logs/9*.log
+ALPHA LOG END

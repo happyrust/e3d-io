@@ -274,8 +274,9 @@ mod tests {
             .set_attribute("RPRO OFFY", 700.0)
             .set_attribute("RPRO OFFZ", 0.0);
         let leaning = direction(&words, &offset).expect("offsets still resolve");
-        assert!((leaning[0] - 0.7071).abs() < 1e-3, "{leaning:?}");
-        assert!((leaning[1] - 0.7071).abs() < 1e-3, "{leaning:?}");
+        let diagonal = std::f64::consts::FRAC_1_SQRT_2;
+        assert!((leaning[0] - diagonal).abs() < 1e-3, "{leaning:?}");
+        assert!((leaning[1] - diagonal).abs() < 1e-3, "{leaning:?}");
         assert_eq!(leaning[2], 0.0);
     }
 

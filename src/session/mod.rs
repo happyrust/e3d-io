@@ -51,7 +51,7 @@ pub use diff::{ChangeKind, ChangedElement, ChangedElements, SessionDiff};
 /// | +0x10 | 4 | `OWNSES` — the owning extract's session this one derives from | [`SessionPage::reserved_10`], verbatim; `0xFFFFFFFF` on every sampled page, which are all master files |
 /// | +0x14 / +0x18 | 5 / 6 | `LASTSP` — last page the session wrote (`EXFLSZ`, the extent file size in pages, is this + 1) | [`SessionPage::end`] |
 /// | +0x1C / +0x20 | 7 / 8 | `INDEX` — root of the RefNo B+tree as of this session | [`SessionPage::index_root`] |
-/// | +0x24 / +0x28 | 9 / 10 | `CLAIM` — root of the claim tree | [`SessionPage::claim`], carried and not walked |
+/// | +0x24 / +0x28 | 9 / 10 | `CLAIM` — root of the claim tree (the primary-element session index) | [`SessionPage::claim`]; read by [`crate::index::claim`], written by [`crate::write::claim_cow`] |
 /// | +0x2C | 11 | `PRISES` — primary session | *not read* |
 /// | +0x30 / +0x34.. | 12 / 13..16 | `DATE` — word count (4) and `year, month, day×24+hour, minute×60+second`, local clock | [`SessionPage::date`]; the raw words on [`SessionPage::stamp_words`] |
 /// | +0x50.. | 20.. | `TRANSA` — an array the text table serves from word 20; its length rule is not decoded | *not read* |
@@ -72,7 +72,10 @@ pub use diff::{ChangeKind, ChangedElement, ChangedElements, SessionDiff};
 /// `PREVSP` names, and `FRSTSP` — the first page this session wrote — is the
 /// previous page's `LASTSP` + 1, or this page's own `LASTSP` when there is no
 /// previous session.
-mod at {
+///
+/// `pub(crate)` so that [`crate::write`] builds a session page from the same
+/// offsets this module reads one by; the two must never drift apart.
+pub(crate) mod at {
     pub const PAGE_TYPE: usize = 0x00;
     pub const LAST_SES_PGNO: usize = 0x04;
     pub const LAST_SES_EXTNO: usize = 0x08;
@@ -84,6 +87,9 @@ mod at {
     pub const INDEX_ROOT_EXTNO: usize = 0x20;
     pub const CLAIM_PGNO: usize = 0x24;
     pub const CLAIM_EXTNO: usize = 0x28;
+    /// `PRISES` — primary session flag, 1 on every sampled page. Not read
+    /// here; [`crate::write`] writes it.
+    pub const PRISES: usize = 0x2C;
     /// `DATE`: word count at +0x30 (always 4 when stated), the four words at
     /// +0x34 — `year, month, day * 24 + hour, minute * 60 + second`, local
     /// wall clock. `core.dll` reads it through `DB_DB::GetSessionDateTime` →

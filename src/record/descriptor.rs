@@ -94,8 +94,12 @@ pub enum StorageShape {
     /// the 1 000+ E3D 3.1 databases installed here — 9 421 ROKEYS/ROVALS
     /// slots, 116 688 `TABITE.CLAURI`, 6 586 `UDA.TADFLT` — and most have no
     /// implicit slot at all (word offset 0), so a value could only ever arrive
-    /// as an explicit entry. E3D 2.1's templates have no type 19. A list shape
-    /// for 19/23 should wait for a database that actually carries one.
+    /// as an explicit entry — which the stream decoder hands over as raw
+    /// words, so this shape never touches it. E3D 2.1's templates have no type
+    /// 19. The list layout itself, and the hunk form (type 23) it moves out of
+    /// the record as, are read and written by [`crate::record::hunk`] (its
+    /// `decode_text_list`) and the write side's `RecordDraft`; a database
+    /// that carries a set value is still wanted to confirm them against.
     Characters,
     /// 14 — a fixed-width record whose width the descriptor states itself as
     /// `(compact.storage_words - 1) / logical_count`. That division is exact
