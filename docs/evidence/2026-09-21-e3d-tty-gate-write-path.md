@@ -39,6 +39,47 @@ powershell -ExecutionPolicy Bypass -File tools\e3d\write_gate.ps1
 
 宏的写法（踩过的坑，来自 gen-model `scripts/e3d/*.mac` 的注释）：`ALPHA LOG … OVER` 到 `ALPHA LOG END` 之间任一语句未处理的报错会让整段日志**不落盘**，所以一问一段日志、每个导航与每个可能报错的 `Q` 后面都跟 `handle any`（`$P … $!!error.text` 把错误码打进日志——`RATM` 那次就是这样拿到 `(2,201)` 的）。宏不含 `QUIT`/`SAVEWORK`（driver 的 wrapper 负责 `$M` 与 `QUIT`；含 `SAVEWORK` 的宏 driver 要求 `--target-db-file`）。
 
+## 第二轮：E3D 自己改 hunk 属性并 SAVEWORK——它怎么对待我们的 hunk
+
+宏 `D:\e3dio-gate\write_mutate.mac`（含一个 `SAVEWORK`，走 driver 的 stateful 模式：`--target-db-file <副本库> --aios-project AMS`，driver 记录写前/写后 sesno，`outcome=Completed`）：EQUI 1 `24384/31486` 改 `DESC 'E3D rewrote …'`、`DESP 7.5 8.5 9.5`、`UUIDIA 5 6 7 8`；EQUI 2 `24384/31487` 只设 `FUNC 'E3D-TOUCHED'`；FIXING `24384/31488` 只设 `DESC 'E3D touched the FIXING'`；然后 `SAVEWORK`，再 Q 一遍。E3D 写出会话 **646**（user dpc，base 645），退出时又追了 647（`Saving Meta Data.`）。
+
+E3D 侧：`UUIDIA 5 6 7 8` 被拒 `(41,160) UUIDIA is already set. Unset it before resetting.`（UUID 一次性属性，E3D 语义，与存储无关）；其余都改成了；SAVEWORK 后 `Q` 全部与改后一致，EQUI 2 的三个 hunk 值与 FIXING 的两个列表照旧读出。
+
+e3d-io 读侧看 646 里的三条新记录（`%TEMP%\s2probe hunks`，对照 645 的快照 `D:\e3dio-gate\ams8000_0001.before-mutate`）：
+
+| 元素 | 646 里的记录 | hunk 目录项 |
+|---|---|---|
+| EQUI 1 | 重写到页 16548 字 1，explicit 流 = `TYPEX`、**`UUIDIA` 目录项 `[1,16499,0x1ea001,4,4]` 逐字不变**（仍指我们页 16499 的块）、`DESC` type 10 inline 16 字、**`UNIPAR` type 7 inline `[NONE,NONE,NONE]`**（E3D 设 DESP 的副作用：记录 DESP 的输入单位）、`DESP` type 6 inline 7 字；word 10 = `0x200b0000`（explicit 44 字 = 4+7+18+6+9） | 被改掉的 DESC/DESP 的旧目录项被删（4RCEDA），新值 inline **追加在流末**；旧 hunk 块留在页 16499 不再被引用 |
+| EQUI 2 | 重写到页 16548 字 83，`FUNC` type 10 追加在流末 | **三个目录项逐字不变**（DESC→16499 字 319、DESP→16499 字 356 跨到 16500、UUIDIA→16500 字 59） |
+| FIXING | 重写到页 16548 字 152，`DESC` 追加 | `ROKEYS` inline 与 `ROVALS` 目录项 `[1,16513,0x2001,15,9]` 逐字不变 |
+
+即：**E3D 重写记录时不搬已存盘的 hunk**——`sub_5AE9960` 的 `ext != 0 → 跳过复制` 那条在真机上就是这样：目录项原样抄进新记录，hunk 块与两个版本的记录共享。这与 e3d-io 写侧「盘上读回的目录项保留原地址原样重发」的做法一致。E3D 替换 hunk 属性的值时按普通 `4SCEA` 走（小值 inline、删旧项、追加），本轮值都小，E3D 自己没造 hunk（要 ≥ 0x2000 字，普通模板属性的 cnt 到不了）。
+
+E3D 写的记录头/块头与 e3d-io 的约定一致（页 16548 字 1 起）：`w0=33`（implicit 字数）、`w1/w2 = 24384/31486`、`w3 = 724361`（EQUI）、`w4/w5 = 24384/47`、`w6/w7 = 16548 / 0x44001`（explicit 块在字 34、ext 1，即 `ext | 字<<13`）、`w8/w9 = 0`、`w10 = 0x200b0000`；块头 `[1<<16 | 49][24384][31486][0][0]`，流首项 `TYPEX [13396799][0x38000002][1][724361]`，第二项 `UUIDIA [19749198][0x50000005][1][16499][0x1ea001][4][4]`——`type<<26 | 5` 与 `[1][页][packed][元素数][字数]` 被 E3D 原样保留。
+
+e3d-io 读侧：`diff_sessions(645, 646)` = 改 3（恰是那三件）、`diff_sessions(646, 647)` = 改 1（E3D 的元数据会话）；`e3d-descriptor sessions` 把 646/647 的会话页读全（user、base、reason 15）。
+
+```text
+----- 90_mutate_equi1.log -----
+Ref =24384/31486
+MUT-90-UUIDIA-ERROR (41,160) UUIDIA is already set.  Unset it before resetting.
+Description E3D rewrote this DESC after e3d-io had stored it as a hunk
+Desparam 7.5 8.5 9.5
+Uuidia 11 12 13 14
+----- 93_after_save.log (tail) -----
+Description E3D touched the FIXING
+Rokeys
+ 1 K1
+ 2 K2
+Rovals
+ 1 V1
+ 2 V2
+Db MASTER/DESIN, number 8000
+Last saved session number 646
+Session 646:
+ Date: 10:50 21 Sep 2026 User: dpc Description: e3d-io gate round 2: E3D edits hunk attributes of EQUI 1, touches EQUI 2 and the FIXING
+```
+
 ## 日志原文（`D:\e3dio-gate\logs\`，2026-09-21 10:30 那一轮）
 
 ```text
