@@ -20,16 +20,22 @@
 //! With `--hunk` it appends two more sessions asking the third and fourth
 //! questions — does E3D read a value stored **out of the record** (a *hunk*,
 //! storage types 20–23, `e3d_io::record::hunk`), and does it read a **string
-//! list** (storage type 19)? The first of them puts an `EQUI` under the ZONE
-//! whose `DESC` (text), `DESP` (real array) and `RATM` (int array) are hunks
-//! — `RATM` five hundred ints, so its chain spans two pages; the second puts a
-//! `FIXING` under the ZONE with `ROKEYS` as an inline type-19 list and
-//! `ROVALS` as the same list moved out into a type-23 hunk. Every one of those
-//! attributes is one the noun's template declares with no implicit slot, so
-//! E3D's `4GCEA` reads it from the explicit stream — the only place a hunk
-//! entry can be met — and the sizes keep under each descriptor's declared
-//! count. Two sessions again, so a balk at the string list does not muddy the
-//! hunk question.
+//! list** (storage type 19)? The first of them puts two `EQUI`s under the ZONE
+//! whose `DESC` (text), `DESP` (real array) and `UUIDIA` (int array) are hunks
+//! — 120 characters (E3D's own `DESC` limit; the template's 480 is the UTF-8
+//! byte capacity, and 480 characters earn (2,170) "Attribute DESC too long"),
+//! the descriptor's full 100 reals, and 4 ints — so that with two elements in
+//! one session at least one chain runs across a page boundary (the second
+//! element's hunks start wherever the first element's record ended); the bin
+//! reads the chains back and says which;
+//! the second puts a `FIXING` under the ZONE with `ROKEYS` as an inline type-19
+//! list and `ROVALS` as the same list moved out into a type-23 hunk. Every one
+//! of those attributes is one the noun's template declares with no implicit
+//! slot, so E3D's `4GCEA` reads it from the explicit stream — the only place a
+//! hunk entry can be met — and is one E3D's `Q` actually exposes (the
+//! template's `RATM`/`UNIPAR` get "does not have attribute", and `USRWEI`
+//! reads as unset however it is stored, so they prove nothing). Two sessions
+//! again, so a balk at the string list does not muddy the hunk question.
 //!
 //! All sessions are written with the schema at hand (`WriteOptions`), so the
 //! keyed tables follow: a `BOX` lists no `TYPEX` in its template and files no
@@ -223,35 +229,123 @@ fn template_name(template: &NounTemplate) -> String {
     e3d_attlib::db1_dehash(template.noun_hash).unwrap_or_else(|| format!("{:#x}", template.noun_hash))
 }
 
-/// The third and fourth sessions: an EQUI whose DESC, DESP and RATM are hunks,
-/// then a FIXING whose ROKEYS is an inline string list and ROVALS the same
-/// list as a hunk. Both under the ZONE, each appended to its member list.
-fn write_hunks(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box_refno: RefNo) -> Result<(), String> {
-    // --- session: hunks on an EQUI ---
-    let equi_template = template_of(provider, "EQUI")?;
-    let desc_text = "e3d-io hunk gate: this DESC is stored out of the record (type 22)";
-    let desp_values: Vec<f64> = vec![1.5, 2.5, 3.5, 10.0, 20.0, 30.0, 100.25, 200.5, 300.75, -1.0, -2.0, 0.0];
-    let ratm_values: Vec<i32> = (1..=500).collect();
-    let desc = explicit_only(&equi_template, "DESC", desc_text.len())?;
-    let desp = explicit_only(&equi_template, "DESP", desp_values.len())?;
-    let ratm = explicit_only(&equi_template, "RATM", ratm_values.len())?;
+/// The values one gate EQUI carries: a text of 120 characters, a real array
+/// of the descriptor's full 100, and four ints. 120 is E3D's own limit for
+/// `DESC` — the template's 480 is the UTF-8 byte capacity behind it, and a
+/// 480-character value is refused by `Q DESC` with (2,170) "Attribute DESC too
+/// long"; 65 and 120 read back. With two such elements in one session the
+/// second element's hunks start wherever the first element's record ended, so
+/// at least one chain runs across a page boundary.
+struct HunkValues {
+    desc: String,
+    desp: Vec<f64>,
+    uuidia: [i32; 4],
+}
 
-    let equi = RefNo::new(box_refno.word0, box_refno.word1 + 3);
-    let mut equi_draft = fresh_element(&equi_template, equi, zone_refno, vec![])?;
-    equi_draft.set_text_hunk_ascii(desc, desc_text).map_err(|e| e.to_string())?;
-    equi_draft.set_real_array_hunk(desp, &desp_values).map_err(|e| e.to_string())?;
-    equi_draft.set_int_array_hunk(ratm, &ratm_values).map_err(|e| e.to_string())?;
+/// E3D's `DESC` length limit in characters (its dictionary's, not the
+/// template's byte capacity).
+const DESC_CHARS: usize = 120;
+
+impl HunkValues {
+    fn for_element(n: u32) -> Self {
+        // 120 characters with the position spelled out every five, so a cut or
+        // a shifted word shows where it happened: "… (type 22) @070 @075 …".
+        let head = format!("e3d-io hunk gate EQUI {n}: DESC stored out of the record (type 22) ");
+        let mut desc = head.clone();
+        while desc.len() < DESC_CHARS {
+            let marker = format!("@{:03} ", desc.len());
+            desc.push_str(&marker);
+        }
+        desc.truncate(DESC_CHARS);
+        Self {
+            desc,
+            desp: (1..=100).map(|i| f64::from(n) * 1000.0 + f64::from(i) + 0.25).collect(),
+            uuidia: [n as i32 * 10 + 1, n as i32 * 10 + 2, n as i32 * 10 + 3, n as i32 * 10 + 4],
+        }
+    }
+}
+
+/// How many pages each of a written element's hunk chains runs over, read
+/// back through the directory entries — the placer's answer for whether the
+/// E3D check exercises a chain that continues onto another page.
+fn hunk_spans(db: &str, refno: RefNo) -> Result<Vec<(String, u16, u32, usize)>, String> {
+    use e3d_io::page::cache::PageCache;
+    use e3d_io::page::io::PageReader;
+    use e3d_io::page::PageId;
+    use e3d_io::record::element::ParsedElement;
+    use e3d_io::record::hunk::{hunk_block_at, HunkRef};
+
+    let mut engine = ReadOnlyEngine::open(db).map_err(|e| e.to_string())?;
+    let view = engine
+        .find_element(refno)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("{refno} is not indexed after the write"))?;
+    let parsed = ParsedElement::parse_as(&view.raw_bytes, engine.text_format()).map_err(|e| e.to_string())?;
+    let mut cache = PageCache::new(PageReader::open(db).map_err(|e| e.to_string())?, 16);
+    let mut out = Vec::new();
+    for attribute in &parsed.explicit_attributes {
+        let Some(entry) = HunkRef::from_explicit(attribute) else { continue };
+        let name = e3d_attlib::lookup_system_name(attribute.hash)
+            .map(str::to_string)
+            .or_else(|| e3d_attlib::db1_dehash(attribute.hash))
+            .unwrap_or_else(|| format!("{:#x}", attribute.hash));
+        let mut pages = 0usize;
+        let mut next = entry.address();
+        while let Some(address) = next {
+            let page = cache
+                .get(PageId::primary(address.page_no))
+                .map_err(|e| e.to_string())?;
+            let block = hunk_block_at(page, address.byte_offset(), refno)
+                .ok_or_else(|| format!("{refno}.{name}: no hunk block at page {} byte {}", address.page_no, address.byte_offset()))?;
+            pages += 1;
+            next = block.continues_at;
+        }
+        out.push((name, entry.hunk_type, entry.words, pages));
+    }
+    Ok(out)
+}
+
+/// The third and fourth sessions: two EQUIs whose DESC, DESP and UUIDIA are
+/// hunks, then a FIXING whose ROKEYS is an inline string list and ROVALS the
+/// same list as a hunk. All under the ZONE, each appended to its member list.
+fn write_hunks(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box_refno: RefNo) -> Result<(), String> {
+    // --- session: hunks on two EQUIs ---
+    // DESC (text → 22), DESP (reals → 21) and UUIDIA (ints → 20). These three
+    // are declared on EQUI with no implicit slot and are ones E3D's `Q`
+    // exposes; RATM and UNIPAR are in the template too but E3D answers "does
+    // not have attribute", and USRWEI reads as unset however it is stored.
+    let equi_template = template_of(provider, "EQUI")?;
+    let values = [HunkValues::for_element(1), HunkValues::for_element(2)];
+    let desc = explicit_only(&equi_template, "DESC", values[0].desc.len())?;
+    let desp = explicit_only(&equi_template, "DESP", values[0].desp.len())?;
+    let uuidia = explicit_only(&equi_template, "UUIDIA", values[0].uuidia.len())?;
+
+    let equis = [
+        RefNo::new(box_refno.word0, box_refno.word1 + 3),
+        RefNo::new(box_refno.word0, box_refno.word1 + 4),
+    ];
+    let mut elements = Vec::new();
+    for (equi, value) in equis.iter().zip(&values) {
+        let mut draft = fresh_element(&equi_template, *equi, zone_refno, vec![])?;
+        draft.set_text_hunk_ascii(desc, &value.desc).map_err(|e| e.to_string())?;
+        draft.set_real_array_hunk(desp, &value.desp).map_err(|e| e.to_string())?;
+        draft.set_int_array_hunk(uuidia, &value.uuidia).map_err(|e| e.to_string())?;
+        elements.push(ElementWrite::Insert(draft));
+    }
     let mut zone_draft = draft_of(db, zone_refno, "the ZONE")?;
-    zone_draft.push_member(equi);
+    for equi in &equis {
+        zone_draft.push_member(*equi);
+    }
+    elements.push(ElementWrite::Update(zone_draft));
 
     let report = write_element_session_with(
         db,
         &SessionRequest {
             user: "e3dio",
-            comment: "e3d-io write-path gate: EQUI with DESC/DESP/RATM as hunks (types 22/21/20)",
+            comment: "e3d-io write-path gate: two EQUIs with DESC/DESP/UUIDIA as hunks (types 22/21/20)",
             clock: None,
         },
-        &[ElementWrite::Insert(equi_draft), ElementWrite::Update(zone_draft)],
+        &elements,
         &[],
         WriteOptions {
             templates: Some(provider),
@@ -263,10 +357,29 @@ fn write_hunks(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box
     println!();
     println!("wrote session {hunk_sesno} to {db}");
     println!("  previous session : {}", report.previous.sesno);
-    println!("  new EQUI         : {equi} (owner ZONE {zone_refno}, appended to its member list)");
-    println!("  DESC  (hunk 22)  : {desc_text:?} ({} characters)", desc_text.len());
-    println!("  DESP  (hunk 21)  : {desp_values:?}");
-    println!("  RATM  (hunk 20)  : 1 2 3 … 500 (five hundred ints; the hunk chain spans two pages)");
+    let mut spanning = 0usize;
+    for (n, (equi, value)) in equis.iter().zip(&values).enumerate() {
+        println!("  new EQUI {}       : {equi} (owner ZONE {zone_refno}, appended to its member list)", n + 1);
+        println!("    DESC   (hunk 22): {} characters: {:?}", value.desc.len(), value.desc);
+        println!(
+            "    DESP   (hunk 21): {} reals, {} {} … {}",
+            value.desp.len(),
+            value.desp[0],
+            value.desp[1],
+            value.desp[value.desp.len() - 1]
+        );
+        println!("    UUIDIA (hunk 20): {:?}", value.uuidia);
+        for (name, hunk_type, words, pages) in hunk_spans(db, *equi)? {
+            println!("    on disk: {name} type {hunk_type}, {words} words in a chain of {pages} page(s)");
+            if pages > 1 {
+                spanning += 1;
+            }
+        }
+    }
+    println!("  hunk chains that cross a page boundary: {spanning}");
+    if spanning == 0 {
+        println!("  (warning: no chain spans a page; the continuation link goes unexercised by this run)");
+    }
     println!("  appended pages   : {:?}", report.appended_pages);
 
     // --- session: a string list, inline and as a hunk, on a FIXING ---
@@ -277,7 +390,7 @@ fn write_hunks(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box
     // strings reports 1 + 2 × (4 × 1 + 3) = 15, under it.
     let rokeys = explicit_only(&fixing_template, "ROKEYS", 15)?;
     let rovals = explicit_only(&fixing_template, "ROVALS", 15)?;
-    let fixing = RefNo::new(box_refno.word0, box_refno.word1 + 4);
+    let fixing = RefNo::new(box_refno.word0, box_refno.word1 + 5);
     let mut fixing_draft = fresh_element(&fixing_template, fixing, zone_refno, vec![])?;
     fixing_draft.set_explicit_text_list_ascii(rokeys, keys).map_err(|e| e.to_string())?;
     fixing_draft.set_text_list_hunk_ascii(rovals, vals).map_err(|e| e.to_string())?;
@@ -309,17 +422,19 @@ fn write_hunks(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box
     println!("  appended pages   : {:?}", report.appended_pages);
     println!();
     println!("In E3D 3.1 Design, on this database's project:");
-    println!("  Q SESSIONS                 -> the newest should be sessions {hunk_sesno} and {list_sesno} by user e3dio");
-    println!("  ={}/{}   Q ATT             -> the EQUI under the ZONE; then:", equi.word0, equi.word1);
-    println!("             Q DESC           -> the text above");
-    println!("             Q DESP           -> the twelve reals above");
-    println!("             Q RATM           -> 1 2 3 … 500");
+    println!("  Q SESSION                  -> the last saved session should be {list_sesno} by user e3dio");
+    for equi in &equis {
+        println!("  ={}/{}   Q ATT             -> an EQUI under the ZONE; then:", equi.word0, equi.word1);
+        println!("             Q DESC           -> the 120-character text above, markers in step");
+        println!("             Q DESP           -> the hundred reals above");
+        println!("             Q UUIDIA         -> the four ints above");
+    }
     println!("  ={}/{}   Q ATT             -> the FIXING under the ZONE; then:", fixing.word0, fixing.word1);
     println!("             Q ROKEYS         -> the two keys above (a string list stored inline)");
     println!("             Q ROVALS         -> the two values above (the same list stored as a hunk)");
-    println!("PASS (session {hunk_sesno}) = E3D shows DESC, DESP and RATM with the values above — it followed a hunk chain.");
+    println!("PASS (session {hunk_sesno}) = E3D shows DESC, DESP and UUIDIA of both EQUIs with the values above — it followed the hunk chains, one of them across pages.");
     println!("PASS (session {list_sesno}) = E3D shows both lists — it read a type-19 list inline and out of a hunk.");
-    println!("If E3D balks, note which session: a hunk problem shows on the EQUI, a string-list problem on the FIXING.");
+    println!("If E3D balks, note which session: a hunk problem shows on the EQUIs, a string-list problem on the FIXING.");
     Ok(())
 }
 

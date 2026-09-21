@@ -1,0 +1,275 @@
+-- e3d-io write-path gate, read back by E3D itself in a TTY session (read-only: no
+-- SAVEWORK, no QUIT — the l3_suite driver's wrapper owns the session). Rendered by
+-- tools/e3d/write_gate.ps1 from this template: {{LOGDIR}} and the refnos come from the
+-- e3d-write-box run on the project copy.
+--
+-- Sessions e3d-write-box --group --hunk appended:
+--   BOX {{BOX}} under the first ZONE {{ZONE}}
+--   GPWL {{GPWL}} under the WORL, GROU {{GROU}} with reference members ZONE + BOX
+--   EQUI {{EQUI1}} and EQUI {{EQUI2}}: DESC / DESP / UUIDIA as hunks (types 22/21/20),
+--     one chain across a page boundary
+--   FIXING {{FIXING}}: ROKEYS inline type 19, ROVALS as a type-23 hunk
+--
+-- One ALPHA LOG block per question: a block's log is written only at ALPHA LOG END, so an
+-- unhandled error loses that block's log and no other. Every navigation and every risky Q
+-- is followed by handle any.
+
+ALPHA LOG "{{LOGDIR}}/00_project.log" OVER
+$P GATE-00-BEGIN
+Q PROJ
+Q MDB
+$P GATE-00-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/10_box.log" OVER
+$P GATE-10-BEGIN
+={{BOX}}
+handle any
+  $P GATE-10-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q POS
+  Q XLEN
+  Q YLEN
+  Q ZLEN
+endhandle
+$P GATE-10-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/20_grou.log" OVER
+$P GATE-20-BEGIN
+={{GROU}}
+handle any
+  $P GATE-20-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q MEM
+endhandle
+={{GPWL}}
+handle any
+  $P GATE-20-GPWL-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q MEM
+endhandle
+$P GATE-20-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/30_equi1_nav.log" OVER
+$P GATE-30-BEGIN
+={{EQUI1}}
+handle any
+  $P GATE-30-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+endhandle
+$P GATE-30-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/31_equi1_desc.log" OVER
+$P GATE-31-BEGIN
+={{EQUI1}}
+handle any
+  $P GATE-31-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESC
+handle any
+  $P GATE-31-DESC-ERROR $!!error.text
+endhandle
+$P GATE-31-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/32_equi1_desp.log" OVER
+$P GATE-32-BEGIN
+={{EQUI1}}
+handle any
+  $P GATE-32-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESP
+handle any
+  $P GATE-32-DESP-ERROR $!!error.text
+endhandle
+$P GATE-32-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/33_equi1_uuidia.log" OVER
+$P GATE-33-BEGIN
+={{EQUI1}}
+handle any
+  $P GATE-33-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q UUIDIA
+handle any
+  $P GATE-33-UUIDIA-ERROR $!!error.text
+endhandle
+$P GATE-33-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/35_equi2_nav.log" OVER
+$P GATE-35-BEGIN
+={{EQUI2}}
+handle any
+  $P GATE-35-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+endhandle
+$P GATE-35-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/36_equi2_desc.log" OVER
+$P GATE-36-BEGIN
+={{EQUI2}}
+handle any
+  $P GATE-36-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESC
+handle any
+  $P GATE-36-DESC-ERROR $!!error.text
+endhandle
+$P GATE-36-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/37_equi2_desp.log" OVER
+$P GATE-37-BEGIN
+={{EQUI2}}
+handle any
+  $P GATE-37-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESP
+handle any
+  $P GATE-37-DESP-ERROR $!!error.text
+endhandle
+$P GATE-37-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/38_equi2_uuidia.log" OVER
+$P GATE-38-BEGIN
+={{EQUI2}}
+handle any
+  $P GATE-38-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q UUIDIA
+handle any
+  $P GATE-38-UUIDIA-ERROR $!!error.text
+endhandle
+$P GATE-38-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/40_fixing_nav.log" OVER
+$P GATE-40-BEGIN
+={{FIXING}}
+handle any
+  $P GATE-40-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+endhandle
+$P GATE-40-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/41_fixing_rokeys.log" OVER
+$P GATE-41-BEGIN
+={{FIXING}}
+handle any
+  $P GATE-41-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q ROKEYS
+handle any
+  $P GATE-41-ROKEYS-ERROR $!!error.text
+endhandle
+$P GATE-41-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/42_fixing_rovals.log" OVER
+$P GATE-42-BEGIN
+={{FIXING}}
+handle any
+  $P GATE-42-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q ROVALS
+handle any
+  $P GATE-42-ROVALS-ERROR $!!error.text
+endhandle
+$P GATE-42-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/50_zone.log" OVER
+$P GATE-50-BEGIN
+={{ZONE}}
+handle any
+  $P GATE-50-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q NAME
+  Q TYPE
+  Q MEM
+endhandle
+$P GATE-50-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/60_equi2_att.log" OVER
+$P GATE-60-BEGIN
+={{EQUI2}}
+handle any
+  $P GATE-60-NAV-ERROR $!!error.text
+endhandle
+Q ATT
+handle any
+  $P GATE-60-ATT-ERROR $!!error.text
+endhandle
+$P GATE-60-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/61_fixing_att.log" OVER
+$P GATE-61-BEGIN
+={{FIXING}}
+handle any
+  $P GATE-61-NAV-ERROR $!!error.text
+endhandle
+Q ATT
+handle any
+  $P GATE-61-ATT-ERROR $!!error.text
+endhandle
+$P GATE-61-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/70_sessions.log" OVER
+$P GATE-70-BEGIN
+={{EQUI1}}
+handle any
+  $P GATE-70-NAV-ERROR $!!error.text
+endhandle
+Q DBNAME
+handle any
+  $P GATE-70-DBNAME-ERROR $!!error.text
+endhandle
+Q SESSION
+handle any
+  $P GATE-70-SESSION-ERROR $!!error.text
+endhandle
+$P GATE-70-END
+ALPHA LOG END
+
+-- The driver reads <macro>.log as the scenario log: a summary marker.
+ALPHA LOG "{{MACROLOG}}" OVER
+$P E3DIO-GATE-DONE see {{LOGDIR}}/*.log
+ALPHA LOG END
