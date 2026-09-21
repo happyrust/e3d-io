@@ -1,6 +1,6 @@
 # 计划：e3d-io 写路径收口与下一步（阶段 0–3 已落地之后）
 
-状态：评审通过（2026-09-21，用户在面板上批「Q1–Q7 全按推荐项定」；Plannotator 门另行 Approve）→ **S2 已落地**（§7 2026-09-21 条：漂移红测试改沿链找、clippy 0 error、类型 15/17/18 普查——15 非 NAME 无声明、18 语料 0 设值、**17 在 24 个库里设了值且都有以属性名命名的表 → 新增 S4b**）→ **S4b 已落地**（类型 17 反向表随写维护；语料 3 191 条边正反全对上）；S1 合入 `main` 待用户看完面板再开
+状态：评审通过（2026-09-21，用户在面板上批「Q1–Q7 全按推荐项定」；Plannotator 门另行 Approve）→ **S2 已落地**（§7 2026-09-21 条：漂移红测试改沿链找、clippy 0 error、类型 15/17/18 普查——15 非 NAME 无声明、18 语料 0 设值、**17 在 24 个库里设了值且都有以属性名命名的表 → 新增 S4b**）→ **S4b 已落地**（类型 17 反向表随写维护；语料 3 191 条边正反全对上）→ **S4 已落地**（`RecordDraft::set_attribute` 按描述子设值；三库 7 825 元素 149 558 行往返恒等 0 例外；顺带找到 E3D 自己写的 hunk 样本、块头字字相同）；S1 合入 `main` 待用户看完面板再开
 日期：2026-09-21
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`，HEAD `eebe21f`（2026-09-21 12:24），自分叉点 `7a51c95` 起 30 个提交；`main` 领先它 2 个提交（`d51c3dd` / `4a76d2a`，池级元素缓存的上限与统计，只碰 `db_element.rs`）
 依据：`docs/plans/2026-09-20-dabacon-write-plan.md`（下称「写计划」，其 §7 观察记录是进度的第一手账）、`docs/evidence/2026-09-20-core-dll-dabacon-write-path-algorithms.md`（「算法清单」）、`docs/evidence/2026-09-21-e3d-tty-gate-write-path.md`（「TTY 门」）
@@ -52,13 +52,13 @@
 | 2 | **按描述子设属性** | `RecordDraft` 只到 `set_real_wide(offset)` / `set_explicit_words(hash, type_code, words)` 这一层；wide 偏移、type_code、hash 全由调用方算；`e3d-write-box` 自己从模板 `defaults.implicit` 铺底再 `put_real_wide` | `write::record` 公开面 39 个 fn 里没有一个按属性名 / 描述子设值 | 读侧 `extract_parsed_element_with_descriptors` 的逆函数未写 |
 | 3 | **refno 分配 + 事务门面** | 新 refno 由测试 / bin 手工取（`primary_extent_ref` 的 word0 + 该库最高 word1 + 1）；`NamedEdit` 要与记录里的 NAME 项手工配对；owner 成员表要调用方自己 `push_member`；写计划 §6 草图的 `Transaction` 未建 | `tests/common/write_fixture.rs`、`bin` | core 的分配器未读（候选：`MNUM`——CLAIM 普查里唯一「primary 却不在树里」的 noun，像个计数元素） |
 | 4 | **写模式哨兵锁**（A9：`LockFileEx` 独占 1 字节 @ `0x7FFFFFF6FFFFFFFF`） | 未做，只有提交前重读页 0 的 `Moved` 复检——能挡「先提交完的写者」，挡不住「正在写的写者」 | `write/mod.rs:20` 模块头明说 | 写计划 Q6 默认值本是两样都做 |
-| 5 | **读侧对 19 / 23 / 20–22 的描述子解码** | `AttrValue` / `ExplicitValue` 无变体：19 仍按 `Characters` 解（已知错，只因语料无设值的 19 才休眠）、hunk 目录项以 `RawWords` 到达 | `descriptor.rs` 注释、写计划 §7 hunk 条 | 现在我们**自己会写出**这些形态（TTY 门的 EQUI / FIXING），下游读回即错 |
+| 5 | **读侧对 19 / 23 / 20–22 的描述子解码** | `AttrValue` / `ExplicitValue` 无变体：19 仍按 `Characters` 解（已知错，只因语料无设值的 19 才休眠）、hunk 目录项以 `RawWords` 到达（`DBMDAT.DBMVAL` 在 `ams8000` 里就是这样报的）；另 S4 普查发现**一字 word 被 attlib `data_type 3` 解成 `Bool(raw != 0)`**——`UDA.DTYP` 盘上是 `TEXT`/`REAL` 这类 WORD，读侧报 `true`，185 例 | `descriptor.rs` 注释、写计划 §7 hunk 条、§7 S4 条 | 现在我们**自己会写出**这些形态（TTY 门的 EQUI / FIXING），下游读回即错 |
 | 6 | 类型 18 集合合并（`sub_5B0F1E0`）、类型 15 非 NAME 唯一表（DRTYPT / DRSTYT / RDFIRI）与 15 的抢占（`sub_5AFFC20`）、类型 17 索引表（MDSYSF / SCAREF / DESREF） | 未建模：18 当不透明字（写者赢）；15 只做 NAME 且撞名一律 561；17 不维护 | 算法清单 §5 类型对表 | **已普查（§7 2026-09-21 条）**：DESI / CATA 模板里 15 只有 NAME；18 只有 `UDASTB`、8.9 M 元素 0 设值 → 两者不做；17 有 21 个属性、语料 2 870 个元素设了值、设值的库**都带**以属性名命名的表 → 进 S4b |
 | 7 | SPAMAP | 不维护 | 写计划 §7 调研条：7 字值 = 世界系 AABB + 标志、键含空间格 hash，要几何流水线算 | 有几何 AABB（e3d-model）+ 读出格号算法后另起计划 |
 | 8 | UDA 表 UDATAB / UDAFTB / UUIDAR | 不维护 | `ams8000` 表目录无此三表；装机语料无 | 拿到带此表的项目库 |
 | 9 | extract 模型（属性 17≠0 的 CLAIM 表搬运 A3a.7、`sub_5B13670`、OWNSES / 第 505 字语义）、页 1 桶表 A11、Central A8 | 不做 | 写计划 §0 | 出现多用户 / extract 需求 |
 | 10 | 多 extent（ext≠1 → `MultiExtent` 拒写）、E3D 2.1 | 拒写 | 语料 940 694 条叶值 `flag` 全 1 = 全部单 extent | 出现多 extent 库 |
-| 11 | E3D 自造 hunk 的样本（逐字比对） | 无 | E3D 只在 ≥ `0x2000` 字且 hunk 登记表 armed 时外联；普通模板属性 cnt 到不了 | 找到能让 E3D 造 hunk 的属性 / 宏再补 |
+| 11 | E3D 自造 hunk 的样本（逐字比对） | **已关（§7 S4 条）**：`ams8000_0001` 的 `DBMDAT 24384/26333` `DBMVAL` 是 E3D 写的类型 20 hunk（5 709 字，跨页链），目录项 / 块头 / 续接与本 crate 写法字字相同 | 起草时以为没有，只查过模板类型 19 | — |
 | 12 | 部分存盘（`sub_5B211C0` 第 ④ 步 `sub_5B1CC10`） | 无对应场景 | — | 不做 |
 
 ---
@@ -115,10 +115,11 @@
 - Windows：staging 起对 `0x7FFFFFF6FFFFFFFF` 处 1 字节 `LockFileEx` 独占，`commit` / `rollback` 后 `UnlockFileEx` + `FlushFileBuffers`；被占 → 新错 `WriteError::Locked` **立即返回**（不等待，等待策略是调用方的事）；非 Windows 维持 `Moved` 复检。FFI 手写两个 `extern "system"` 声明，不加 crate（Q5）。
 - **验收**：单测两把句柄互斥；TTY 门加第 15 问——E3D 以写模式开着副本时 e3d-io 写 → `Locked` 且文件字节不变，E3D 退出后同一写成功（这一问同时坐实「我们锁的和 E3D 锁的是同一字节」）。
 
-#### S8 读侧跟进 19 / 23 / 20–22
+#### S8 读侧跟进 19 / 23 / 20–22，以及 Bool 压掉 word
 
 - `extract_parsed_element_with_descriptors`：类型 19 / 23 → `AttrValue::TextList(Vec<String>)`（Q3）；20 / 21 / 22 目录项 → 经 `record::hunk::read_hunk` 解成 `IntArray` / `RealArray` / `Text`，状态 `Decoded`；`e3d-descriptor extract` 输出随之。
-- **验收**：对 TTY 门写出的副本 `extract` EQUI / FIXING，`DESC` / `DESP` / `UUIDIA` / `ROKEYS` / `ROVALS` 五行 `Decoded` 且值与 TTY 日志逐字相等；`tests/write_stage2_hunks.rs` 加同样断言。
+- 一字 word 的 `Bool` 判定加一道门：attlib 说 `data_type 3` 但字不是 0 / 1 → 报 `Word { raw }` 而不是 `Bool(true)`（S4 普查：`ams5100` 的 185 个 `UDA.DTYP` 盘上是 `TEXT` / `REAL` / `INTE` 的 WORD，E3D 打 `Dtype TEXT`）。要先查 `uda_catalog` 等读 `DTYP` 的地方有没有依赖现在的 `Bool`。
+- **验收**：对 TTY 门写出的副本 `extract` EQUI / FIXING，`DESC` / `DESP` / `UUIDIA` / `ROKEYS` / `ROVALS` 五行 `Decoded` 且值与 TTY 日志逐字相等；`ams8000` 的 `DBMDAT.DBMVAL` 解出 5 709 个 int；`tests/write_stage2_hunks.rs` 加同样断言；S4 的往返普查里 `ams5100` 的 185 个「Bool 压 word」归零。
 
 ### C · 留待（不排期，只写触发）
 
@@ -130,7 +131,7 @@
 | 类型 18 `UDASTB` 集合合并 | **不做**：DESI 868 / CATA 146 个 noun 声明，语料 2.09 M + 6.85 M 元素 **0** 设值；触发 = 语料里出现设了值的 `UDASTB` |
 | 类型 17 索引表 | **已落地（S4b，§7）**。留待：A3b 对数组属性逐槽（元素 k）三方与 17 写入撞 23 → 576 的冲突——触发 = 出现两边并发改同一数组的场景 |
 | extract 模型、页 1 桶表、Central、多 extent、E3D 2.1、部分存盘 | 需求出现再议 |
-| E3D 自造 hunk 样本 | 不专门做 |
+| E3D 自造 hunk 样本 | **已有**：S4 普查撞到 `ams8000` `DBMDAT.DBMVAL`（类型 20，5 709 字，跨页），块头 / 目录项 / 续接与本 crate 字字相同（§7） |
 
 ---
 
@@ -189,3 +190,7 @@ S1 → S2 → S3（收口，1 天）→ **S4**（2–3 天）→ S4b（半天）
   - 落地：`write::reverse` 加 `REFERENCE_ARRAY_STORAGE_TYPE = 17`、`reference_array(draft, template, hash) -> Option<Vec<RefNo>>`（implicit：偏移处 `[count][pairs]`，count 按槽容量 `(storage_words−1)/2` 截；explicit：`explicit_words` 的 data 按 count 取；空对与 unset 标记跳过）、`set_reference_array(draft, template, hash, &[RefNo]) -> bool`（implicit 写 count + 对、槽余零填、超容量拒且不动；explicit 空表删项、否则 `[n][pairs]` 以 `REFERENCE_ARRAY_TYPE_CODE = 17<<10` 写，与语料 2 754 个字段一致）；`table_keys` 对模板里每个类型 17 属性按项出键 `[t, 自身]`。`write::record` 加常量 `REFERENCE_ARRAY_TYPE_CODE`。建表 / 目录追加 / 差集删插 / 删元素撤键全部复用 `keyed_cow` 与 `stage_session_with_base` 现有路径，一行未改。
   - 验收：单测 `reverse::a_reference_array_files_one_key_per_non_null_entry`（explicit 与 implicit 两档、每项一键、空对与 unset 不出键、count 之外的对不读、超容量拒写不动、空表清项 / 清槽、类型 16 属性拒）；集成 `tests/write_stage2_tables.rs::a_reference_array_moves_one_edge_per_entry_and_a_deleted_referrer_withdraws_them_all`（`ams251142_0001` 副本，表 SPRE 128 / HCREF 42 / TCREF 34 / TYPEX 362 / CONNRE 10 / POSREF 282 条键）：取首个同时设了 HCREF 与 TCREF 的引用者 `CWBRAN 2013287686/36`，先核它出的每个键都在表里；S+1 把 HCREF 首项 A 换成 B → HCREF 表恰好 −`[A,R]` +`[B,R]`、**其余表连根页号都没动**、记录读回 type_code `0x4400`、TCREF 原样、diff 改 1；S+2 删 R（并出 owner 表）→ 每张表恰好少掉引用者为 R 的键（HCREF 边 + TCREF 边 + TYPEX 键 = 3）、R 出索引、diff 删 1 改 1；两轮字节前缀不变、新页连续。全套：`cargo test --lib` **330** 通过、写路径 **37** 条全绿、clippy 写路径文件 0 warning、cargo doc 仍 24 条。
   - 仍未做（类型 17 相关，记入 §2 C）：A3b 的 `sub_5B0D950` 对数组属性按**元素 k 逐槽**三读一写（17 的元素数 = `(size−1)/2`），两边改同一数组的**不同槽**时 core 两者都留；本 crate 的 `three_way` 按**整个属性**比，同一数组两边都改则写者整段赢。`sub_5AB8DC0` 写 17 时回 23 → 冲突 576 也未建模（`keyed_cow` 插已有键幂等）。语料里没有并发改同一数组的样本可坐实，先记下。
+- 2026-09-21：**S4 落地——按描述子设属性 `RecordDraft::set_attribute(&template, hash, &DescriptorValue, TextFormat)`（新模块 `write::attr`），验收 = 三个样本库 7 825 个元素 149 558 行往返恒等 0 例外。**
+  - 口径 = `extract_parsed_element_with_descriptors` 的逆，按描述子 `wide.location.word_offset()` 判 implicit 槽 / explicit 项，explicit 的 type_code 一律 `存储类型 << 10`（与读侧 `explicit::decode_value` 的分派一致，语料 0 例外）：2/6 real = 两字 Fortran 序（低半在前）、标量直写 / 数组 `[n][2n]`；3/7/18 word = 一字，`Int`/`Bool`(0/1)/`Word{raw}`/角度属性的 `Real`→有符号百分度（`is_angle_attr`）；4/8/16/17 ref = 两字，数组 `[n][2n]`；5 = 槽字里 `location>>20` 那一位读改写（不动同字其它位），explicit 形 `[0|1]`；9 = `[n][ceil(n/32)]` 位集；10/15 文本 = `[字节数][4 字节/字 NUL 补齐]`，FORMAT 1 存 UTF-8 原字节、其它 FORMAT 暂只收 ASCII（S5）；14 = `[n][n×stride]`，stride 取 compact 列 `(storage_words−1)/logical_count`（`sub_5AB5600`）；19 拒（走串列表 setter）。**只写值需要的字**：implicit 槽里 count+元素之后的字原样保留（`4SCEA` 也不清），所以盘上读回再写回逐字相同。`RawWords` 的含义按落点分：implicit = 元素（读侧去掉了 count），explicit 且读侧原样透传的类型（14/17/18/19…）= 整个字段 data 原样。**读回的 hunk 目录项**（type_code 20–23 的 5 字 `RawWords`）原样重发、地址不动——与 `sub_5AE9960` 重写记录不搬 hunk 一致；新 hunk 值走 `set_*_hunk`。`Unset` = implicit 写 `0x80000001`（5 清位）、explicit 删项。compact 记录（字 10 bit 29 清）拒；数量 > `logical_count`（≠0）拒；槽放不下 / 出记录拒；拒写不动 draft。
+  - **往返普查**（`tests/write_stage4_set_attribute.rs`）：对每个元素 `from_record_bytes` 成 draft，把读侧每行 `Decoded`/`DecodedExplicit` 的值 `set_attribute` 回去，`content_eq` 必须等于原记录，不等则按描述子逐槽/逐项报第一处差异。**`ams8000_0001`（FORMAT 1）6 639 元素 140 112 行**（按类型/落点：2 implicit 11 447 + explicit 7 259、3 25 834 + 7 448、4 10 678、5 19 373 + 9 275、6 13 965 + 2 228、7 793 + 2 234、10 637 + 1 067、14 5 253 + 5 941、15 1 834、16 14 238 + 608）**0 差异**；**`ams251142_0001`** 948 元素 6 510 行（含 17 explicit 87）0 差异；**`ams5100_0001`（DICT、FORMAT 0）** 238 元素 2 936 行，其中两类按预期跳过：**57 个中文文本**（`&~…&` 转义库、写侧还没有编码器 → S5 的现成 oracle）与 **185 个 `UDA.DTYP`**——读侧按 attlib 的 `data_type 3` 把一字 word 解成 `Bool(raw != 0)`，而盘上是 `640481`/`942752`/`536961` 这类 WORD（E3D 打 `Dtype TEXT`），值到写侧时已经丢了原字，**这是读侧的错**（记 S8）；其余 2 751 行 0 差异。类型 8/9/18 三个样本里没有设过值的，靠单测（`write::attr` 3 条：implicit 各形、explicit 各形 + Unset、各种拒写不动 draft + UTF-8 文本按字节）。全套 `cargo test --lib` **333**、写路径 **38** 条全绿；clippy 写路径 0 warning；cargo doc 24 条。
+  - **顺带把 §1.3 第 11 条关掉了——语料里有一个 E3D 自己写的 hunk。** 往返普查在 `DBMDAT 24384/26333`（`ams8000_0001`）撞到 `DBMVAL`：模板说类型 7、盘上 explicit 项 type_code `0x5000`（20<<10）、data 5 字 `[1, 16456, 0x18001, 5709, 5709]` = **类型 20 int 数组 hunk，5 709 字**（`DBMVAL` 描述子 cnt 0 → 阈值 1024，超过即外联）。用读侧对着 core 的写法逐字核：目录项 `[1][页][packed = ext | 字<<13][元素数][字数]` ✓；首块在页 16456 字 12，块头 7 字 `[3<<16 | 500][24384][26333][16457][0x2001][173692327][20]` = kind 3、本块 500 字恰填到页尾（12+500=512）、续接 `(16457, ext 1 字 1)`、hash、type ✓——与 `write::place_block` 写的 kind 3 块头**字字相同**；`read_hunk` 沿链读回恰 5 709 字。之前「语料无 hunk」的结论是只查了模板类型 19；这一条把 hunk 块头 / 目录项 / 续接三样都从 E3D 自己的产物上坐实了。旁证一条：该记录头在同页字 1、hunk 在字 12——E3D 这一次是记录 implicit 区先落、hunk 紧随其后、explicit 块另页；我们是 hunk 先放。两种顺序读侧都认（`Q ATT` 门已过）。

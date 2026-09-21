@@ -543,7 +543,7 @@ impl RecordDraft {
     }
 
     /// [`Self::set_explicit_words`] with the inline length limit enforced.
-    fn set_explicit_words_checked(
+    pub(crate) fn set_explicit_words_checked(
         &mut self,
         hash: u32,
         type_code: u16,

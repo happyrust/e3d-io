@@ -17,7 +17,8 @@ use tempfile::TempDir;
 /// the sample is live and E3D keeps writing to it.
 pub const AMS8000: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001";
 
-/// A small design database from the same sample, for the quick path.
+/// A small database from the same sample, for the quick path: a dictionary
+/// (`DICT`, 238 elements, templates in `dicvir.dat`), not a design database.
 pub const AMS5100: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001";
 
 /// A cable-tray design database of the Marine sample (305 KB), one of the 24

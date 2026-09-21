@@ -24,6 +24,7 @@
 //! not one that is mid-flight. Take the file out of E3D's write mode before
 //! writing.
 
+pub mod attr;
 pub mod claim;
 pub mod claim_cow;
 pub mod index_cow;
@@ -48,6 +49,7 @@ use crate::record::text::TextFormat;
 use crate::refno::RefNo;
 use crate::session::SessionPage;
 
+pub use attr::{set_attribute, AttributeWriteError};
 pub use claim::{plan_claim_edits, Touched, TouchKind};
 pub use claim_cow::{ClaimCowError, ClaimEdit, ClaimEditKind};
 pub use index_cow::{EditKind, IndexCowError, LeafEdit};
