@@ -25,8 +25,26 @@
 //! every sampled element uses: a real at a descriptor's wide word offset is two
 //! Fortran-ordered words ([`put_real_wide`]), and a real array is a count word
 //! then that many reals ([`put_real_vec_wide`]).
+//!
+//! Two shapes of explicit value have their own setters ([`crate::record::hunk`]
+//! has the layouts, read out of `core.dll`). A **string list** (storage type
+//! 19) is `[n] { [i][words][bytes][packed text] }*` under a header of
+//! `19 << 26 | words` with no separate count word
+//! ([`RecordDraft::set_explicit_text_list_ascii`]). A **hunk** (types 20–23,
+//! the out-of-record form of an int array, real array, text or string list)
+//! is a seven-word directory entry in the stream — `[hash][type << 26 | 5]
+//! [1][page][packed][count][words]` — with the value itself in a kind-3 block
+//! chain elsewhere. A draft holds such a value as a [`HunkDraft`] until the
+//! record is placed: the directory entry carries address `(0, 0)` in the
+//! draft, and the placer ([`crate::write::stage_element_session`]'s
+//! `place_record`) lays the hunk down first, as `4SCEA` does, and patches the
+//! address in ([`RecordDraft::explicit_stream_words_with_hunks`]). A hunk
+//! entry read back from disk keeps its address and is re-emitted as it stands,
+//! so a rewrite of the record leaves the value where it is — a page once
+//! written is never changed, so the address stays good.
 
 use crate::record::block::{block_at, BlockKind, HEADER_BYTES};
+use crate::record::hunk::{self, HunkRef, TEXT_LIST_TYPE};
 use crate::refno::RefNo;
 
 /// Words of header before the first implicit attribute.
@@ -66,6 +84,13 @@ pub enum RecordEncodeError {
          (stage 2 does not split a record across pages)"
     )]
     RecordTooLong { words: usize, page_words: usize },
+    #[error(
+        "explicit attribute {hash:#x}: {words} data words is more than an inline entry's \
+         length field holds ({max}); store it as a hunk"
+    )]
+    ExplicitTooLong { hash: u32, words: usize, max: usize },
+    #[error("storage type {storage_type} is not a hunk type (20, 21, 22 or 23)")]
+    NotAHunkType { storage_type: u16 },
 }
 
 /// One element record to be written, in a form that is easy to change before
@@ -84,7 +109,33 @@ pub struct RecordDraft {
     members: Vec<RefNo>,
     /// The explicit attribute stream, verbatim, without any block header.
     explicit_stream: Vec<u8>,
+    /// Out-of-record values set on this draft and not yet placed. Each has a
+    /// directory entry in `explicit_stream` whose address reads `(0, 0)`
+    /// until the placer fills it in.
+    hunks: Vec<HunkDraft>,
 }
+
+/// A value to be written out of the record, in a hunk (storage type 20–23):
+/// what the placer lays down as a kind-3 block chain and points the
+/// attribute's directory entry at. See [`crate::record::hunk`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HunkDraft {
+    pub hash: u32,
+    /// 20 (ints), 21 (reals), 22 (text) or 23 (string list).
+    pub hunk_type: u16,
+    /// The element count the directory entry states — what `core.dll`'s
+    /// caller passed `4SCEA` as the value's length.
+    pub count: u32,
+    /// The hunk's payload, exactly the words the chain carries.
+    pub payload: Vec<u32>,
+}
+
+/// The largest data-word count an inline explicit entry can state here: this
+/// module's field walk and the stream reader ([`crate::record::explicit`])
+/// split the header word into two 16-bit halves. `core.dll`'s field is 26
+/// bits, but it moves anything past [`hunk::HUNK_THRESHOLD_WORDS`] (`0x2000`)
+/// out of the record, so no inline entry it writes comes near this.
+pub const MAX_INLINE_DATA_WORDS: usize = 0xFFFF;
 
 /// A placed record: its bytes and where they were placed.
 #[derive(Debug, Clone)]
@@ -123,6 +174,7 @@ impl RecordDraft {
             implicit,
             members,
             explicit_stream,
+            hunks: Vec::new(),
         })
     }
 
@@ -132,7 +184,9 @@ impl RecordDraft {
     /// The bytes are one contiguous record — implicit region, then the member
     /// blocks, then the explicit blocks — so this walks the same way
     /// [`crate::record::explicit::parse_tail`] does, keeping the member RefNos
-    /// and the explicit stream bytes rather than decoding the attributes.
+    /// and the explicit stream bytes rather than decoding the attributes. A
+    /// hunk directory entry in the stream keeps the address it has; the value
+    /// it points at is not read and stays where it is.
     pub fn from_record_bytes(bytes: &[u8]) -> Result<Self, RecordEncodeError> {
         let word = |at: usize| u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap());
         if bytes.len() < HEADER_WORDS * 4 {
@@ -237,8 +291,11 @@ impl RecordDraft {
 
     /// Whether two records carry the same content — noun, owner, members, the
     /// implicit region past its header (the header words are addresses and the
-    /// format word, recomputed on encode) and the explicit attributes as
-    /// fields (so a difference in stream padding does not count).
+    /// format word, recomputed on encode), the explicit attributes as fields
+    /// (so a difference in stream padding does not count) and any hunk values
+    /// waiting to be placed. A hunk value newly set on one side is a pending
+    /// [`HunkDraft`] with a `(0, 0)` directory address, so it never compares
+    /// equal to a placed one — the record is rewritten, as it must be.
     ///
     /// This is what INDEX de-duplication (`sub_5B07080`, A3a) tests: a merged
     /// record equal to the committed one is not written, and its index leaf
@@ -249,6 +306,7 @@ impl RecordDraft {
             && self.members == other.members
             && self.implicit.get(HEADER_WORDS..) == other.implicit.get(HEADER_WORDS..)
             && self.parse_explicit_fields() == other.parse_explicit_fields()
+            && self.hunks == other.hunks
     }
 
     /// Set the value at wide word offset `offset`: the header-relative word,
@@ -334,8 +392,144 @@ impl RecordDraft {
         self.set_explicit_words(hash, REFERENCE_TYPE_CODE, vec![value.word0, value.word1]);
     }
 
-    /// Remove an explicit attribute. Returns whether it was there.
+    /// Set a string-list attribute (storage type 19) inline: the
+    /// `[n] { [i][words][bytes][packed text] }*` buffer `db_cxx_put_str_vector`
+    /// builds, under type code `19 << 10` with the buffer's own length as the
+    /// entry's data-word count and no separate count word — `4SCEA`'s `type ==
+    /// 19` arm ([`crate::record::hunk`]). ASCII only, like the text setters.
+    /// An empty list unsets the attribute — `db_cxx_put_str_vector` passes an
+    /// empty vector to `4SCEA` as a value of length 0, which deletes the entry
+    /// and writes nothing. A list past [`MAX_INLINE_DATA_WORDS`] is refused;
+    /// use [`Self::set_text_list_hunk_ascii`] for it (`core.dll` moves
+    /// anything past `0x2000` words out of the record).
+    pub fn set_explicit_text_list_ascii<I, S>(&mut self, hash: u32, items: I) -> Result<(), RecordEncodeError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let (data, _count) = text_list_data_ascii(items)?;
+        if data[0] == 0 {
+            self.remove_explicit(hash);
+            return Ok(());
+        }
+        self.set_explicit_words_checked(hash, TEXT_LIST_TYPE << 10, data)
+    }
+
+    /// Set an attribute as a hunk (storage type 20–23) from its payload words:
+    /// the seven-word directory entry goes into the stream with address
+    /// `(0, 0)` and the value waits as a [`HunkDraft`] for the placer. `count`
+    /// is the element count the entry states. Any inline value the attribute
+    /// had is replaced.
+    pub fn set_hunk_words(
+        &mut self,
+        hash: u32,
+        hunk_type: u16,
+        count: u32,
+        payload: Vec<u32>,
+    ) -> Result<(), RecordEncodeError> {
+        if !hunk::is_hunk_type(hunk_type) {
+            return Err(RecordEncodeError::NotAHunkType { storage_type: hunk_type });
+        }
+        let entry = HunkRef {
+            hunk_type,
+            page_no: 0,
+            packed: 0,
+            count,
+            words: payload.len() as u32,
+        };
+        self.upsert_explicit(hash, entry.type_code(), entry.to_words().to_vec(), false);
+        self.hunks.push(HunkDraft {
+            hash,
+            hunk_type,
+            count,
+            payload,
+        });
+        Ok(())
+    }
+
+    /// Set an int array as a type-20 hunk: one word per value, `count` the
+    /// number of values.
+    pub fn set_int_array_hunk(&mut self, hash: u32, values: &[i32]) -> Result<(), RecordEncodeError> {
+        let payload = values.iter().map(|value| *value as u32).collect();
+        self.set_hunk_words(hash, 20, values.len() as u32, payload)
+    }
+
+    /// Set a real array as a type-21 hunk: each value two Fortran-ordered
+    /// words, as an inline real array stores them ([`put_real_wide`]),
+    /// `count` the number of values.
+    pub fn set_real_array_hunk(&mut self, hash: u32, values: &[f64]) -> Result<(), RecordEncodeError> {
+        let mut payload = vec![0u32; values.len() * 2];
+        for (index, value) in values.iter().enumerate() {
+            put_real_wide(&mut payload, index * 2, *value);
+        }
+        self.set_hunk_words(hash, 21, values.len() as u32, payload)
+    }
+
+    /// Set a text as a type-22 hunk: the bytes four to a word, NUL-padded,
+    /// `count` the byte length — the packed text an inline `0x2800` entry
+    /// carries after its count word, here with the count in the directory.
+    /// ASCII only, like the inline text setters.
+    pub fn set_text_hunk_ascii(&mut self, hash: u32, text: &str) -> Result<(), RecordEncodeError> {
+        let mut data = ascii_text_data(text)?;
+        let count = data.remove(0);
+        self.set_hunk_words(hash, 22, count, data)
+    }
+
+    /// Set a string list as a type-23 hunk: the same buffer
+    /// [`Self::set_explicit_text_list_ascii`] would store inline, with the
+    /// element count `db_cxx_put_str_vector` reports for it
+    /// (`1 + Σ(4 × words_i + 3)`) in the directory. An empty list unsets the
+    /// attribute, as inline.
+    pub fn set_text_list_hunk_ascii<I, S>(&mut self, hash: u32, items: I) -> Result<(), RecordEncodeError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let (data, count) = text_list_data_ascii(items)?;
+        if data[0] == 0 {
+            self.remove_explicit(hash);
+            return Ok(());
+        }
+        self.set_hunk_words(hash, 23, count, data)
+    }
+
+    /// The hunk values set on this draft and not yet placed.
+    pub fn pending_hunks(&self) -> &[HunkDraft] {
+        &self.hunks
+    }
+
+    /// The hunk directory entry of the explicit attribute keyed by `hash`, or
+    /// `None` when the element does not carry it or it is not a hunk. A
+    /// pending hunk's entry reads address `(0, 0)`.
+    pub fn hunk_ref(&self, hash: u32) -> Option<HunkRef> {
+        self.explicit_words(hash)
+            .and_then(|(type_code, data)| HunkRef::from_words(type_code, &data))
+    }
+
+    /// The explicit stream as words with each pending hunk's directory entry
+    /// pointed at `addresses` — `(hash, page, packed)` per hunk, the placer's
+    /// answer for where its first block landed. A hunk not in the list keeps
+    /// `(0, 0)`.
+    pub fn explicit_stream_words_with_hunks(&self, addresses: &[(u32, u32, u32)]) -> Vec<u32> {
+        let mut fields = self.parse_explicit_fields();
+        for (hash, page, packed) in addresses {
+            let Some(field) = fields.iter_mut().find(|(field_hash, _, _)| field_hash == hash) else {
+                continue;
+            };
+            if let Some(entry) = HunkRef::from_words(field.1, &field.2) {
+                field.2 = HunkRef { page_no: *page, packed: *packed, ..entry }.to_words().to_vec();
+            }
+        }
+        rebuild_explicit_stream(&fields)
+            .chunks_exact(4)
+            .map(|word| u32::from_be_bytes(word.try_into().expect("stream is whole words")))
+            .collect()
+    }
+
+    /// Remove an explicit attribute. Returns whether it was there. A pending
+    /// hunk value of the attribute goes with it.
     pub fn remove_explicit(&mut self, hash: u32) -> bool {
+        self.hunks.retain(|hunk| hunk.hash != hash);
         let mut fields = self.parse_explicit_fields();
         let before = fields.len();
         fields.retain(|(field_hash, _, _)| *field_hash != hash);
@@ -346,7 +540,28 @@ impl RecordDraft {
         true
     }
 
+    /// [`Self::set_explicit_words`] with the inline length limit enforced.
+    fn set_explicit_words_checked(
+        &mut self,
+        hash: u32,
+        type_code: u16,
+        data: Vec<u32>,
+    ) -> Result<(), RecordEncodeError> {
+        if data.len() > MAX_INLINE_DATA_WORDS {
+            return Err(RecordEncodeError::ExplicitTooLong {
+                hash,
+                words: data.len(),
+                max: MAX_INLINE_DATA_WORDS,
+            });
+        }
+        self.upsert_explicit(hash, type_code, data, false);
+        Ok(())
+    }
+
+    /// Replace or add a field. Whatever value the attribute had is gone,
+    /// a pending hunk included; [`Self::set_hunk_words`] re-registers its own.
     fn upsert_explicit(&mut self, hash: u32, type_code: u16, data: Vec<u32>, at_front: bool) {
+        self.hunks.retain(|hunk| hunk.hash != hash);
         let mut fields = self.parse_explicit_fields();
         match fields.iter_mut().find(|(field_hash, _, _)| *field_hash == hash) {
             Some(field) => {
@@ -409,7 +624,9 @@ impl RecordDraft {
     ///
     /// The header's two block addresses are set to point at the member block
     /// (right after the implicit region) and the explicit block (right after
-    /// the member block), both on the same page.
+    /// the member block), both on the same page. Pending hunks are not placed
+    /// by this single-page layout — their directory entries keep address
+    /// `(0, 0)`; the session placer is what lays a record with hunks down.
     pub fn encode(&self, page: u32, word_offset: u32, ext: u16) -> PlacedRecord {
         let mut words = self.implicit.clone();
         let member_words = self.members.len() * 2;
@@ -671,7 +888,20 @@ pub fn three_way_with_mode(
         latest.owner
     };
 
-    RecordDraft::new(working.refno, latest.noun_hash, owner, implicit, members, explicit_stream)
+    let mut merged = RecordDraft::new(working.refno, latest.noun_hash, owner, implicit, members, explicit_stream)?;
+    // A pending hunk travels with the directory entry that names it: the
+    // writer's where the merge took the writer's field, the committed side's
+    // where that field stood (only a draft still in memory has one; a record
+    // read from disk carries placed entries and no pending hunks).
+    for (source, fields) in [(working, &working_fields), (latest, &latest_fields)] {
+        for pending in &source.hunks {
+            let taken = value_of(&merged_fields, pending.hash) == value_of(fields, pending.hash);
+            if taken && !merged.hunks.iter().any(|hunk| hunk.hash == pending.hash) {
+                merged.hunks.push(pending.clone());
+            }
+        }
+    }
+    Ok(merged)
 }
 
 /// One step of the ordered member-list diff `sub_5B1FF60` yields between a
@@ -839,6 +1069,46 @@ fn ascii_text_data(text: &str) -> Result<Vec<u32>, RecordEncodeError> {
         data.push(u32::from_be_bytes(word));
     }
     Ok(data)
+}
+
+/// A string list's stored words and the element count `core.dll` reports for
+/// it: `[n] { [i][words][bytes][packed text × words] }*` as `sub_5AD5060`
+/// builds it — item index from 0, the item's packed word count, its byte
+/// length, then the bytes four to a word NUL-padded — and `1 + Σ(4 × words_i
+/// + 3)`, the running total it hands `4SCEA` as the value's length (what a
+/// type-23 directory entry's count word carries). ASCII only, like
+/// [`ascii_text_data`]: under either header `FORMAT` the bytes store as they
+/// are.
+pub fn text_list_data_ascii<I, S>(items: I) -> Result<(Vec<u32>, u32), RecordEncodeError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut data = vec![0u32];
+    let mut count: u32 = 1;
+    let mut items_seen: u32 = 0;
+    for (index, item) in items.into_iter().enumerate() {
+        let text = item.as_ref();
+        if !text.is_ascii() {
+            return Err(RecordEncodeError::ExplicitTextNotAscii {
+                text: text.to_owned(),
+            });
+        }
+        let bytes = text.as_bytes();
+        let words = bytes.len().div_ceil(4);
+        data.push(index as u32);
+        data.push(words as u32);
+        data.push(bytes.len() as u32);
+        for chunk in bytes.chunks(4) {
+            let mut word = [0u8; 4];
+            word[..chunk.len()].copy_from_slice(chunk);
+            data.push(u32::from_be_bytes(word));
+        }
+        count += 4 * words as u32 + 3;
+        items_seen += 1;
+    }
+    data[0] = items_seen;
+    Ok((data, count))
 }
 
 /// Serialise explicit fields back into a stream: `[hash][type_code << 16 |
@@ -1333,5 +1603,131 @@ mod tests {
         let grown = grown.encode(9, 5, PageId::PRIMARY);
         let member_words = u32::from_be_bytes(grown.bytes[40..44].try_into().unwrap()) & 0x3FFF;
         assert_eq!(member_words, 4);
+    }
+
+    /// The type-19 buffer `sub_5AD5060` builds — `[n] {[i][words][bytes]
+    /// [packed]}*` — and the running length it reports, `1 + Σ(4·words + 3)`.
+    #[test]
+    fn a_text_list_encodes_as_db_cxx_put_str_vector_builds_it() {
+        let (words, count) = text_list_data_ascii(["AB", "CDEFG"]).unwrap();
+        assert_eq!(
+            words,
+            vec![2, 0, 1, 2, 0x4142_0000, 1, 2, 5, 0x4344_4546, 0x4700_0000]
+        );
+        assert_eq!(count, 1 + (4 + 3) + (8 + 3));
+        assert_eq!(
+            crate::record::hunk::decode_text_list(&words, crate::record::text::TextFormat::Utf8),
+            Some(vec!["AB".to_string(), "CDEFG".to_string()])
+        );
+        // An empty string is an item of no words.
+        let (words, count) = text_list_data_ascii([""]).unwrap();
+        assert_eq!(words, vec![1, 0, 0, 0]);
+        assert_eq!(count, 4);
+        assert!(text_list_data_ascii(["é"]).is_err());
+    }
+
+    /// An inline string list goes under `19 << 10` with the buffer's own length
+    /// and no count word; an empty list unsets the attribute.
+    #[test]
+    fn an_inline_text_list_is_a_type_19_entry() {
+        let refno = RefNo::new(1, 10);
+        let mut draft = RecordDraft::new(refno, 0x861E0, RefNo::new(1, 1), implicit(&[0]), vec![], vec![]).unwrap();
+        draft.set_explicit_text_list_ascii(0x1234, ["AB", "CDEFG"]).unwrap();
+        let (type_code, data) = draft.explicit_words(0x1234).expect("the list is there");
+        assert_eq!(type_code, 19 << 10);
+        assert_eq!(data.len(), 10);
+        assert_eq!(draft.explicit_stream_words()[1], (19 << 26) | 10, "header: type 19, ten words, no count word");
+        assert!(draft.pending_hunks().is_empty());
+
+        draft.set_explicit_text_list_ascii(0x1234, Vec::<&str>::new()).unwrap();
+        assert_eq!(draft.explicit_words(0x1234), None, "an empty list deletes the entry");
+    }
+
+    /// A hunk value is a seven-word directory entry with address `(0, 0)` and
+    /// a pending payload; the placer's addresses patch into the stream; an
+    /// inline value set over it, or its removal, drops the pending hunk.
+    #[test]
+    fn a_hunk_is_a_directory_entry_and_a_pending_payload_until_placed() {
+        let refno = RefNo::new(1, 10);
+        let mut draft = RecordDraft::new(refno, 0x861E0, RefNo::new(1, 1), implicit(&[0]), vec![], vec![]).unwrap();
+        draft.set_int_array_hunk(0xA1, &[1, -2, 3]).unwrap();
+        draft.set_real_array_hunk(0xA2, &[1.5, 2.5]).unwrap();
+        draft.set_text_hunk_ascii(0xA3, "HELLO").unwrap();
+        draft.set_text_list_hunk_ascii(0xA4, ["AB", "CDEFG"]).unwrap();
+        assert_eq!(draft.set_hunk_words(0xA5, 7, 1, vec![1]).unwrap_err().to_string(), RecordEncodeError::NotAHunkType { storage_type: 7 }.to_string());
+
+        let ints = draft.hunk_ref(0xA1).expect("a directory entry");
+        assert_eq!((ints.hunk_type, ints.page_no, ints.packed, ints.count, ints.words), (20, 0, 0, 3, 3));
+        let reals = draft.hunk_ref(0xA2).unwrap();
+        assert_eq!((reals.hunk_type, reals.count, reals.words), (21, 2, 4));
+        let text = draft.hunk_ref(0xA3).unwrap();
+        assert_eq!((text.hunk_type, text.count, text.words), (22, 5, 2));
+        let list = draft.hunk_ref(0xA4).unwrap();
+        assert_eq!((list.hunk_type, list.count, list.words), (23, 19, 10));
+        assert_eq!(draft.explicit_words(0xA4).unwrap().1, vec![1, 0, 0, 19, 10]);
+        assert_eq!(draft.explicit_stream_words()[1], (20 << 26) | 5, "header: type 20, five words");
+
+        let pending = draft.pending_hunks();
+        assert_eq!(pending.len(), 4);
+        assert_eq!(pending[0].payload, vec![1, 0xFFFF_FFFE, 3]);
+        let mut reals_payload = vec![0u32; 4];
+        put_real_wide(&mut reals_payload, 0, 1.5);
+        put_real_wide(&mut reals_payload, 2, 2.5);
+        assert_eq!(pending[1].payload, reals_payload);
+        assert_eq!(pending[2].payload, vec![0x4845_4C4C, 0x4F00_0000]);
+        assert_eq!(pending[3].payload.len(), 10);
+
+        // The placer's answer lands in the directory; a hunk it did not place keeps (0, 0).
+        let words = draft.explicit_stream_words_with_hunks(&[(0xA1, 700, (9 << 13) | 1), (0xA3, 701, (1 << 13) | 1)]);
+        let mut patched = RecordDraft::new(refno, 0x861E0, RefNo::new(1, 1), implicit(&[0]), vec![], vec![]).unwrap();
+        patched.explicit_stream = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+        assert_eq!((patched.hunk_ref(0xA1).unwrap().page_no, patched.hunk_ref(0xA1).unwrap().packed), (700, (9 << 13) | 1));
+        assert_eq!((patched.hunk_ref(0xA3).unwrap().page_no, patched.hunk_ref(0xA3).unwrap().packed), (701, (1 << 13) | 1));
+        assert_eq!((patched.hunk_ref(0xA2).unwrap().page_no, patched.hunk_ref(0xA2).unwrap().packed), (0, 0));
+        assert_eq!(patched.hunk_ref(0xA1).unwrap().count, 3, "count and words are untouched by the patch");
+
+        // An inline value over a hunk attribute drops the pending payload; so does removal.
+        draft.set_explicit_words(0xA1, 0x1C00, vec![1, 5]);
+        assert!(draft.hunk_ref(0xA1).is_none());
+        assert_eq!(draft.pending_hunks().len(), 3);
+        assert!(draft.remove_explicit(0xA2));
+        assert_eq!(draft.pending_hunks().iter().map(|h| h.hash).collect::<Vec<_>>(), vec![0xA3, 0xA4]);
+        // Setting a hunk again replaces the earlier pending one, not adds to it.
+        draft.set_text_hunk_ascii(0xA3, "BYE").unwrap();
+        assert_eq!(draft.pending_hunks().len(), 2);
+        assert_eq!(draft.pending_hunks()[1].hash, 0xA3);
+        assert_eq!(draft.hunk_ref(0xA3).unwrap().count, 3);
+
+        // A placed entry read back has no pending hunk and is re-emitted as it stands.
+        let placed = patched.encode(9, 5, PageId::PRIMARY);
+        let redraft = RecordDraft::from_record_bytes(&placed.bytes).unwrap();
+        assert!(redraft.pending_hunks().is_empty());
+        assert_eq!(redraft.hunk_ref(0xA1).unwrap().page_no, 700);
+        assert!(patched.content_eq(&redraft));
+    }
+
+    /// A three-way merge carries the writer's pending hunk with the field it
+    /// took, and not when the committed side's value stands.
+    #[test]
+    fn three_way_carries_a_pending_hunk_with_its_field() {
+        let refno = RefNo::new(1, 10);
+        let owner = RefNo::new(1, 1);
+        let base = RecordDraft::new(refno, 0x861E0, owner, implicit(&[10]), vec![], vec![]).unwrap();
+        let latest = base.clone();
+        let mut working = base.clone();
+        working.set_int_array_hunk(0xA1, &[4, 5, 6]).unwrap();
+
+        let merged = three_way(&base, &latest, &working).unwrap();
+        assert_eq!(merged.pending_hunks(), working.pending_hunks());
+        assert_eq!(merged.hunk_ref(0xA1).unwrap().words, 3);
+        assert!(!merged.content_eq(&latest), "a new hunk value is a change");
+        assert!(merged.content_eq(&working));
+
+        // Under extract flush, a clash on the attribute keeps the committed side and drops the writer's hunk.
+        let mut latest_changed = base.clone();
+        latest_changed.set_explicit_words(0xA1, 0x1C00, vec![1, 9]);
+        let merged = three_way_with_mode(&base, &latest_changed, &working, MemberMerge::MemberByMember, MergeMode::ExtractFlush).unwrap();
+        assert!(merged.pending_hunks().is_empty());
+        assert_eq!(merged.explicit_words(0xA1), Some((0x1C00, vec![1, 9])));
     }
 }

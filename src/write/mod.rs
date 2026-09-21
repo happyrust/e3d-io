@@ -42,6 +42,7 @@ use crate::error::SessionError;
 use crate::meta::descriptor::at as page0;
 use crate::meta::DbDescriptor;
 use crate::page::{PageId, PageSize, PageType};
+use crate::record::hunk;
 use crate::record::template::TemplateProvider;
 use crate::record::text::TextFormat;
 use crate::refno::RefNo;
@@ -54,7 +55,7 @@ pub use keyed_cow::{KeyedCowError, KeyedEdit, KeyedEditKind, KeyedKey};
 pub use merge::{write_merge_session, write_merge_session_with, MergeConflict, MergeOptions};
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
-pub use record::{MemberMerge, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError};
+pub use record::{HunkDraft, MemberMerge, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError};
 pub use reverse::{ensure_typex, reference_value, set_reference, table_keys, typex_table_hash};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
 
@@ -583,15 +584,18 @@ fn put_word(bytes: &mut [u8], word: usize, value: u32) {
 /// (`docs/plans/2026-09-20-dabacon-write-plan.md` §2 阶段 2b; the reader's
 /// `record::block` continuation, `record::read_record`).
 ///
-/// The eleven-word header and the implicit region go down contiguously — the
-/// index leaf points at the header, and the reader reads the implicit region
-/// off the one page, so it cannot span (a record whose implicit region alone
-/// overruns a page is [`WriteError::RecordTooLong`]). Each tail block is then
-/// laid down as one or more segments: a segment fills to the page boundary and,
-/// when payload is left, states in its header where the rest continues, exactly
-/// the `(page, packed)` link `record::gather` follows. The header's two slots
-/// are back-patched to where each block's first segment landed, so the record
-/// reads back whole however many pages it took.
+/// The record's pending hunks ([`RecordDraft::pending_hunks`]) go down first,
+/// each a kind-3 chain of the same segment shape under a seven-word header,
+/// and their directory entries in the explicit stream are pointed at them.
+/// The eleven-word header and the implicit region then go down contiguously —
+/// the index leaf points at the header, and the reader reads the implicit
+/// region off the one page, so it cannot span (a record whose implicit region
+/// alone overruns a page is [`WriteError::RecordTooLong`]). Each tail block is
+/// then laid down as one or more segments: a segment fills to the page boundary
+/// and, when payload is left, states in its header where the rest continues,
+/// exactly the `(page, packed)` link `record::gather` follows. The header's two
+/// slots are back-patched to where each block's first segment landed, so the
+/// record reads back whole however many pages it took.
 #[allow(clippy::too_many_arguments)]
 fn place_record(
     draft: &RecordDraft,
@@ -615,19 +619,41 @@ fn place_record(
         .iter()
         .flat_map(|member| [member.word0, member.word1])
         .collect();
-    let explicit_payload: Vec<u32> = draft
-        .explicit_stream_words();
 
-    // The header page: reuse the open bump page when the header and implicit
-    // region still fit, else flush it and start fresh.
-    let mut working = match current.take() {
-        Some((page_no, bytes, used)) if used + header_words <= page_words => (page_no, bytes, used),
-        Some((page_no, bytes, _)) => {
-            appended.push((page_no, bytes));
-            new_data_page(next, page_words)
-        }
-        None => new_data_page(next, page_words),
-    };
+    // The open bump page, or a fresh one.
+    let mut working = current.take().unwrap_or_else(|| new_data_page(next, page_words));
+    let mut done: Vec<(u32, Vec<u8>)> = Vec::new();
+
+    // Hunks first. `4SCEA` writes an out-of-record value into the current
+    // output page the moment it is set (`sub_5AEC110`, a3 == 3), before the
+    // record itself is laid down at save, so a hunk precedes its record. Each
+    // is a kind-3 chain whose seven-word header names the element, the
+    // attribute and the hunk type; its directory entry in the explicit stream
+    // then gets the address of its first segment (`crate::record::hunk`).
+    let mut hunk_addresses: Vec<(u32, u32, u32)> = Vec::with_capacity(draft.pending_hunks().len());
+    for pending in draft.pending_hunks() {
+        let address = place_block(
+            u32::from(hunk::HUNK_KIND),
+            &[pending.hash, u32::from(pending.hunk_type)],
+            hunk::HUNK_MIN_WORDS - hunk::HUNK_HEADER_WORDS,
+            &pending.payload,
+            draft.refno,
+            page_words,
+            ext,
+            &mut working,
+            &mut done,
+            next,
+        );
+        hunk_addresses.push((pending.hash, address.0, address.1));
+    }
+    let explicit_payload: Vec<u32> = draft.explicit_stream_words_with_hunks(&hunk_addresses);
+
+    // The header page: the working page when the header and implicit region
+    // still fit, else set it aside and start fresh.
+    if working.2 + header_words > page_words {
+        let full = std::mem::replace(&mut working, new_data_page(next, page_words));
+        done.push((full.0, full.1));
+    }
     let header_page = working.0;
     let header_off = working.2;
 
@@ -659,9 +685,8 @@ fn place_record(
     });
 
     // The two tail blocks, members then explicit — the order `encode` uses.
-    let mut done: Vec<(u32, Vec<u8>)> = Vec::new();
-    let member_addr = place_block(2, &member_payload, draft.refno, page_words, ext, &mut working, &mut done, next);
-    let explicit_addr = place_block(1, &explicit_payload, draft.refno, page_words, ext, &mut working, &mut done, next);
+    let member_addr = place_block(2, &[], 1, &member_payload, draft.refno, page_words, ext, &mut working, &mut done, next);
+    let explicit_addr = place_block(1, &[], 1, &explicit_payload, draft.refno, page_words, ext, &mut working, &mut done, next);
 
     // Back-patch the header slots into whichever page still holds the header.
     let header_buf = if working.0 == header_page {
@@ -685,14 +710,23 @@ fn place_record(
     Ok(())
 }
 
-/// Lay one tail block's payload down as segments, returning `(page_no, packed)`
-/// of its first segment — the address the record header's slot names, or
-/// `(0, 0)` for an empty block. A segment that cannot hold the rest of the
-/// payload states the `(page, packed)` where it continues; the continuation
-/// opens a fresh page at word 1.
+/// Lay one block's payload down as segments, returning `(page_no, packed)` of
+/// its first segment — the address the record header's slot (or a hunk's
+/// directory entry) names, or `(0, 0)` for an empty block. A segment that
+/// cannot hold the rest of the payload states the `(page, packed)` where it
+/// continues; the continuation opens a fresh page at word 1.
+///
+/// The header is the five tail-block words — `[kind|words][owner.0][owner.1]
+/// [cont.0][cont.1]` — followed by `header_extra`: nothing for a member or
+/// explicit block, `[hash][hunk type]` for a hunk (kind 3). `min_payload` is
+/// the fewest payload words a segment may open with; a page with less room
+/// than header plus that is set aside first (`sub_5AE9DF0`'s minimum: two
+/// words for a hunk, `a6 = 9`).
 #[allow(clippy::too_many_arguments)]
 fn place_block(
     kind_word: u32,
+    header_extra: &[u32],
+    min_payload: usize,
     payload: &[u32],
     owner: RefNo,
     page_words: usize,
@@ -704,12 +738,13 @@ fn place_block(
     if payload.is_empty() {
         return (0, 0);
     }
+    let header_words = BLOCK_HEADER_WORDS + header_extra.len();
     let mut remaining = payload;
     let mut first_addr = None;
     loop {
-        // A segment needs its header and at least one payload word; a page
+        // A segment needs its header and at least `min_payload` words; a page
         // with less left is flushed and the segment starts on a fresh one.
-        if page_words - working.2 < BLOCK_HEADER_WORDS + 1 {
+        if page_words - working.2 < header_words + min_payload {
             let full = std::mem::replace(working, new_data_page(next, page_words));
             done.push((full.0, full.1));
         }
@@ -717,7 +752,7 @@ fn place_block(
         if first_addr.is_none() {
             first_addr = Some((working.0, record::pack_offset(seg_off as u32, ext)));
         }
-        let capacity = page_words - working.2 - BLOCK_HEADER_WORDS;
+        let capacity = page_words - working.2 - header_words;
         let take = remaining.len().min(capacity);
         let continues = take < remaining.len();
         // The continuation page is drawn now so the segment header can name it.
@@ -727,15 +762,18 @@ fn place_block(
         } else {
             (0, 0)
         };
-        put_word(&mut working.1, seg_off, (kind_word << 16) | (BLOCK_HEADER_WORDS + take) as u32);
+        put_word(&mut working.1, seg_off, (kind_word << 16) | (header_words + take) as u32);
         put_word(&mut working.1, seg_off + 1, owner.word0);
         put_word(&mut working.1, seg_off + 2, owner.word1);
         put_word(&mut working.1, seg_off + 3, cont.0);
         put_word(&mut working.1, seg_off + 4, cont.1);
-        for (index, word) in remaining[..take].iter().enumerate() {
+        for (index, word) in header_extra.iter().enumerate() {
             put_word(&mut working.1, seg_off + BLOCK_HEADER_WORDS + index, *word);
         }
-        working.2 += BLOCK_HEADER_WORDS + take;
+        for (index, word) in remaining[..take].iter().enumerate() {
+            put_word(&mut working.1, seg_off + header_words + index, *word);
+        }
+        working.2 += header_words + take;
         if !continues {
             return first_addr.expect("a non-empty block set its first address");
         }

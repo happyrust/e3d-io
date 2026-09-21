@@ -50,6 +50,7 @@ pub mod descriptor;
 pub mod direction_spec;
 pub mod element;
 pub mod explicit;
+pub mod hunk;
 pub mod orientation;
 pub mod point_list;
 pub mod template;
@@ -525,8 +526,8 @@ pub fn read_element_record(
 ///
 /// Every read this module makes comes through here, so the header check
 /// covers the record's own page and every page its block chains continue
-/// onto alike.
-fn page_of(pages: &mut PageCache, page: PageId) -> Result<&[u8], RecordError> {
+/// onto alike — and every page a hunk chain ([`hunk::read_hunk`]) lives on.
+pub(crate) fn page_of(pages: &mut PageCache, page: PageId) -> Result<&[u8], RecordError> {
     let data = pages.get(page).map_err(|source| RecordError::Unreadable {
         page,
         detail: source.to_string(),
