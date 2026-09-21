@@ -267,6 +267,11 @@ pub struct DbSet {
     dbs: RwLock<HashMap<u32, Arc<Mutex<OpenDb>>>>,
     resolver: Option<Box<dyn DbFileResolver>>,
     element_cache: Option<RwLock<DbElementCaches>>,
+    /// 池级元素缓存最多装多少个元素（全池、跨库合计；0 = 不限）。见 [`DbSet::with_element_cache_limit`]。
+    element_cache_limit: usize,
+    /// 全池已缓存的 `parsed` 条数（抽取总跟在解析后面，所以它就是元素数），与
+    /// [`DbSet::cached_element_count`] 同一个数，只是不用逐库拿锁去数。
+    element_cache_entries: std::sync::atomic::AtomicUsize,
     opening: Mutex<HashMap<u32, Arc<Mutex<()>>>>,
     uda: Option<Arc<UdaCatalog>>,
 }
@@ -281,6 +286,19 @@ type DbElementCaches = HashMap<u32, Arc<RwLock<ElementCache>>>;
 struct ElementCache {
     parsed: HashMap<RefNo, Arc<ParsedElement>>,
     extraction: HashMap<RefNo, Arc<ElementExtraction>>,
+}
+
+/// A snapshot of the pool-level element cache ([`DbSet::element_cache_stats`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ElementCacheStats {
+    /// Parsed records held (the number the entry cap counts).
+    pub parsed_entries: usize,
+    /// Descriptor extractions held (a subset of the parsed keys).
+    pub extraction_entries: usize,
+    /// Approximate bytes behind both tables; see the method for what is counted.
+    pub approx_bytes: usize,
+    /// The entry cap in force (`0` = unbounded, also when the cache is off).
+    pub limit: usize,
 }
 
 impl std::fmt::Debug for DbSet {
@@ -300,6 +318,8 @@ impl DbSet {
             dbs: RwLock::new(HashMap::new()),
             resolver: None,
             element_cache: None,
+            element_cache_limit: 0,
+            element_cache_entries: std::sync::atomic::AtomicUsize::new(0),
             opening: Mutex::new(HashMap::new()),
             uda: None,
         }
@@ -340,14 +360,34 @@ impl DbSet {
     /// 与 79 万次描述符抽取，**每元素真读 145 遍**，合计 5.9s，占生成总时间 88%；
     /// 句柄级 `OnceLock` 只挡下其中 24%。
     ///
-    /// 代价是无界：缓存条目随实际读到的元素数增长，不淘汰。生成一棵子树是有界的，
-    /// 长驻进程按库全量读则不是——那种场景自己建一个短命 `DbSet`，别开这个开关。
+    /// 代价默认是无界：缓存条目随实际读到的元素数增长，不淘汰。生成一棵子树是有界的，
+    /// 长驻进程按库全量读则不是——那种场景自己建一个短命 `DbSet`，或者用
+    /// [`DbSet::with_element_cache_limit`] 给它一个元素数上限。
     ///
     /// 缓存的正确性挂在**会话钉死**上：[`DbSet::add_db`] 换库会连同该库的缓存条目一起丢，
     /// 因为换了时点再用旧解析读到的就是上一个时点的树。
     pub fn with_element_cache(mut self) -> Self {
         self.element_cache = Some(RwLock::new(HashMap::new()));
         self
+    }
+
+    /// 打开池级元素缓存，并给它一个**元素数**上限（全池、跨库合计；`0` = 不限，等同于
+    /// [`DbSet::with_element_cache`]）。
+    ///
+    /// 满了**整张清**：再装第 `max_entries + 1` 个元素时先把全池缓存清空、再装它，下一次读
+    /// 从文件重来。不做 LRU——按访问序簿记要在每次命中的读路径上写一笔，而这张缓存的命中率
+    /// 是每元素上百次；「满则清」零簿记，代价只是清空之后那一小段重新变冷。正在读的句柄
+    /// 手里的 `Arc` 不受影响。计数只数 `parsed`（抽取总跟在解析后面，
+    /// 与 [`DbSet::cached_element_count`] 同一口径）。
+    pub fn with_element_cache_limit(mut self, max_entries: usize) -> Self {
+        self.element_cache = Some(RwLock::new(HashMap::new()));
+        self.element_cache_limit = max_entries;
+        self
+    }
+
+    /// 池级元素缓存的元素数上限（0 = 不限 / 没开缓存）。
+    pub fn element_cache_limit(&self) -> usize {
+        self.element_cache_limit
     }
 
     pub fn with_resolver(
@@ -359,6 +399,8 @@ impl DbSet {
             dbs: RwLock::new(HashMap::new()),
             resolver: Some(resolver),
             element_cache: None,
+            element_cache_limit: 0,
+            element_cache_entries: std::sync::atomic::AtomicUsize::new(0),
             opening: Mutex::new(HashMap::new()),
             uda: None,
         }
@@ -419,7 +461,37 @@ impl DbSet {
         let Ok(mut cache) = cache.write() else {
             return;
         };
-        cache.remove(&dbno);
+        if let Some(forgotten) = cache.remove(&dbno) {
+            let parsed = forgotten
+                .read()
+                .map(|cache| cache.parsed.len())
+                .unwrap_or(0);
+            // 饱和减：`store_parsed` 在锁外并发加，计数本就是近似的，减到负数才是真错。
+            let mut current = self
+                .element_cache_entries
+                .load(std::sync::atomic::Ordering::Acquire);
+            while let Err(actual) = self.element_cache_entries.compare_exchange_weak(
+                current,
+                current.saturating_sub(parsed),
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+            ) {
+                current = actual;
+            }
+        }
+    }
+
+    /// 满则清（[`DbSet::with_element_cache_limit`]）：全池缓存整张清空、计数归零。
+    /// 别的线程手里已拿到的 `Arc<RwLock<ElementCache>>` 仍可读写，只是从此不在池表里。
+    fn clear_element_cache(&self) {
+        let Some(cache) = self.element_cache.as_ref() else {
+            return;
+        };
+        if let Ok(mut cache) = cache.write() {
+            cache.clear();
+        }
+        self.element_cache_entries
+            .store(0, std::sync::atomic::Ordering::Release);
     }
 
     /// Create the next immutable MDB view, preserving unaffected open sessions
@@ -442,7 +514,7 @@ impl DbSet {
             .element_cache
             .as_ref()
             .map(|cache| {
-                let retained = cache
+                let retained: DbElementCaches = cache
                     .read()
                     .map_err(|_| DbElementError::Poisoned)?
                     .iter()
@@ -452,11 +524,25 @@ impl DbSet {
                 Ok::<_, DbElementError>(RwLock::new(retained))
             })
             .transpose()?;
+        // 留下来的那几库的缓存条目跟着过来，计数按它们现在的样子重数一遍。
+        let retained_entries = element_cache
+            .as_ref()
+            .and_then(|cache| cache.read().ok())
+            .map(|databases| {
+                databases
+                    .values()
+                    .filter_map(|cache| cache.read().ok())
+                    .map(|cache| cache.parsed.len())
+                    .sum()
+            })
+            .unwrap_or(0);
         Ok(Self {
             attlib: self.attlib.clone(),
             dbs: RwLock::new(dbs),
             resolver: Some(resolver),
             element_cache,
+            element_cache_limit: self.element_cache_limit,
+            element_cache_entries: std::sync::atomic::AtomicUsize::new(retained_entries),
             opening: Mutex::new(HashMap::new()),
             // 字典库有自己的生命周期（DICT 存盘才换），不随 DESI 换代作废。
             uda: self.uda.clone(),
@@ -478,6 +564,53 @@ impl DbSet {
             .unwrap_or_default()
     }
 
+    /// What the pool-level element cache holds right now, with an **approximate**
+    /// byte footprint — computed by walking every cached entry when asked, never
+    /// stored anywhere. Per entry: the `Arc` block, the map slot and key, the
+    /// inline struct and its heap payload ([`ParsedElement::approx_heap_bytes`] /
+    /// [`ElementExtraction::approx_heap_bytes`]). Lengths, not capacities: the
+    /// number is for a health page to relate to RSS, not an allocator audit.
+    /// Walks each database's cache under its read lock, so it costs O(entries);
+    /// call it at observation rate, not per element.
+    pub fn element_cache_stats(&self) -> ElementCacheStats {
+        // A `HashMap<RefNo, Arc<T>>` slot: key + pointer + control byte, rounded.
+        const SLOT: usize = std::mem::size_of::<RefNo>() + std::mem::size_of::<usize>() + 8;
+        // `Arc<T>` allocation header: strong + weak counts.
+        const ARC: usize = 2 * std::mem::size_of::<usize>();
+        let mut stats = ElementCacheStats {
+            limit: self.element_cache_limit,
+            ..ElementCacheStats::default()
+        };
+        let Some(databases) = self
+            .element_cache
+            .as_ref()
+            .and_then(|cache| cache.read().ok())
+        else {
+            return stats;
+        };
+        for cache in databases.values().filter_map(|cache| cache.read().ok()) {
+            stats.parsed_entries += cache.parsed.len();
+            stats.extraction_entries += cache.extraction.len();
+            stats.approx_bytes += cache
+                .parsed
+                .values()
+                .map(|parsed| {
+                    SLOT + ARC + std::mem::size_of::<ParsedElement>() + parsed.approx_heap_bytes()
+                })
+                .sum::<usize>();
+            stats.approx_bytes += cache
+                .extraction
+                .values()
+                .map(|extraction| {
+                    SLOT + ARC
+                        + std::mem::size_of::<ElementExtraction>()
+                        + extraction.approx_heap_bytes()
+                })
+                .sum::<usize>();
+        }
+        stats
+    }
+
     fn cache_of(&self, dbno: u32) -> Option<Arc<RwLock<ElementCache>>> {
         let caches = self.element_cache.as_ref()?;
         if let Some(cache) = caches.read().ok()?.get(&dbno) {
@@ -496,11 +629,24 @@ impl DbSet {
     }
 
     fn store_parsed(&self, refno: RefNo, parsed: Arc<ParsedElement>) {
+        // 满则清：装第 limit + 1 个之前先整张清（[`DbSet::with_element_cache_limit`]）。
+        // 计数是近似的（并发装入时可能多一两条），上限本来就是内存量级的旋钮，不求逐条精确。
+        if self.element_cache_limit > 0
+            && self
+                .element_cache_entries
+                .load(std::sync::atomic::Ordering::Acquire)
+                >= self.element_cache_limit
+        {
+            self.clear_element_cache();
+        }
         let Some(cache) = self.cache_of(refno.dbno()) else {
             return;
         };
         if let Ok(mut cache) = cache.write() {
-            cache.parsed.insert(refno, parsed);
+            if cache.parsed.insert(refno, parsed).is_none() {
+                self.element_cache_entries
+                    .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            }
         };
     }
 
