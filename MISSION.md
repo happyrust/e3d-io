@@ -20,8 +20,15 @@
 - 手上的实物：`schema/e3d31/binaries/` 里的 `*vir.dat`（20 个）与 `attlib.dat`、
   AMS 样例库、以及一份只覆盖 WORL 的 live 内存 dump
 
+## 写回（2026-09-20 起纳入）
+
+读侧的 map 做完整之后，同一份地基反过来用：`e3d_io::write` 往 E3D 3.1 库**追加一个会话**，
+写出的文件本 crate 的读侧原样读得回来，真 E3D 3.1 Design 也认（TTY 门 14 问 PASS，
+`docs/evidence/2026-09-21-e3d-tty-gate-write-path.md`）。口径与读侧一样只认二进制与 IDA 证据：
+每个写侧模块都是对应读侧的逆函数，读侧是它的验收方（`docs/plans/2026-09-20-dabacon-write-plan.md`
+§7 是逐步的账，`docs/plans/2026-09-21-write-path-next-steps.md` 是收口与下一步）。
+
 ## Out of scope
 
-- 写回（writeback）。先把读侧的 map 做完整。
-- 几何求解、模型生成、下游渲染。
-- E3D 2.10 及其他版本的常量差异。
+- 几何求解、模型生成、下游渲染（写侧因此也不维护 `SPAMAP`——它的值要几何算）。
+- E3D 2.10 及其他版本的常量差异；写侧只写 3.1 单 extent 文件。
