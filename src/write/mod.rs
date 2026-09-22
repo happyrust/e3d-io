@@ -17,6 +17,11 @@
 //! element writes ([`stage_element_session`]) and merges — use the same
 //! two-phase [`StagedSession`].
 //!
+//! [`Transaction`] wraps all of this for a caller who would rather not mint
+//! refnos, thread `NamedEdit`s and edit owner member lists by hand: it opens
+//! on the newest session, `insert` / `update` / `rename` / `delete` build the
+//! batch, and `commit` hands it here.
+//!
 //! Not done here: the write-mode sentinel lock `core.dll` takes
 //! (`LockFileEx` on one byte at `0x7FFFFFF6FFFFFFFF`, A9). In its place
 //! [`StagedSession::commit`] re-reads page 0 and refuses when `LSPGNO` moved
@@ -35,6 +40,7 @@ pub mod pages;
 pub mod record;
 pub mod reverse;
 pub mod session_page;
+pub mod transaction;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -62,6 +68,7 @@ pub use reverse::{
     ensure_typex, reference_array, reference_value, set_reference, set_reference_array, table_keys, typex_table_hash,
 };
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
+pub use transaction::{Transaction, TransactionError};
 
 /// Why a write did not happen. Nothing in this enum is returned after page 0
 /// has been written: past that point the session is committed.
