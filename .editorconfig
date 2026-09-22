@@ -1,0 +1,18 @@
+# The repository is LF throughout (`.gitattributes`: `* text=auto eol=lf`).
+# This file keeps editors from writing CRLF into the working tree — the
+# recurring "22 files M, 0 lines changed" noise (docs/plans/2026-09-22-write-path-phase-2-plan.md T0.2).
+# It does not reach a tool that copies files in from elsewhere; that one has to preserve bytes itself.
+root = true
+
+[*]
+end_of_line = lf
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = false
+
+[*.rs]
+indent_style = space
+indent_size = 4
+
+[*.{md,toml,json,yml,yaml,ps1,py}]
+indent_style = space
