@@ -1,6 +1,6 @@
 # 计划：e3d-io 写路径 · 第二期（0.3.0 之后）——收口、消费者门面、规模门、SPAMAP 后果实测
 
-状态：**评审通过**（2026-09-22，用户在面板上批「Q1–Q6 全按推荐项定」；Plannotator 门另行 Approve）→ T0 开工（§7）。接班会话 fable-5-1-12 的评审补充见 §5.1（七条，方案与顺序不变）、T0.2 写者复核见 §7（是 Cursor 本身，不是同步工具）。
+状态：**评审通过**（2026-09-22，用户在面板上批「Q1–Q6 全按推荐项定」；Plannotator 门 `approved`）→ **T0 已落地**（0.3.0 `ae9cdfd` 由 WIP 会话提交、本会话独立重跑 96 / 594 / 0；CRLF 写者画像见 §7）→ **T3 已落地**（`docs/evidence/2026-09-22-e3d-spamap-consequences.md`：空间搜索只看 SPAMAP、E3D 不自愈 → **Q3 定：SPAMAP 升为第三期第一件**）→ 下一步 T1a。接班会话 fable-5-1-12 的评审补充见 §5.1（七条，方案与顺序不变）、T0.2 写者复核见 §7（是 Cursor 本身，不是同步工具）。
 日期：2026-09-22
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`，HEAD `23af76f`（2026-09-22 16:44）；`main` @ `D:\work\plant-code\old\vendor\e3d-io` 同头（`git rev-list --left-right --count main...write-path` = `0 / 0`）
 上一期：`docs/plans/2026-09-21-write-path-next-steps.md`（下称「上期计划」；其 §7 是 S1–S8 的第一手账）、`docs/plans/2026-09-20-dabacon-write-plan.md`（「写计划」）
@@ -118,7 +118,7 @@
 
 | 项 | 触发条件 |
 |---|---|
-| SPAMAP | **改为按 T3 结果定**（见上） |
+| SPAMAP | **T3 已定：升为第三期第一件**（`docs/evidence/2026-09-22-e3d-spamap-consequences.md`；值 = 世界系 AABB 0.1 mm + flags，键首字 = `N × 10^8 + 最短轴 min`，只剩桶 / flags 规则要拟合） |
 | S6b 页 1 桶表写侧 | 需与 E3D 交替写同一扩展且号段不容空档，或要把「删号不回收 + 保留量」对齐到字节（`updateBucketList` 存盘重算，`max+1` ≈ 收敛值） |
 | UDA 表 UDATAB / UDAFTB / UUIDAR | 拿到一个带这三张表的项目库 |
 | 类型 17 逐槽三方 + 576 | 出现两边并发改同一数组的场景 |
@@ -156,7 +156,7 @@
 
 - **Q1 首个消费者形态——已定**：本仓先做 Rust 门面 + `e3d-write` CLI（T1），HTTP / UI 接线由消费者仓做。（备选未取：直接在 gen-model 加 HTTP 写接口；`plant-model-2` 起新仓。）理由：`e3d_io::write` 今天 0 个下游引用，先把门面做到「不看源码能用」，接线谁做都一样。
 - **Q2 提交时库已前进、且同属性撞车——已定**：门面默认 `OnClash::Refuse`（回报冲突清单），`OnClash::WriterWins` 可选 = core 普通 `SAVEWORK` 口径。
-- **Q3 SPAMAP——已定**：按 T3 结果定；T3 之前不排几何。
+- **Q3 SPAMAP——已定（T3 落地后按规则自动定）**：T3 实测（`docs/evidence/2026-09-22-e3d-spamap-consequences.md`）——E3D 给全部几何图元维护 SPAMAP（BOX 45/45 … 我们的 BOX 是全库唯一没有的）、空间搜索只看 SPAMAP（我们的 BOX 在 100 m 体积搜索里不出现、连它自己 ZONE 的体积搜索都不列它）、`WITHIN VOLUME =ourBOX` 报 `(2,536) Error getting volume`、E3D 改无关元素存盘**不补**、只有 E3D 自己改过该元素才补。→ **SPAMAP 升为第三期第一件**，另起计划。取证顺带把成本压低：值 = 世界系 AABB（**0.1 mm**）+ flags；键首字 = `N × 10^8 + 最短轴 min`（3 747 / 3 747 条成立），不需要读 core 的「空间格 hash」，只剩桶（1–5）与 flags 的规则要拟合或读 core。
 - **Q4 规模门阈值——已定口径**：T2 出数字后定；提案 1 万 insert 单会话 ≤ 10 s、追加页 ≤ 1.5 × 记录页、`Transaction::open` 在最大装机库 ≤ 1 s。
 - **Q5 CRLF 根因处置——已定**：找 18:35:31 的写者并让它保字节；`.editorconfig` 同时加上兜编辑器一档。
 - **Q6 `main` 工作树 0.3.0 WIP——已定**：本会话验收并提交（T0.1），再 fast-forward `write-path`。
@@ -191,6 +191,14 @@
   - **T0.3** gen-model 4 处 `TextList` 臂：归其工作树归属者，本仓不动。
   - **T0.4** 上期计划状态行末尾指向本文；README 「Not yet」（第 23 行）与「Not written」（第 230 行）已与 §1.3 表一致（0.3.0 提交顺手改过），未再动。
   - **下一步：T3**（SPAMAP 缺失后果实测），随后 T1a。
+- 2026-09-22：**T3 落地——SPAMAP 缺失后果实测**（`docs/evidence/2026-09-22-e3d-spamap-consequences.md`，全部真 E3D 3.1 TTY + 表级探针，数字见该文 §0 / §1）。
+  - 门先在本机重跑：`write_gate.ps1` 16 问 PASS，12.6 s（首次 robocopy 3.2 GB；一次 robocopy 因 E3D 占着文件回 9，重跑即过）。
+  - **① 空间搜索**：PML1 `EVALUATE NAME FOR ALL BOX WITHIN VOLUME <elem> [n]` 可用；以原生 BOX 为中心 100 m 列出 12 190 个 BOX **无我们的**、以我们的 ZONE 为体积列 911 行 **无它自己的子元素**、以我们的 BOX 为体积 → **`(2,536) Error getting volume`**；层级遍历 `FOR CE` 找得到。→ 元素体积从 SPAMAP 读，没有条目 = 空间上不存在。
+  - **② 3D 视图**：TTY 不出图，未验；留一次人工图形会话（`ADD =24384/26484`、`LIMITS CE`）。
+  - **③ E3D 自补？** 改无关 ZONE 存盘（会话 643）→ SPAMAP 244 页 / 3 746 条**不变**；E3D 把我们 BOX 的 `XLEN` 300 → 301 存盘（会话 648）→ 3 747 条、BOX 46/46、我们的 BOX 得条目 `[300008495, 24384, 26484, 0] → [8495, 18000, 27500, 11505, 22000, 32500, 2]`，同会话体积搜索返回它自己。→ **不自愈，只有 E3D 自己改过才补。**
+  - **顺带坐实**：SPAMAP 值单位 **0.1 mm**（09-20 调研写的 mm 有误）；键首字 `= N × 10^8 + 最短轴 min`，3 747 / 3 747 成立，N = 6 × 轴序 + 桶（1–5）；表结构 244 页 / 3 746 条 / 3 628 元素，同一元素最多 2 条（k = 0 / 1，121 条）；覆盖 = 全部几何 noun 100 %、EQUI / ZONE / SITE / GROU / FIXING 0。
+  - **TTY 驱动两条坑**：shadow TTY 里任何 PML2 对象 / `COLLECT` / `!!collectallfor` 都 0xC0000005（pristine 库同崩，与写路径无关），只能用 PML1 `VAR … EVALUATE` + `Q VAR`；对 BOX 设 `DESC` 也崩（原生的一样）。记进 `tools/e3d/` 用法。
+  - **Q3 → SPAMAP 升为第三期第一件（§5）。** 下一步：T1a。
 - 2026-09-22：**T2 规模门实测（接班会话 fable-5-1-12；与另一会话分工：我做 T2，另一会话推 T3→T1）。** 探针 `%TEMP%\e3dio_scale`（release，未入库），`ams8000_0001`（6 639 元素、S640）副本上跑；E3D 读回在 `D:\e3dio-scale` 的整项目副本上由 `l3_suite --check-driver` 真 des.exe 驱动。
   - **单会话 A（n insert 到一个 ZONE + 1 000 update + 100 delete，冷 RSS）**：
 
