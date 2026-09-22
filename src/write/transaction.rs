@@ -110,6 +110,11 @@ pub struct Transaction<'a> {
     order: Vec<RefNo>,
     writes: HashMap<RefNo, ElementWrite>,
     names: Vec<NamedEdit>,
+    /// Owner member-list changes, applied at stage time so an owner-only update
+    /// lands after the child inserts that name it — the order the primitive path
+    /// writes in, which keeps a new element's tail blocks (and hunks) where a
+    /// hand-written batch would put them. `(owner, member, add?)`.
+    member_ops: Vec<(RefNo, RefNo, bool)>,
     /// Per-extent (`word0`) next `word1` to hand out; seeded from the base.
     next_word1: HashMap<u32, u32>,
 }
@@ -141,6 +146,7 @@ impl<'a> Transaction<'a> {
             order: Vec::new(),
             writes: HashMap::new(),
             names: Vec::new(),
+            member_ops: Vec::new(),
             next_word1,
         })
     }
@@ -194,7 +200,7 @@ impl<'a> Transaction<'a> {
             self.set_name(&mut draft, &template, refno, None, name)?;
         }
         self.register(ElementWrite::Insert(draft));
-        self.add_to_owner(owner, refno)?;
+        self.member_ops.push((owner, refno, true));
         Ok(refno)
     }
 
@@ -258,26 +264,42 @@ impl<'a> Transaction<'a> {
             .map_err(|detail| TransactionError::Parse { refno, detail })?;
         let old = crate::element_name::stored_name(&parsed);
         self.register(ElementWrite::Delete(refno));
-        self.remove_from_owner(owner, refno)?;
+        self.member_ops.push((owner, refno, false));
         let format = self.text_format;
         Self::file_name_edits(&mut self.names, refno, format, old.as_deref(), None)?;
         Ok(())
     }
 
     /// Stage the batch: everything but page 0 is written and synced, and a
-    /// [`StagedSession`] is returned for the commit. Element writes go out in
-    /// the order they were first registered — a new element before the owner
-    /// update that lists it, which is the order the primitive path is called in.
-    pub fn stage(self, request: &SessionRequest<'_>) -> Result<StagedSession, WriteError> {
+    /// [`StagedSession`] is returned for the commit. Owner member-list updates
+    /// are resolved here and go out after the child inserts that name them — the
+    /// order the primitive path writes in.
+    pub fn stage(mut self, request: &SessionRequest<'_>) -> Result<StagedSession, TransactionError> {
+        self.resolve_members()?;
         let Transaction { path, templates, names, order, mut writes, .. } = self;
         let elements: Vec<ElementWrite> =
             order.iter().map(|refno| writes.remove(refno).expect("every ordered refno has a write")).collect();
-        stage_element_session_with(&path, request, &elements, &names, WriteOptions { templates: Some(templates) })
+        Ok(stage_element_session_with(&path, request, &elements, &names, WriteOptions { templates: Some(templates) })?)
     }
 
     /// Stage and commit in one step.
-    pub fn commit(self, request: &SessionRequest<'_>) -> Result<CommitReport, WriteError> {
-        self.stage(request)?.commit()
+    pub fn commit(self, request: &SessionRequest<'_>) -> Result<CommitReport, TransactionError> {
+        Ok(self.stage(request)?.commit()?)
+    }
+
+    /// Apply the queued owner member-list changes. Each owner is read (from the
+    /// pending batch or the base) and updated in place; an owner touched only
+    /// for membership becomes an update appended after the explicit writes.
+    fn resolve_members(&mut self) -> Result<(), TransactionError> {
+        let ops = std::mem::take(&mut self.member_ops);
+        for (owner, member, add) in ops {
+            if add {
+                self.add_to_owner(owner, member)?;
+            } else {
+                self.remove_from_owner(owner, member)?;
+            }
+        }
+        Ok(())
     }
 
     // --- internals ---
