@@ -50,7 +50,7 @@
 |---|---|---|---|---|
 | 1 | **非 ASCII 文本** | **已关（S5，§7 2026-09-22 条）**：`record::text::encode_as` 按头 `FORMAT` 编码，会话页 / explicit 文本 / 串列表 / hunk / NAME 键全走它；无转义形态的字符（GBK 码有字节 < `0xA0`、BMP 外、PUA）拒且不写，与 core 的 638 同口径 | 起草时：`session_page.rs:250`、`record.rs:1149` / `1184` 一律 ASCII | 语料 643 库里 451 个 `FORMAT` 1（UTF-8 原字节）、192 个 `FORMAT` 0（GBK 经 `&~ … &` 七位转义；本机 TES000 84 个） |
 | 2 | **按描述子设属性** | `RecordDraft` 只到 `set_real_wide(offset)` / `set_explicit_words(hash, type_code, words)` 这一层；wide 偏移、type_code、hash 全由调用方算；`e3d-write-box` 自己从模板 `defaults.implicit` 铺底再 `put_real_wide` | `write::record` 公开面 39 个 fn 里没有一个按属性名 / 描述子设值 | 读侧 `extract_parsed_element_with_descriptors` 的逆函数未写 |
-| 3 | **refno 分配 + 事务门面** | 新 refno 由测试 / bin 手工取（`primary_extent_ref` 的 word0 + 该库最高 word1 + 1）；`NamedEdit` 要与记录里的 NAME 项手工配对；owner 成员表要调用方自己 `push_member`；写计划 §6 草图的 `Transaction` 未建 | `tests/common/write_fixture.rs`、`bin` | core 的分配器未读（候选：`MNUM`——CLAIM 普查里唯一「primary 却不在树里」的 noun，像个计数元素） |
+| 3 | **refno 分配 + 事务门面** | 新 refno 由测试 / bin 手工取（`primary_extent_ref` 的 word0 + 该库最高 word1 + 1）；`NamedEdit` 要与记录里的 NAME 项手工配对；owner 成员表要调用方自己 `push_member`；写计划 §6 草图的 `Transaction` 未建 | `tests/common/write_fixture.rs`、`bin` | **分配器已读（S6 前半，`docs/evidence/2026-09-22-core-dll-refno-allocation.md`）**：创建路径 `DB_Element::createAt → ELCREL → ELCREA → BCREAT → routine 597`；号在建块路径铸出、不由上层传入。**页 1（桶表，页类型 1）为每个会长的扩展存 `(word0, 下一个 word1)` 计数器，严格 > 该扩展活最大（删号不回收）**；主扩展只放 WORLD+MNUM 不长、纯字典库不长 → 无计数器。`MNUM` 不是计数器（它的 MARK/MAPCSV 是 noun→数量映射）。忠实做法 = 读页 1 计数器发号 + 页 1 CoW（= A11，记 S6b）；本轮按 max word1 + 1 + 590 兜底 |
 | 4 | **写模式哨兵锁**（A9：`LockFileEx` 独占 1 字节 @ `0x7FFFFFF6FFFFFFFF`） | 未做，只有提交前重读页 0 的 `Moved` 复检——能挡「先提交完的写者」，挡不住「正在写的写者」 | `write/mod.rs:20` 模块头明说 | 写计划 Q6 默认值本是两样都做 |
 | 5 | **读侧对 19 / 23 / 20–22 的描述子解码** | **已关（S8，§7 2026-09-22 条）**：`ExplicitValue::TextList` / `DescriptorValue::TextList`，19 inline 与槽按串列表解；`resolve_hunks` 把 20–23 目录项就着页读成值，引擎与 `DbElement` 门面自动做；`data_type 3` 且字 ∉ {0, 1} → `Word`（185 例归零）。纯函数 `extract_parsed_element_with_descriptors` 无页，目录项照旧 `RawWords`（写侧原样重发靠它） | 起草时：`AttrValue` / `ExplicitValue` 无变体，19 按 `Characters` 解、目录项 `RawWords`、`UDA.DTYP` 报 `Bool(true)` | 下游 gen-model 4 处穷举 `match` 待补 `TextList` 臂（§7） |
 | 6 | 类型 18 集合合并（`sub_5B0F1E0`）、类型 15 非 NAME 唯一表（DRTYPT / DRSTYT / RDFIRI）与 15 的抢占（`sub_5AFFC20`）、类型 17 索引表（MDSYSF / SCAREF / DESREF） | 未建模：18 当不透明字（写者赢）；15 只做 NAME 且撞名一律 561；17 不维护 | 算法清单 §5 类型对表 | **已普查（§7 2026-09-21 条）**：DESI / CATA 模板里 15 只有 NAME；18 只有 `UDASTB`、8.9 M 元素 0 设值 → 两者不做；17 有 21 个属性、语料 2 870 个元素设了值、设值的库**都带**以属性名命名的表 → 进 S4b |
@@ -107,7 +107,7 @@
 #### S6 事务门面 + NAME 自动配对 + refno 分配
 
 - `write::Transaction::open(path, WriteOptions)` → `insert(owner, noun, |draft| …)` / `update(refno, |draft| …)` / `delete(refno)` / `rename(refno, name)` / `stage()` → `StagedSession`。NAME 项改动自动生成 `NamedEdit`（今天两处手配，漏一处就是表与记录不一致）；owner 成员表的增删由门面代做；`Insert` 自动 `ensure_typex`。
-- refno 分配：先花半天读 core（Q4）——元素创建路径里新 refno 从哪来（候选 `MNUM`）；读不出就用现规则（`primary_extent_ref` word0 + max word1 + 1），会话内连续分配，提交前对 latest 撞号已是 590。
+- refno 分配：先花半天读 core（Q4）——元素创建路径里新 refno 从哪来（候选 `MNUM`）；读不出就用现规则（`primary_extent_ref` word0 + max word1 + 1），会话内连续分配，提交前对 latest 撞号已是 590。**已读（S6 前半，2026-09-22 §7 与 `docs/evidence/2026-09-22-core-dll-refno-allocation.md`）：号在建块路径（`createAt→ELCREL→ELCREA→BCREAT→routine 597`）铸出，页 1 桶表为会长的扩展各存一个「下一个 word1」高水位计数器（删号不回收）。忠实做法要页 1 CoW（A11，记 S6b）；本轮按「owner 扩展 word0 + 该扩展 max word1 + 1」发号（会话内连续），590 兜底。`MNUM` 不是计数器。**
 - **验收**：`e3d-write-box` 改用门面重写，同一时钟下写出的 4 个会话与旧版**逐字节相同**（旧版 bin 保留到比对完）；TTY 门照旧 14 PASS。
 
 #### S7 写模式哨兵锁（A9）
@@ -130,7 +130,8 @@
 | 类型 15 非 NAME | **不做**：DESI / CATA 模板里没有一个（DRTYPT / DRSTYT / RDFIRI 是别的库类型的） |
 | 类型 18 `UDASTB` 集合合并 | **不做**：DESI 868 / CATA 146 个 noun 声明，语料 2.09 M + 6.85 M 元素 **0** 设值；触发 = 语料里出现设了值的 `UDASTB` |
 | 类型 17 索引表 | **已落地（S4b，§7）**。留待：A3b 对数组属性逐槽（元素 k）三方与 17 写入撞 23 → 576 的冲突——触发 = 出现两边并发改同一数组的场景 |
-| extract 模型、页 1 桶表、Central、多 extent、E3D 2.1、部分存盘 | 需求出现再议 |
+| **S6b 页 1 桶表 CoW（refno 计数器随写维护）** | 需要与 E3D 交替写同一扩展且号段不容空档，或要把「删除号不回收」对齐到字节；届时把 routine 597 展到字节级、页 1 随会话 CoW 写回（现按 max+1，`docs/evidence/2026-09-22-core-dll-refno-allocation.md`） |
+| extract 模型、Central、多 extent、E3D 2.1、部分存盘 | 需求出现再议 |
 | E3D 自造 hunk 样本 | **已有**：S4 普查撞到 `ams8000` `DBMDAT.DBMVAL`（类型 20，5 709 字，跨页），块头 / 目录项 / 续接与本 crate 字字相同（§7） |
 
 ---
