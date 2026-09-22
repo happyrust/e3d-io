@@ -1,7 +1,7 @@
 //! A transaction facade over the element write path: mint refnos, keep owner
 //! member lists and the `NAME` table in step, and hand the batch to
 //! [`stage_element_session_with`] — the three chores a caller of
-//! [`write_element_session_with`] does by hand today
+//! [`write_element_session_with`](super::write_element_session_with) does by hand today
 //! (`docs/plans/2026-09-21-write-path-next-steps.md` S6, §6).
 //!
 //! ```no_run

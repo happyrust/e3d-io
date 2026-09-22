@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-09-22
+
+The write path is completed and externally re-verified: text outside ASCII stored the way the header's `FORMAT` says (S5), the read side now reports the string lists and hunks the write side produces and no longer collapses a boolean-typed word (S8), a `Transaction` facade that mints refnos and keeps owner member lists and the `NAME` table in step (S6), the write-mode sentinel lock `core.dll` takes (S7), and the page-1 bucket-table reader (S6b read side). A real E3D 3.1 reads back every session the facade writes (`tools/e3d/write_gate.ps1`, sixteen questions). The write path's copy-on-write mechanics (`index_cow` / `keyed_cow` / `claim_cow` / `named_cow` / `claim`) are now `pub(crate)`; only their error types (reachable from `WriteError`) and `NamedEdit` remain public.
 
 ### Added
 
@@ -20,6 +22,7 @@
 - A one-word implicit slot attlib types boolean (`data_type 3`) is a `Bool` only while its word is 0 or 1; any other word is reported as the `Word { raw, text }` it is. `UDA.DTYP` is typed 3 in attlib and holds the words `TEXT` / `REAL` / `INTE` on disk — 185 elements of `ams5100_0001`, each printed by E3D as `Dtype TEXT` and the like — which read as `Bool(true)` before, so the word was lost by the time it reached the writer; `tests/write_stage4_set_attribute.rs` now asserts that class empty and the dictionary's 2 993 decoded rows all write back word for word. `UdaDefinition::default_is_defined` is accordingly whether `DTYP` holds a non-zero word (it used to be that `Bool`), and the new `UdaDefinition::default_type: Option<String>` is the word's name (`TEXT`, `REAL`, …); `e3d-descriptor uda` prints it as `default_type`.
 - The TTY reconciliation (`tty::compare_tty_value`) accepts a `TextList` against the one-item-per-line form E3D prints (`Rokeys` / ` 1 K1` / ` 2 K2`, joined to `1 K1 2 K2`), and an empty list against `unset` or nothing.
 - `AttributeWriteError::StringList` is gone: a non-list value given to a type-19 attribute is the ordinary `TypeMismatch { shape: "a string list", .. }`.
+- The write path's tree-table mechanics are no longer public API: `write::index_cow`, `write::keyed_cow`, `write::claim_cow`, `write::named_cow` and `write::claim` are `pub(crate)`, and the edit / key types they defined (`LeafEdit`, `EditKind`, `KeyedEdit`, `KeyedKey`, `KeyedEditKind`, `ClaimEdit`, `ClaimEditKind`, `Touched`, `TouchKind`, `plan_claim_edits`) are no longer re-exported from `write`. Their error types (`IndexCowError`, `KeyedCowError`, `ClaimCowError`, `NamedCowError`) stay public because `WriteError` carries them, and `NamedEdit` / `NamedEditKind` stay public as the primitive session API takes them. A caller drives the three steps — open a `Transaction` (or `write_element_session`), change values, commit — not the per-leaf edits. No downstream crate used the removed items.
 
 - `ReadOnlyEngine::find_by_name` keys the name under the file's `FORMAT`, so `find_by_name("/锅炉岛设备")` finds the SITE on a `FORMAT 0` file; it looked for the UTF-8 bytes before and found nothing.
 - `WriteError::TextNotAscii` is replaced by `WriteError::Text { field, source: TextEncodeError }` and `WriteError::TextControl { field, text }` (a control character in `USER` / `DESC` is still refused); `AttributeWriteError::TextNotAscii` by `AttributeWriteError::Text { hash, source }`. `RecordEncodeError` gains a transparent `Text(TextEncodeError)` variant; its `ExplicitTextNotAscii` is now what only the `_ascii` setters return.

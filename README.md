@@ -186,27 +186,38 @@ and session page are appended after the newest session's last page, and page
 write leaves a file every reader still sees as the previous session; a page 0
 that moved while the write was staged is refused (`WriteError::Moved`).
 
+Three steps: open a `Transaction`, change values by descriptor, commit.
+
 ```rust
+use e3d_attlib::db1_hash;
+use e3d_io::record::descriptor::DescriptorValue;
 use e3d_io::record::template::TemplateProvider;
-use e3d_io::write::{write_element_session_with, ElementWrite, RecordDraft, SessionRequest, WriteOptions};
+use e3d_io::write::{SessionRequest, Transaction};
 
 let mut templates = TemplateProvider::open(r"schema\e3d31\binaries\desvir.dat", Some(0x000B_0692))?;
-let zone_template = templates.template_for(zone_noun)?.expect("desvir lists ZONE").clone();
+let mut tx = Transaction::open(path, &mut templates)?;
+let format = tx.text_format();               // the header's FORMAT, for text values
 
-// Re-emit an existing record with one attribute changed, by its descriptor.
-let record = engine.find_element(zone)?.expect("indexed");
-let mut draft = RecordDraft::from_record_bytes(&record.raw_bytes)?;
-draft.set_attribute(&zone_template, db1_hash("DESC"), &DescriptorValue::Text("pump bay".into()), engine.text_format())?;
+// A new BOX under an existing ZONE: the refno is minted in the ZONE's extent,
+// the ZONE's member list gains it, and its NAME goes into the record and the
+// NAME table together.
+let the_box = tx.insert(zone, box_noun, Some("/E3DIO-BOX"), |draft, template| {
+    draft.set_attribute(template, db1_hash("POS"), &DescriptorValue::RealArray(vec![1000.0, 2000.0, 3000.0]), format)?;
+    draft.set_attribute(template, db1_hash("XLEN"), &DescriptorValue::Real(300.0), format)?;
+    Ok(())
+})?;
 
-let report = write_element_session_with(
-    path,
-    &SessionRequest { user: "e3dio", comment: "one DESC", clock: None },
-    &[ElementWrite::Update(draft)],
-    &[],                                        // NAME table edits
-    WriteOptions { templates: Some(&mut templates) },
-)?;
-println!("session {} on {} new pages", report.written.sesno, report.appended_pages.len());
+// One attribute of an existing element, by its descriptor.
+tx.update(zone, |draft, template| {
+    draft.set_attribute(template, db1_hash("DESC"), &DescriptorValue::Text("pump bay".into()), format)?;
+    Ok(())
+})?;
+
+let report = tx.commit(&SessionRequest { user: "e3dio", comment: "one box, one DESC", clock: None })?;
+println!("{the_box}: session {} on {} new pages", report.written.sesno, report.appended_pages.len());
 ```
+
+The primitive form underneath — `write_element_session_with(path, &request, &[ElementWrite], &[NamedEdit], WriteOptions { templates })` over `RecordDraft`s — is still public for a caller that mints refnos and threads `NAME` edits itself; the copy-on-write mechanics of the trees (`index_cow`, `keyed_cow`, `claim_cow`, `named_cow`, the claim plan) are crate-private since 0.3.0, reachable only through their error types on `WriteError`.
 
 - **Elements**: `ElementWrite::{Insert, Update, Delete}` over a `RecordDraft` — the inverse of `read_record` + `ParsedElement`. `RecordDraft::set_attribute(&template, hash, &DescriptorValue, text_format)` places a value where the noun's descriptor puts the attribute, in the shape the read side decodes (`write::attr`); every decoded attribute of the 7 825 elements of three sample databases writes back word for word (`tests/write_stage4_set_attribute.rs`). Members: `push_member` / `remove_member` / `move_member_after`. Records longer than a page split their tail blocks across pages; large values go out of the record as hunks (`set_int_array_hunk`, `set_text_hunk`, …). Text is stored the way the header's `FORMAT` says (`record::text::encode_as`): UTF-8 as it is under `FORMAT 1`, the project code page (GBK) in `&~ … &` runs under any other — the form `core.dll`'s own converter writes, refusing what it refuses — for attributes, string lists, hunks, the session's `USER` / `DESC` and the `NAME` table key alike; E3D 3.1 reads back a Chinese `NAME`, `DESC` and session comment (`tools/e3d/write_gate.ps1` Q7 / Q8).
 - **Names**: `NamedEdit` keeps the `NAME` table (variable-key B+tree) in step; a name already taken is refused as conflict 561 before anything is written.
@@ -215,8 +226,8 @@ println!("session {} on {} new pages", report.written.sesno, report.appended_pag
 - **Transaction facade** (`write::Transaction`): `open(path, &mut templates)` → `insert(owner, noun, name, build)` / `update(refno, edit)` / `rename(refno, name)` / `delete(refno)` → `commit(request)`. It mints the refno (in the owner's extent, one past the highest seen — `core.dll`'s page-1 counter, `docs/evidence/2026-09-22-core-dll-refno-allocation.md`), keeps the owner's member list and the `NAME` table in step, and hands the batch to `stage_element_session_with`. A box inserted through it is byte-for-byte the file the primitive path writes (`tests/write_stage6_transaction.rs`).
 - **Two phases**: `stage_element_session[_with]` writes everything but page 0 and returns a `StagedSession`; `commit` re-reads page 0, refuses if it moved, then writes it; `rollback` truncates the appended pages.
 - **Write-mode lock**: staging takes `core.dll`'s sentinel lock (an exclusive `LockFileEx` on the byte at `0x7FFFFFF6FFFFFFFF`, held until commit/rollback), so a file a real E3D is writing is refused at once as `WriteError::Locked`; on non-Windows the lock is a no-op and the page-0 re-read (`WriteError::Moved`) is the guard.
-- **What E3D said**: `tools/e3d/write_gate.ps1` writes a box, a group of references, hunks of every kind and a string list into a scratch copy of the AMS sample project and reads them back through a real E3D 3.1 Design TTY session — fourteen questions, about ten seconds. Three rules a caller needs from that run: a template's count for a text attribute is its **byte** capacity (`DESC` is 480 bytes for E3D's 120-character limit), `UUIDIA` is set-once, and `RATM` / `UNIPAR` / `USRWEI` are not attributes E3D's dictionary answers for.
-- **Not written**: `SPAMAP` (needs the geometry the spatial grid is computed from), the UDA tables (`UDATAB` / `UDAFTB` / `UUIDAR`), the extract model (attribute 17), page 1's bucket table, multi-extent files (refused), records in the compact layout (refused), text with no stored form under the file's `FORMAT` (refused, as `core.dll` refuses it: a GBK code with a byte below `0xA0` such as `–`, anything outside the BMP), and `core.dll`'s write-mode sentinel lock — take the file out of E3D's write mode before writing.
+- **What E3D said**: `tools/e3d/write_gate.ps1` writes a box, a group of references, hunks of every kind and a string list into a scratch copy of the AMS sample project and reads them back through a real E3D 3.1 Design TTY session — sixteen questions (a Chinese `NAME`, `DESC` and session comment among them), about ten seconds. Three rules a caller needs from that run: a template's count for a text attribute is its **byte** capacity (`DESC` is 480 bytes for E3D's 120-character limit), `UUIDIA` is set-once, and `RATM` / `UNIPAR` / `USRWEI` are not attributes E3D's dictionary answers for.
+- **Not written**: `SPAMAP` (needs the geometry the spatial grid is computed from), the UDA tables (`UDATAB` / `UDAFTB` / `UUIDAR`), the extract model (attribute 17), page 1's bucket table, multi-extent files (refused), records in the compact layout (refused), text with no stored form under the file's `FORMAT` (refused, as `core.dll` refuses it: a GBK code with a byte below `0xA0` such as `–`, anything outside the BMP).
 
 ## API surface (key types)
 

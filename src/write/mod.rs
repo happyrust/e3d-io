@@ -32,12 +32,17 @@
 //! guard on a platform without `LockFileEx`, where the lock is a no-op.
 
 pub mod attr;
-pub mod claim;
-pub mod claim_cow;
-pub mod index_cow;
-pub mod keyed_cow;
+// The copy-on-write mechanics of the tree tables and the claim plan are the
+// write path's internals — a caller drives the three steps (open a transaction
+// or session, change values, commit), not the per-leaf edits. They are
+// `pub(crate)`; only their error types (reachable from [`WriteError`]) and the
+// user-facing `NamedEdit` are re-exported below.
+pub(crate) mod claim;
+pub(crate) mod claim_cow;
+pub(crate) mod index_cow;
+pub(crate) mod keyed_cow;
 pub mod merge;
-pub mod named_cow;
+pub(crate) mod named_cow;
 pub mod pages;
 pub mod record;
 pub mod reverse;
@@ -58,10 +63,14 @@ use crate::refno::RefNo;
 use crate::session::SessionPage;
 
 pub use attr::{set_attribute, AttributeWriteError};
-pub use claim::{plan_claim_edits, Touched, TouchKind};
-pub use claim_cow::{ClaimCowError, ClaimEdit, ClaimEditKind};
-pub use index_cow::{EditKind, IndexCowError, LeafEdit};
-pub use keyed_cow::{KeyedCowError, KeyedEdit, KeyedEditKind, KeyedKey};
+// Error types are part of [`WriteError`], so they stay public; the edit and
+// key types are the mechanics `plan_side_tables` and `place_record` use
+// internally.
+pub use claim_cow::ClaimCowError;
+pub use index_cow::IndexCowError;
+pub use keyed_cow::KeyedCowError;
+use index_cow::{EditKind, LeafEdit};
+use keyed_cow::KeyedEditKind;
 pub use merge::{write_merge_session, write_merge_session_with, MergeConflict, MergeOptions};
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
