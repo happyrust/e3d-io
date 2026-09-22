@@ -27,6 +27,13 @@ pub const AMS5100: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\am
 /// file them, one edge per array entry.
 pub const AMS251142: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001";
 
+/// A `FORMAT 0` design database of the local `TES000` project (288 KB, 320
+/// elements, 14 nouns): text is stored in the escaped project code page, and
+/// E3D itself named its `SITE` `/锅炉岛设备`, keyed in the `NAME` table as
+/// `/&~9xB/5:Ih18 &` — the one E3D-written escaped name in a database small
+/// enough to copy per test.
+pub const TES023: &str = r"D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023";
+
 /// A private copy of `source` to write on.
 pub struct DbCopy {
     _dir: TempDir,

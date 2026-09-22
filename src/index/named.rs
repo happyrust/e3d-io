@@ -61,6 +61,7 @@ use std::cmp::Ordering;
 use crate::error::E3dReaderError;
 use crate::page::cache::PageCache;
 use crate::page::{IoStats, PageId};
+use crate::record::text::{TextEncodeError, TextFormat};
 use crate::refno::RefNo;
 use crate::session::DbView;
 
@@ -104,11 +105,19 @@ impl NamedKey {
         out
     }
 
-    /// The key as text. `FORMAT 1` files store UTF-8 as it lies; on an
-    /// escaped-format file a non-ASCII name comes back in its `&~ … &` form,
-    /// which is what the record's own `NAME` attribute reads as too.
+    /// The key as text, its bytes taken as UTF-8. `FORMAT 1` files store
+    /// UTF-8 as it lies; on an escaped-format file a non-ASCII name comes
+    /// back in its `&~ … &` form — [`NamedKey::text_as`] with the header's
+    /// word restores it.
     pub fn text(&self) -> String {
         String::from_utf8_lossy(&self.bytes()).into_owned()
+    }
+
+    /// The key as text under the header's `FORMAT`
+    /// ([`crate::record::text::decode_as`]): on an escaped-format file the
+    /// `&~ … &` runs come back as the characters they hold.
+    pub fn text_as(&self, format: TextFormat) -> String {
+        crate::record::text::decode_as(&self.bytes(), format)
     }
 
     pub fn words(&self) -> &[u32] {
@@ -116,16 +125,25 @@ impl NamedKey {
     }
 }
 
-/// Pack a name the way the table keys it: its bytes, four to a word, big
-/// endian, NUL-padded to the word. An empty name is one word of zeros.
+/// Pack a name the way the table keys it: its UTF-8 bytes, four to a word,
+/// big endian, NUL-padded to the word. An empty name is one word of zeros.
+/// This is the key of a `FORMAT 1` file; [`encode_name_as`] keys a name
+/// under whatever the header says.
 pub fn encode_name(name: &str) -> NamedKey {
-    let bytes = name.as_bytes();
-    let mut words = Vec::with_capacity(bytes.len().div_ceil(4).max(1));
-    for chunk in bytes.chunks(4) {
-        let mut word = [0u8; 4];
-        word[..chunk.len()].copy_from_slice(chunk);
-        words.push(u32::from_be_bytes(word));
-    }
+    key_of(name.as_bytes())
+}
+
+/// Pack a name the way the table of a file with this header `FORMAT` keys
+/// it: the name stored as its text is ([`crate::record::text::encode_as`] —
+/// UTF-8 under `FORMAT 1`, the escaped project code page under any other,
+/// where `TES6804_0001` keys `…/45&~!cHHQ9MdM7 &:50`), then four bytes to a
+/// word. The key and the record's `NAME` value are the same bytes.
+pub fn encode_name_as(name: &str, format: TextFormat) -> Result<NamedKey, TextEncodeError> {
+    Ok(key_of(&crate::record::text::encode_as(name, format)?))
+}
+
+fn key_of(bytes: &[u8]) -> NamedKey {
+    let mut words = crate::record::text::pack_words(bytes);
     if words.is_empty() {
         words.push(0);
     }
@@ -536,9 +554,22 @@ impl<'a> NamedTable<'a> {
     }
 
     /// The element named `name`, if the table has it. Names are matched as
-    /// stored — with their leading `/`, case and all.
+    /// stored — with their leading `/`, case and all — the name keyed as a
+    /// `FORMAT 1` file keys it ([`encode_name`]); [`Self::lookup_name_as`]
+    /// takes the header's word.
     pub fn lookup_name(&mut self, name: &str) -> Result<Option<RefNo>, NamedTableError> {
         self.lookup(&encode_name(name))
+    }
+
+    /// [`Self::lookup_name`] with the name keyed under the header's `FORMAT`
+    /// ([`encode_name_as`]), so a non-ASCII name is found on an
+    /// escaped-format file too. A name the format cannot store is `Ok(None)`:
+    /// no table holds it.
+    pub fn lookup_name_as(&mut self, name: &str, format: TextFormat) -> Result<Option<RefNo>, NamedTableError> {
+        match encode_name_as(name, format) {
+            Ok(key) => self.lookup(&key),
+            Err(_) => Ok(None),
+        }
     }
 
     /// Every entry in key order.

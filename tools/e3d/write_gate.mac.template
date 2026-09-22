@@ -9,6 +9,8 @@
 --   EQUI {{EQUI1}} and EQUI {{EQUI2}}: DESC / DESP / UUIDIA as hunks (types 22/21/20),
 --     one chain across a page boundary
 --   FIXING {{FIXING}}: ROKEYS inline type 19, ROVALS as a type-23 hunk
+--   BOX {{BOX}} renamed in Chinese, ZONE {{ZONE}} described in Chinese, the session
+--     commented in Chinese — text stored the way the header's FORMAT says (S5)
 --
 -- One ALPHA LOG block per question: a block's log is written only at ALPHA LOG END, so an
 -- unhandled error loses that block's log and no other. Every navigation and every risky Q
@@ -267,6 +269,34 @@ handle any
   $P GATE-70-SESSION-ERROR $!!error.text
 endhandle
 $P GATE-70-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/80_box_name.log" OVER
+$P GATE-80-BEGIN
+={{BOX}}
+handle any
+  $P GATE-80-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q NAME
+handle any
+  $P GATE-80-NAME-ERROR $!!error.text
+endhandle
+$P GATE-80-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/81_zone_desc.log" OVER
+$P GATE-81-BEGIN
+={{ZONE}}
+handle any
+  $P GATE-81-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESC
+handle any
+  $P GATE-81-DESC-ERROR $!!error.text
+endhandle
+$P GATE-81-END
 ALPHA LOG END
 
 -- The driver reads <macro>.log as the scenario log: a summary marker.

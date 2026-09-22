@@ -443,7 +443,7 @@ vtbl（`??_7SessionPackageNative@Dabacon@Database@Core@Aveva@@6B@` 0x5D8D9E8 / `
 
 ## 7. 复现命令（本机）
 
-> 注意：本机 `ida-bridge` 安装目录已由 `C:\Users\dpc\.agents\tools\ida-bridge` 改名为 `.agents-old`，用户 PATH 与 venv 里的 editable `.pth` 仍指旧路径，直接敲 `ida-bridge` 会静默退出（exit 1）。本轮用下面的包装绕过（不改任何系统配置）：
+> 注意：本机 `ida-bridge` 安装目录已由 `C:\Users\dpc\.agents\tools\ida-bridge` 改名为 `.agents-old`，用户 PATH 与 venv 里的 editable `.pth` 仍指旧路径，直接敲 `ida-bridge` 会静默退出（exit 1）。本轮用下面的包装绕过（不改任何系统配置）。**2026-09-22 起 `core.dll.i64` 的实例是 `idalib-4000`**（`idalib-33060` 被一条不终止的 xref 脚本卡死后用同一 `.i64` 重开，见 `2026-09-22-core-dll-text-charset-write.md`）——下面命令里的 `idalib-33060` 照此替换：
 
 ```powershell
 # %TEMP%\ib.ps1

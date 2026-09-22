@@ -94,8 +94,13 @@ pub enum WriteError {
     PreviousSessionPageTooShort { page: PageId, len: usize, need: usize },
     #[error("{page}: page type {page_type} is not a session page")]
     NotASessionPage { page: PageId, page_type: u32 },
-    #[error("{field}: stage 1 writes ASCII only, got {text:?}")]
-    TextNotAscii { field: &'static str, text: String },
+    #[error("{field}: {source}")]
+    Text {
+        field: &'static str,
+        source: crate::record::text::TextEncodeError,
+    },
+    #[error("{field}: {text:?} holds a control character; the session page is printed as it is")]
+    TextControl { field: &'static str, text: String },
     #[error("{field}: {len} bytes, the field holds at most {max}")]
     TextTooLong {
         field: &'static str,

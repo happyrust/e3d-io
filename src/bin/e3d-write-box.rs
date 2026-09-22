@@ -6,7 +6,7 @@
 //! was written.
 //!
 //! ```text
-//! e3d-write-box <database> [desvir.dat] [--group] [--hunk]
+//! e3d-write-box <database> [desvir.dat] [--group] [--hunk] [--text]
 //! ```
 //!
 //! With `--group` it appends a **second** session after the box: a `GPWL`
@@ -37,6 +37,12 @@
 //! reads as unset however it is stored, so they prove nothing). Two sessions
 //! again, so a balk at the string list does not muddy the hunk question.
 //!
+//! With `--text` it appends a fifth session asking whether E3D reads text
+//! outside ASCII the way this crate stores it under the header's `FORMAT`
+//! (`e3d_io::record::text::encode_as`, plan S5): the BOX gets a Chinese
+//! `NAME` — record and `NAME` table key — the ZONE a Chinese `DESC` with an
+//! escaped run inside plain text, and the session a Chinese comment.
+//!
 //! All sessions are written with the schema at hand (`WriteOptions`), so the
 //! keyed tables follow: a `BOX` lists no `TYPEX` in its template and files no
 //! key, while the `GPWL`, `GROU`, `EQUI` and `FIXING` get their `TYPEX` field
@@ -56,7 +62,7 @@ use e3d_io::write::{write_element_session_with, ElementWrite, RecordDraft, Sessi
 use e3d_io::{ReadOnlyEngine, RefNo};
 
 const DEFAULT_DESVIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/desvir.dat");
-const USAGE: &str = "usage: e3d-write-box <database> [desvir.dat] [--group] [--hunk]";
+const USAGE: &str = "usage: e3d-write-box <database> [desvir.dat] [--group] [--hunk] [--text]";
 
 fn wide_offset(template: &NounTemplate, name: &str) -> Option<usize> {
     template
@@ -92,10 +98,12 @@ fn run() -> Result<(), String> {
     let mut desvir = None;
     let mut group = false;
     let mut hunk = false;
+    let mut text = false;
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
             "--group" => group = true,
             "--hunk" => hunk = true,
+            "--text" => text = true,
             other if other.starts_with("--") => return Err(format!("unknown flag {other}\n{USAGE}")),
             _ if db.is_none() => db = Some(arg),
             _ if desvir.is_none() => desvir = Some(arg),
@@ -183,6 +191,9 @@ fn run() -> Result<(), String> {
     }
     if hunk {
         write_hunks(&db, &mut provider, zone_refno, fresh)?;
+    }
+    if text {
+        write_text(&db, &mut provider, zone_refno, fresh)?;
     }
     Ok(())
 }
@@ -504,6 +515,73 @@ fn write_group(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box
     println!("  ={}/{}   Q OWNER            -> the BOX still says OWNER the ZONE, not the group", box_refno.word0, box_refno.word1);
     println!("  ={}/{}   Q MEM              -> the WORL lists the GPWL behind its old members", world_refno.word0, world_refno.word1);
     println!("PASS = E3D navigates to the GROU, lists both reference members, and the BOX keeps its ZONE owner.");
+    Ok(())
+}
+
+/// The `NAME` the `--text` session gives the BOX and the `DESC` it gives the
+/// ZONE: text outside ASCII, stored as the header's `FORMAT` says
+/// (`e3d_io::record::text::encode_as`). The `DESC` opens and closes an
+/// escaped run inside plain text on a `FORMAT 0` file.
+pub const TEXT_BOX_NAME: &str = "/E3DIO-盒子";
+pub const TEXT_ZONE_DESC: &str = "反应堆厂房 -3.320m~±0.00m";
+pub const TEXT_COMMENT: &str = "e3d-io 写路径门：中文 NAME / DESC / 会话注释";
+
+/// The fifth session: the BOX gets a Chinese `NAME` (record and `NAME` table
+/// key alike), the ZONE a Chinese `DESC`, and the session a Chinese comment —
+/// every one through the header's `FORMAT`, so on a `FORMAT 1` file they are
+/// UTF-8 as they are and on any other the project code page in `&~ … &`
+/// runs. E3D's `Q NAME` / `Q DESC` / `Q SESSION` then say whether it reads
+/// them as the characters they are.
+fn write_text(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box_refno: RefNo) -> Result<(), String> {
+    use e3d_io::index::encode_name_as;
+    use e3d_io::record::descriptor::DescriptorValue;
+    use e3d_io::write::{NamedEdit, NamedEditKind};
+
+    let format = {
+        let mut engine = ReadOnlyEngine::open(db).map_err(|e| e.to_string())?;
+        if engine.find_by_name(TEXT_BOX_NAME).map_err(|e| e.to_string())?.is_some() {
+            return Err(format!("{TEXT_BOX_NAME} is already in use"));
+        }
+        engine.text_format()
+    };
+    let box_template = template_of(provider, "BOX")?;
+    let zone_template = template_of(provider, "ZONE")?;
+    let name_hash = e3d_attlib::db1_hash("NAME");
+    let desc_hash = e3d_attlib::db1_hash("DESC");
+
+    let mut box_draft = draft_of(db, box_refno, "the BOX")?;
+    box_draft
+        .set_attribute(&box_template, name_hash, &DescriptorValue::Text(TEXT_BOX_NAME.into()), format)
+        .map_err(|e| e.to_string())?;
+    let mut zone_draft = draft_of(db, zone_refno, "the ZONE")?;
+    zone_draft
+        .set_attribute(&zone_template, desc_hash, &DescriptorValue::Text(TEXT_ZONE_DESC.into()), format)
+        .map_err(|e| e.to_string())?;
+    let key = encode_name_as(TEXT_BOX_NAME, format).map_err(|e| e.to_string())?;
+    let name_edits = [NamedEdit { key: key.clone(), refno: box_refno, kind: NamedEditKind::Insert }];
+
+    let report = write_element_session_with(
+        db,
+        &SessionRequest { user: "e3dio", comment: TEXT_COMMENT, clock: None },
+        &[ElementWrite::Update(box_draft), ElementWrite::Update(zone_draft)],
+        &name_edits,
+        WriteOptions { templates: Some(provider) },
+    )
+    .map_err(|e| e.to_string())?;
+
+    println!();
+    println!("wrote session {} to {db}", report.written.sesno);
+    println!("  previous session : {}", report.previous.sesno);
+    println!("  text format      : {format:?}");
+    println!("  BOX NAME         : {TEXT_BOX_NAME} (key bytes {:?})", key.text());
+    println!("  ZONE DESC        : {TEXT_ZONE_DESC}");
+    println!("  comment          : {TEXT_COMMENT}");
+    println!("  appended pages   : {:?}", report.appended_pages);
+    println!();
+    println!("In E3D 3.1 Design, on this database's project:");
+    println!("  ={}/{}   Q NAME             -> {TEXT_BOX_NAME}", box_refno.word0, box_refno.word1);
+    println!("  ={}/{}   Q DESC             -> {TEXT_ZONE_DESC}", zone_refno.word0, zone_refno.word1);
+    println!("  Q SESSIONS                 -> session {} commented {TEXT_COMMENT}", report.written.sesno);
     Ok(())
 }
 

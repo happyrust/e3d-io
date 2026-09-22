@@ -59,7 +59,7 @@ pub use diff::{
 };
 pub use claim::{ClaimEntry, ClaimTable, ClaimTableError, ClaimWalk};
 pub use named::{
-    encode_name, name_table_hash, NamedEntry, NamedKey, NamedTable, NamedTableError, NamedWalk,
+    encode_name, encode_name_as, name_table_hash, NamedEntry, NamedKey, NamedTable, NamedTableError, NamedWalk,
 };
 pub use reference::{ReferenceEntry, ReferenceTable, ReferenceTableError, ReferenceWalk};
 

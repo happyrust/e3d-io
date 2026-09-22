@@ -15,7 +15,7 @@
 //! §2 and in the `core.dll` map on [`crate::session`].
 
 use crate::page::{PageId, PageType};
-use crate::record::text::TextFormat;
+use crate::record::text::{self, TextFormat};
 use crate::session::{at, SessionDate, SessionPage};
 
 use super::pages::{be_word, put_be_word};
@@ -97,14 +97,15 @@ pub struct NewSession<'a> {
     pub table_additions: &'a [(u32, PageId)],
     /// `BASESN`: the session this one was written on top of.
     pub base_sesno: u32,
-    /// `USER`, ASCII only in stage 1; at most nine words (36 bytes).
+    /// `USER`; at most nine words (36 stored bytes).
     pub user: &'a str,
-    /// `DESC`, ASCII only in stage 1; at most 158 words before the table
+    /// `DESC`; at most 158 words (632 stored bytes) before the table
     /// directory at +0x31C.
     pub comment: &'a str,
     pub clock: SessionClock,
-    /// The header's `FORMAT`, deciding how text is stored. Stage 1 accepts
-    /// ASCII under either format, which both store as the bytes themselves.
+    /// The header's `FORMAT`, deciding how `USER` and `DESC` are stored
+    /// ([`text::encode_as`]): UTF-8 under `FORMAT 1`, the project code page
+    /// in `&~ … &` runs under any other.
     pub text: TextFormat,
 }
 
@@ -236,8 +237,12 @@ fn write_date(page: &mut [u8], len_at: usize, words_at: usize, date: SessionDate
 }
 
 /// A word-counted text field, NUL-padded to the word, exactly as `USER` and
-/// `DESC` are stored (`session::word_text` reads them back so). The field's
-/// room is cleared first so a shorter text leaves no tail of the old one.
+/// `DESC` are stored (`session::word_text` reads them back so). The text is
+/// stored as the header's `FORMAT` says ([`text::encode_as`]) — the `DESC`
+/// of a `FORMAT 0` session holds `&~ … &` runs like any other text — and the
+/// room is measured in stored bytes. Control characters are refused: the
+/// session page is what `Q SESSIONS` prints. The field's room is cleared
+/// first so a shorter text leaves no tail of the old one.
 fn write_text(
     page: &mut [u8],
     len_at: usize,
@@ -247,16 +252,10 @@ fn write_text(
     format: TextFormat,
     field: &'static str,
 ) -> Result<(), WriteError> {
-    if !text.is_ascii() || text.bytes().any(|b| b < 0x20 || b == 0x7F) {
-        return Err(WriteError::TextNotAscii {
-            field,
-            text: text.to_owned(),
-        });
+    if text.chars().any(|c| c.is_control()) {
+        return Err(WriteError::TextControl { field, text: text.to_owned() });
     }
-    // Under both formats ASCII is stored as itself: `FORMAT 1` is UTF-8 as it
-    // lies, and the escaped form only wraps bytes outside seven-bit ASCII.
-    let _ = format;
-    let bytes = text.as_bytes();
+    let bytes = text::encode_as(text, format).map_err(|source| WriteError::Text { field, source })?;
     let words = bytes.len().div_ceil(4);
     if words > max_words {
         return Err(WriteError::TextTooLong {
@@ -266,7 +265,7 @@ fn write_text(
         });
     }
     page[text_at..text_at + max_words * 4].fill(0);
-    page[text_at..text_at + bytes.len()].copy_from_slice(bytes);
+    page[text_at..text_at + bytes.len()].copy_from_slice(&bytes);
     put_be_word(page, len_at, words as u32);
     Ok(())
 }
@@ -390,11 +389,45 @@ mod tests {
                 at::USER_LEN,
                 at::USER_TEXT,
                 at::USER_MAX_WORDS,
-                "反应堆",
+                "dp\nc",
                 TextFormat::Utf8,
                 "USER"
             ),
-            Err(WriteError::TextNotAscii { field: "USER", .. })
+            Err(WriteError::TextControl { field: "USER", .. })
+        ));
+    }
+
+    /// Text is stored as the header's `FORMAT` says: UTF-8 bytes under
+    /// `FORMAT 1`, the escaped project code page under any other — with the
+    /// room measured in stored bytes — and what has no escaped form is refused.
+    #[test]
+    fn text_is_stored_as_the_header_format_says() {
+        let mut page = vec![0xAAu8; at::TAIL_END];
+        write_text(&mut page, at::USER_LEN, at::USER_TEXT, at::USER_MAX_WORDS, "反应堆", TextFormat::Utf8, "USER")
+            .unwrap();
+        assert_eq!(be_word(&page, at::USER_LEN), 3);
+        assert_eq!(&page[at::USER_TEXT..at::USER_TEXT + 9], "反应堆".as_bytes());
+        assert_eq!(&page[at::USER_TEXT + 9..at::USER_TEXT + 12], b"\0\0\0");
+
+        write_text(&mut page, at::USER_LEN, at::USER_TEXT, at::USER_MAX_WORDS, "反应堆", TextFormat::Escaped, "USER")
+            .unwrap();
+        assert_eq!(be_word(&page, at::USER_LEN), 3, "ten escaped bytes are three words");
+        assert_eq!(&page[at::USER_TEXT..at::USER_TEXT + 12], b"&~74S&6Q &\0\0");
+        assert_eq!(text::decode_as(&page[at::USER_TEXT..at::USER_TEXT + 12], TextFormat::Escaped), "反应堆");
+
+        // 36 bytes of room: nine CJK characters escape to 22 bytes and fit,
+        // eighteen escape to 40 and do not, though they are UTF-8 shorter.
+        let nine = "反应堆厂房内部结构";
+        write_text(&mut page, at::USER_LEN, at::USER_TEXT, at::USER_MAX_WORDS, nine, TextFormat::Escaped, "USER").unwrap();
+        assert_eq!(be_word(&page, at::USER_LEN), 6);
+        let eighteen = format!("{nine}{nine}");
+        assert!(matches!(
+            write_text(&mut page, at::USER_LEN, at::USER_TEXT, at::USER_MAX_WORDS, &eighteen, TextFormat::Escaped, "USER"),
+            Err(WriteError::TextTooLong { field: "USER", len: 40, max: 36 })
+        ));
+        assert!(matches!(
+            write_text(&mut page, at::USER_LEN, at::USER_TEXT, at::USER_MAX_WORDS, "a–b", TextFormat::Escaped, "USER"),
+            Err(WriteError::Text { field: "USER", .. })
         ));
     }
 }

@@ -444,16 +444,19 @@ impl ReadOnlyEngine {
     }
 
     /// The element stored under exactly `name` (leading `/` included), by one
-    /// descent of the `NAME` table — no element scan.
+    /// descent of the `NAME` table — no element scan. The name is keyed the
+    /// way this file stores text ([`Self::text_format`]), so `反应堆` is
+    /// found on a `FORMAT 0` file under its `&~ … &` key.
     ///
     /// `Ok(None)` means the table has no such name, or the session has no
     /// `NAME` table at all; a table that is there and cannot be read is an
     /// `Err`.
     pub fn find_by_name(&mut self, name: &str) -> Result<Option<RefNo>, E3dReaderError> {
+        let format = self.text_format();
         let Some(mut table) = self.name_table() else {
             return Ok(None);
         };
-        Ok(table.lookup_name(name)?)
+        Ok(table.lookup_name_as(name, format)?)
     }
 
     /// Find one RefNo in the index of the selected session.

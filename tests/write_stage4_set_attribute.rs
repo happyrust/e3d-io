@@ -23,7 +23,8 @@ use e3d_io::record::descriptor::{
 };
 use e3d_io::record::element::ParsedElement;
 use e3d_io::record::template::{NounTemplate, TemplateProvider};
-use e3d_io::write::{AttributeWriteError, RecordDraft};
+use e3d_io::record::text::TextFormat;
+use e3d_io::write::RecordDraft;
 use e3d_io::{ReadOnlyEngine, RefNo};
 
 const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
@@ -150,11 +151,15 @@ fn round_trip(path: &str, attlib: &AttlibData) -> BTreeMap<(u32, &'static str), 
             let value = row.value.as_ref().expect("a decoded row carries a value");
             let resident = if row.storage.location.word_offset() != 0 { "implicit" } else { "explicit" };
             match copy.set_attribute(template, row.hash, value, text) {
-                Ok(()) => *rows.entry((row.storage_type_code, resident)).or_default() += 1,
-                // The escaped charset has no writer yet (plan S5): a non-ASCII
-                // text under a `FORMAT 0` header is refused and left as it is,
-                // which is the one refusal this round trip accepts.
-                Err(AttributeWriteError::TextNotAscii { .. }) => non_ascii += 1,
+                Ok(()) => {
+                    *rows.entry((row.storage_type_code, resident)).or_default() += 1;
+                    // A non-ASCII text under a non-UTF-8 header went back
+                    // through the escaped encoder (plan S5) and must still
+                    // compare equal below.
+                    if text != TextFormat::Utf8 && matches!(value, DescriptorValue::Text(t) if !t.is_ascii()) {
+                        non_ascii += 1;
+                    }
+                }
                 Err(error) => {
                     if errors.len() < 20 {
                         errors.push(format!(
@@ -188,7 +193,7 @@ fn round_trip(path: &str, attlib: &AttlibData) -> BTreeMap<(u32, &'static str), 
     let total: u64 = rows.values().sum();
     eprintln!(
         "{path} ({text:?}): {elements} elements round-tripped ({no_template} without a template, {expressions} \
-         formula-backed rows skipped, {non_ascii} non-ASCII texts under a non-UTF-8 header left for S5, \
+         formula-backed rows skipped, {non_ascii} non-ASCII texts written back through the escaped encoder, \
          {bool_over_a_word} words the read side reports as a Bool {bool_examples:?}); \
          {total} decoded rows set back by (storage type, residence): {rows:?}"
     );

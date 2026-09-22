@@ -45,6 +45,7 @@
 
 use crate::record::block::{block_at, BlockKind, HEADER_BYTES};
 use crate::record::hunk::{self, HunkRef, TEXT_LIST_TYPE};
+use crate::record::text::{self, TextEncodeError, TextFormat};
 use crate::refno::RefNo;
 
 /// Words of header before the first implicit attribute.
@@ -81,8 +82,10 @@ pub enum RecordEncodeError {
     ImplicitTooShort { got: usize },
     #[error("the explicit stream is {len} bytes, not a whole number of 4-byte words")]
     ExplicitNotDwordAligned { len: usize },
-    #[error("an explicit text may only be set to ASCII for now, got {text:?}")]
+    #[error("the ASCII text setters take ASCII only, got {text:?}; use the setters that take the header's FORMAT")]
     ExplicitTextNotAscii { text: String },
+    #[error(transparent)]
+    Text(#[from] TextEncodeError),
     #[error("{refno}: gathered record is {len} bytes, too short for an {HEADER_WORDS}-word header")]
     RecordTooShort { refno: RefNo, len: usize },
     #[error("{refno}: implicit length {words} words runs past the {len}-byte record")]
@@ -328,14 +331,12 @@ impl RecordDraft {
 
     /// Replace the value of the explicit text attribute keyed by `hash` with
     /// `text`, keeping its type code. Returns whether such an attribute was
-    /// there. ASCII only for now — under either header `FORMAT` it stores as
-    /// its own bytes, the same rule the session-page writer keeps.
-    pub fn set_explicit_text_ascii(
-        &mut self,
-        hash: u32,
-        text: &str,
-    ) -> Result<bool, RecordEncodeError> {
-        let data = ascii_text_data(text)?;
+    /// there. `format` is the database header's `FORMAT` reading: UTF-8 as
+    /// it is under `FORMAT 1`, the project code page in `&~ … &` runs under
+    /// any other ([`crate::record::text::encode_as`]); the count word is the
+    /// stored byte count, escapes included.
+    pub fn set_explicit_text(&mut self, hash: u32, text: &str, format: TextFormat) -> Result<bool, RecordEncodeError> {
+        let data = text_data(text, format)?;
         let mut fields = self.parse_explicit_fields();
         let Some(field) = fields.iter_mut().find(|(field_hash, _, _)| *field_hash == hash) else {
             return Ok(false);
@@ -345,17 +346,24 @@ impl RecordDraft {
         Ok(true)
     }
 
+    /// [`Self::set_explicit_text`] for ASCII, which stores as itself under
+    /// either header `FORMAT`; anything else is refused.
+    pub fn set_explicit_text_ascii(&mut self, hash: u32, text: &str) -> Result<bool, RecordEncodeError> {
+        self.set_explicit_text(hash, ascii_only(text)?, TextFormat::Utf8)
+    }
+
     /// Add a text attribute the element does not carry, or replace it if it
     /// does — the way an element gains a `NAME` it never had. `type_code` is
-    /// the stored type (`0x3C00` for a `FORMAT 1` text, the shape `NAME`
-    /// takes). ASCII only, like [`Self::set_explicit_text_ascii`].
-    pub fn add_explicit_text_ascii(
+    /// the stored type (`0x3C00` for a text, the shape `NAME` takes);
+    /// `format` as for [`Self::set_explicit_text`].
+    pub fn add_explicit_text(
         &mut self,
         hash: u32,
         type_code: u16,
         text: &str,
+        format: TextFormat,
     ) -> Result<(), RecordEncodeError> {
-        let data = ascii_text_data(text)?;
+        let data = text_data(text, format)?;
         let mut fields = self.parse_explicit_fields();
         match fields.iter_mut().find(|(field_hash, _, _)| *field_hash == hash) {
             Some(field) => {
@@ -366,6 +374,12 @@ impl RecordDraft {
         }
         self.explicit_stream = rebuild_explicit_stream(&fields);
         Ok(())
+    }
+
+    /// [`Self::add_explicit_text`] for ASCII, like
+    /// [`Self::set_explicit_text_ascii`].
+    pub fn add_explicit_text_ascii(&mut self, hash: u32, type_code: u16, text: &str) -> Result<(), RecordEncodeError> {
+        self.add_explicit_text(hash, type_code, ascii_only(text)?, TextFormat::Utf8)
     }
 
     /// The explicit attribute keyed by `hash`, as its stored type code and
@@ -401,23 +415,39 @@ impl RecordDraft {
     /// `[n] { [i][words][bytes][packed text] }*` buffer `db_cxx_put_str_vector`
     /// builds, under type code `19 << 10` with the buffer's own length as the
     /// entry's data-word count and no separate count word — `4SCEA`'s `type ==
-    /// 19` arm ([`crate::record::hunk`]). ASCII only, like the text setters.
-    /// An empty list unsets the attribute — `db_cxx_put_str_vector` passes an
-    /// empty vector to `4SCEA` as a value of length 0, which deletes the entry
-    /// and writes nothing. A list past [`MAX_INLINE_DATA_WORDS`] is refused;
-    /// use [`Self::set_text_list_hunk_ascii`] for it (`core.dll` moves
-    /// anything past `0x2000` words out of the record).
-    pub fn set_explicit_text_list_ascii<I, S>(&mut self, hash: u32, items: I) -> Result<(), RecordEncodeError>
+    /// 19` arm ([`crate::record::hunk`]). Each item is stored under `format`
+    /// like a text ([`Self::set_explicit_text`]); its `bytes` word is the
+    /// converted length, as `sub_5AD5060` pushes it. An empty list unsets the
+    /// attribute — `db_cxx_put_str_vector` passes an empty vector to `4SCEA`
+    /// as a value of length 0, which deletes the entry and writes nothing. A
+    /// list past [`MAX_INLINE_DATA_WORDS`] is refused; use
+    /// [`Self::set_text_list_hunk`] for it (`core.dll` moves anything past
+    /// `0x2000` words out of the record).
+    pub fn set_explicit_text_list<I, S>(&mut self, hash: u32, items: I, format: TextFormat) -> Result<(), RecordEncodeError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let (data, _count) = text_list_data_ascii(items)?;
+        let (data, _count) = text_list_data(items, format)?;
         if data[0] == 0 {
             self.remove_explicit(hash);
             return Ok(());
         }
         self.set_explicit_words_checked(hash, TEXT_LIST_TYPE << 10, data)
+    }
+
+    /// [`Self::set_explicit_text_list`] for ASCII items, which store as
+    /// themselves under either header `FORMAT`; anything else is refused.
+    pub fn set_explicit_text_list_ascii<I, S>(&mut self, hash: u32, items: I) -> Result<(), RecordEncodeError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let items: Vec<S> = items.into_iter().collect();
+        for item in &items {
+            ascii_only(item.as_ref())?;
+        }
+        self.set_explicit_text_list(hash, items, TextFormat::Utf8)
     }
 
     /// Set an attribute as a hunk (storage type 20–23) from its payload words:
@@ -473,29 +503,47 @@ impl RecordDraft {
     /// Set a text as a type-22 hunk: the bytes four to a word, NUL-padded,
     /// `count` the byte length — the packed text an inline `0x2800` entry
     /// carries after its count word, here with the count in the directory.
-    /// ASCII only, like the inline text setters.
-    pub fn set_text_hunk_ascii(&mut self, hash: u32, text: &str) -> Result<(), RecordEncodeError> {
-        let mut data = ascii_text_data(text)?;
+    /// Stored under `format` like an inline text ([`Self::set_explicit_text`]).
+    pub fn set_text_hunk(&mut self, hash: u32, text: &str, format: TextFormat) -> Result<(), RecordEncodeError> {
+        let mut data = text_data(text, format)?;
         let count = data.remove(0);
         self.set_hunk_words(hash, 22, count, data)
     }
 
+    /// [`Self::set_text_hunk`] for ASCII, like [`Self::set_explicit_text_ascii`].
+    pub fn set_text_hunk_ascii(&mut self, hash: u32, text: &str) -> Result<(), RecordEncodeError> {
+        self.set_text_hunk(hash, ascii_only(text)?, TextFormat::Utf8)
+    }
+
     /// Set a string list as a type-23 hunk: the same buffer
-    /// [`Self::set_explicit_text_list_ascii`] would store inline, with the
-    /// element count `db_cxx_put_str_vector` reports for it
-    /// (`1 + Σ(4 × words_i + 3)`) in the directory. An empty list unsets the
-    /// attribute, as inline.
-    pub fn set_text_list_hunk_ascii<I, S>(&mut self, hash: u32, items: I) -> Result<(), RecordEncodeError>
+    /// [`Self::set_explicit_text_list`] would store inline, with the element
+    /// count `db_cxx_put_str_vector` reports for it (`1 + Σ(4 × words_i +
+    /// 3)`) in the directory. An empty list unsets the attribute, as inline.
+    pub fn set_text_list_hunk<I, S>(&mut self, hash: u32, items: I, format: TextFormat) -> Result<(), RecordEncodeError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let (data, count) = text_list_data_ascii(items)?;
+        let (data, count) = text_list_data(items, format)?;
         if data[0] == 0 {
             self.remove_explicit(hash);
             return Ok(());
         }
         self.set_hunk_words(hash, 23, count, data)
+    }
+
+    /// [`Self::set_text_list_hunk`] for ASCII items, like
+    /// [`Self::set_explicit_text_list_ascii`].
+    pub fn set_text_list_hunk_ascii<I, S>(&mut self, hash: u32, items: I) -> Result<(), RecordEncodeError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let items: Vec<S> = items.into_iter().collect();
+        for item in &items {
+            ascii_only(item.as_ref())?;
+        }
+        self.set_text_list_hunk(hash, items, TextFormat::Utf8)
     }
 
     /// The hunk values set on this draft and not yet placed.
@@ -1141,9 +1189,6 @@ fn anchor_slot(merged: &[RefNo], working: &[RefNo], at: usize) -> usize {
         .map_or(0, |anchor| anchor + 1)
 }
 
-/// An explicit text value's data words: a count word, then the bytes four to
-/// a word, NUL-padded — the `[len][packed text]` a `0x3C00`/`0x2800` reader
-/// decodes.
 /// An explicit stream's bytes as its big-endian words. The stream is whole
 /// words — every entry states its length in words — so the remainder is
 /// empty; a trailing partial word, were there one, is left out the way
@@ -1153,32 +1198,36 @@ fn stream_words(stream: &[u8]) -> Vec<u32> {
     words.iter().map(|word| u32::from_be_bytes(*word)).collect()
 }
 
-fn ascii_text_data(text: &str) -> Result<Vec<u32>, RecordEncodeError> {
-    if !text.is_ascii() {
-        return Err(RecordEncodeError::ExplicitTextNotAscii {
-            text: text.to_owned(),
-        });
+/// `text` itself when it is ASCII — which stores as itself under either
+/// header `FORMAT` — else the refusal the `_ascii` setters give.
+fn ascii_only(text: &str) -> Result<&str, RecordEncodeError> {
+    if text.is_ascii() {
+        Ok(text)
+    } else {
+        Err(RecordEncodeError::ExplicitTextNotAscii { text: text.to_owned() })
     }
-    let bytes = text.as_bytes();
+}
+
+/// An explicit text value's data words under the header's `FORMAT`: the
+/// stored byte count, then the stored bytes four to a word NUL-padded — the
+/// `[len][packed text]` a `0x3C00` / `0x2800` reader decodes, with the count
+/// `db_cxx_put_str_vector` reports after conversion.
+fn text_data(text: &str, format: TextFormat) -> Result<Vec<u32>, RecordEncodeError> {
+    let bytes = text::encode_as(text, format)?;
     let mut data = Vec::with_capacity(1 + bytes.len().div_ceil(4));
     data.push(bytes.len() as u32);
-    for chunk in bytes.chunks(4) {
-        let mut word = [0u8; 4];
-        word[..chunk.len()].copy_from_slice(chunk);
-        data.push(u32::from_be_bytes(word));
-    }
+    data.extend(text::pack_words(&bytes));
     Ok(data)
 }
 
 /// A string list's stored words and the element count `core.dll` reports for
 /// it: `[n] { [i][words][bytes][packed text × words] }*` as `sub_5AD5060`
-/// builds it — item index from 0, the item's packed word count, its byte
-/// length, then the bytes four to a word NUL-padded — and the running total
-/// `1 + Σ(4 × words_i + 3)` it hands `4SCEA` as the value's length (what a
-/// type-23 directory entry's count word carries). ASCII only, like
-/// `ascii_text_data`: under either header `FORMAT` the bytes store as they
-/// are.
-pub fn text_list_data_ascii<I, S>(items: I) -> Result<(Vec<u32>, u32), RecordEncodeError>
+/// builds it — item index from 0, the item's packed word count, its stored
+/// byte length (after conversion under `format`), then the bytes four to a
+/// word NUL-padded — and the running total `1 + Σ(4 × words_i + 3)` it hands
+/// `4SCEA` as the value's length (what a type-23 directory entry's count word
+/// carries).
+pub fn text_list_data<I, S>(items: I, format: TextFormat) -> Result<(Vec<u32>, u32), RecordEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
@@ -1187,27 +1236,31 @@ where
     let mut count: u32 = 1;
     let mut items_seen: u32 = 0;
     for (index, item) in items.into_iter().enumerate() {
-        let text = item.as_ref();
-        if !text.is_ascii() {
-            return Err(RecordEncodeError::ExplicitTextNotAscii {
-                text: text.to_owned(),
-            });
-        }
-        let bytes = text.as_bytes();
-        let words = bytes.len().div_ceil(4);
+        let bytes = text::encode_as(item.as_ref(), format)?;
+        let packed = text::pack_words(&bytes);
         data.push(index as u32);
-        data.push(words as u32);
+        data.push(packed.len() as u32);
         data.push(bytes.len() as u32);
-        for chunk in bytes.chunks(4) {
-            let mut word = [0u8; 4];
-            word[..chunk.len()].copy_from_slice(chunk);
-            data.push(u32::from_be_bytes(word));
-        }
-        count += 4 * words as u32 + 3;
+        count += 4 * packed.len() as u32 + 3;
+        data.extend(packed);
         items_seen += 1;
     }
     data[0] = items_seen;
     Ok((data, count))
+}
+
+/// [`text_list_data`] for ASCII items, which store as themselves under either
+/// header `FORMAT`; anything else is refused.
+pub fn text_list_data_ascii<I, S>(items: I) -> Result<(Vec<u32>, u32), RecordEncodeError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let items: Vec<S> = items.into_iter().collect();
+    for item in &items {
+        ascii_only(item.as_ref())?;
+    }
+    text_list_data(items, TextFormat::Utf8)
 }
 
 /// Serialise explicit fields back into a stream: `[hash][type_code << 16 |

@@ -42,9 +42,162 @@
 //! right on every sampled database, but a `FORMAT == 1` string that happens
 //! to contain `&~` and ` &` would be mangled by it, which is why the record
 //! and session parsers carry the header's answer instead.
+//!
+//! # Writing
+//!
+//! [`encode_as`] is the inverse, read off `core.dll`'s write path
+//! (`docs/evidence/2026-09-22-core-dll-text-charset-write.md`).
+//! `db_cxx_put_str_vector` (`sub_5AD5060`) reads the header's `FORMAT`
+//! (header integer 18) and, for each string:
+//!
+//! * **`FORMAT == 1`** — `sub_54719F0` (`CHPACK`): the UTF-8 bytes are packed
+//!   four to a word as they are; the only check is that the string does not
+//!   end inside a multi-byte sequence.
+//! * **anything else** — `sub_5B8F3C0` spreads the bytes one to a word,
+//!   `sub_54B2CE8` converts from charset 12 (UTF-8) to the project's
+//!   `MBCHARSET` code (`dword_6453EDC`; 6 for the `CI-CHI` sites sampled,
+//!   whose table `sub_54B9032` is GBK — 21 792 code points, identical to
+//!   `encoding_rs::GBK` on every one of them), and `sub_5471E50` packs the
+//!   result. In that converter an ASCII character is written as itself,
+//!   closing any open run with ` &` first; a double-byte character is
+//!   written **only if both bytes are `0xA0..=0xFE`** — `&~` opens a run if
+//!   none is open and the two bytes go in with their high bits cleared; a
+//!   character the table does not have but whose code point is `0x80..=0xFF`
+//!   goes in as that single raw byte (the reader's CP1252 fallback takes it
+//!   back); anything else — a GBK code with a byte below `0xA0` such as `–`
+//!   (`A843`), a character outside the BMP, `U+FFFE`, `U+FFFF` — is refused
+//!   (converter status 2 or 1, which the put reports as error 638). A run
+//!   still open at the end is closed with ` &`. The byte count the value
+//!   carries is the count **after** conversion, escapes included.
+//!
+//! `encoding_rs::GBK` knows 2 165 code points core's table does not (GB18030
+//! additions and the user-defined areas); the 1 377 of them that would pass
+//! the byte rule — the private-use block `U+E000..=U+F8FF` and thirteen
+//! others, [`NOT_IN_CORE_GBK`] — are refused here too, so nothing leaves this
+//! encoder that `core.dll` would not have written.
 
 const ESCAPE_OPEN: &[u8; 2] = b"&~";
 const ESCAPE_CLOSE: &[u8; 2] = b" &";
+
+/// GBK codes `encoding_rs` assigns that `core.dll`'s Unicode → GBK table
+/// (`sub_54B9032`, 21 792 entries dumped through ida-bridge) has no entry
+/// for, among the codes whose two bytes are both `0xA0..=0xFE` — the
+/// vertical forms `U+FE10..=U+FE19`, `ḿ` (`U+1E3F`), `ǹ` (`U+01F9`) and
+/// `龻` (`U+9FBB`). The other GB18030 additions fail the byte rule anyway,
+/// and the user-defined areas are refused by their code points
+/// (`U+E000..=U+F8FF`).
+pub const NOT_IN_CORE_GBK: [u16; 13] = [
+    0xA6D9, 0xA6DA, 0xA6DB, 0xA6DC, 0xA6DD, 0xA6DE, 0xA6DF, 0xA6EC, 0xA6ED, 0xA6F3, 0xA8BC, 0xA8BF, 0xFEA0,
+];
+
+/// Why a string cannot be stored under a database's `FORMAT`. Nothing is
+/// written when one of these comes back.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum TextEncodeError {
+    /// The readers stop at the first NUL (`sub_5B8F2D0`, `sub_5471D70`), so
+    /// text past one would be lost.
+    #[error("text {text:?} holds a NUL at byte {at}; a stored text ends at its first NUL")]
+    Nul { text: String, at: usize },
+    /// `FORMAT != 1` and the character has no escaped form: not in the
+    /// project code page, or its GBK bytes are not both `0xA0..=0xFE`, or it
+    /// is outside the BMP or one of `U+FFFE` / `U+FFFF`. `sub_54B2CE8` status
+    /// 2 (or 1), reported by `db_cxx_put_str_vector` as error 638.
+    #[error(
+        "{ch:?} (U+{code:04X}) in {text:?} has no escaped form in the project code page \
+         (core.dll refuses it as error 638)"
+    )]
+    Unmappable { text: String, ch: char, code: u32 },
+    /// [`TextFormat::Detect`]: the header's word is not at hand and the text
+    /// is not ASCII, so there is no telling which form to write.
+    #[error("text {text:?} is not ASCII and the database header's FORMAT is not at hand")]
+    FormatUnknown { text: String },
+}
+
+/// Encode a string the way `core.dll` stores it under the header's `FORMAT`
+/// word — the inverse of [`decode_as`]. See the module documentation for the
+/// rules; [`pack_words`] turns the bytes into the stored words.
+pub fn encode_as(text: &str, format: TextFormat) -> Result<Vec<u8>, TextEncodeError> {
+    if let Some(at) = text.bytes().position(|byte| byte == 0) {
+        return Err(TextEncodeError::Nul { text: text.to_owned(), at });
+    }
+    match format {
+        TextFormat::Utf8 => Ok(text.as_bytes().to_vec()),
+        TextFormat::Escaped => escape(text),
+        TextFormat::Detect if text.is_ascii() => Ok(text.as_bytes().to_vec()),
+        TextFormat::Detect => Err(TextEncodeError::FormatUnknown { text: text.to_owned() }),
+    }
+}
+
+/// `FORMAT != 1`: `sub_54B2CE8` from charset 12 to charset 6, as the module
+/// documentation lays it out.
+fn escape(text: &str) -> Result<Vec<u8>, TextEncodeError> {
+    let mut out = Vec::with_capacity(text.len() + 4);
+    let mut open = false;
+    let unmappable = |ch: char| TextEncodeError::Unmappable { text: text.to_owned(), ch, code: ch as u32 };
+    for ch in text.chars() {
+        if ch.is_ascii() {
+            close_run(&mut out, &mut open);
+            out.push(ch as u8);
+            continue;
+        }
+        let code = ch as u32;
+        if code > 0xFFFF || code == 0xFFFE || code == 0xFFFF || (0xE000..=0xF8FF).contains(&code) {
+            return Err(unmappable(ch));
+        }
+        let mut utf8 = [0u8; 4];
+        let (gbk, _, had_errors) = encoding_rs::GBK.encode(ch.encode_utf8(&mut utf8));
+        match (had_errors, gbk.as_ref()) {
+            // Not in the table: a Latin-1 code point goes in as its own byte
+            // (`v74 = v34` when `sub_54B9032` says no and `128 <= cp <= 255`).
+            (true, _) if (0x80..=0xFF).contains(&code) => {
+                close_run(&mut out, &mut open);
+                out.push(code as u8);
+            }
+            (true, _) => return Err(unmappable(ch)),
+            // The one single-byte entry: `€` → `0x80`.
+            (false, [byte]) => {
+                close_run(&mut out, &mut open);
+                out.push(*byte);
+            }
+            (false, [lead, trail]) => {
+                let escapable = (0xA0..=0xFE).contains(lead) && (0xA0..=0xFE).contains(trail);
+                if !escapable || NOT_IN_CORE_GBK.contains(&(u16::from(*lead) << 8 | u16::from(*trail))) {
+                    return Err(unmappable(ch));
+                }
+                if !open {
+                    out.extend_from_slice(ESCAPE_OPEN);
+                    open = true;
+                }
+                out.push(lead & 0x7F);
+                out.push(trail & 0x7F);
+            }
+            (false, _) => return Err(unmappable(ch)),
+        }
+    }
+    close_run(&mut out, &mut open);
+    Ok(out)
+}
+
+fn close_run(out: &mut Vec<u8>, open: &mut bool) {
+    if *open {
+        out.extend_from_slice(ESCAPE_CLOSE);
+        *open = false;
+    }
+}
+
+/// Pack stored bytes four to a word, big-endian, the last word NUL-padded —
+/// `sub_5471E50` / `sub_5B9B920`, the shape every stored text takes after
+/// its count word. An empty text is no words.
+pub fn pack_words(bytes: &[u8]) -> Vec<u32> {
+    bytes
+        .chunks(4)
+        .map(|chunk| {
+            let mut word = [0u8; 4];
+            word[..chunk.len()].copy_from_slice(chunk);
+            u32::from_be_bytes(word)
+        })
+        .collect()
+}
 
 /// The way a database's strings are stored, as its header's `FORMAT` word
 /// states it. See the module documentation for what `core.dll` does with each.
@@ -362,5 +515,93 @@ mod tests {
         assert_eq!(packed(&[0]), None);
         assert_eq!(packed(&[9, 0x4652_4545]), None);
         assert_eq!(packed(&[]), None);
+    }
+
+    /// The encoder writes back every escaped string sampled from
+    /// `ams1112_0001` byte for byte, and each comes back through the decoder.
+    #[test]
+    fn escapes_the_sampled_strings_byte_for_byte() {
+        let cases: &[(&str, &[u8])] = &[
+            ("墙", b"&~G= &"),
+            ("板", b"&~0e &"),
+            ("埋板", b"&~Bq0e &"),
+            ("二次浇注", b"&~6~4N==W\" &"),
+            ("二次浇灌", b"&~6~4N==9` &"),
+            ("反应堆厂房", b"&~74S&6Q3'7? &"),
+            ("反应堆厂房内部结构", b"&~74S&6Q3'7?DZ2?=a99 &"),
+            ("动力院压力容器埋板", b"&~6/A&T:Q9A&H]FwBq0e &"),
+            // A run inside plain text opens and closes around the characters.
+            ("-3.320m~±0.00m", b"-3.320m~&~!@ &0.00m"),
+            // 範 is B9 A0: the trail byte 0xA0 is allowed and stores as a space.
+            ("範板", b"&~9 0e &"),
+            // Two runs when ASCII sits between them; the count is the escaped length.
+            ("/A-反应-板", b"/A-&~74S& &-&~0e &"),
+        ];
+        for (text, stored) in cases {
+            let encoded = encode_as(text, TextFormat::Escaped).unwrap();
+            assert_eq!(encoded, stored.to_vec(), "{text}");
+            assert_eq!(decode_as(&encoded, TextFormat::Escaped), *text, "{text} back");
+        }
+    }
+
+    /// `FORMAT == 1` stores UTF-8 as it is, whatever the characters; ASCII
+    /// stores as itself under both, and both refuse a NUL.
+    #[test]
+    fn utf8_format_stores_the_bytes_and_ascii_is_the_same_under_both() {
+        assert_eq!(encode_as("梭式泄压阀", TextFormat::Utf8).unwrap(), "梭式泄压阀".as_bytes());
+        assert_eq!(encode_as("A&~G= &B", TextFormat::Utf8).unwrap(), b"A&~G= &B");
+        assert_eq!(encode_as("😀", TextFormat::Utf8).unwrap(), "😀".as_bytes());
+        assert_eq!(encode_as("/1RS-CIVI", TextFormat::Escaped).unwrap(), b"/1RS-CIVI");
+        assert_eq!(encode_as("/1RS-CIVI", TextFormat::Detect).unwrap(), b"/1RS-CIVI");
+        assert_eq!(encode_as("", TextFormat::Escaped).unwrap(), b"");
+        assert_eq!(encode_as("AT&T", TextFormat::Escaped).unwrap(), b"AT&T");
+        assert!(matches!(
+            encode_as("AB\0CD", TextFormat::Utf8),
+            Err(TextEncodeError::Nul { at: 2, .. })
+        ));
+        assert!(matches!(
+            encode_as("AB\0", TextFormat::Escaped),
+            Err(TextEncodeError::Nul { at: 2, .. })
+        ));
+        assert!(matches!(
+            encode_as("墙", TextFormat::Detect),
+            Err(TextEncodeError::FormatUnknown { .. })
+        ));
+    }
+
+    /// What `sub_54B2CE8` refuses, this refuses: a GBK code with a byte below
+    /// `0xA0`, a character outside the BMP, `U+FFFE` / `U+FFFF`, the private
+    /// use area and the GB18030 additions core's table lacks. What it lets
+    /// through as a raw byte — a Latin-1 character the table does not have,
+    /// `€` as `0x80` — goes through the same way and reads back.
+    #[test]
+    fn refuses_what_core_refuses_and_passes_latin1_through_raw() {
+        for text in ["–", "a–b", "😀", "\u{FFFE}", "\u{FFFF}", "\u{E000}", "\u{E864}", "\u{FE10}", "ḿ", "ǹ", "龻"] {
+            assert!(
+                matches!(encode_as(text, TextFormat::Escaped), Err(TextEncodeError::Unmappable { .. })),
+                "{text:?}"
+            );
+        }
+        // `–` is GBK A843: the trail byte is below 0xA0, so it has no escaped form.
+        let (gbk, _, _) = encoding_rs::GBK.encode("–");
+        assert_eq!(gbk.as_ref(), b"\xA8\x43");
+        // ÿ is not in GBK: the raw byte, closing a run if one is open.
+        assert_eq!(encode_as("ÿ", TextFormat::Escaped).unwrap(), b"\xFF");
+        assert_eq!(encode_as("墙ÿ墙", TextFormat::Escaped).unwrap(), b"&~G= &\xFF&~G= &");
+        assert_eq!(decode_as(b"\xFF", TextFormat::Escaped), "ÿ");
+        // € is GBK's one single-byte code.
+        assert_eq!(encode_as("€", TextFormat::Escaped).unwrap(), b"\x80");
+        assert_eq!(decode_as(b"\x80", TextFormat::Escaped), "€");
+        // é is in GBK (A8A6), so it is escaped like any double-byte character.
+        assert_eq!(encode_as("café", TextFormat::Escaped).unwrap(), b"caf&~(& &");
+        assert_eq!(decode_as(b"caf&~(& &", TextFormat::Escaped), "café");
+    }
+
+    #[test]
+    fn packs_four_bytes_to_a_word_nul_padded() {
+        assert_eq!(pack_words(b""), Vec::<u32>::new());
+        assert_eq!(pack_words(b"dpc"), vec![0x6470_6300]);
+        assert_eq!(pack_words(b"FREE"), vec![0x4652_4545]);
+        assert_eq!(pack_words(b"H-AIRQUANTITY"), vec![0x482D_4149, 0x5251_5541, 0x4E54_4954, 0x5900_0000]);
     }
 }

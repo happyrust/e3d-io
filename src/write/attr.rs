@@ -35,13 +35,14 @@
 //!
 //! Records are written in the **wide** layout only, the one every element of
 //! the corpus uses; a compact record (format-word bit 29 clear) is refused.
-//! Text is stored as its UTF-8 bytes under `FORMAT 1` and must be ASCII under
-//! any other header until the escaped charset has a writer.
+//! Text is stored as the header's `FORMAT` says ([`crate::record::text`]):
+//! its UTF-8 bytes under `FORMAT 1`, the project code page in `&~ … &` runs
+//! under any other, the count word being the stored byte count either way.
 
 use crate::record::descriptor::{descriptor_is_array, DescriptorValue, StorageShape};
 use crate::record::hunk;
 use crate::record::template::{NounTemplate, TemplateAttr, WIDE_LAYOUT_FLAG};
-use crate::record::text::TextFormat;
+use crate::record::text::{self, TextEncodeError, TextFormat};
 use crate::refno::RefNo;
 
 use super::record::{RecordDraft, RecordEncodeError};
@@ -76,8 +77,8 @@ pub enum AttributeWriteError {
     SlotOutOfRecord { hash: u32, offset: usize, len: usize },
     #[error("attribute {hash:#x}: the record is in the compact layout, which this writer does not produce")]
     CompactLayout { hash: u32 },
-    #[error("attribute {hash:#x}: text {text:?} is not ASCII and the database header's FORMAT is not UTF-8")]
-    TextNotAscii { hash: u32, text: String },
+    #[error("attribute {hash:#x}: {source}")]
+    Text { hash: u32, source: TextEncodeError },
     #[error("attribute {hash:#x}: packed-bit index {bit} exceeds 31")]
     BitIndex { hash: u32, bit: u32 },
     #[error("attribute {hash:#x}: a type-14 record of {words} words is not a whole number of {stride}-word elements")]
@@ -271,24 +272,14 @@ fn centidegrees(degrees: f64) -> u32 {
     (degrees * 100.0).round() as i32 as u32
 }
 
+/// `[stored bytes][packed text]`: the text as the header's `FORMAT` stores
+/// it ([`text::encode_as`]), the count the stored length — escapes included
+/// under a non-UTF-8 header, which is what the read side's count says too.
 fn text_words(attr: &TemplateAttr, text_value: &str, format: TextFormat) -> Result<Vec<u32>, AttributeWriteError> {
-    let bytes: &[u8] = match format {
-        TextFormat::Utf8 => text_value.as_bytes(),
-        TextFormat::Escaped | TextFormat::Detect if text_value.is_ascii() => text_value.as_bytes(),
-        TextFormat::Escaped | TextFormat::Detect => {
-            return Err(AttributeWriteError::TextNotAscii {
-                hash: attr.hash,
-                text: text_value.to_string(),
-            });
-        }
-    };
+    let bytes = text::encode_as(text_value, format).map_err(|source| AttributeWriteError::Text { hash: attr.hash, source })?;
     let mut words = Vec::with_capacity(1 + bytes.len().div_ceil(4));
     words.push(bytes.len() as u32);
-    for chunk in bytes.chunks(4) {
-        let mut word = [0u8; 4];
-        word[..chunk.len()].copy_from_slice(chunk);
-        words.push(u32::from_be_bytes(word));
-    }
+    words.extend(text::pack_words(&bytes));
     Ok(words)
 }
 
@@ -634,9 +625,14 @@ mod tests {
             set(&mut draft, "ROKEYS", DescriptorValue::Text("K1".into())),
             Err(AttributeWriteError::StringList { .. })
         ));
+        // `–` is GBK A843, a trail byte below 0xA0: no escaped form.
         assert!(matches!(
-            draft.set_attribute(&template, db1_hash("DESC"), &DescriptorValue::Text("反应堆".into()), TextFormat::Escaped),
-            Err(AttributeWriteError::TextNotAscii { .. })
+            draft.set_attribute(&template, db1_hash("DESC"), &DescriptorValue::Text("a–b".into()), TextFormat::Escaped),
+            Err(AttributeWriteError::Text { source: TextEncodeError::Unmappable { ch: '–', .. }, .. })
+        ));
+        assert!(matches!(
+            draft.set_attribute(&template, db1_hash("DESC"), &DescriptorValue::Text("反应堆".into()), TextFormat::Detect),
+            Err(AttributeWriteError::Text { source: TextEncodeError::FormatUnknown { .. }, .. })
         ));
         assert!(draft.content_eq(&before), "every refusal left the draft as it was");
 
@@ -670,5 +666,15 @@ mod tests {
         let (_, data) = utf8.explicit_words(db1_hash("DESC")).unwrap();
         assert_eq!(data[0], 9, "three CJK characters are nine UTF-8 bytes");
         assert_eq!(data.len(), 4);
+
+        // Under any other FORMAT the same text is the escaped run
+        // `&~74S&6Q &` (`ams1112_0001` stores 反应堆厂房 as `&~74S&6Q3'7? &`),
+        // and the count word is the ten stored bytes, escapes included.
+        let mut escaped = draft.clone();
+        escaped
+            .set_attribute(&template, db1_hash("DESC"), &DescriptorValue::Text("反应堆".into()), TextFormat::Escaped)
+            .unwrap();
+        let (_, data) = escaped.explicit_words(db1_hash("DESC")).unwrap();
+        assert_eq!(data, vec![10, u32::from_be_bytes(*b"&~74"), u32::from_be_bytes(*b"S&6Q"), u32::from_be_bytes(*b" &\0\0")]);
     }
 }
