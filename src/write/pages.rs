@@ -27,6 +27,10 @@ pub struct PageFile {
     path: PathBuf,
     file: File,
     size: PageSize,
+    /// Whether this handle holds the write-mode sentinel lock (Windows only;
+    /// always `false` elsewhere, where it is unread). Released on drop.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    locked: bool,
 }
 
 impl PageFile {
@@ -50,7 +54,35 @@ impl PageFile {
             words,
             detail: source.to_string(),
         })?;
-        Ok(Self { path, file, size })
+        Ok(Self { path, file, size, locked: false })
+    }
+
+    /// Take `core.dll`'s write-mode sentinel lock before appending anything:
+    /// an exclusive lock on one byte at [`sentinel::LOCK_OFFSET`]
+    /// (`0x7FFFFFF6FFFFFFFF`, A9 of the write-path note), which `core.dll` holds
+    /// while a database is open for writing. A file another writer — this crate
+    /// or a real E3D in write mode — is mid-write on is refused at once with
+    /// [`WriteError::Locked`], nothing having been written; the lock is released
+    /// when this handle drops (on commit or rollback). Waiting for the lock is
+    /// the caller's business, so this never blocks.
+    ///
+    /// On platforms without `LockFileEx` this is a no-op — the commit's page-0
+    /// re-read still catches a writer that finished first (`WriteError::Moved`),
+    /// as it did before the lock.
+    pub fn lock_for_write(&mut self) -> Result<(), WriteError> {
+        #[cfg(windows)]
+        {
+            if sentinel::try_lock_exclusive(&self.file) {
+                self.locked = true;
+                Ok(())
+            } else {
+                Err(WriteError::Locked { path: self.path.clone() })
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            Ok(())
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -120,4 +152,134 @@ pub(crate) fn be_word(page: &[u8], byte_offset: usize) -> u32 {
 
 pub(crate) fn put_be_word(page: &mut [u8], byte_offset: usize, word: u32) {
     page[byte_offset..byte_offset + 4].copy_from_slice(&word.to_be_bytes());
+}
+
+#[cfg(windows)]
+impl Drop for PageFile {
+    fn drop(&mut self) {
+        if self.locked {
+            sentinel::unlock(&self.file);
+        }
+    }
+}
+
+/// `core.dll`'s write-mode sentinel lock, by hand — two `extern "system"`
+/// declarations, no crate (Q5). `core.dll` (`FHSWIT`, A9) takes an exclusive
+/// `LockFileEx` on one byte at `0x7FFFFFF6FFFFFFFF` when a database enters write
+/// mode and drops it with `UnlockFileEx` on the way out; locking the same byte
+/// is how this crate and E3D exclude each other.
+#[cfg(windows)]
+mod sentinel {
+    use std::fs::File;
+    use std::os::windows::io::{AsRawHandle, RawHandle};
+
+    /// The byte `core.dll` locks. Beyond any real file length — Windows locks a
+    /// range past end-of-file fine, and the point is the marker, not the byte.
+    pub const LOCK_OFFSET: u64 = 0x7FFF_FFF6_FFFF_FFFF;
+    const LOCKFILE_FAIL_IMMEDIATELY: u32 = 0x0000_0001;
+    const LOCKFILE_EXCLUSIVE_LOCK: u32 = 0x0000_0002;
+
+    #[repr(C)]
+    struct Overlapped {
+        internal: usize,
+        internal_high: usize,
+        offset: u32,
+        offset_high: u32,
+        h_event: RawHandle,
+    }
+
+    extern "system" {
+        fn LockFileEx(
+            file: RawHandle,
+            flags: u32,
+            reserved: u32,
+            bytes_low: u32,
+            bytes_high: u32,
+            overlapped: *mut Overlapped,
+        ) -> i32;
+        fn UnlockFileEx(
+            file: RawHandle,
+            reserved: u32,
+            bytes_low: u32,
+            bytes_high: u32,
+            overlapped: *mut Overlapped,
+        ) -> i32;
+    }
+
+    fn overlapped() -> Overlapped {
+        Overlapped {
+            internal: 0,
+            internal_high: 0,
+            offset: LOCK_OFFSET as u32,
+            offset_high: (LOCK_OFFSET >> 32) as u32,
+            h_event: std::ptr::null_mut(),
+        }
+    }
+
+    /// Try to take the exclusive one-byte lock without waiting. `true` if it was
+    /// taken, `false` if another handle already holds it.
+    pub fn try_lock_exclusive(file: &File) -> bool {
+        let mut ov = overlapped();
+        // SAFETY: `file`'s handle outlives the call; `ov` is a valid, owned
+        // OVERLAPPED for the duration; one byte is locked, none read or written.
+        let ok = unsafe {
+            LockFileEx(
+                file.as_raw_handle(),
+                LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                0,
+                1,
+                0,
+                &mut ov,
+            )
+        };
+        ok != 0
+    }
+
+    /// Release the one-byte lock. Errors are ignored: the handle is closing, and
+    /// a lock on a handle is dropped when the handle is anyway.
+    pub fn unlock(file: &File) {
+        let mut ov = overlapped();
+        // SAFETY: as `try_lock_exclusive`.
+        unsafe {
+            UnlockFileEx(file.as_raw_handle(), 0, 1, 0, &mut ov);
+        }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    /// A minimal file whose page-0 `PGSIZE` word (+0x34) is 512, enough for
+    /// [`PageFile::open`].
+    fn one_page_file() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("lock_probe");
+        let mut page = vec![0u8; 2048];
+        page[0x34..0x38].copy_from_slice(&512u32.to_be_bytes());
+        let mut file = File::create(&path).expect("create");
+        file.write_all(&page).expect("write");
+        file.sync_all().expect("sync");
+        (dir, path)
+    }
+
+    #[test]
+    fn the_write_lock_is_exclusive_and_released_on_drop() {
+        let (_dir, path) = one_page_file();
+
+        let mut first = PageFile::open(&path).expect("open first");
+        first.lock_for_write().expect("first takes the lock");
+
+        // A second handle cannot take it while the first holds it.
+        let mut second = PageFile::open(&path).expect("open second");
+        assert!(
+            matches!(second.lock_for_write(), Err(WriteError::Locked { .. })),
+            "the byte core.dll locks admits one writer at a time"
+        );
+
+        // Dropping the first releases it; the second can then take it.
+        drop(first);
+        second.lock_for_write().expect("the lock is free once the first handle drops");
+    }
 }

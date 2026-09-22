@@ -22,12 +22,14 @@
 //! on the newest session, `insert` / `update` / `rename` / `delete` build the
 //! batch, and `commit` hands it here.
 //!
-//! Not done here: the write-mode sentinel lock `core.dll` takes
-//! (`LockFileEx` on one byte at `0x7FFFFFF6FFFFFFFF`, A9). In its place
-//! [`StagedSession::commit`] re-reads page 0 and refuses when `LSPGNO` moved
-//! since staging, which catches a concurrent writer that finished first but
-//! not one that is mid-flight. Take the file out of E3D's write mode before
-//! writing.
+//! Entering write mode takes `core.dll`'s sentinel lock — an exclusive
+//! `LockFileEx` on one byte at `0x7FFFFFF6FFFFFFFF` (A9),
+//! [`PageFile::lock_for_write`] — so a file a real E3D (or another instance of
+//! this crate) is writing is refused at once with [`WriteError::Locked`],
+//! nothing written; the lock is held until the [`StagedSession`] commits or
+//! rolls back. [`StagedSession::commit`] also re-reads page 0 and refuses when
+//! `LSPGNO` moved since staging ([`WriteError::Moved`]), which is the whole
+//! guard on a platform without `LockFileEx`, where the lock is a no-op.
 
 pub mod attr;
 pub mod claim;
@@ -116,6 +118,8 @@ pub enum WriteError {
     },
     #[error("{path}: extent {ext} — only single-extent files (extent 1) are written")]
     MultiExtent { path: PathBuf, ext: u32 },
+    #[error("{path}: the file is in write mode — another writer holds the sentinel lock; nothing was changed")]
+    Locked { path: PathBuf },
     #[error(
         "{path}: page 0 moved while staging — LSPGNO was {expected}, is {found}; \
          another writer committed, nothing was changed"
@@ -824,6 +828,10 @@ pub(crate) fn stage_session_with_base(
     let elements: &[ElementWrite] = side.as_ref().map_or(elements, |work| work.elements.as_slice());
 
     let mut file = PageFile::open(path)?;
+    // Enter write mode: take the sentinel lock before appending anything, so a
+    // file a real E3D (or another instance of this crate) is writing is refused
+    // at once and untouched. Held until this handle drops at commit or rollback.
+    file.lock_for_write()?;
     let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
     let text = TextFormat::from_header(descriptor.header_format);
     let page_words = file.page_size().words() as usize;
