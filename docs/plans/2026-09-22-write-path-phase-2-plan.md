@@ -57,7 +57,7 @@
 | 6 | UDA 表 / extract / Central / 多 extent / compact / E3D 2.1 / 部分存盘 / 类型 17 逐槽三方（576） | 无语料或无需求 | C 留待 |
 | 7 | 性能 | 只有「45 条用例 1.7 s」「2000 成员跨页 8+ 页」；**无万级数字** | T2 |
 | 8 | TTY 门盲区 | `FORMAT 0` 项目没上门；Q17（活 E3D 写模式 → `Locked`）未自动化；E3D ↔ e3d-io 交替写只做过 1 轮 | T4 |
-| 9 | `tests/` 里引用 `ams1112_0001` 的十几个测试一个断言都没跑（本机无此样本，`SKIP` 即 return） | NOTES.md 已记 | T4 |
+| 9 | `tests/` 里引用 `ams1112_0001` 的十几个测试 | **本机已有该样本**（103 MB，`D:\work\plant-code\plant-io\test-file\`，2026-06-12 起）——16 个引用它的套件实跑 **84 断言 0 失败、0 skip**（接班会话复核，§7）；旧「本机无此样本」的前提已不成立 | 已闭，无需换 / 删 |
 
 ---
 
@@ -112,7 +112,7 @@
 - TTY 门 `FORMAT 0`：把 TES000 的 MDB / 用户接进 `l3_suite --check-driver`，`TES023` 副本上跑中文 NAME / DESC 三问（今天口径靠 E3D 自写的键 `/&~9xB/5:Ih18 &` 逐字节相同，缺一次 E3D 亲口读回）。
 - Q17 自动化：门里起一个写模式 E3D（`DOPENW` 宏）再让 `e3d-write` 写 → 期望 `Locked` 且字节不变；E3D 退出后同一写成功。
 - 交替写 5 轮：E3D 写 → e3d-io 写（以 E3D 会话为 base）→ E3D 写 → …，每轮两边都 `Q SESSION` / `Q ATT`，会话链 `BASESN` 逐段正确。
-- `ams1112_0001` 族：换到本机存在的样本（`D:\AVEVA\Projects\E3D3.1` 9 个项目目录）或删，让「SKIP 即 ok」的十几个测试重新有断言。
+- ~~`ams1112_0001` 族：换到本机存在的样本或删~~ **已复核（接班会话，§7）：该样本本机已在（`D:\work\plant-code\plant-io\test-file\ams1112_0001`，103 MB），16 个引用它的套件实跑 84 断言全绿、无一 SKIP——无需换或删，T4 这一条闭。** `common::missing` 仍保底：样本哪天被移走，这些测试报 skip 而非红。
 
 ### C · 留待（不排期，只写触发；较上期只改一处）
 
@@ -216,4 +216,5 @@
   - **合并 C**：小 ZONE（126 成员）merge 1.2 ms，大 ZONE（20 128 成员）merge 3.7 ms——三方成员对账 `member_list_diff` 双游标 O(n)，20 000 成员 3.7 ms，不是瓶颈。
   - **E3D 读回（真 des.exe，`D:\e3dio-scale`）——一条重要发现，是 E3D 的枚举上限、不是 e3d-io 的字节问题**：把 20 128 成员（20 004 BOX）的库交给 E3D，`Q MEM` 只列到 **3 744**（124 原成员 + 前 3 620 个 BOX）就停，PML `!!CE.Members.Size()` 同样返 **3 744**、`COLLECT ALL BOX FOR CE` 返 3 620——E3D 的成员枚举有个约 3 744 的封顶。**但这不是 e3d-io 写坏了**：① 抽的 20 个 BOX（refno 从 26985 到 36485，含很靠后的）E3D 都能 `=<refno>` 直达、`Q ATT` 打出 `Type BOX` / `Position E …mm N 2000mm U 3000mm` / `Xlength 300` / owner `/1RX03-MSUP` 全对（20/20）；② E3D 打开后自写了三个 `Saving Meta Data` 会话（656→658），之后**e3d-io 再读该库仍是 20 128 成员、20 004 BOX、gathered record 162 916 字节，与纯 e3d-io 的 S655 逐字节同尺寸**——E3D 没有截断落盘，成员块被原样保留。结论：e3d-io 的大成员块写得对（E3D 底层 I/O 认、逐个元素可达），E3D 只是在**成员列表枚举层**封顶 ~3 744；这个顶只有「两万个孩子全挂一个 ZONE」这种压力形状会撞到，真实模型不会（孩子分散在多 owner 下）。**给 T2 验收补一条**：真实规模门要把 N 个元素分散到 M 个 owner（如每 owner ≤ 500），再各 `Q MEM` 全数读回，别全挂一个 ZONE。
   - **未撞到的**：无 `RecordTooLong`（成员块跨页正常，20 000 成员 = 162 916 字节 gather 无误）；写路径全程无 `Locked`（无并发 E3D）；峰值 RSS 与追加页数线性（100k 也才 112 MB）。三个门 A/B/C 的库最终交 E3D 都能开、无报错。
-  - Q4 阈值据此定：**单会话 10 000 insert 106 ms « 10 s（宽松达标）**；追加页 1 228 / 记录页 1 015 = **1.21×（< 1.5× 达标）**；**`Transaction::open` 最大库 2.4 s > 1 s（不达标，记优化）**。探针与 E3D 宏（`m0_open` / `m1_readback` / `m2_count` / `run.ps1`）留在 `D:\e3dio-scale`，项目副本用后可删（3.3 GB）。
+  - Q4 阈值据此定：**单会话 10 000 insert 106 ms « 10 s（宽松达标）**；追加页 1 228 / 记录页 1 015 = **1.21×（< 1.5× 达标）**；**`Transaction::open` 最大库 2.4 s > 1 s（不达标，记优化）**。探针与 E3D 宏（`m0_open` / `m1_readback` / `m2_count` / `run.ps1`）留在 `D:\e3dio-scale`，项目副本用后可删（3.3 GB，本轮已删、宏留）。
+- 2026-09-22：**T4 部分——`ams1112_0001` 测试复核（接班会话 fable-5-1-12；§1.3 #9 / T4 那一条）。** 起草时以为「本机无此样本、SKIP 即 return」；实测 **样本在**：`D:\work\plant-code\plant-io\test-file\ams1112_0001`（103 MB）+ `attlib.dat`（4.6 MB）+ `acp7002_0001` / `amssys`，2026-06-12 起。`common::TEST_FILE_DB` / `TEST_FILE_ATTLIB` 正指这两个，`common::missing` 返 false，测试实跑。跑 16 个引用它的套件（`decode_attributes_e2e` / `atnlog_high_level_api` / `atnlog_default_pool` / `atnlog_decode_first_element` / `decode_richer_element` / `find_covered_noun` / `engine_summarize_element` / `engine_summarize_with_template` / `engine_resolve_attribute` / `uda_name_resolution_verified` / `read_real_db` / `sampled_elements_resolve` / `live_tree_sample_resolves` / `noun_coverage_analysis` / `text_format_real` / `session_date_real`）：**84 断言 0 失败、输出里 0 条 `skipped: fixtures not installed`**（`read_real_db` 76.6 s 是全库扫描那条，其余亚秒）。→ **T4 这一条已闭，无需换样本 / 删测试**；§1.3 #9 与 §2 T4 已改。`common::missing` 保底不变：样本被移走则报 skip 而非红。其余 T4 项（`FORMAT 0` TTY 门、Q17 自动化、E3D↔e3d-io 交替写 5 轮）仍开，属推 T1 / T4 的会话。
