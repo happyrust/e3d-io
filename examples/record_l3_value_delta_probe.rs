@@ -542,6 +542,7 @@ fn render_value(value: &ExplicitValue) -> String {
         ExplicitValue::IntArray(v) => array("ia", v.len(), v.iter().map(|x| x.to_string())),
         ExplicitValue::RealArray(v) => array("ra", v.len(), v.iter().map(|x| format!("{x:?}"))),
         ExplicitValue::RefNoArray(v) => array("na", v.len(), v.iter().map(|x| x.to_string())),
+        ExplicitValue::TextList(v) => array("tl", v.len(), v.iter().map(|x| escape(x))),
         ExplicitValue::RawWords(v) => array("rw", v.len(), v.iter().map(|x| format!("{x:08X}"))),
     }
 }

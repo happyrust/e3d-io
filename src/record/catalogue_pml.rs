@@ -1709,6 +1709,7 @@ mod tests {
             length: 2,
             applicable_nouns: vec![808_220],
             default_is_defined: true,
+            default_type: Some("REAL".into()),
             default_mode: 0,
             default_text: None,
             default_real: Some(0.0),

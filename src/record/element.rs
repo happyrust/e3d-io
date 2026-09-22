@@ -53,6 +53,9 @@ impl ParsedElement {
                         ExplicitValue::IntArray(values) => values.len() * 4,
                         ExplicitValue::RealArray(values) => values.len() * 8,
                         ExplicitValue::RefNoArray(values) => values.len() * 8,
+                        ExplicitValue::TextList(items) => {
+                            items.iter().map(|item| std::mem::size_of::<String>() + item.len()).sum()
+                        }
                         ExplicitValue::RawWords(values) => values.len() * 4,
                         ExplicitValue::Integer(_)
                         | ExplicitValue::Real(_)

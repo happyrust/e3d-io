@@ -176,6 +176,7 @@ fn run() -> Result<(), String> {
                         "length": definition.length,
                         "applicable_nouns": definition.applicable_nouns,
                         "default_is_defined": definition.default_is_defined,
+                        "default_type": definition.default_type,
                         "default_mode": definition.default_mode,
                         "default_text": definition.default_text,
                         "default_real": definition.default_real,
@@ -1705,6 +1706,7 @@ fn explicit_value_json(value: &e3d_io::record::explicit::ExplicitValue) -> Value
         ExplicitValue::RefNoArray(v) => {
             json!(v.iter().map(ToString::to_string).collect::<Vec<_>>())
         }
+        ExplicitValue::TextList(v) => json!(v),
         ExplicitValue::RawWords(v) => json!({"words": v}),
     }
 }
@@ -1938,9 +1940,10 @@ fn read_stream_defaults_as_type_zero(
 /// type with nothing behind it.
 fn type_zero(value: &DescriptorValue) -> DescriptorValue {
     match value {
-        DescriptorValue::Unset | DescriptorValue::Text(_) | DescriptorValue::RefNoArray(_) => {
-            DescriptorValue::Unset
-        }
+        DescriptorValue::Unset
+        | DescriptorValue::Text(_)
+        | DescriptorValue::TextList(_)
+        | DescriptorValue::RefNoArray(_) => DescriptorValue::Unset,
         // An empty word slot is not the same as `unset`, and which of the two
         // E3D writes depends on the attribute rather than the value: `NAPP`
         // shows `0` and `QTYPE` shows `unset`, both from a word holding zero.
@@ -2316,6 +2319,7 @@ fn value_json(value: &DescriptorValue) -> Value {
                 .map(|raw| json!({"raw": raw, "text": e3d_io::record::descriptor::word_name(*raw)}))
                 .collect(),
         ),
+        DescriptorValue::TextList(value) => json!(value),
         DescriptorValue::RawWords(value) => match e3d_io::record::catalogue_expr::render(value) {
             Some(expression) => json!({"words": value, "expression": expression}),
             None => json!(value),

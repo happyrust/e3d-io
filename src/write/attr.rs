@@ -17,7 +17,7 @@
 //! | 9 bool array | 32 to a word | `[n][ceil(n/32)]` | same |
 //! | 10, 15 text | four bytes to a word, NUL-padded | `[bytes][ceil(bytes/4)]` | same |
 //! | 14 record | `stride` words per element | `[n][n·stride]` | verbatim |
-//! | 19 string list | [`crate::record::hunk`] | — | verbatim |
+//! | 19 string list | `[n] { [i][words][bytes][packed text] }*` ([`crate::record::hunk`]) | the buffer | the buffer, no count word |
 //!
 //! Only what the value needs is written: an implicit slot's words past the
 //! count and elements keep whatever they held, the way `4SCEA` leaves them,
@@ -29,9 +29,11 @@
 //! What the read side collapses, this takes back the way it came: a one-word
 //! `Word { raw }` is its raw word, a `Bool` on a one-word slot is 0 or 1, an
 //! angle attribute's `Real` degrees are the signed centidegrees the word
-//! stores, and a `RawWords` value is the elements of an implicit slot but the
-//! whole data of an explicit field whose type the stream decoder hands over
-//! raw (14, 17, 18, 19 …), because that is exactly what it handed over.
+//! stores, a `TextList` is the string-list buffer (an empty list unsets, as
+//! a length-0 value does in `4SCEA`), and a `RawWords` value is the elements
+//! of an implicit slot but the whole data of an explicit field whose type the
+//! stream decoder hands over raw (14, 17, 18 …), because that is exactly what
+//! it handed over.
 //!
 //! Records are written in the **wide** layout only, the one every element of
 //! the corpus uses; a compact record (format-word bit 29 clear) is refused.
@@ -83,8 +85,6 @@ pub enum AttributeWriteError {
     BitIndex { hash: u32, bit: u32 },
     #[error("attribute {hash:#x}: a type-14 record of {words} words is not a whole number of {stride}-word elements")]
     RecordStride { hash: u32, words: usize, stride: u32 },
-    #[error("attribute {hash:#x}: a string list is set through the string-list setters, not a text value")]
-    StringList { hash: u32 },
     #[error(transparent)]
     Record(#[from] RecordEncodeError),
 }
@@ -135,7 +135,10 @@ pub fn set_attribute(
         }
     }
 
-    if matches!(value, DescriptorValue::Unset) {
+    // An empty string list reaches `4SCEA` as a value of length 0, which
+    // unsets the attribute — the same as handing over `Unset`.
+    let empty_list = matches!(value, DescriptorValue::TextList(items) if items.is_empty());
+    if matches!(value, DescriptorValue::Unset) || empty_list {
         if implicit {
             let offset = attr.wide.location.word_offset() as usize;
             if attr.storage_type_code == 5 {
@@ -241,6 +244,7 @@ fn value_name(value: &DescriptorValue) -> &'static str {
         DescriptorValue::RefNoArray(_) => "RefNoArray",
         DescriptorValue::WordArray(_) => "WordArray",
         DescriptorValue::BoolArray(_) => "BoolArray",
+        DescriptorValue::TextList(_) => "TextList",
         DescriptorValue::RawWords(_) => "RawWords",
     }
 }
@@ -388,14 +392,23 @@ fn encode(
             words
         }
         StorageShape::Characters => {
-            if storage_type == 19 {
-                return Err(AttributeWriteError::StringList { hash });
-            }
             let DescriptorValue::Text(text_value) = value else {
                 return Err(mismatch(attr, "a text", value));
             };
             let words = text_words(attr, text_value, text)?;
             check_count(attr, words[0] as usize)?;
+            words
+        }
+        // The string-list buffer `db_cxx_put_str_vector` builds, written
+        // verbatim wherever the descriptor puts it (`4SCEA`'s `type == 19`
+        // arm); an explicit field carries it under `19 << 10` with no count
+        // word of its own. The descriptor's count is not a bound on the items
+        // — `ROKEYS` declares 500000 — so only the slot's room is checked.
+        StorageShape::TextList => {
+            let DescriptorValue::TextList(items) = value else {
+                return Err(mismatch(attr, "a string list", value));
+            };
+            let (words, _count) = super::record::text_list_data(items, text)?;
             words
         }
         StorageShape::Record => {
@@ -588,6 +601,15 @@ mod tests {
             Some((7 << 10, vec![2, 546_602, 702_806])),
             "a raw word array is its elements, behind a count, because the stream decoder strips the count"
         );
+        // A string list is the buffer `db_cxx_put_str_vector` builds, under
+        // `19 << 10` with no count word of its own; an empty one unsets.
+        set(&mut draft, "ROKEYS", DescriptorValue::TextList(vec!["AB".into(), "CDEFG".into()])).unwrap();
+        assert_eq!(
+            draft.explicit_words(db1_hash("ROKEYS")),
+            Some((19 << 10, vec![2, 0, 1, 2, 0x4142_0000, 1, 2, 5, 0x4344_4546, 0x4700_0000]))
+        );
+        set(&mut draft, "ROKEYS", DescriptorValue::TextList(vec![])).unwrap();
+        assert!(draft.explicit_words(db1_hash("ROKEYS")).is_none());
 
         // Unset removes an explicit field and marks an implicit slot.
         set(&mut draft, "SPRE", DescriptorValue::Unset).unwrap();
@@ -623,7 +645,7 @@ mod tests {
         ));
         assert!(matches!(
             set(&mut draft, "ROKEYS", DescriptorValue::Text("K1".into())),
-            Err(AttributeWriteError::StringList { .. })
+            Err(AttributeWriteError::TypeMismatch { shape: "a string list", given: "Text", .. })
         ));
         // `–` is GBK A843, a trail byte below 0xA0: no escaped form.
         assert!(matches!(

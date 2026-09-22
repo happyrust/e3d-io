@@ -40,8 +40,9 @@ struct Difference {
     /// The read side reported a `Bool` for a one-word slot whose word is
     /// neither 0 nor 1 — attlib calls the attribute a boolean, the database
     /// stores a word (`UDA.DTYP` holds `TEXT`, `REAL`, `INTE`…). The value the
-    /// writer was handed had already lost the word, so this is the read side's
-    /// to fix, not the writer's.
+    /// writer was handed had already lost the word, so this was the read
+    /// side's to fix, not the writer's — and it is fixed (S8): such a word is
+    /// now reported as `Word { raw }`, so this class is asserted empty below.
     bool_over_a_word: bool,
 }
 
@@ -196,6 +197,14 @@ fn round_trip(path: &str, attlib: &AttlibData) -> BTreeMap<(u32, &'static str), 
          formula-backed rows skipped, {non_ascii} non-ASCII texts written back through the escaped encoder, \
          {bool_over_a_word} words the read side reports as a Bool {bool_examples:?}); \
          {total} decoded rows set back by (storage type, residence): {rows:?}"
+    );
+    // Closed by S8 (plan §7, 2026-09-22): a one-word slot attlib types
+    // boolean but holding a word other than 0 / 1 (`UDA.DTYP` = `TEXT` …) is
+    // reported as the word, so it writes back as it was read. 185 rows of
+    // `ams5100_0001` were counted here before; none may be now.
+    assert_eq!(
+        bool_over_a_word, 0,
+        "{path}: {bool_over_a_word} words the read side collapsed to a Bool, e.g. {bool_examples:?}"
     );
     assert!(
         errors.is_empty(),

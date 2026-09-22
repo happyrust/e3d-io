@@ -174,7 +174,7 @@ fn hunks_and_a_text_list_read_back_through_their_directory_entries() {
     assert_eq!(keys.type_code, 19 << 10, "an inline string list is a type-19 entry");
     let (key_words, _) = text_list_data_ascii(&values.keys).unwrap();
     assert_eq!(keys.data_words as usize, key_words.len(), "its length is the buffer's, with no count word");
-    assert_eq!(keys.value, ExplicitValue::RawWords(key_words.clone()));
+    assert_eq!(keys.value, ExplicitValue::TextList(values.keys.clone()), "the stream decoder takes the list apart");
     assert_eq!(decode_text_list(&key_words, TextFormat::Utf8), Some(values.keys.clone()));
     assert!(HunkRef::from_explicit(keys).is_none(), "an inline list is not a hunk");
 
@@ -186,6 +186,55 @@ fn hunks_and_a_text_list_read_back_through_their_directory_entries() {
         assert!(matches!(&entry.value, ExplicitValue::RawWords(words) if words[0] == 1));
     }
     let hunks = check_hunks(&copy.path, fresh, &parsed, &values);
+
+    // The engine resolves the four directory entries into the values they
+    // point at — the entries keep their hunk type codes, only the values
+    // change — and the descriptor path then reports each as the decoded
+    // explicit value it is, not as five address words.
+    {
+        let mut resolved = parsed.clone();
+        assert_eq!(engine.resolve_hunks(&mut resolved).expect("read every chain"), 4);
+        assert_eq!(engine.resolve_hunks(&mut resolved).expect("nothing left to resolve"), 0);
+        let expect = |hash: u32, value: ExplicitValue| {
+            let entry = attribute(&resolved, hash);
+            assert!(e3d_io::record::hunk::is_hunk_type(entry.type_code >> 10), "the type code still says hunk");
+            assert_eq!(entry.data_words, 5, "the stream entry is still the five-word directory");
+            assert_eq!(entry.value, value, "{hash:#x}");
+        };
+        expect(db1_hash("ROVALS"), ExplicitValue::TextList(values.vals.clone()));
+        expect(db1_hash("IPARAM"), ExplicitValue::IntArray(values.ints.clone()));
+        expect(db1_hash("PARA"), ExplicitValue::RealArray(values.reals.clone()));
+        expect(db1_hash("DESC"), ExplicitValue::Text(values.text.clone()));
+        assert_eq!(attribute(&resolved, db1_hash("ROKEYS")).value, ExplicitValue::TextList(values.keys.clone()));
+        assert_eq!(attribute(&resolved, db1_hash("NUMB")).value, ExplicitValue::Integer(42));
+
+        if !common::missing(&[common::DESVIR, common::ATTLIB]) {
+            use e3d_io::record::descriptor::{AttributeExtractionStatus, DescriptorValue};
+            let attlib = e3d_attlib::AttlibData::parse_file(common::ATTLIB).expect("attlib");
+            let mut provider =
+                e3d_io::record::template::TemplateProvider::open(common::DESVIR, Some(0x000B_0692)).expect("desvir");
+            let extraction = engine
+                .extract_element_with_descriptors(fresh, &attlib, &mut provider)
+                .expect("extract with the hunks read");
+            let wanted: [(u32, DescriptorValue); 5] = [
+                (db1_hash("ROKEYS"), DescriptorValue::TextList(values.keys.clone())),
+                (db1_hash("ROVALS"), DescriptorValue::TextList(values.vals.clone())),
+                (db1_hash("IPARAM"), DescriptorValue::IntArray(values.ints.clone())),
+                (db1_hash("PARA"), DescriptorValue::RealArray(values.reals.clone())),
+                (db1_hash("DESC"), DescriptorValue::Text(values.text.clone())),
+            ];
+            let mut checked = 0;
+            for row in &extraction.attributes {
+                if let Some((_, value)) = wanted.iter().find(|(hash, _)| *hash == row.hash) {
+                    assert_eq!(row.status, AttributeExtractionStatus::DecodedExplicit, "{}", row.name);
+                    assert_eq!(row.value.as_ref(), Some(value), "{}", row.name);
+                    checked += 1;
+                }
+            }
+            assert!(checked >= 1, "the GROU template declares at least one of the five attributes written");
+            eprintln!("descriptor path: {checked} of the five hunk / list attributes are in GROU's template and decode");
+        }
+    }
 
     // The format word counts the stream with the directory entries in it.
     let stream_words: usize = parsed.explicit_attributes.iter().map(|a| 2 + a.data_words as usize).sum();

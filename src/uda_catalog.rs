@@ -59,7 +59,15 @@ pub struct UdaDefinition {
     pub value_type: Option<String>,
     pub length: u32,
     pub applicable_nouns: Vec<u32>,
+    /// `DTYP` holds a word — E3D prints it as `Dtype TEXT` / `REAL` / `INTE`:
+    /// the type the default (`DFLT` / `DREA` / …) is stated in — and this is
+    /// whether it holds one at all. attlib types the attribute boolean, and
+    /// until 2026-09-22 the read side collapsed the word to `true`; the word
+    /// itself is [`Self::default_type`].
     pub default_is_defined: bool,
+    /// `DTYP` as a name (`TEXT`, `REAL`, `INTE`, …), `None` when unset or when
+    /// the word has no name.
+    pub default_type: Option<String>,
     pub default_mode: u32,
     pub default_text: Option<String>,
     pub default_real: Option<f64>,
@@ -398,6 +406,7 @@ fn explicit_value(value: &ExplicitValue) -> DescriptorValue {
         ExplicitValue::IntArray(value) => DescriptorValue::IntArray(value.clone()),
         ExplicitValue::RealArray(value) => DescriptorValue::RealArray(value.clone()),
         ExplicitValue::RefNoArray(value) => DescriptorValue::RefNoArray(value.clone()),
+        ExplicitValue::TextList(value) => DescriptorValue::TextList(value.clone()),
         ExplicitValue::RawWords(value) => DescriptorValue::RawWords(value.clone()),
     }
 }
@@ -427,7 +436,8 @@ fn parse_definition(extraction: &ElementExtraction) -> Result<UdaDefinition, Str
         value_type: word_text(extraction, "UTYP"),
         length: required_word("ULEN")?,
         applicable_nouns: word_array(extraction, "ELEL").unwrap_or_default(),
-        default_is_defined: bool_value(extraction, "DTYP").unwrap_or(false),
+        default_is_defined: set_word(extraction, "DTYP"),
+        default_type: word_text(extraction, "DTYP"),
         default_mode: word(extraction, "DMOD").unwrap_or(0),
         default_text: text(extraction, "DFLT"),
         default_real: real(extraction, "DREA"),
@@ -464,6 +474,18 @@ fn bool_value(extraction: &ElementExtraction, name: &str) -> Option<bool> {
     match attribute(extraction, name)? {
         DescriptorValue::Bool(value) => Some(*value),
         _ => None,
+    }
+}
+
+/// Whether a one-word attribute holds anything: a word (`DTYP` is `TEXT`,
+/// `REAL`, `INTE` … on disk, and attlib typing it boolean does not make it
+/// one), an integer, or — for a fixture that still spells it so — a `Bool`.
+fn set_word(extraction: &ElementExtraction, name: &str) -> bool {
+    match attribute(extraction, name) {
+        Some(DescriptorValue::Word { raw, .. }) => *raw != 0,
+        Some(DescriptorValue::Int(value)) => *value != 0,
+        Some(DescriptorValue::Bool(value)) => *value,
+        _ => false,
     }
 }
 
@@ -568,7 +590,13 @@ mod tests {
                 ),
                 extracted("ULEN", DescriptorValue::Word { raw: 1, text: None }),
                 extracted("ELEL", DescriptorValue::WordArray(vec![808_220])),
-                extracted("DTYP", DescriptorValue::Bool(true)),
+                extracted(
+                    "DTYP",
+                    DescriptorValue::Word {
+                        raw: 768_519,
+                        text: Some("REAL".into()),
+                    },
+                ),
                 extracted("DMOD", DescriptorValue::Word { raw: 0, text: None }),
                 extracted("DREA", DescriptorValue::Real(0.0)),
                 extracted("DFLT", DescriptorValue::Text("0".into())),
@@ -584,6 +612,7 @@ mod tests {
         all_plant_definition.applicable_nouns = vec![ALL_PLANT_PSEUDO_NOUN_HASH];
         assert!(all_plant_definition.applies_to(e3d_attlib::db1_hash("WELD")));
         assert!(definition.default_is_defined);
+        assert_eq!(definition.default_type.as_deref(), Some("REAL"));
         assert_eq!(definition.default_real, Some(0.0));
         assert_eq!(
             definition.resolve_default(),
@@ -650,6 +679,7 @@ mod tests {
             length: 4,
             applicable_nouns: vec![566_245],
             default_is_defined: true,
+            default_type: Some("TEXT".into()),
             default_mode: 0,
             default_text: Some("ANY".into()),
             default_real: None,
@@ -682,6 +712,7 @@ mod tests {
             length: 120,
             applicable_nouns: vec![808_220],
             default_is_defined: false,
+            default_type: None,
             default_mode: 0,
             default_text: None,
             default_real: None,
@@ -723,6 +754,7 @@ mod tests {
                 length: 120,
                 applicable_nouns: vec![808_220],
                 default_is_defined: false,
+                default_type: None,
                 default_mode: 0,
                 default_text: None,
                 default_real: None,
@@ -762,6 +794,7 @@ mod tests {
             length: 2,
             applicable_nouns: vec![808_220],
             default_is_defined: true,
+            default_type: Some("REAL".into()),
             default_mode: 0,
             default_text: None,
             default_real: Some(0.0),

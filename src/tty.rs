@@ -553,6 +553,25 @@ fn compare_tty_value_as(
                     .all(|(value, token)| token.parse::<bool>().is_ok_and(|token| token == *value))
         }
         DescriptorValue::RefNoArray(_) => return ValueComparison::NeedsReferenceResolution,
+        // E3D prints a string list one item to a line, each behind its
+        // 1-based index — `Rokeys` / ` 1 K1` / ` 2 K2` on the FIXING the write
+        // gate creates (`docs/evidence/2026-09-21-e3d-tty-gate-write-path.md`)
+        // — which the line-joined attlist row hands over as `1 K1 2 K2`. An
+        // empty list is nothing stored, and prints as such.
+        DescriptorValue::TextList(items) if items.is_empty() => {
+            rendered.is_empty() || rendered.eq_ignore_ascii_case("unset")
+        }
+        DescriptorValue::TextList(items) => {
+            let expected = items
+                .iter()
+                .enumerate()
+                .map(|(index, item)| format!("{} {}", index + 1, item.trim()))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let rendered = rendered.split_whitespace().collect::<Vec<_>>().join(" ");
+            let expected = expected.split_whitespace().collect::<Vec<_>>().join(" ");
+            rendered.eq_ignore_ascii_case(&expected)
+        }
         DescriptorValue::WordArray(values) | DescriptorValue::RawWords(values) => {
             // `SDTE.Skey` holds four spaces behind a count of four, which E3D
             // shows as nothing at all.

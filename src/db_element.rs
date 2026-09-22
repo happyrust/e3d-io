@@ -1426,8 +1426,14 @@ impl DbElement {
                 .find_element(refno)
                 .map_err(|source| DbElementError::Io { dbno, source })?
                 .ok_or(DbElementError::NotFound { refno, dbno, sesno })?;
-            ParsedElement::parse_as(&view.raw_bytes, db.engine.text_format())
-                .map_err(|detail| DbElementError::Parse { refno, detail })
+            let mut parsed = ParsedElement::parse_as(&view.raw_bytes, db.engine.text_format())
+                .map_err(|detail| DbElementError::Parse { refno, detail })?;
+            // 存在记录外 hunk（类型 20–23）里的值，这里就着引擎的页读回来，
+            // 缓存进池子的是值本身，不是五个地址字。
+            db.engine
+                .resolve_hunks(&mut parsed)
+                .map_err(|source| DbElementError::Extract { refno, source: ResolveError::Hunk(source) })?;
+            Ok(parsed)
         });
         crate::read_stats::note_parse_miss(started.elapsed());
         let parsed = parsed?;
@@ -1543,6 +1549,7 @@ fn shape_of(value: &DescriptorValue) -> String {
         DescriptorValue::RefNoArray(items) => format!("RefNoArray[{}]", items.len()),
         DescriptorValue::WordArray(items) => format!("WordArray[{}]", items.len()),
         DescriptorValue::BoolArray(items) => format!("BoolArray[{}]", items.len()),
+        DescriptorValue::TextList(items) => format!("TextList[{}]", items.len()),
         DescriptorValue::RawWords(items) => format!("RawWords[{}]", items.len()),
     }
 }

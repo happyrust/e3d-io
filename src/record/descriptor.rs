@@ -69,38 +69,40 @@ pub enum StorageShape {
     /// 9 — 32 booleans per word. `TRINCO.DEPTYP` declares 500000 of them in
     /// 15626 words, `LOOPTS.INVI` 500 in 17.
     BitSet,
-    /// 10, 15, 19 — four characters per word; the count word counts
+    /// 10, 15 — four characters per word; the count word counts
     /// characters, not words. `BRAN.NAME` declares 200 characters in 51 words.
-    ///
-    /// **Type 19 is misread here, and the misreading is dormant.** core.dll
-    /// stores a type-19 value as a list of strings — it is the on-disk form
-    /// of the `std::vector<std::string>` that `db_cxx_put_str_vector` (routine
-    /// 640, `sub_5AAA8B0` → `sub_5AD5060`) takes. That routine packs each
-    /// string four characters to a word (after the project charset conversion
-    /// when header attribute 18 is not UTF-8) and builds
+    Characters,
+    /// 19 — a list of strings: the on-disk form of the
+    /// `std::vector<std::string>` that `db_cxx_put_str_vector` (routine 640,
+    /// `sub_5AAA8B0` → `sub_5AD5060`) takes. That routine packs each string
+    /// four characters to a word (after the project charset conversion when
+    /// header attribute 18 is not UTF-8) and builds
     /// `[item_count] { [index][word_count][byte_length][packed text × word_count] }*`
     /// — a 0-based item index, the item's word count and its byte length
     /// ahead of every string — which `4SCEA` (`sub_5AB7B90`, its `type == 19`
-    /// branch) writes into an explicit entry headed `word_count | 19 << 26`,
-    /// and the explicit reader (`sub_5AB4CF0`, `case 19`) hands back verbatim:
-    /// no separate count word, and a length counted in words, never divided
-    /// by the width table. Type 23 is the same value moved out of the record
+    /// branch) writes verbatim: into an explicit entry headed
+    /// `word_count | 19 << 26` (no separate count word, the length in words,
+    /// never divided by the width table; the explicit reader `sub_5AB4CF0`,
+    /// `case 19`, copies it back as it is) or into the implicit slot when the
+    /// descriptor has one. Type 23 is the same value moved out of the record
     /// into a hunk (`sub_5AB5BC0` treats 19 and 23 as one type, as it does
-    /// 6/21, 7/20 and 10/22). Decoding that as `Characters` would take the
-    /// item count for a character count and the item headers for text.
-    /// It has never happened: every type-19 descriptor in the schema files
-    /// (`ROKEYS`/`ROVALS` on FIXING, PFIT and the HR* nouns, `CLAURI`,
+    /// 6/21, 7/20 and 10/22). Both are taken apart by
+    /// [`crate::record::hunk::decode_text_list`] into
+    /// [`DescriptorValue::TextList`].
+    ///
+    /// Until 2026-09-22 type 19 shared `Characters`, which would have taken
+    /// the item count for a character count and the item headers for text;
+    /// it never happened, because every type-19 descriptor in the schema
+    /// files (`ROKEYS`/`ROVALS` on FIXING, PFIT and the HR* nouns, `CLAURI`,
     /// `DIURIS`, `TADFLT`, `VLOCDE`, `CFGTAV`, …) is unset on every element of
     /// the 1 000+ E3D 3.1 databases installed here — 9 421 ROKEYS/ROVALS
     /// slots, 116 688 `TABITE.CLAURI`, 6 586 `UDA.TADFLT` — and most have no
-    /// implicit slot at all (word offset 0), so a value could only ever arrive
-    /// as an explicit entry — which the stream decoder hands over as raw
-    /// words, so this shape never touches it. E3D 2.1's templates have no type
-    /// 19. The list layout itself, and the hunk form (type 23) it moves out of
-    /// the record as, are read and written by [`crate::record::hunk`] (its
-    /// `decode_text_list`) and the write side's `RecordDraft`; a database
-    /// that carries a set value is still wanted to confirm them against.
-    Characters,
+    /// implicit slot at all (word offset 0). E3D 2.1's templates have no type
+    /// 19. What sets type-19 values today is this crate's own writer
+    /// (`RecordDraft::set_explicit_text_list`, `set_attribute`), and a real
+    /// E3D 3.1 reads those back (`tools/e3d/write_gate.ps1`, the FIXING's
+    /// `Rokeys` / `Rovals`).
+    TextList,
     /// 14 — a fixed-width record whose width the descriptor states itself as
     /// `(compact.storage_words - 1) / logical_count`. That division is exact
     /// for all 5387 type-14 descriptors and yields 1, 2, 3 or 4 words.
@@ -115,7 +117,8 @@ impl StorageShape {
             4 | 8 | 16 | 17 => Self::Reference,
             5 => Self::PackedBit,
             9 => Self::BitSet,
-            10 | 15 | 19 => Self::Characters,
+            10 | 15 => Self::Characters,
+            19 => Self::TextList,
             14 => Self::Record,
             _ => return None,
         })
@@ -129,7 +132,7 @@ impl StorageShape {
             Self::Real => 1,
             Self::Word => 1,
             Self::Reference => 2,
-            Self::PackedBit | Self::BitSet | Self::Characters | Self::Record => return None,
+            Self::PackedBit | Self::BitSet | Self::Characters | Self::TextList | Self::Record => return None,
         })
     }
 }
@@ -167,6 +170,15 @@ pub enum DescriptorValue {
     WordArray(Vec<u32>),
     /// Storage type 9: booleans packed 32 to a word.
     BoolArray(Vec<bool>),
+    /// Storage type 19 inline, or a type-23 hunk: a list of strings, in order.
+    TextList(Vec<String>),
+    /// Words this decoder gives no shape to — a type-14 record of several
+    /// words per element, a type-17 reference array or type-18 set handed
+    /// over as stored, a one-word array attlib does not type — and a **hunk
+    /// directory entry** (`[1][page][packed][count][words]`) when the record
+    /// was decoded without its pages
+    /// ([`crate::ReadOnlyEngine::extract_element_with_descriptors`] resolves
+    /// those; the pure `extract_parsed_element_with_descriptors` cannot).
     RawWords(Vec<u32>),
 }
 
@@ -250,6 +262,9 @@ impl ElementExtraction {
                         Some(DescriptorValue::RefNoArray(values)) => values.len() * 8,
                         Some(DescriptorValue::WordArray(values)) => values.len() * 4,
                         Some(DescriptorValue::BoolArray(values)) => values.len(),
+                        Some(DescriptorValue::TextList(items)) => {
+                            items.iter().map(|item| std::mem::size_of::<String>() + item.len()).sum()
+                        }
                         Some(DescriptorValue::RawWords(values)) => values.len() * 4,
                         Some(
                             DescriptorValue::Unset
@@ -520,6 +535,21 @@ fn decode_value(
                 parsed.text_format,
             )))
         }
+        // The slot holds the string-list buffer as `4SCEA` wrote it: its
+        // first word is the item count (0 for an empty list), and the items
+        // follow with their own headers, so the list says where it ends and
+        // whatever the slot holds past it is not read.
+        StorageShape::TextList => {
+            let words = read_words(parsed, offset, storage.storage_words)?;
+            crate::record::hunk::decode_text_list(&words, parsed.text_format)
+                .map(DescriptorValue::TextList)
+                .ok_or_else(|| {
+                    DecodeFailure::Unsupported(format!(
+                        "the {}-word slot does not hold a string list ({} items announced)",
+                        storage.storage_words, words[0]
+                    ))
+                })
+        }
         StorageShape::Record => {
             // `sub_5AB5600`: `v18 = v17 * ((a3[4] - 1) / a3[3])`. The stride
             // comes from the compact column in both layouts, and a type-14
@@ -600,7 +630,19 @@ fn decode_value(
                 .ok_or_else(|| DecodeFailure::OutOfBounds("scalar is truncated".into()))?;
             Ok(match def.map(|def| def.data_type) {
                 Some(1) => DescriptorValue::Int(raw as i32),
-                Some(3) => DescriptorValue::Bool(raw != 0),
+                // attlib's boolean is a word holding 0 or 1 (`4SCEA` writes a
+                // one-word LOGICAL as exactly that, and the packed-bit form
+                // above is 0 or 1 by construction). A word that is neither is
+                // not a boolean whatever attlib says of it: `UDA.DTYP` is typed
+                // 3 there and holds the words `TEXT`, `REAL`, `INTE` on disk —
+                // 185 elements of `ams5100_0001`, every one printed by E3D as
+                // `Dtype TEXT` and the like — so it is surfaced as the word it
+                // is, name and all, rather than collapsed to `true`.
+                Some(3) if raw <= 1 => DescriptorValue::Bool(raw == 1),
+                Some(3) => DescriptorValue::Word {
+                    raw,
+                    text: word_name(raw),
+                },
                 // An angle attribute stored in one word holds hundredths of a
                 // degree: `SCTN.Bangle` writes -9000 where `q att` prints -90,
                 // and `SSLC.Pxbshear` writes 1150 where it prints 11.5. attlib
@@ -883,6 +925,62 @@ mod tests {
         assert_eq!(bits.len(), 35);
         assert_eq!(&bits[..4], &[true, false, true, false]);
         assert_eq!(&bits[32..35], &[false, true, false]);
+    }
+
+    /// attlib's data type 3 is a boolean only while the word is 0 or 1. The
+    /// word `TEXT` in a slot attlib calls boolean — `UDA.DTYP`, 185 elements
+    /// of `ams5100_0001`, printed `Dtype TEXT` by E3D — is the word, with its
+    /// name, not `true`; 0 and 1 are still `false` and `true`.
+    #[test]
+    fn a_boolean_typed_word_that_is_not_0_or_1_is_the_word_it_is() {
+        let text_word = e3d_attlib::db1_hash("TEXT");
+        let d = descriptor(3, 1, 11, 1);
+        let def = AttrDefEntry::new(d.hash, 3, 1, 1);
+        let read = |word: u32| {
+            let mut words = vec![0u32; 16];
+            words[11] = word;
+            extract_attribute(&parsed(&words), &d, Some(&def), StorageLayout::Wide, "DTYP".into())
+        };
+        assert_eq!(
+            read(text_word).value,
+            Some(DescriptorValue::Word {
+                raw: text_word,
+                text: Some("TEXT".into())
+            })
+        );
+        assert_eq!(read(1).value, Some(DescriptorValue::Bool(true)));
+        assert_eq!(read(0).value, Some(DescriptorValue::Bool(false)));
+        // The unset marker is not a boolean either: the default is asked for.
+        assert_eq!(read(UNSET_SENTINELS[1]).status, AttributeExtractionStatus::DefaultRequired);
+    }
+
+    /// A type-19 slot holds the string-list buffer as `4SCEA` wrote it and
+    /// decodes item by item; an empty list is a list; whatever the slot holds
+    /// past the list is not read; a slot that does not hold the shape is
+    /// reported rather than read as text.
+    #[test]
+    fn a_string_list_slot_decodes_item_by_item() {
+        let mut words = vec![0u32; 24];
+        // "AB" and "CDEFG", then two stale words the list does not reach.
+        words[11..21].copy_from_slice(&[2, 0, 1, 2, 0x4142_0000, 1, 2, 5, 0x4344_4546, 0x4700_0000]);
+        words[21] = 0xDEAD_BEEF;
+        let mut d = descriptor(19, 0, 11, 12);
+        d.compact.storage_words = 12;
+        d.wide.storage_words = 12;
+        let got = extract_attribute(&parsed(&words), &d, None, StorageLayout::Wide, "ROKEYS".into());
+        assert_eq!(got.status, AttributeExtractionStatus::Decoded);
+        assert_eq!(got.value, Some(DescriptorValue::TextList(vec!["AB".into(), "CDEFG".into()])));
+
+        let mut empty = vec![0u32; 24];
+        empty[11] = 0;
+        let got = extract_attribute(&parsed(&empty), &d, None, StorageLayout::Wide, "ROKEYS".into());
+        assert_eq!(got.value, Some(DescriptorValue::TextList(vec![])));
+
+        let mut broken = vec![0u32; 24];
+        broken[11..16].copy_from_slice(&[1, 0, 30, 120, 0x4142_4344]);
+        let got = extract_attribute(&parsed(&broken), &d, None, StorageLayout::Wide, "ROKEYS".into());
+        assert!(matches!(got.status, AttributeExtractionStatus::Unsupported { .. }), "{:?}", got.status);
+        assert_eq!(got.value, None);
     }
 
     /// Type 15 counts characters, not words, and packs four per word — the

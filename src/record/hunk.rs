@@ -53,9 +53,13 @@
 //! `sub_5AD5060` reports for it is `1 + Σ(4 × words_i + 3)`, which is what a
 //! type-23 directory entry carries in its count word.
 //!
-//! No installed E3D 3.1 database sets a type-19 value or carries a hunk (the
-//! write-path note, §5), so everything here is read out of `core.dll` and
-//! exercised against records this crate writes.
+//! No installed E3D 3.1 database sets a type-19 value, and the one hunk E3D
+//! itself wrote in the corpus is `DBMDAT 24384/26333`'s `DBMVAL` in
+//! `ams8000_0001` — a type-20 array of 5 709 ints whose directory entry, block
+//! header and continuation match what this crate writes word for word
+//! (`docs/plans/2026-09-21-write-path-next-steps.md` §7, S4) — so everything
+//! here is read out of `core.dll` and exercised against that hunk and against
+//! records this crate writes.
 
 use crate::page::cache::PageCache;
 use crate::page::PageId;
@@ -343,9 +347,8 @@ pub fn decode_text_list(words: &[u32], text: TextFormat) -> Option<Vec<String>> 
 
 /// Decode a hunk's payload as the value its inline type would be: 20 → ints,
 /// 21 → reals (two Fortran-ordered words each, as an inline real array), 22 →
-/// text (`count` characters). A type-23 payload is a string list, which
-/// [`ExplicitValue`] has no variant for, so it comes back as
-/// [`ExplicitValue::RawWords`] for [`decode_text_list`] to take apart.
+/// text (`count` characters), 23 → a string list ([`decode_text_list`]; a
+/// payload that is not list-shaped stays [`ExplicitValue::RawWords`]).
 pub fn decode_hunk_value(hunk: &HunkRef, payload: &[u32], text: TextFormat) -> ExplicitValue {
     match hunk.hunk_type {
         20 => ExplicitValue::IntArray(payload.iter().map(|word| *word as i32).collect()),
@@ -365,8 +368,47 @@ pub fn decode_hunk_value(hunk: &HunkRef, payload: &[u32], text: TextFormat) -> E
                 .collect();
             ExplicitValue::Text(decode_as(&bytes, text))
         }
+        23 => match decode_text_list(payload, text) {
+            Some(items) => ExplicitValue::TextList(items),
+            None => ExplicitValue::RawWords(payload.to_vec()),
+        },
         _ => ExplicitValue::RawWords(payload.to_vec()),
     }
+}
+
+/// Replace every hunk directory entry in `parsed`'s explicit stream with the
+/// value it points at — the chain read through [`read_hunk`] and decoded by
+/// [`decode_hunk_value`] under the record's own text format — the way
+/// `sub_5AB4CF0`'s `type in 20..=23` arm hands a hunk back to `4GCEA` as if
+/// it had been inline. The entry keeps its `type_code` (`20..=23 << 10`) and
+/// `data_words` (5), so a caller can still tell a value that lived out of the
+/// record from one that did not; only `value` changes. Returns how many
+/// entries were resolved. Nothing is changed when a chain cannot be read: the
+/// first unreadable hunk is the error and the entries before it stay resolved.
+///
+/// The stream decoder cannot do this itself — it has the record's bytes and
+/// no pages — which is why a freshly parsed record carries the five raw
+/// words. [`crate::ReadOnlyEngine::extract_element_with_descriptors`] and the
+/// `DbElement` facade call this before decoding by descriptor; a caller that
+/// parses records itself calls it when it wants the values rather than the
+/// addresses (a writer re-emitting a record wants the addresses).
+pub fn resolve_hunks(
+    pages: &mut PageCache,
+    ext: u16,
+    parsed: &mut crate::record::element::ParsedElement,
+) -> Result<usize, HunkError> {
+    let refno = parsed.refno;
+    let text = parsed.text_format;
+    let mut resolved = 0;
+    for attribute in &mut parsed.explicit_attributes {
+        let Some(entry) = HunkRef::from_explicit(attribute) else {
+            continue;
+        };
+        let payload = read_hunk(pages, ext, refno, &entry)?;
+        attribute.value = decode_hunk_value(&entry, &payload, text);
+        resolved += 1;
+    }
+    Ok(resolved)
 }
 
 fn be32(data: &[u8], at: usize) -> Option<u32> {
@@ -466,7 +508,12 @@ mod tests {
         let list = HunkRef { hunk_type: 23, page_no: 1, packed: 1, count: 8, words: 5 };
         assert_eq!(
             decode_hunk_value(&list, &[1, 0, 1, 2, 0x4142_0000], text),
-            ExplicitValue::RawWords(vec![1, 0, 1, 2, 0x4142_0000])
+            ExplicitValue::TextList(vec!["AB".to_string()])
+        );
+        // A type-23 payload that is not list-shaped stays raw.
+        assert_eq!(
+            decode_hunk_value(&list, &[1, 0, 3, 12, 0x4142_4344], text),
+            ExplicitValue::RawWords(vec![1, 0, 3, 12, 0x4142_4344])
         );
     }
 

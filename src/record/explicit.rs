@@ -20,6 +20,17 @@ pub enum ExplicitValue {
     IntArray(Vec<i32>),
     RealArray(Vec<f64>),
     RefNoArray(Vec<RefNo>),
+    /// Storage type 19 (and a type-23 hunk once resolved): a list of strings,
+    /// the `[n] { [i][words][bytes][packed text] }*` buffer
+    /// `db_cxx_put_str_vector` builds, taken apart item by item
+    /// ([`crate::record::hunk::decode_text_list`]).
+    TextList(Vec<String>),
+    /// The data words as stored, for a type code this decoder has no shape
+    /// for — a type-14 record, a type-17 reference array, a type-18 set — and
+    /// for a **hunk directory entry** (type codes `20..=23 << 10`, five
+    /// words: `[1][page][packed][count][words]`), which
+    /// [`crate::record::hunk::resolve_hunks`] replaces with the value it
+    /// points at when the caller has the pages.
     RawWords(Vec<u32>),
 }
 
@@ -212,12 +223,25 @@ fn decode_value(type_code: u16, data: &[u8], text: TextFormat) -> Option<Explici
             }
             ExplicitValue::RefNoArray(values)
         }
-        _ => ExplicitValue::RawWords(
-            data.chunks_exact(4)
-                .map(|word| u32::from_be_bytes(word.try_into().unwrap()))
-                .collect(),
-        ),
+        // Storage type 19: the string-list buffer, written verbatim by
+        // `4SCEA`'s `type == 19` arm under a header of its own word count.
+        // A buffer that does not hold the list shape stays raw rather than
+        // being guessed at.
+        0x4C00 => {
+            let words = raw_words(data);
+            match crate::record::hunk::decode_text_list(&words, text) {
+                Some(items) => ExplicitValue::TextList(items),
+                None => ExplicitValue::RawWords(words),
+            }
+        }
+        _ => ExplicitValue::RawWords(raw_words(data)),
     })
+}
+
+/// The data words as stored; a trailing partial word (there is none in a
+/// well-formed stream, the length being counted in words) is dropped.
+fn raw_words(data: &[u8]) -> Vec<u32> {
+    data.as_chunks::<4>().0.iter().map(|word| u32::from_be_bytes(*word)).collect()
 }
 
 fn read_u32(data: &[u8], offset: usize) -> Option<u32> {
@@ -315,6 +339,40 @@ mod tests {
 
         let tail = parse_tail(&block(1, OWNER, (17, (2 << 12) | 1), &payload), 0, OWNER);
         assert!(tail.continues_past_end);
+    }
+
+    /// A type-19 entry is the string-list buffer itself — no count word of
+    /// its own, its length the buffer's — and decodes item by item; a
+    /// buffer that is not list-shaped stays raw.
+    #[test]
+    fn a_type_19_entry_decodes_as_a_string_list() {
+        // "AB" and "CDEFG": [2] {[0][1][2][AB\0\0]} {[1][2][5][CDEF][G\0\0\0]}
+        let list = [2u32, 0, 1, 2, 0x4142_0000, 1, 2, 5, 0x4344_4546, 0x4700_0000];
+        let mut payload = 0x000A_FA16u32.to_be_bytes().to_vec();
+        payload.extend_from_slice(&(19u16 << 10).to_be_bytes());
+        payload.extend_from_slice(&(list.len() as u16).to_be_bytes());
+        for word in list {
+            payload.extend_from_slice(&word.to_be_bytes());
+        }
+        let tail = parse_tail(&block(1, OWNER, (0, 0), &payload), 0, OWNER);
+        assert_eq!(tail.attributes.len(), 1);
+        assert_eq!(tail.attributes[0].type_code, 0x4C00);
+        assert_eq!(tail.attributes[0].data_words as usize, list.len());
+        assert_eq!(
+            tail.attributes[0].value,
+            ExplicitValue::TextList(vec!["AB".into(), "CDEFG".into()])
+        );
+
+        // An item promising more words than the buffer holds is not a list.
+        let broken = [1u32, 0, 3, 12, 0x4142_4344];
+        let mut payload = 0x000A_FA16u32.to_be_bytes().to_vec();
+        payload.extend_from_slice(&(19u16 << 10).to_be_bytes());
+        payload.extend_from_slice(&(broken.len() as u16).to_be_bytes());
+        for word in broken {
+            payload.extend_from_slice(&word.to_be_bytes());
+        }
+        let tail = parse_tail(&block(1, OWNER, (0, 0), &payload), 0, OWNER);
+        assert_eq!(tail.attributes[0].value, ExplicitValue::RawWords(broken.to_vec()));
     }
 
     /// The continuation words are not payload. Read as members they become

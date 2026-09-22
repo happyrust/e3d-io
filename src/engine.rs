@@ -1051,10 +1051,17 @@ impl ReadOnlyEngine {
         self.summarize_parsed_element_with_template(refno, &parsed, attlib, template)
     }
 
-    /// Decode every descriptor-backed implicit attribute for one persisted element.
+    /// Decode every descriptor-backed attribute for one persisted element.
     ///
     /// The returned vector preserves descriptor order and includes an explicit status
     /// for non-implicit, metadata-missing, unsupported, and out-of-bounds attributes.
+    ///
+    /// A value the record keeps out of itself in a hunk (storage types 20–23)
+    /// is read through its directory entry first ([`Self::resolve_hunks`]),
+    /// so it arrives as the int array, real array, text or string list it is
+    /// — `DecodedExplicit`, like any other explicit value — rather than as
+    /// the five address words. A chain that cannot be read is
+    /// [`ResolveError::Hunk`].
     pub fn extract_element_with_descriptors(
         &mut self,
         refno: RefNo,
@@ -1065,8 +1072,9 @@ impl ReadOnlyEngine {
             .find_element(refno)
             .map_err(ResolveError::Io)?
             .ok_or(ResolveError::ElementNotFound(refno))?;
-        let parsed = record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format())
-            .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
+        let mut parsed = record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format())
+            .map_err(ResolveError::ParseFailed)?;
+        self.resolve_hunks(&mut parsed)?;
         let template = provider
             .template_for(parsed.noun_hash)
             .map_err(ResolveError::TemplateLoad)?
@@ -1075,9 +1083,29 @@ impl ReadOnlyEngine {
         self.extract_parsed_element_with_descriptors(refno, &parsed, attlib, template)
     }
 
+    /// Replace every hunk directory entry in `parsed`'s explicit stream with
+    /// the value it points at, read off this engine's pages
+    /// ([`record::hunk::resolve_hunks`]). Returns how many entries were
+    /// resolved — 0 for the vast majority of records, which keep every value
+    /// inline. The entry keeps its hunk type code, so a caller can still tell
+    /// where the value lived; a writer re-emitting the record wants the
+    /// unresolved form (`RecordDraft::from_record_bytes` reads the bytes, not
+    /// this).
+    pub fn resolve_hunks(
+        &mut self,
+        parsed: &mut record::element::ParsedElement,
+    ) -> Result<usize, record::hunk::HunkError> {
+        // Every page of the descended tree inherits the root's extent, and a
+        // hunk is on the writer's output page beside its record.
+        let ext = self.session.index_root.ext;
+        record::hunk::resolve_hunks(&mut self.cache, ext, parsed)
+    }
+
     /// Decode a record the caller already holds. Delegates to the free
     /// function [`extract_parsed_element_with_descriptors`]; nothing here needs
-    /// the engine.
+    /// the engine — which also means a hunk directory entry in the record
+    /// stays the five words it is unless the caller ran
+    /// [`Self::resolve_hunks`] over the record first.
     pub fn extract_parsed_element_with_descriptors(
         &self,
         refno: RefNo,
@@ -1249,6 +1277,9 @@ fn descriptor_value_to_attr_value(
         DescriptorValue::RefNoArray(value) => AttrValue::DbRefArray(value),
         DescriptorValue::WordArray(value) => AttrValue::TextArray(value),
         DescriptorValue::BoolArray(value) => AttrValue::BoolArray(value),
+        // `AttrValue` carries no strings (its `Text` is a word); like `Text`,
+        // a string list has no summary form.
+        DescriptorValue::TextList(_) => return None,
         DescriptorValue::RawWords(value) => AttrValue::Raw(*value.first()?),
     })
 }
@@ -1308,6 +1339,7 @@ fn explicit_value_to_descriptor_value(
         ExplicitValue::IntArray(value) => DescriptorValue::IntArray(value.clone()),
         ExplicitValue::RealArray(value) => DescriptorValue::RealArray(value.clone()),
         ExplicitValue::RefNoArray(value) => DescriptorValue::RefNoArray(value.clone()),
+        ExplicitValue::TextList(value) => DescriptorValue::TextList(value.clone()),
         ExplicitValue::RawWords(value) => DescriptorValue::RawWords(value.clone()),
     }
 }
@@ -1427,4 +1459,6 @@ pub enum ResolveError {
     TemplateNounMismatch { expected: u32, actual: u32 },
     #[error("SYNO chain contains cycle at RefNo({at})")]
     ChainCycle { at: RefNo },
+    #[error("a value stored out of the record could not be read: {0}")]
+    Hunk(#[from] record::hunk::HunkError),
 }
