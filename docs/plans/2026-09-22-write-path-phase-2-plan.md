@@ -1,6 +1,6 @@
 # 计划：e3d-io 写路径 · 第二期（0.3.0 之后）——收口、消费者门面、规模门、SPAMAP 后果实测
 
-状态：**评审通过**（2026-09-22，用户在面板上批「Q1–Q6 全按推荐项定」；Plannotator 门另行 Approve）→ T0 开工（§7）
+状态：**评审通过**（2026-09-22，用户在面板上批「Q1–Q6 全按推荐项定」；Plannotator 门另行 Approve）→ T0 开工（§7）。接班会话 fable-5-1-12 的评审补充见 §5.1（七条，方案与顺序不变）、T0.2 写者复核见 §7（是 Cursor 本身，不是同步工具）。
 日期：2026-09-22
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`，HEAD `23af76f`（2026-09-22 16:44）；`main` @ `D:\work\plant-code\old\vendor\e3d-io` 同头（`git rev-list --left-right --count main...write-path` = `0 / 0`）
 上一期：`docs/plans/2026-09-21-write-path-next-steps.md`（下称「上期计划」；其 §7 是 S1–S8 的第一手账）、`docs/plans/2026-09-20-dabacon-write-plan.md`（「写计划」）
@@ -161,6 +161,18 @@
 - **Q5 CRLF 根因处置——已定**：找 18:35:31 的写者并让它保字节；`.editorconfig` 同时加上兜编辑器一档。
 - **Q6 `main` 工作树 0.3.0 WIP——已定**：本会话验收并提交（T0.1），再 fast-forward `write-path`。
 
+### 5.1 评审补充（接班会话 fable-5-1-12，2026-09-22；每条都核到代码行，方案与 §3 顺序不变）
+
+1. **T1c 的 refno 发号必须扫 latest，不能扫 base。** `Transaction::open` 今天在所开会话的索引上求每扩展 max `word1`（`transaction.rs:132`）；`open_at(base)` 若沿用同一扫描，base 之后别人建的元素号会被再发一次，直到提交才撞 590。`open_at` 要另开一个 latest 引擎求 `next_word1`（或取 base / latest 之大者），验收加一条：A 在 S+1 建 BOX，B 以 S 开 tx 再 insert → 号不撞、merge 成功。
+2. **T1c 的 `Moved` 自动重试基本是理论项。** S7 起 staging 全程持哨兵锁，`Moved` 只可能来自不认锁的写者；重试一次可以留，但不为它写门。重试 = 同一 `write_merge_session_with(base_sesno, …)` 再调一次——草稿已带 base 字节，不需要重放构建闭包。
+3. **T1a 的「claim 两侧都冒」不用另做。** 换 owner 时旧 owner（摘成员）与新 owner（插成员）都作为 Update 进批，`plan_claim_edits` 对每个 `Touched` 各爬一条 owner 链，两侧主元素自然都 Refresh；T1a 只需保证两侧 owner 都进批。`RecordDraft.owner` 是 `pub`（`write/record.rs:113`），`move_to` 直接改；`remove_member` / `push_member` / `move_member_after` 都在（`:254` / `:260` / `:270`）。
+4. **T1b 的 WORD 反表要一份。** 读侧 `word_name(raw)` = `lookup_system_name(raw)` ∪ `db1_dehash(raw)`（`record/descriptor.rs:698`）；字符串 → 字：db1 可哈希的词直接 `db1_hash`，系统名那张表要反向映射（表在 e3d-attlib 侧）。`noun_attr_fields.json` 在 `schema/e3d31/catalog/`，`SchemaPack.catalog`（`schema.rs:640`）已有目录位可挂 `DictionaryLimits`。
+5. **T2 的「按批还是按条」已有答案。** `index_cow::rewrite_index` 收整批 `&[LeafEdit]`（`index_cow.rs:104`），模块头明说「共享页只复制一次」（`:13`，`by_child` 分桶下钻 `:239`）；剩下要量的是 CoW 页数 ∝ 触及的叶数 × 树高，以及 `Transaction::open` 的全索引扫描随库大小的开销。
+6. **T3 (2) 读 SPAMAP 要一把小工具。** `index::reference::ReferenceTable` 只认叶 `value_dwords == 0`（`reference.rs:326`；`value_dwords: 7` 在它的测试里是拒收用例 `:764`），SPAMAP 是 key 4 / value 7 的有值表；用 `index::IndexPageView`（通用页解析，带 `key_dwords` / `value_dwords`）在 `%TEMP%` 写探针走叶即可，09-20 那只若已不在就重写。
+7. **T4 第 17 问值半天不值一天。** `tests/write_stage7_lock.rs` 已是它的自动化等价（持锁则 `Locked` 且字节不变）；门里再起写模式 E3D 只是把「锁字节与 E3D 同一」从 IDA 证据变成实测。
+
+另：T0.2 的写者复核见 §7（是 Cursor 本身，不是同步工具）。
+
 ---
 
 ## 6. 不做
@@ -175,6 +187,7 @@
 - 2026-09-22：**评审通过（Q1–Q6 全按推荐项），T0 收口。**
   - **T0.1 0.3.0 已由做 WIP 的会话提交**：`main` `ae9cdfd`（20:21:05，`chore(release): 0.3.0`），`write-path` 同分钟 fast-forward 到同头。本会话在 `main` 工作树**独立重跑**验收：`cargo test --no-fail-fast` **96 个测试二进制 594 passed / 0 failed / 30 ignored**，`--lib` 355 / 2 ignored（137 s 含全量重编译）；`cargo clippy --all-targets` 0 error、lib 22 warning（与 `write-path` 基线同）。被收 `pub(crate)` 的项在本仓 `tests/` / `examples/` / `src/bin/` 里 `rg` 0 命中，故只可能是下游编译错、不会静默错值；下游 7 crate `cargo check` 0 error 由提交消息记账，本会话未重跑。
   - **T0.2 CRLF**：写工作树 10 个假改动 `git checkout -- .` 还原，`git ls-files --eol` 回到 `w/lf`；`main` 工作树 `src/meta/bucket.rs` / `tests/bucket_table_real.rs` 同样只是 CRLF、同样还原。**写者画像**（本轮实测）：`D:\work\plant-code\old` 下 **193 个文件** mtime 落在 18:35:00–18:36:00，跨 **10+ 个互不相关的仓**（`plant3d-web\src` 49、`vendor\e3d-io-write` 28、`gen-model-model-cache\src` 20、`plant3d-web-e3dlook\src` 10、`e3dlook-shots\2026-09-21` 7 张截图 …），`.git` 目录里无一文件在那一分钟被动、两个工作树 reflog 在 18:35 无记录——**不是 git、不是编辑器（连 PNG 都写了），是一个排除 `.git` 的整目录同步 / 拷贝工具，来源侧工作树是 CRLF**。此刻没有同步类进程在跑、无计划任务指向 `D:\work`；`vendor\dpc-sync` 只是 chunk 归档库（无 EOL 逻辑、无已编译二进制），不是它。git 侧另有一条线索：系统级 `E:/Program Files/Git/etc/gitconfig` `core.autocrlf=true`，用户级 `~/.gitconfig` `false`——本机被后者压住，来源机若只有系统级那条，其工作树天然 CRLF。**工具名要用户指认**（它不在本机可见处）；仓内已加 `.editorconfig`（`end_of_line = lf`）兜编辑器一档。
+  - **T0.2 复核（接班会话 fable-5-1-12，20:45）：写者是 Cursor 本身，不是同步工具——上一条的「整目录同步」推断不成立。** 判据（本机实测）：① `D:\work\plant-code\old` 下那 190 个文件（排除 `.git` / `target` / `node_modules`）的 mtime **全部落在 18:35:31.401–18:35:31.964 这 0.56 s 里**（另 1 个 18:35:32），不是「一分钟内」；② Cursor 主进程 `Cursor.exe`（PID 90036）`StartTime` = **18:35:22**，各窗口 renderer 18:35:23–:34 陆续起，主进程在 **18:35:31.785 / .795 / .804** 连起三个 `--utility-sub-type=node.mojom.NodeService` 子进程——与文件写入窗口重合到毫秒级；③ 本机无重启（`LastBootUpTime` 09-03）、System 日志 18:30–18:40 无电源 / 恢复事件、当前无任何同步类进程；④ `e3dlook-shots\2026-09-21` 里被写的 7 个是 `.pmlmac` / `.py` / `.ps1` 脚本，**不是截图**，所以「连 PNG 都写了」不成立，「写者不是编辑器」的推理随之失效；⑤ 190 个文件跨 12 个仓，正是各会话在 Cursor tab 里打开过的那批（含 `MISSION.md` / `examples/*.rs`）。结论：Cursor 18:35:22 重启，启动第 9 秒把恢复的编辑器 / 会话状态里的文件内容整批写回盘（具体是哪一子系统——热退出恢复还是 agent checkpoint 回放——从外面看不出，也不必），其中缓冲仍是 CRLF 的 12 个带回了 CRLF。处置（Q5「让它保字节」）：Cursor 用户设置 `%APPDATA%\Cursor\User\settings.json` **加 `"files.eol": "\n"`**（此前未设 = `auto`，Windows 上新缓冲默认 CRLF；已加）；`.editorconfig` 照旧兜一档；**不必再找同步工具**。验收口径不变：两个工作日开工 `git status` 无 CRLF 假改动；若再现，先看 mtime 是否又与 `Get-Process Cursor` 的 `StartTime` 同秒。
   - **T0.3** gen-model 4 处 `TextList` 臂：归其工作树归属者，本仓不动。
   - **T0.4** 上期计划状态行末尾指向本文；README 「Not yet」（第 23 行）与「Not written」（第 230 行）已与 §1.3 表一致（0.3.0 提交顺手改过），未再动。
   - **下一步：T3**（SPAMAP 缺失后果实测），随后 T1a。
