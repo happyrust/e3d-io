@@ -8,14 +8,16 @@
   1. Copies the sample project (all but the picture and drawing folders) to a scratch
      directory once, and resets its ams8000_0001 from the original before every run —
      the live project is never touched.
-  2. Runs `e3d-write-box <copy db> --group --hunk --move --big --text`: eight sessions —
-     a BOX, a GPWL+GROU with reference members, two EQUIs whose DESC/DESP/UUIDIA are
-     hunks (one chain across a page boundary), a FIXING with a type-19 string list inline
-     and as a hunk, three BOXes under the second ZONE (two referenced by the GROU) then
-     one moved to the third ZONE / one reordered / one unreferenced (T1a: move_to,
-     reorder, reference members), a ZONE with 8 200 BOXes (the format word's member
-     count saturated at 0x3FFF, plan §1.3 #11), and last a Chinese NAME on the BOX /
-     DESC on the ZONE / session comment stored the way the header's FORMAT says (S5).
+  2. Runs `e3d-write-box <copy db> --group --hunk --move --big --strings --text`: nine
+     sessions — a BOX, a GPWL+GROU with reference members, two EQUIs whose
+     DESC/DESP/UUIDIA are hunks (one chain across a page boundary), a FIXING with a
+     type-19 string list inline and as a hunk, three BOXes under the second ZONE (two
+     referenced by the GROU) then one moved to the third ZONE / one reordered / one
+     unreferenced (T1a: move_to, reorder, reference members), a ZONE with 8 200 BOXes
+     (the format word's member count saturated at 0x3FFF, plan §1.3 #11), an EQUI and a
+     FIXING whose every value was typed as text and set by attribute name under E3D's
+     dictionary (T1b: Transaction::set), and last a Chinese NAME on the BOX / DESC on the
+     ZONE / session comment stored the way the header's FORMAT says (S5).
   3. Renders write_gate.mac.template with the refnos the bin printed and runs it through
      gen-model's l3_suite `--check-driver` (des.exe TTY, login SYSTEM/XXXXXX, MDB /ALL,
      project AMS pointed at the copy via --project-dir). The macro is read-only.
@@ -71,7 +73,7 @@ Write-Output "reset $copyDb from the original"
 # 2. The sessions.
 Push-Location $crate
 try {
-    $binOut = & cargo run --quiet --bin e3d-write-box -- $copyDb --group --hunk --move --big --text 2>&1 | Out-String
+    $binOut = & cargo run --quiet --bin e3d-write-box -- $copyDb --group --hunk --move --big --strings --text 2>&1 | Out-String
 } finally { Pop-Location }
 if ($LASTEXITCODE) { Write-Output $binOut; throw 'e3d-write-box failed' }
 Set-Content -Path (Join-Path $Scratch 'e3d-write-box.out.txt') -Value $binOut
@@ -95,11 +97,16 @@ $ids = @{
     ZONE2   = & $refno 'owner ZONE 2'
     ZONE3   = & $refno 'owner ZONE 3'
     BIGZONE = & $refno 'new ZONE big'
+    STREQUI   = & $refno 'new EQUI str'
+    STRFIXING = & $refno 'new FIXING str'
 }
 $spanning = [regex]::Match($binOut, 'hunk chains that cross a page boundary: (\d+)').Groups[1].Value
 $bigMembers = [int][regex]::Match($binOut, 'big members\s*:\s*(\d+)').Groups[1].Value
+# The text the FIXING's CREF was set from (the first ZONE's /NAME), which E3D prints back.
+$crefText = [regex]::Match($binOut, 'CREF text\s*:\s*(\S+)').Groups[1].Value
 Write-Output ("wrote: BOX {0} GPWL {1} GROU {2} EQUI {3} {4} FIXING {5}; hunk chains across a page: {6}" -f $ids.BOX, $ids.GPWL, $ids.GROU, $ids.EQUI1, $ids.EQUI2, $ids.FIXING, $spanning)
 Write-Output ("       moves: BOX A {0} B {1} C {2} under ZONE 2 {3}, A moved to ZONE 3 {4}; big ZONE {5} with {6} BOXes" -f $ids.BOXM1, $ids.BOXM2, $ids.BOXM3, $ids.ZONE2, $ids.ZONE3, $ids.BIGZONE, $bigMembers)
+Write-Output ("       by name: EQUI {0}, FIXING {1} (CREF = {2})" -f $ids.STREQUI, $ids.STRFIXING, $crefText)
 
 # 3. The macro, rendered; then E3D.
 New-Item -ItemType Directory -Force $logDir, $driverOut | Out-Null
@@ -222,6 +229,11 @@ Check 'Q9d GROU (reference members): A added, B removed, old members kept' '93_m
 # §1.3 #11: the member count of a 16 400-word member block is written 0x3FFF, so E3D
 # measures the chain — every one of the 8 200 BOXes is listed, not `16 400 & 0x3FFF`.
 Check "Q10 big ZONE: Q MEM lists all $bigMembers BOXes (format word count saturated)" '95_big_zone.log' @('Name /E3DIO-BIG-ZONE') -memberLines $bigMembers
+# T1b (plan §2 T1b: the gate's Q19). Every value was typed as text and set by attribute
+# name (Transaction::set) under E3D's dictionary; E3D must print back exactly what was
+# typed — the strings here are e3d-write-box's STR_* constants.
+Check 'Q11a EQUI set by name: DESC / POS / FUNC / PURP print back as typed' '96_str_equi.log' @('Name /E3DIO-STR-EQUI', 'Description e3d-io T1b: DESC typed as text and set by name through Transaction::set', 'Position E 1234mm N 2345mm U 3456mm', 'Function STRING-PATH', 'Purpose PIPE')
+Check 'Q11b FIXING set by name: ROKEYS as a | list, BUIL true, NUMB 42, CREF from /NAME' '97_str_fixing.log' @('Name /E3DIO-STR-FIXING', 'Rokeys', ' 1 S1', ' 2 S2', ' 3 S3', 'Built true', 'Number 42', "Cref $crefText")
 
 Write-Output ''
 if ($failures) { Write-Output "$failures FAIL — logs in $logDir"; exit 1 }

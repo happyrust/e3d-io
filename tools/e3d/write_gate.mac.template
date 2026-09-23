@@ -13,6 +13,8 @@
 --     referenced by the GROU; then A moved under the third ZONE {{ZONE3}} (move_to), C
 --     put before B (reorder), B taken out of the GROU (remove_reference_member) - T1a
 --   ZONE {{BIGZONE}} with 8 200 BOXes: member count saturated at 0x3FFF (plan 1.3 #11)
+--   EQUI {{STREQUI}} and FIXING {{STRFIXING}}: every value typed as text and set by
+--     attribute name (Transaction::set) under E3D's dictionary - T1b
 --   BOX {{BOX}} renamed in Chinese, ZONE {{ZONE}} described in Chinese, the session
 --     commented in Chinese — text stored the way the header's FORMAT says (S5)
 --
@@ -374,6 +376,62 @@ elsehandle none
   Q MEM
 endhandle
 $P GATE-95-END
+ALPHA LOG END
+
+-- T1b: the EQUI whose DESC / POS / FUNC / PURP were typed as text and set by name.
+ALPHA LOG "{{LOGDIR}}/96_str_equi.log" OVER
+$P GATE-96-BEGIN
+={{STREQUI}}
+handle any
+  $P GATE-96-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q NAME
+Q DESC
+handle any
+  $P GATE-96-DESC-ERROR $!!error.text
+endhandle
+Q POS
+handle any
+  $P GATE-96-POS-ERROR $!!error.text
+endhandle
+Q FUNC
+handle any
+  $P GATE-96-FUNC-ERROR $!!error.text
+endhandle
+Q PURP
+handle any
+  $P GATE-96-PURP-ERROR $!!error.text
+endhandle
+$P GATE-96-END
+ALPHA LOG END
+
+-- T1b: the FIXING likewise - ROKEYS as a | list, BUIL true, NUMB 42, CREF given as /NAME.
+ALPHA LOG "{{LOGDIR}}/97_str_fixing.log" OVER
+$P GATE-97-BEGIN
+={{STRFIXING}}
+handle any
+  $P GATE-97-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q NAME
+Q ROKEYS
+handle any
+  $P GATE-97-ROKEYS-ERROR $!!error.text
+endhandle
+Q BUIL
+handle any
+  $P GATE-97-BUIL-ERROR $!!error.text
+endhandle
+Q NUMB
+handle any
+  $P GATE-97-NUMB-ERROR $!!error.text
+endhandle
+Q CREF
+handle any
+  $P GATE-97-CREF-ERROR $!!error.text
+endhandle
+$P GATE-97-END
 ALPHA LOG END
 
 -- The driver reads <macro>.log as the scenario log: a summary marker.

@@ -47,6 +47,14 @@
 //! holds, so the count is written saturated (`0x3FFF`) and E3D has to measure
 //! the member chain (plan §1.3 #11; the 20 128-member ZONE E3D listed as 3 744).
 //!
+//! With `--strings` it appends one session written **by attribute name from
+//! text** (`Transaction::set`, plan T1b) under E3D's dictionary
+//! (`schema/e3d31/catalog/noun_attr_fields.json`): an EQUI whose `DESC` /
+//! `POS` / `FUNC` / `PURP` and a FIXING whose `ROKEYS` / `BUIL` / `NUMB` /
+//! `CREF` (a `/NAME` reference) are all given as strings, after the dictionary
+//! has refused a 121-character `DESC`, a four-element `POS` and `RATM`. The
+//! question is whether E3D prints back exactly what was typed.
+//!
 //! With `--text` it appends a last session: the BOX gets a Chinese `NAME`
 //! (record and `NAME` table key, through `Transaction::rename`), the ZONE a
 //! Chinese `DESC`, and the session a Chinese comment — each stored the way the
@@ -64,11 +72,13 @@ use e3d_io::engine::ScanTier;
 use e3d_io::record::descriptor::DescriptorValue;
 use e3d_io::record::template::{MemberListKind, NounTemplate, TemplateProvider};
 use e3d_io::record::text::TextFormat;
-use e3d_io::write::{MemberPosition, RecordDraft, SessionRequest, Transaction};
+use e3d_io::write::{Dictionary, DictionaryError, MemberPosition, RecordDraft, SessionRequest, Transaction, TransactionError};
 use e3d_io::{ReadOnlyEngine, RefNo};
 
 const DEFAULT_DESVIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/desvir.dat");
-const USAGE: &str = "usage: e3d-write-box <database> [desvir.dat] [--group] [--hunk] [--move] [--big] [--text]";
+/// E3D's dictionary export the schema pack carries, for `--strings`.
+const DICTIONARY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/catalog/noun_attr_fields.json");
+const USAGE: &str = "usage: e3d-write-box <database> [desvir.dat] [--group] [--hunk] [--move] [--big] [--strings] [--text]";
 
 /// The `NAME` the `--text` session gives the BOX and the `DESC` it gives the
 /// ZONE: text outside ASCII, stored as the header's `FORMAT` says.
@@ -84,6 +94,18 @@ pub const MOVE_BOX_NAMES: [&str; 3] = ["/E3DIO-MOVE-A", "/E3DIO-MOVE-B", "/E3DIO
 /// member count no longer fits its fourteen bits.
 pub const BIG_ZONE_NAME: &str = "/E3DIO-BIG-ZONE";
 pub const BIG_ZONE_MEMBERS: u32 = 8_200;
+
+/// What the `--strings` session types, attribute by attribute, exactly as
+/// `Transaction::set` receives it — the gate compares E3D's print-out with
+/// these.
+pub const STR_EQUI_NAME: &str = "/E3DIO-STR-EQUI";
+pub const STR_EQUI_DESC: &str = "e3d-io T1b: DESC typed as text and set by name through Transaction::set";
+pub const STR_EQUI_POS: &str = "1234 2345 3456";
+pub const STR_EQUI_FUNC: &str = "STRING-PATH";
+pub const STR_EQUI_PURP: &str = "PIPE";
+pub const STR_FIXING_NAME: &str = "/E3DIO-STR-FIXING";
+pub const STR_FIXING_ROKEYS: &str = "S1|S2|S3";
+pub const STR_FIXING_NUMB: &str = "42";
 
 /// The database's header `FORMAT` reading, for text values.
 fn text_format(db: &str) -> Result<TextFormat, String> {
@@ -165,6 +187,7 @@ fn run() -> Result<(), String> {
     let mut hunk = false;
     let mut moves = false;
     let mut big = false;
+    let mut strings = false;
     let mut text = false;
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
@@ -172,6 +195,7 @@ fn run() -> Result<(), String> {
             "--hunk" => hunk = true,
             "--move" => moves = true,
             "--big" => big = true,
+            "--strings" => strings = true,
             "--text" => text = true,
             other if other.starts_with("--") => return Err(format!("unknown flag {other}\n{USAGE}")),
             _ if db.is_none() => db = Some(arg),
@@ -220,6 +244,9 @@ fn run() -> Result<(), String> {
     }
     if big {
         write_big(&db, &mut provider, format, zone_refno)?;
+    }
+    if strings {
+        write_strings(&db, &mut provider, zone_refno)?;
     }
     // Last, so `Q SESSION` (the newest session) shows the Chinese comment.
     if text {
@@ -668,6 +695,110 @@ fn write_hunks(
     println!("PASS (session {hunk_sesno}) = E3D shows DESC, DESP and UUIDIA of both EQUIs with the values above — it followed the hunk chains, one of them across pages.");
     println!("PASS (session {list_sesno}) = E3D shows both lists — it read a type-19 list inline and out of a hunk.");
     println!("If E3D balks, note which session: a hunk problem shows on the EQUIs, a string-list problem on the FIXING.");
+    Ok(())
+}
+
+/// The `--strings` session (plan T1b): every value typed as text and set by
+/// attribute name through `Transaction::set`, under E3D's dictionary. An EQUI
+/// `/E3DIO-STR-EQUI` under the first ZONE gets `DESC` / `POS` / `FUNC` /
+/// `PURP`; a FIXING `/E3DIO-STR-FIXING` gets `ROKEYS` (a `|` list), `BUIL`
+/// (`true`), `NUMB` and `CREF` — the ZONE, by its `/NAME` when it has one.
+/// Before the values go in, the dictionary is shown refusing a 121-character
+/// `DESC`, a four-element `POS` and `RATM`, none of which reaches the record.
+fn write_strings(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo) -> Result<(), String> {
+    for name in [STR_EQUI_NAME, STR_FIXING_NAME] {
+        name_is_free(db, name)?;
+    }
+    let dictionary = Dictionary::read(DICTIONARY).map_err(|e| e.to_string())?;
+    // The ZONE's stored name, for a `/NAME` reference; its refno otherwise.
+    let zone_name = {
+        let mut engine = ReadOnlyEngine::open(db).map_err(|e| e.to_string())?;
+        let view = engine.find_element(zone_refno).map_err(|e| e.to_string())?.ok_or("the ZONE is not indexed")?;
+        let parsed = e3d_io::record::element::ParsedElement::parse_as(&view.raw_bytes, engine.text_format())
+            .map_err(|e| e.to_string())?;
+        e3d_io::element_name::stored_name(&parsed)
+    };
+    let cref_text = zone_name.clone().unwrap_or_else(|| format!("={}/{}", zone_refno.word0, zone_refno.word1));
+
+    let (equi, fixing, refused, sesno, previous, appended) = {
+        let mut tx = Transaction::open(db, &mut *provider).map_err(|e| e.to_string())?.with_dictionary(&dictionary);
+        let equi = tx
+            .insert(zone_refno, e3d_attlib::db1_hash("EQUI"), Some(STR_EQUI_NAME), |_, _| Ok(()))
+            .map_err(|e| e.to_string())?;
+        // What the dictionary refuses, before anything is written.
+        let mut refused = Vec::new();
+        let long_desc = "x".repeat(121);
+        for (attr, text) in [("DESC", long_desc.as_str()), ("POS", "1 2 3 4"), ("RATM", "1")] {
+            match tx.set(equi, attr, text) {
+                Err(TransactionError::Dictionary(error @ DictionaryError::TextTooLong { .. }))
+                | Err(TransactionError::Dictionary(error @ DictionaryError::TooManyElements { .. }))
+                | Err(TransactionError::Dictionary(error @ DictionaryError::NotInDictionary { .. })) => {
+                    refused.push(format!("{attr} = {:?}: {error}", if text.len() > 24 { &text[..24] } else { text }));
+                }
+                Ok(()) => return Err(format!("the dictionary let {attr} = {text:?} through")),
+                Err(other) => return Err(format!("{attr} = {text:?}: {other}, not a dictionary refusal")),
+            }
+        }
+        let set = |tx: &mut Transaction<'_>, refno: RefNo, attr: &str, text: &str| {
+            tx.set(refno, attr, text).map_err(|e| format!("{attr} = {text:?}: {e}"))
+        };
+        set(&mut tx, equi, "DESC", STR_EQUI_DESC)?;
+        set(&mut tx, equi, "POS", STR_EQUI_POS)?;
+        set(&mut tx, equi, "FUNC", STR_EQUI_FUNC)?;
+        set(&mut tx, equi, "PURP", STR_EQUI_PURP)?;
+        let fixing = tx
+            .insert(zone_refno, e3d_attlib::db1_hash("FIXING"), Some(STR_FIXING_NAME), |_, _| Ok(()))
+            .map_err(|e| e.to_string())?;
+        set(&mut tx, fixing, "ROKEYS", STR_FIXING_ROKEYS)?;
+        set(&mut tx, fixing, "BUIL", "true")?;
+        set(&mut tx, fixing, "NUMB", STR_FIXING_NUMB)?;
+        set(&mut tx, fixing, "CREF", &cref_text)?;
+        let report = tx
+            .commit(&session("e3d-io write-path gate: an EQUI and a FIXING set by attribute name from text (Transaction::set)"))
+            .map_err(|e| e.to_string())?;
+        (equi, fixing, refused, report.written.sesno, report.previous.sesno, report.appended_pages)
+    };
+    // Read back through this crate before E3D gets to look: the `/NAME`
+    // reference resolved to the ZONE's refno, wherever the descriptor keeps it.
+    {
+        let fixing_template = template_of(provider, "FIXING")?;
+        let cref = fixing_template
+            .attrs
+            .iter()
+            .find(|attr| attr.hash == e3d_attlib::db1_hash("CREF"))
+            .ok_or("the FIXING template has no CREF")?;
+        let mut engine = ReadOnlyEngine::open(db).map_err(|e| e.to_string())?;
+        let view = engine.find_element(fixing).map_err(|e| e.to_string())?.ok_or("the FIXING is not indexed")?;
+        let draft = RecordDraft::from_record_bytes(&view.raw_bytes).map_err(|e| e.to_string())?;
+        let offset = cref.wide.location.word_offset() as usize;
+        let words: Vec<u32> = if offset != 0 {
+            draft.implicit().get(offset..offset + 2).map(<[u32]>::to_vec).unwrap_or_default()
+        } else {
+            draft.explicit_words(cref.hash).map(|(_, words)| words).unwrap_or_default()
+        };
+        if words != [zone_refno.word0, zone_refno.word1] {
+            return Err(format!("CREF read-back: {words:?}, wanted {zone_refno}"));
+        }
+    }
+    println!();
+    println!("wrote session {sesno} to {db}");
+    println!("  previous session : {previous}");
+    println!("  dictionary       : {} attributes from {DICTIONARY}", dictionary.len());
+    for line in &refused {
+        println!("  refused          : {line}");
+    }
+    println!("  new EQUI str     : {equi} ({STR_EQUI_NAME}, owner ZONE {zone_refno})");
+    println!("    DESC = {STR_EQUI_DESC:?}");
+    println!("    POS  = {STR_EQUI_POS:?}   FUNC = {STR_EQUI_FUNC:?}   PURP = {STR_EQUI_PURP:?}");
+    println!("  new FIXING str   : {fixing} ({STR_FIXING_NAME}, owner ZONE {zone_refno})");
+    println!("    ROKEYS = {STR_FIXING_ROKEYS:?}   BUIL = \"true\"   NUMB = {STR_FIXING_NUMB:?}");
+    println!("    CREF = {cref_text:?} -> {zone_refno}");
+    println!("  CREF text        : {cref_text}");
+    println!("  appended pages   : {appended:?}");
+    println!();
+    println!("In E3D 3.1 Design, on this database's project:");
+    println!("  ={}/{}   Q DESC / Q POS / Q FUNC / Q PURP -> the texts above, verbatim", equi.word0, equi.word1);
+    println!("  ={}/{}   Q ROKEYS / Q BUIL / Q NUMB / Q CREF -> S1 S2 S3, true, 42, the ZONE", fixing.word0, fixing.word1);
     Ok(())
 }
 
