@@ -40,9 +40,33 @@ use crate::record::template::{MemberListKind, TemplateProvider};
 use crate::refno::RefNo;
 use crate::session::DbView;
 
-use super::record::{member_list_diff, three_way_with_standing, MemberEdit, MemberMerge, MemberStanding, MergeMode};
-use super::{stage_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft, SessionRequest, WriteError};
+use super::record::{
+    member_list_diff, three_way_clashes, three_way_with_standing, ClashSite, MemberEdit, MemberMerge, MemberStanding,
+    MergeMode,
+};
+use super::{
+    stage_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft, SessionRequest,
+    StagedSession, WriteError,
+};
 use crate::ReadOnlyEngine;
+
+/// What a merge does where the writer and the committed session changed the
+/// **same** attribute, owner or reference list of one element to different
+/// ends (a change to different attributes, or to a member-by-member list,
+/// composes and is no clash).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OnClash {
+    /// Break the tie by [`MergeMode`]: the writer's value under plain
+    /// `SAVEWORK`, the committed one under extract flush — what `core.dll`
+    /// does, silently. The default at this level.
+    #[default]
+    WriterWins,
+    /// Refuse the whole merge with the list of clashes
+    /// ([`WriteError::MergeClashes`]) and write nothing, so the caller can
+    /// look at what the other side did and decide. The
+    /// [`Transaction`](super::Transaction) facade's default.
+    Refuse,
+}
 
 /// What a merge may consult beyond the file itself.
 #[derive(Default)]
@@ -61,6 +85,27 @@ pub struct MergeOptions<'a> {
     /// slot (`DXSWK2`): flushing an extract back to the master keeps what the
     /// master gained since the extract was taken. `false` is plain `SAVEWORK`.
     pub extract_flush: bool,
+    /// Whether a same-attribute clash is broken ([`OnClash::WriterWins`], by
+    /// `extract_flush`) or refused ([`OnClash::Refuse`]).
+    pub on_clash: OnClash,
+}
+
+/// One thing both the writer and the committed session changed on one
+/// element, to different ends — what [`OnClash::Refuse`] refuses a merge over.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeClash {
+    pub refno: RefNo,
+    pub site: ClashSite,
+    /// The attribute's hash: the explicit field's, or — with the templates at
+    /// hand — the attribute whose implicit slot holds the clashing word.
+    pub attribute: Option<u32>,
+    pub detail: String,
+}
+
+impl MergeClash {
+    pub(crate) fn summary(clashes: &[MergeClash]) -> String {
+        clashes.iter().map(|c| c.detail.clone()).collect::<Vec<_>>().join("; ")
+    }
 }
 
 impl MergeOptions<'_> {
@@ -79,6 +124,46 @@ impl MergeOptions<'_> {
         } else {
             MemberMerge::MemberByMember
         })
+    }
+
+    /// A [`MergeClash`] for `site` on `refno` of `noun_hash`, the attribute
+    /// named where the templates can name it.
+    fn describe_clash(&mut self, refno: RefNo, noun_hash: u32, site: ClashSite) -> Result<MergeClash, WriteError> {
+        let attribute = match site {
+            ClashSite::ExplicitAttribute(hash) => Some(hash),
+            ClashSite::ImplicitWord(index) => match self.templates.as_deref_mut() {
+                Some(templates) => templates.template_for(noun_hash)?.and_then(|template| {
+                    template
+                        .attrs
+                        .iter()
+                        .find(|attr| {
+                            let offset = attr.wide.location.word_offset() as usize;
+                            offset != 0 && (offset..offset + attr.wide.storage_words as usize).contains(&index)
+                        })
+                        .map(|attr| attr.hash)
+                }),
+                None => None,
+            },
+            ClashSite::Owner | ClashSite::MemberList => None,
+        };
+        let name = attribute.map(|hash| {
+            e3d_attlib::lookup_system_name(hash)
+                .map(str::to_string)
+                .or_else(|| e3d_attlib::db1_dehash(hash))
+                .unwrap_or_else(|| format!("{hash:#x}"))
+        });
+        let detail = match (site, &name) {
+            (ClashSite::Owner, _) => format!("{refno}: moved here and moved in the committed session, to different owners"),
+            (ClashSite::MemberList, _) => format!("{refno}: its reference list was changed here and in the committed session"),
+            (ClashSite::ImplicitWord(index), None) => {
+                format!("{refno}: implicit word {index} was changed here and in the committed session")
+            }
+            (_, Some(name)) => format!("{refno}: {name} was changed here and in the committed session"),
+            (ClashSite::ExplicitAttribute(hash), None) => {
+                format!("{refno}: attribute {hash:#x} was changed here and in the committed session")
+            }
+        };
+        Ok(MergeClash { refno, site, attribute, detail })
     }
 }
 
@@ -166,8 +251,24 @@ pub fn write_merge_session_with(
     base_sesno: u32,
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
-    mut options: MergeOptions<'_>,
+    options: MergeOptions<'_>,
 ) -> Result<CommitReport, WriteError> {
+    stage_merge_session_with(path, request, base_sesno, elements, name_edits, options)?.commit()
+}
+
+/// The two-phase form of [`write_merge_session_with`]: the conflict scan, the
+/// clash scan ([`OnClash`]), the rebase, and the staging of every page but
+/// page 0 — leaving the commit to [`StagedSession::commit`], which refuses
+/// ([`WriteError::Moved`]) if yet another session was committed meanwhile.
+/// Nothing is written when a conflict or a refused clash comes back.
+pub fn stage_merge_session_with(
+    path: impl AsRef<std::path::Path>,
+    request: &SessionRequest<'_>,
+    base_sesno: u32,
+    elements: &[ElementWrite],
+    name_edits: &[NamedEdit],
+    mut options: MergeOptions<'_>,
+) -> Result<StagedSession, WriteError> {
     let path = path.as_ref();
     let conflicts = scan_conflicts(path, base_sesno, elements, name_edits)?;
     if !conflicts.is_empty() {
@@ -176,7 +277,7 @@ pub fn write_merge_session_with(
     let rebased = rebase_updates(path, base_sesno, elements, &mut options)?;
     // The same templates keep the keyed tables (`TYPEX`, the reverse-reference
     // tables) in step with the records the merge writes on top of latest.
-    stage_session_with_base(path, request, &rebased, name_edits, Some(base_sesno), options.templates)?.commit()
+    stage_session_with_base(path, request, &rebased, name_edits, Some(base_sesno), options.templates)
 }
 
 /// Rebase each of the writer's element updates onto the committed record, so a
@@ -206,6 +307,9 @@ fn rebase_updates(
     // `(element, the owner the committed record names)` for each element the
     // merge re-parents; fixed up after every update is rebased.
     let mut re_parented: Vec<(RefNo, RefNo)> = Vec::new();
+    // What both sides changed, for a caller who refuses rather than breaks a
+    // tie; collected across the whole batch so the refusal names all of it.
+    let mut clashes: Vec<MergeClash> = Vec::new();
     for element in elements {
         match element {
             ElementWrite::Update(working) => {
@@ -216,6 +320,11 @@ fn rebase_updates(
                         let base_draft = RecordDraft::from_record_bytes(&base_view.raw_bytes)?;
                         let latest_draft = RecordDraft::from_record_bytes(&latest_view.raw_bytes)?;
                         let member_merge = options.member_merge_for(latest_draft.noun_hash)?;
+                        if options.on_clash == OnClash::Refuse {
+                            for site in three_way_clashes(&base_draft, &latest_draft, working, member_merge) {
+                                clashes.push(options.describe_clash(working.refno, latest_draft.noun_hash, site)?);
+                            }
+                        }
                         // `sub_5B20CA0`'s lookups for each member the writer
                         // added, done up front so a read failure is this
                         // function's error rather than a silent "unknown".
@@ -256,6 +365,9 @@ fn rebase_updates(
             }
             other => out.push(other.clone()),
         }
+    }
+    if !clashes.is_empty() {
+        return Err(WriteError::MergeClashes(clashes));
     }
     for (member, committed_owner) in re_parented {
         detach_from_committed_owner(&mut out, &mut latest, committed_owner, member)?;

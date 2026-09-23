@@ -326,6 +326,21 @@ impl RecordDraft {
         self.members.len() != before
     }
 
+    /// Replace every occurrence of `old` in the member list with `new`, in
+    /// place. Returns whether there was one. This is what a re-minted refno
+    /// needs of the lists that named it (`Transaction` re-mints an inserted
+    /// refno the committed session took meanwhile).
+    pub fn replace_member(&mut self, old: RefNo, new: RefNo) -> bool {
+        let mut found = false;
+        for member in &mut self.members {
+            if *member == old {
+                *member = new;
+                found = true;
+            }
+        }
+        found
+    }
+
     /// Move an existing member to directly after `after`, or to the front
     /// when `after` is `None` — the list edit a `REORDER` makes. Returns
     /// whether the move happened; it does not when either member is missing
@@ -689,8 +704,10 @@ impl RecordDraft {
         self.explicit_stream = rebuild_explicit_stream(&fields);
     }
 
-    /// The explicit stream as `(hash, type_code, data_words)` fields.
-    fn parse_explicit_fields(&self) -> Vec<(u32, u16, Vec<u32>)> {
+    /// The explicit stream as `(hash, type_code, data_words)` fields, in
+    /// stream order. The type code is the field header's `type << 10` word,
+    /// so `type_code >> 10` is the storage type.
+    pub fn parse_explicit_fields(&self) -> Vec<(u32, u16, Vec<u32>)> {
         let words = stream_words(&self.explicit_stream);
         let mut fields = Vec::new();
         let mut cursor = 0;
@@ -1096,6 +1113,79 @@ pub fn three_way_with_standing(
         }
     }
     Ok(merged)
+}
+
+/// One place a three-way merge has to break a tie: something both the writer
+/// and the committed session changed, relative to the base, on one element.
+/// [`MergeMode`] says which side [`three_way_with_mode`] takes; a caller who
+/// would rather not have the tie broken for them asks [`three_way_clashes`]
+/// first and refuses the merge when it names anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClashSite {
+    /// An implicit word, by its index in the region (header included); the
+    /// noun's template says which attribute's slot it belongs to.
+    ImplicitWord(usize),
+    /// An explicit attribute, by hash: set, changed or removed on both sides
+    /// to different ends.
+    ExplicitAttribute(u32),
+    /// Both sides moved the element (to different owners).
+    Owner,
+    /// Both sides changed a reference list (one attribute under
+    /// [`MemberMerge::WholeList`]) to different lists.
+    MemberList,
+}
+
+/// What both the writer and the committed session changed on one element, to
+/// different values — the ties [`three_way_with_mode`] would break by
+/// [`MergeMode`]. Two sides making the *same* change is not a clash, nor is a
+/// member-by-member list, whose adds, removes and moves compose
+/// ([`merge_members`]); only a reference list ([`MemberMerge::WholeList`]),
+/// which is one attribute, clashes as a whole.
+pub fn three_way_clashes(
+    base: &RecordDraft,
+    latest: &RecordDraft,
+    working: &RecordDraft,
+    member_merge: MemberMerge,
+) -> Vec<ClashSite> {
+    let mut clashes = Vec::new();
+    let common = base.implicit.len().min(latest.implicit.len()).min(working.implicit.len());
+    for index in HEADER_WORDS..common {
+        let (b, l, w) = (base.implicit[index], latest.implicit[index], working.implicit[index]);
+        if w != b && l != b && l != w {
+            clashes.push(ClashSite::ImplicitWord(index));
+        }
+    }
+    let base_fields = base.parse_explicit_fields();
+    let working_fields = working.parse_explicit_fields();
+    let latest_fields = latest.parse_explicit_fields();
+    let value_of = |fields: &[(u32, u16, Vec<u32>)], hash: u32| {
+        fields.iter().find(|f| f.0 == hash).map(|f| (f.1, f.2.clone()))
+    };
+    let mut touched: Vec<u32> = base_fields
+        .iter()
+        .map(|f| f.0)
+        .chain(working_fields.iter().map(|f| f.0))
+        .chain(latest_fields.iter().map(|f| f.0))
+        .collect();
+    touched.sort_unstable();
+    touched.dedup();
+    for hash in touched {
+        let (b, l, w) = (value_of(&base_fields, hash), value_of(&latest_fields, hash), value_of(&working_fields, hash));
+        if w != b && l != b && l != w {
+            clashes.push(ClashSite::ExplicitAttribute(hash));
+        }
+    }
+    if working.owner != base.owner && latest.owner != base.owner && latest.owner != working.owner {
+        clashes.push(ClashSite::Owner);
+    }
+    if member_merge == MemberMerge::WholeList
+        && working.members != base.members
+        && latest.members != base.members
+        && latest.members != working.members
+    {
+        clashes.push(ClashSite::MemberList);
+    }
+    clashes
 }
 
 /// One step of the ordered member-list diff `sub_5B1FF60` yields between a
@@ -1520,6 +1610,63 @@ mod tests {
         let value = |hash: u32| fields.iter().find(|f| f.0 == hash).map(|f| f.2[0]);
         assert_eq!(value(0xAA), Some(7), "both changed 0xAA: the writer wins");
         assert_eq!(value(0xBB), Some(9), "committed-only attribute is kept");
+
+        // The clash scan names exactly the tie the merge broke: 0xAA, and
+        // neither the disjoint words nor the committed-only attribute.
+        assert_eq!(
+            three_way_clashes(&base, &latest, &working, MemberMerge::MemberByMember),
+            vec![ClashSite::ExplicitAttribute(0xAA)]
+        );
+    }
+
+    /// The clash scan: what both sides changed to different ends, and nothing
+    /// else — the same change on both sides is no clash, a member-by-member
+    /// list composes, a reference list changed on both sides is one clash, an
+    /// element moved two ways is one.
+    #[test]
+    fn the_clash_scan_names_what_both_sides_changed_differently() {
+        let refno = RefNo::new(1, 10);
+        let (a, b, c, d) = (RefNo::new(1, 2), RefNo::new(1, 3), RefNo::new(1, 4), RefNo::new(1, 5));
+        let draft = |owner: RefNo, words: &[u32], members: Vec<RefNo>| {
+            RecordDraft::new(refno, 0x861E0, owner, implicit(words), members, vec![]).unwrap()
+        };
+        let base = draft(RefNo::new(1, 1), &[10, 20, 30, 40], vec![a, b]);
+        // Both changed word 11 to different values, both changed word 12 to the
+        // same value, latest alone changed word 13, working alone word 14.
+        let latest = draft(RefNo::new(1, 7), &[11, 22, 33, 40], vec![a, b, c]);
+        let working = draft(RefNo::new(1, 8), &[12, 22, 30, 44], vec![a, b, d]);
+        assert_eq!(
+            three_way_clashes(&base, &latest, &working, MemberMerge::MemberByMember),
+            vec![ClashSite::ImplicitWord(11), ClashSite::Owner],
+            "word 11 and the owner; the same change, the one-sided changes and the composable list are not clashes"
+        );
+        assert_eq!(
+            three_way_clashes(&base, &latest, &working, MemberMerge::WholeList),
+            vec![ClashSite::ImplicitWord(11), ClashSite::Owner, ClashSite::MemberList],
+            "a reference list both sides changed is one more clash"
+        );
+        // Both moved it to the same owner, both made the same list: no clash there.
+        let same = draft(RefNo::new(1, 7), &[10, 20, 30, 40], vec![a, b, c]);
+        assert_eq!(three_way_clashes(&base, &latest, &same, MemberMerge::WholeList), vec![]);
+        // An explicit attribute removed here and changed there clashes; added on
+        // one side only does not.
+        let explicit = |hash: u32, value: u32| {
+            let mut s = Vec::new();
+            s.extend_from_slice(&hash.to_be_bytes());
+            s.extend_from_slice(&((0x0C00u32 << 16) | 1).to_be_bytes());
+            s.extend_from_slice(&value.to_be_bytes());
+            s
+        };
+        let owner = RefNo::new(1, 1);
+        let base = RecordDraft::new(refno, 0x861E0, owner, implicit(&[]), vec![], explicit(0xAA, 1)).unwrap();
+        let mut latest_stream = explicit(0xAA, 2);
+        latest_stream.extend_from_slice(&explicit(0xBB, 9));
+        let latest = RecordDraft::new(refno, 0x861E0, owner, implicit(&[]), vec![], latest_stream).unwrap();
+        let working = RecordDraft::new(refno, 0x861E0, owner, implicit(&[]), vec![], vec![]).unwrap();
+        assert_eq!(
+            three_way_clashes(&base, &latest, &working, MemberMerge::MemberByMember),
+            vec![ClashSite::ExplicitAttribute(0xAA)]
+        );
     }
 
     /// The same three views under extract flush: disjoint changes still

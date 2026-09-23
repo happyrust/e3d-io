@@ -29,8 +29,27 @@
 //!   page 1 (the bucket table) that sits above the live maximum because a
 //!   deleted number is never reused (`docs/evidence/2026-09-22-core-dll-refno-allocation.md`);
 //!   this crate does not maintain page 1 yet (that is A11 / S6b), so it hands
-//!   out `max + 1`, which never collides with a live element and, if it
-//!   collides with the latest session, is refused as conflict 590 at commit.
+//!   out `max + 1`, which never collides with a live element of the base. If
+//!   the database moved on before the commit and the committed session took
+//!   that number, the insert is **re-minted** past the committed maximum at
+//!   commit — every owner word, member list, name key and reference in the
+//!   batch that named it following — and the mapping is reported
+//!   ([`TransactionCommit::reminted`]).
+//! - **the base and the merge** — [`Transaction::open`] opens at the newest
+//!   session, [`Transaction::open_at`] at any retained one. At commit the file's
+//!   newest session is compared with the base the transaction was opened at:
+//!   equal, the batch is written on top of it as before; moved on, the batch is
+//!   **merged** the way `core.dll`'s `SAVEWORK` merges — the three-view conflict
+//!   scan ([`TransactionError::Conflicts`]: 561 / 562 / 590, nothing written),
+//!   then each update rebased attribute by attribute onto the committed record
+//!   ([`write_merge_session_with`](super::write_merge_session_with)) and written
+//!   on top of latest with `BASESN` = the base. Where both sides changed the
+//!   *same* attribute, owner or reference list, the facade **refuses** by
+//!   default ([`OnClash::Refuse`], [`TransactionError::Clashes`] naming each
+//!   clash) rather than let one side win silently; [`Transaction::with_on_clash`]
+//!   `(OnClash::WriterWins)` is plain `SAVEWORK`. If yet another writer commits
+//!   between the staging and the page-0 write ([`WriteError::Moved`]), the
+//!   facade stages once more on the new latest before it gives up.
 //! - **owner membership** — an insert adds the new element to its owner's
 //!   member list; a delete takes it out; [`Transaction::move_to`] takes it out
 //!   of one owner's list and puts it into another's at a [`MemberPosition`]
@@ -56,21 +75,22 @@
 //!   always carries the schema; `TYPEX` is appended after what `build` set,
 //!   where E3D 3.1 puts it.
 //!
-//! It is not a merge: it writes on top of the newest session. Use
-//! [`write_merge_session_with`](crate::write::write_merge_session_with) when the
-//! database may have moved on since a long-lived reader opened it.
+//! A caller who wants the merge's tie-breaking without the facade uses
+//! [`write_merge_session_with`](crate::write::write_merge_session_with) directly.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::record::descriptor::DescriptorValue;
 use crate::record::template::{MemberListKind, NounTemplate, TemplateProvider};
 use crate::record::text::{TextEncodeError, TextFormat};
 use crate::refno::RefNo;
+use crate::session::SessionSelector;
 use crate::ReadOnlyEngine;
 
 use super::attr::AttributeWriteError;
 use super::dictionary::{Dictionary, DictionaryError};
+use super::merge::{stage_merge_session_with, MergeClash, MergeConflict, MergeOptions, OnClash};
 use super::named_cow::{NamedEdit, NamedEditKind};
 use super::record::{RecordDraft, RecordEncodeError};
 use super::value::{parse_value, ValueParseError};
@@ -123,6 +143,39 @@ pub enum TransactionError {
     Value { name: String, input: String, source: ValueParseError },
     #[error(transparent)]
     Dictionary(#[from] DictionaryError),
+    /// The database moved on since the base and the committed sessions conflict
+    /// with this batch the way `core.dll` refuses a `SAVEWORK`: 561 a name
+    /// taken, 562 an element changed here but deleted there, 590 deleted here
+    /// but changed there (or a refno inserted here that is already there and
+    /// could not be re-minted). Nothing was written.
+    #[error("merge refused by {} conflict(s): {}", .0.len(), MergeConflict::summary(.0))]
+    Conflicts(Vec<MergeConflict>),
+    /// The database moved on since the base and both sides changed the same
+    /// attribute, owner or reference list of an element, and the transaction
+    /// was to refuse rather than break the tie ([`OnClash::Refuse`], the
+    /// default). Nothing was written; [`Transaction::with_on_clash`] takes the
+    /// writer's side instead.
+    #[error("merge refused by {} clash(es): {}", .0.len(), MergeClash::summary(.0))]
+    Clashes(Vec<MergeClash>),
+}
+
+/// What [`Transaction::commit_reporting`] says about a commit beyond the
+/// [`CommitReport`] the write path returns.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransactionCommit {
+    pub report: CommitReport,
+    /// The session the transaction was opened at.
+    pub base_sesno: u32,
+    /// The newest session the batch was merged onto, when the database had
+    /// moved on since the base; `None` when it was written straight on top of
+    /// the base.
+    pub merged_onto: Option<u32>,
+    /// `(the refno the insert was given, the refno it was written as)` for
+    /// every insert whose number the committed session had taken meanwhile.
+    pub reminted: Vec<(RefNo, RefNo)>,
+    /// Whether the page-0 write found yet another session committed after the
+    /// staging and the batch was staged a second time on the new latest.
+    pub retried_after_move: bool,
 }
 
 /// Where a member goes in its owner's list — the positions `REORDER` names.
@@ -173,16 +226,34 @@ pub struct Transaction<'a> {
     next_word1: HashMap<u32, u32>,
     /// E3D's dictionary limits, applied by [`Transaction::set`] when given.
     dictionary: Option<&'a Dictionary>,
+    /// The session the batch is relative to: the one `engine` reads.
+    base_sesno: u32,
+    /// What a merge does where both sides changed the same thing.
+    on_clash: OnClash,
 }
 
 impl<'a> Transaction<'a> {
-    /// Open a transaction on `path`'s newest session with the schema at hand.
+    /// Open a transaction on `path`'s newest session with the schema at hand —
+    /// [`Transaction::open_at`] with [`SessionSelector::Latest`].
+    pub fn open(path: impl AsRef<Path>, templates: &'a mut TemplateProvider) -> Result<Self, TransactionError> {
+        Self::open_at(path, SessionSelector::Latest, templates)
+    }
+
+    /// Open a transaction on the session `at` selects — the **base** every
+    /// edit is relative to and every read (`update`, `set`, `delete`, an owner
+    /// read for its member list) comes from. A commit onto a database whose
+    /// newest session is no longer the base is a merge (module docs).
     ///
     /// Scans the base session's index once for the highest `word1` in each
     /// extent, so a new element can be given the next one.
-    pub fn open(path: impl AsRef<Path>, templates: &'a mut TemplateProvider) -> Result<Self, TransactionError> {
+    pub fn open_at(
+        path: impl AsRef<Path>,
+        at: impl Into<SessionSelector>,
+        templates: &'a mut TemplateProvider,
+    ) -> Result<Self, TransactionError> {
         let path = path.as_ref().to_path_buf();
-        let mut engine = ReadOnlyEngine::open(&path)?;
+        let mut engine = ReadOnlyEngine::open_at(&path, at)?;
+        let base_sesno = engine.session().sesno;
         let text_format = engine.text_format();
         let mut next_word1: HashMap<u32, u32> = HashMap::new();
         for element in engine.scan_elements(crate::engine::ScanTier::Header)? {
@@ -205,7 +276,25 @@ impl<'a> Transaction<'a> {
             member_ops: Vec::new(),
             next_word1,
             dictionary: None,
+            base_sesno,
+            on_clash: OnClash::Refuse,
         })
+    }
+
+    /// The session this transaction was opened at — what its edits are
+    /// relative to, and the `BASESN` a merged commit records.
+    pub fn base_sesno(&self) -> u32 {
+        self.base_sesno
+    }
+
+    /// What a merged commit does where this batch and the committed sessions
+    /// changed the same attribute, owner or reference list of an element:
+    /// [`OnClash::Refuse`] (the default) refuses the commit with the list of
+    /// clashes and writes nothing; [`OnClash::WriterWins`] takes this batch's
+    /// value, as `core.dll`'s plain `SAVEWORK` does.
+    pub fn with_on_clash(mut self, on_clash: OnClash) -> Self {
+        self.on_clash = on_clash;
+        self
     }
 
     /// Apply E3D's dictionary to every [`Transaction::set`]: an attribute the
@@ -541,18 +630,256 @@ impl<'a> Transaction<'a> {
     /// Stage the batch: everything but page 0 is written and synced, and a
     /// [`StagedSession`] is returned for the commit. Owner member-list updates
     /// are resolved here and go out after the child inserts that name them — the
-    /// order the primitive path writes in.
+    /// order the primitive path writes in. On a database that moved on since
+    /// the base this is the merge staging (module docs); a refno the committed
+    /// session took is re-minted first, silently — [`Transaction::commit_reporting`]
+    /// is the form that reports it.
     pub fn stage(mut self, request: &SessionRequest<'_>) -> Result<StagedSession, TransactionError> {
         self.resolve_members()?;
-        let Transaction { path, templates, names, order, mut writes, .. } = self;
-        let elements: Vec<ElementWrite> =
+        let Transaction { path, templates, names, order, mut writes, base_sesno, on_clash, .. } = self;
+        let mut elements: Vec<ElementWrite> =
             order.iter().map(|refno| writes.remove(refno).expect("every ordered refno has a write")).collect();
-        Ok(stage_element_session_with(&path, request, &elements, &names, WriteOptions { templates: Some(templates) })?)
+        let mut names = names;
+        let latest = ReadOnlyEngine::open(&path)?.session().sesno;
+        let mut reminted = Vec::new();
+        Self::stage_batch(&path, base_sesno, latest, on_clash, templates, request, &mut elements, &mut names, &mut reminted)
     }
 
-    /// Stage and commit in one step.
+    /// Stage and commit in one step — [`Transaction::commit_reporting`] without
+    /// the report of what the commit did beyond writing.
     pub fn commit(self, request: &SessionRequest<'_>) -> Result<CommitReport, TransactionError> {
-        Ok(self.stage(request)?.commit()?)
+        self.commit_reporting(request).map(|commit| commit.report)
+    }
+
+    /// Stage and commit, and say what happened: whether the batch was written
+    /// straight on top of the base or merged onto a newer session, which
+    /// inserted refnos were re-minted because the committed sessions had taken
+    /// them, and whether the staging had to be redone because another writer
+    /// committed between it and the page-0 write ([`WriteError::Moved`] —
+    /// retried once; a second `Moved` is returned).
+    pub fn commit_reporting(self, request: &SessionRequest<'_>) -> Result<TransactionCommit, TransactionError> {
+        self.commit_observed(request, |_| {})
+    }
+
+    /// [`Transaction::commit_reporting`] with a look at each staging before
+    /// its page 0 is written — for a caller who wants to see the mid-state
+    /// (`StagedSession::staged` has the session number and pages), or, in a
+    /// test, to act as the other writer and provoke the `Moved` retry.
+    pub fn commit_observed(
+        mut self,
+        request: &SessionRequest<'_>,
+        mut observe: impl FnMut(&StagedSession),
+    ) -> Result<TransactionCommit, TransactionError> {
+        self.resolve_members()?;
+        let Transaction { path, templates, names, order, mut writes, base_sesno, on_clash, .. } = self;
+        let mut elements: Vec<ElementWrite> =
+            order.iter().map(|refno| writes.remove(refno).expect("every ordered refno has a write")).collect();
+        let mut names = names;
+        let mut reminted: Vec<(RefNo, RefNo)> = Vec::new();
+        let mut retried_after_move = false;
+        loop {
+            let latest = ReadOnlyEngine::open(&path)?.session().sesno;
+            let staged = Self::stage_batch(
+                &path,
+                base_sesno,
+                latest,
+                on_clash,
+                &mut *templates,
+                request,
+                &mut elements,
+                &mut names,
+                &mut reminted,
+            )?;
+            observe(&staged);
+            match staged.commit() {
+                Ok(report) => {
+                    return Ok(TransactionCommit {
+                        report,
+                        base_sesno,
+                        merged_onto: (latest != base_sesno).then_some(latest),
+                        reminted,
+                        retried_after_move,
+                    })
+                }
+                // Another writer got its page 0 in between our staging and ours:
+                // our staged pages are unreachable (and partly overwritten by
+                // theirs — both stagings start at the same page), so stage
+                // again on what is now the newest session. Once.
+                Err(WriteError::Moved { .. }) if !retried_after_move => retried_after_move = true,
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+
+    /// One staging of the batch: straight on top of the base when the file's
+    /// newest session is the base, else the merge — re-minting first any
+    /// inserted refno the committed sessions took (`elements` and `names` are
+    /// rewritten in place, `reminted` extended), then
+    /// [`stage_merge_session_with`] with the facade's [`OnClash`].
+    #[allow(clippy::too_many_arguments)]
+    fn stage_batch(
+        path: &Path,
+        base_sesno: u32,
+        latest: u32,
+        on_clash: OnClash,
+        templates: &mut TemplateProvider,
+        request: &SessionRequest<'_>,
+        elements: &mut Vec<ElementWrite>,
+        names: &mut Vec<NamedEdit>,
+        reminted: &mut Vec<(RefNo, RefNo)>,
+    ) -> Result<StagedSession, TransactionError> {
+        if latest == base_sesno {
+            return Ok(stage_element_session_with(
+                path,
+                request,
+                elements.as_slice(),
+                names.as_slice(),
+                WriteOptions { templates: Some(templates) },
+            )?);
+        }
+        Self::remint_taken_refnos(path, templates, elements.as_mut_slice(), names.as_mut_slice(), reminted)?;
+        let options = MergeOptions { templates: Some(templates), extract_flush: false, on_clash };
+        match stage_merge_session_with(path, request, base_sesno, elements.as_slice(), names.as_slice(), options) {
+            Ok(staged) => Ok(staged),
+            Err(WriteError::MergeConflicts(conflicts)) => Err(TransactionError::Conflicts(conflicts)),
+            Err(WriteError::MergeClashes(clashes)) => Err(TransactionError::Clashes(clashes)),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// Give every insert whose refno the newest session already indexes a
+    /// fresh one past that session's highest in the extent — what `core.dll`
+    /// gets for free by minting at save time from page 1 — and rewrite the
+    /// batch to match: the record's own refno, every owner word and member
+    /// list that named it, every `NAME` key filed for it, and every reference
+    /// attribute in the batch (explicit type 4 / 8 / 16 / 17 fields, and the
+    /// implicit slots the templates place) that pointed at it.
+    fn remint_taken_refnos(
+        path: &Path,
+        templates: &mut TemplateProvider,
+        elements: &mut [ElementWrite],
+        names: &mut [NamedEdit],
+        reminted: &mut Vec<(RefNo, RefNo)>,
+    ) -> Result<(), TransactionError> {
+        let inserted: Vec<RefNo> = elements
+            .iter()
+            .filter_map(|element| match element {
+                ElementWrite::Insert(draft) => Some(draft.refno),
+                _ => None,
+            })
+            .collect();
+        if inserted.is_empty() {
+            return Ok(());
+        }
+        let mut latest = ReadOnlyEngine::open(path)?;
+        let mut taken = Vec::new();
+        for refno in &inserted {
+            if latest.find_element(*refno)?.is_some() {
+                taken.push(*refno);
+            }
+        }
+        if taken.is_empty() {
+            return Ok(());
+        }
+        // The newest session's highest `word1` per extent, past which the fresh
+        // numbers go — skipping any the batch already uses.
+        let mut next: HashMap<u32, u32> = HashMap::new();
+        for element in latest.scan_elements(crate::engine::ScanTier::Header)? {
+            let element = element?;
+            let entry = next.entry(element.refno.word0).or_insert(0);
+            *entry = (*entry).max(element.refno.word1);
+        }
+        let mut used: HashSet<RefNo> = inserted.iter().copied().collect();
+        for old in taken {
+            let counter = next.entry(old.word0).or_insert(0);
+            let new = loop {
+                *counter += 1;
+                if (*counter as i32) < 0 {
+                    return Err(TransactionError::RefnoExhausted { word0: old.word0 });
+                }
+                let candidate = RefNo::new(old.word0, *counter);
+                if !used.contains(&candidate) {
+                    break candidate;
+                }
+            };
+            used.insert(new);
+            Self::rename_refno(templates, elements, names, old, new)?;
+            match reminted.iter_mut().find(|(_, current)| *current == old) {
+                Some(pair) => pair.1 = new,
+                None => reminted.push((old, new)),
+            }
+        }
+        Ok(())
+    }
+
+    /// Every mention of `old` in the batch becomes `new`.
+    fn rename_refno(
+        templates: &mut TemplateProvider,
+        elements: &mut [ElementWrite],
+        names: &mut [NamedEdit],
+        old: RefNo,
+        new: RefNo,
+    ) -> Result<(), TransactionError> {
+        let is_reference_type = |storage_type: u32| matches!(storage_type, 4 | 8 | 16 | 17);
+        for element in elements.iter_mut() {
+            let draft = match element {
+                ElementWrite::Insert(draft) | ElementWrite::Update(draft) => draft,
+                ElementWrite::Delete(_) => continue,
+            };
+            if draft.refno == old {
+                draft.refno = new;
+            }
+            if draft.owner == old {
+                draft.owner = new;
+            }
+            draft.replace_member(old, new);
+            // Explicit reference fields: the stream's type code says which.
+            for (hash, type_code, words) in draft.parse_explicit_fields() {
+                if !is_reference_type(u32::from(type_code >> 10)) {
+                    continue;
+                }
+                let mut changed = false;
+                let mut words = words;
+                for pair in words.as_chunks_mut::<2>().0 {
+                    if *pair == [old.word0, old.word1] {
+                        *pair = [new.word0, new.word1];
+                        changed = true;
+                    }
+                }
+                if changed {
+                    draft.set_explicit_words(hash, type_code, words);
+                }
+            }
+            // Implicit reference slots: the template says where they are.
+            let Some(template) = templates.template_for(draft.noun_hash)? else {
+                continue;
+            };
+            let slots: Vec<(usize, usize)> = template
+                .attrs
+                .iter()
+                .filter(|attr| is_reference_type(attr.storage_type_code) && attr.wide.location.word_offset() != 0)
+                .map(|attr| (attr.wide.location.word_offset() as usize, attr.wide.storage_words as usize))
+                .collect();
+            // A scalar slot is the pair itself, an array slot `[n][pairs…]`:
+            // every adjacent pair in the slot is looked at, whatever the
+            // alignment (a stray match of an extent number and a refno word
+            // in one attribute's data is not a thing).
+            for (offset, words) in slots {
+                for at in offset..offset + words.saturating_sub(1) {
+                    let hit = draft.implicit().get(at) == Some(&old.word0) && draft.implicit().get(at + 1) == Some(&old.word1);
+                    if hit {
+                        *draft.implicit_word_mut(at).expect("in range") = new.word0;
+                        *draft.implicit_word_mut(at + 1).expect("in range") = new.word1;
+                    }
+                }
+            }
+        }
+        for edit in names.iter_mut() {
+            if edit.refno == old {
+                edit.refno = new;
+            }
+        }
+        Ok(())
     }
 
     /// Apply the queued owner member-list changes. Each owner is read (from the

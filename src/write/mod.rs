@@ -73,18 +73,22 @@ pub use index_cow::IndexCowError;
 pub use keyed_cow::KeyedCowError;
 use index_cow::{EditKind, LeafEdit};
 use keyed_cow::KeyedEditKind;
-pub use merge::{write_merge_session, write_merge_session_with, MergeConflict, MergeOptions};
+pub use merge::{
+    stage_merge_session_with, write_merge_session, write_merge_session_with, MergeClash, MergeConflict, MergeOptions,
+    OnClash,
+};
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
 pub use record::{
-    HunkDraft, MemberMerge, MemberStanding, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError, FORMAT_COUNT_MAX,
+    ClashSite, HunkDraft, MemberMerge, MemberStanding, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError,
+    FORMAT_COUNT_MAX,
 };
 pub use reverse::{
     ensure_typex, reference_array, reference_value, set_reference, set_reference_array, table_keys, typex_table_hash,
 };
 pub use dictionary::{Dictionary, DictionaryEntry, DictionaryError, DictionaryLoadError};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
-pub use transaction::{MemberPosition, Transaction, TransactionError};
+pub use transaction::{MemberPosition, Transaction, TransactionCommit, TransactionError};
 pub use value::{parse_value, ValueParseError};
 
 /// Why a write did not happen. Nothing in this enum is returned after page 0
@@ -154,6 +158,12 @@ pub enum WriteError {
     NoNameTable { name_hash: u32 },
     #[error("merge refused by {} conflict(s): {}", .0.len(), MergeConflict::summary(.0))]
     MergeConflicts(Vec<MergeConflict>),
+    /// Both the writer and the committed session changed the same attribute,
+    /// owner or reference list of an element, and the merge was asked to
+    /// refuse rather than break the tie ([`merge::OnClash::Refuse`]). Nothing
+    /// was written.
+    #[error("merge refused by {} clash(es): {}", .0.len(), MergeClash::summary(.0))]
+    MergeClashes(Vec<MergeClash>),
     #[error("{0}")]
     Record(#[from] RecordEncodeError),
     #[error("{0}")]
