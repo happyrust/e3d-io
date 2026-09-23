@@ -8,11 +8,14 @@
   1. Copies the sample project (all but the picture and drawing folders) to a scratch
      directory once, and resets its ams8000_0001 from the original before every run —
      the live project is never touched.
-  2. Runs `e3d-write-box <copy db> --group --hunk --text`: five sessions — a BOX, a
-     GPWL+GROU with reference members, two EQUIs whose DESC/DESP/UUIDIA are hunks (one
-     chain across a page boundary), a FIXING with a type-19 string list inline and as a
-     hunk, and a Chinese NAME on the BOX / DESC on the ZONE / session comment stored the
-     way the header's FORMAT says (plan S5).
+  2. Runs `e3d-write-box <copy db> --group --hunk --move --big --text`: eight sessions —
+     a BOX, a GPWL+GROU with reference members, two EQUIs whose DESC/DESP/UUIDIA are
+     hunks (one chain across a page boundary), a FIXING with a type-19 string list inline
+     and as a hunk, three BOXes under the second ZONE (two referenced by the GROU) then
+     one moved to the third ZONE / one reordered / one unreferenced (T1a: move_to,
+     reorder, reference members), a ZONE with 8 200 BOXes (the format word's member
+     count saturated at 0x3FFF, plan §1.3 #11), and last a Chinese NAME on the BOX /
+     DESC on the ZONE / session comment stored the way the header's FORMAT says (S5).
   3. Renders write_gate.mac.template with the refnos the bin printed and runs it through
      gen-model's l3_suite `--check-driver` (des.exe TTY, login SYSTEM/XXXXXX, MDB /ALL,
      project AMS pointed at the copy via --project-dir). The macro is read-only.
@@ -36,6 +39,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# The driver is a gen-model bin; when the default build is not there (gen-model's main
+# worktree does not always compile against a neighbouring e3d-model WIP), take one built
+# from a scratch worktree into its own target dir (2026-09-23: `.scratch\wt-f47\gen-model`,
+# `CARGO_TARGET_DIR=D:\Rust\target-l3`, 3m45s).
+if (-not (Test-Path $L3Exe)) {
+    $fallback = @('D:\Rust\target-l3\debug\l3_suite.exe', 'D:\Rust\target\release\l3_suite.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($fallback) { Write-Output "l3_suite not at $L3Exe; using $fallback"; $L3Exe = $fallback }
+}
 $crate = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $copy = Join-Path $Scratch (Split-Path $Project -Leaf)
 $copyDb = Join-Path $copy $DbRelative
@@ -60,7 +71,7 @@ Write-Output "reset $copyDb from the original"
 # 2. The sessions.
 Push-Location $crate
 try {
-    $binOut = & cargo run --quiet --bin e3d-write-box -- $copyDb --group --hunk --text 2>&1 | Out-String
+    $binOut = & cargo run --quiet --bin e3d-write-box -- $copyDb --group --hunk --move --big --text 2>&1 | Out-String
 } finally { Pop-Location }
 if ($LASTEXITCODE) { Write-Output $binOut; throw 'e3d-write-box failed' }
 Set-Content -Path (Join-Path $Scratch 'e3d-write-box.out.txt') -Value $binOut
@@ -71,16 +82,24 @@ $refno = {
     $m.Groups[1].Value
 }
 $ids = @{
-    BOX    = & $refno 'new BOX'
-    GPWL   = & $refno 'new GPWL'
-    GROU   = & $refno 'new GROU'
-    EQUI1  = & $refno 'new EQUI 1'
-    EQUI2  = & $refno 'new EQUI 2'
-    FIXING = & $refno 'new FIXING'
-    ZONE   = & $refno 'owner ZONE'
+    BOX     = & $refno 'new BOX'
+    GPWL    = & $refno 'new GPWL'
+    GROU    = & $refno 'new GROU'
+    EQUI1   = & $refno 'new EQUI 1'
+    EQUI2   = & $refno 'new EQUI 2'
+    FIXING  = & $refno 'new FIXING'
+    ZONE    = & $refno 'owner ZONE'
+    BOXM1   = & $refno 'new BOX A'
+    BOXM2   = & $refno 'new BOX B'
+    BOXM3   = & $refno 'new BOX C'
+    ZONE2   = & $refno 'owner ZONE 2'
+    ZONE3   = & $refno 'owner ZONE 3'
+    BIGZONE = & $refno 'new ZONE big'
 }
 $spanning = [regex]::Match($binOut, 'hunk chains that cross a page boundary: (\d+)').Groups[1].Value
+$bigMembers = [int][regex]::Match($binOut, 'big members\s*:\s*(\d+)').Groups[1].Value
 Write-Output ("wrote: BOX {0} GPWL {1} GROU {2} EQUI {3} {4} FIXING {5}; hunk chains across a page: {6}" -f $ids.BOX, $ids.GPWL, $ids.GROU, $ids.EQUI1, $ids.EQUI2, $ids.FIXING, $spanning)
+Write-Output ("       moves: BOX A {0} B {1} C {2} under ZONE 2 {3}, A moved to ZONE 3 {4}; big ZONE {5} with {6} BOXes" -f $ids.BOXM1, $ids.BOXM2, $ids.BOXM3, $ids.ZONE2, $ids.ZONE3, $ids.BIGZONE, $bigMembers)
 
 # 3. The macro, rendered; then E3D.
 New-Item -ItemType Directory -Force $logDir, $driverOut | Out-Null
@@ -121,17 +140,46 @@ function Read-LogText([string]$path) {
         return $ansi.GetString($bytes)
     }
 }
-function Check([string]$question, [string]$log, [string[]]$expected) {
+# A `Q MEM` line: ` i TYPE n /NAME` or ` i TYPE n =word0/word1` — the list index, the type,
+# the ordinal among that type, then the name or refno, glued to the ordinal once it has
+# two digits (` 4 PIPE 4 /1RX-333`, `15 PIPE 15/1RX-311`, `8200 BOX 8200=24384/34691`).
+$memberLine = '(?m)^\s*\d+\s+[A-Z][A-Z0-9]*\s+\d+\s*(=\d+/\d+|/\S+)\s*$'
+function Check(
+    [string]$question, [string]$log, [string[]]$expected,
+    [string[]]$absent = @(),   # strings that must not appear
+    [switch]$ordered,          # $expected must appear in this order
+    [string]$lastMember = '',  # the last `Q MEM` line must contain this
+    [int]$memberLines = -1     # exactly this many `Q MEM` lines
+) {
     $path = Join-Path $logDir $log
     if (-not (Test-Path $path)) { Write-Output "FAIL $question — $log was never written (the block did not reach ALPHA LOG END)"; $script:failures++; return }
     $content = Read-LogText $path
     $missing = @($expected | Where-Object { $content -notmatch [regex]::Escape($_) })
+    $present = @($absent | Where-Object { $content -match [regex]::Escape($_) })
     $errors = @([regex]::Matches($content, '(?m)^.*(ERROR|\(\d+,\d+\)).*$') | ForEach-Object { $_.Value })
-    if ($missing.Count -eq 0 -and $errors.Count -eq 0) {
+    $problems = @()
+    if ($ordered -and $missing.Count -eq 0) {
+        $previous = -1
+        foreach ($e in $expected) {
+            $at = $content.IndexOf($e)
+            if ($at -lt $previous) { $problems += "'$e' should come after the one before it" }
+            $previous = $at
+        }
+    }
+    $lines = @([regex]::Matches($content, $memberLine) | ForEach-Object { $_.Value.Trim() })
+    if ($lastMember -and ($lines.Count -eq 0 -or $lines[-1] -notmatch [regex]::Escape($lastMember))) {
+        $problems += "the last member line is '$(if ($lines.Count) { $lines[-1] } else { '<none>' })', wanted $lastMember"
+    }
+    if ($memberLines -ge 0 -and $lines.Count -ne $memberLines) {
+        $problems += "$($lines.Count) member lines, wanted $memberLines"
+    }
+    if ($missing.Count -eq 0 -and $present.Count -eq 0 -and $errors.Count -eq 0 -and $problems.Count -eq 0) {
         Write-Output "PASS $question"
     } else {
         Write-Output "FAIL $question"
         foreach ($m in $missing) { Write-Output "     missing: $m" }
+        foreach ($p in $present) { Write-Output "     must not appear: $p" }
+        foreach ($p in $problems) { Write-Output "     $p" }
         foreach ($e in $errors) { Write-Output "     E3D said: $e" }
         $script:failures++
     }
@@ -160,10 +208,20 @@ Check 'Q6  Q ATT walks every attribute of the EQUI and the FIXING' '60_equi2_att
 Check 'Q6b Q ATT of the FIXING' '61_fixing_att.log' @('Type FIXING')
 # `Q SESSION` prints the last saved session only — the text session, whose comment is Chinese.
 Check 'Q7  E3D reads the session page (user e3dio, our comment, in Chinese)' '70_sessions.log' @('User: e3dio', $commentTail)
-Check 'Q8a BOX: a Chinese NAME, record and table (session 5)' '80_box_name.log' @("Name $boxName")
+Check 'Q8a BOX: a Chinese NAME, record and table (last session)' '80_box_name.log' @("Name $boxName")
 Check 'Q8b ZONE: a Chinese DESC with an escaped run inside plain text' '81_zone_desc.log' @("Description $zoneDesc")
 Write-Output ("     (text logs decoded as: {0})" -f (($script:logEncodings.GetEnumerator() | Where-Object { $_.Key -match '^(70|8)' } | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', '))
 if ([int]$spanning -lt 1) { Write-Output 'FAIL     no hunk chain crossed a page boundary in this run, so the continuation link went unexercised'; $failures++ }
+# T1a (plan §2 T1a: the gate's Q OWNER / Q MEMBERS questions). The moved BOX A says its
+# owner is ZONE 3 and navigating OWNER lands there; ZONE 2 lists C before B and no A;
+# ZONE 3 lists A last; the GROU gained A and lost B.
+Check 'Q9a BOX A moved (move_to): Q OWNER is ZONE 3, OWNER navigates there' '90_move_owner.log' @('Name /E3DIO-MOVE-A', "=$($ids.ZONE3)") -absent @("=$($ids.ZONE2)")
+Check 'Q9b ZONE 2 (reorder): lists C before B, A no longer' '91_move_zone2.log' @('/E3DIO-MOVE-C', '/E3DIO-MOVE-B') -ordered -absent @('/E3DIO-MOVE-A')
+Check 'Q9c ZONE 3: lists A as its last member' '92_move_zone3.log' @('/E3DIO-MOVE-A') -lastMember '/E3DIO-MOVE-A'
+Check 'Q9d GROU (reference members): A added, B removed, old members kept' '93_move_grou.log' @('ZONE 1', "BOX 1 $boxName", '/E3DIO-MOVE-A') -absent @('/E3DIO-MOVE-B')
+# §1.3 #11: the member count of a 16 400-word member block is written 0x3FFF, so E3D
+# measures the chain — every one of the 8 200 BOXes is listed, not `16 400 & 0x3FFF`.
+Check "Q10 big ZONE: Q MEM lists all $bigMembers BOXes (format word count saturated)" '95_big_zone.log' @('Name /E3DIO-BIG-ZONE') -memberLines $bigMembers
 
 Write-Output ''
 if ($failures) { Write-Output "$failures FAIL — logs in $logDir"; exit 1 }

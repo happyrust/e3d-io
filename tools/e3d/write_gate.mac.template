@@ -9,6 +9,10 @@
 --   EQUI {{EQUI1}} and EQUI {{EQUI2}}: DESC / DESP / UUIDIA as hunks (types 22/21/20),
 --     one chain across a page boundary
 --   FIXING {{FIXING}}: ROKEYS inline type 19, ROVALS as a type-23 hunk
+--   BOX A {{BOXM1}}, B {{BOXM2}}, C {{BOXM3}} under the second ZONE {{ZONE2}}, A and B
+--     referenced by the GROU; then A moved under the third ZONE {{ZONE3}} (move_to), C
+--     put before B (reorder), B taken out of the GROU (remove_reference_member) - T1a
+--   ZONE {{BIGZONE}} with 8 200 BOXes: member count saturated at 0x3FFF (plan 1.3 #11)
 --   BOX {{BOX}} renamed in Chinese, ZONE {{ZONE}} described in Chinese, the session
 --     commented in Chinese — text stored the way the header's FORMAT says (S5)
 --
@@ -297,6 +301,79 @@ handle any
   $P GATE-81-DESC-ERROR $!!error.text
 endhandle
 $P GATE-81-END
+ALPHA LOG END
+
+-- T1a: the moved BOX A - its NAME, its OWNER, and the owner reached by navigation.
+ALPHA LOG "{{LOGDIR}}/90_move_owner.log" OVER
+$P GATE-90-BEGIN
+={{BOXM1}}
+handle any
+  $P GATE-90-NAV-ERROR $!!error.text
+elsehandle none
+  Q NAME
+  Q OWNER
+  OWNER
+  handle any
+    $P GATE-90-OWNER-NAV-ERROR $!!error.text
+  elsehandle none
+    Q REF
+    Q NAME
+  endhandle
+endhandle
+$P GATE-90-END
+ALPHA LOG END
+
+-- T1a: the second ZONE after the reorder (C before B) and the move (no A).
+ALPHA LOG "{{LOGDIR}}/91_move_zone2.log" OVER
+$P GATE-91-BEGIN
+={{ZONE2}}
+handle any
+  $P GATE-91-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q MEM
+endhandle
+$P GATE-91-END
+ALPHA LOG END
+
+-- T1a: the third ZONE, A appended last.
+ALPHA LOG "{{LOGDIR}}/92_move_zone3.log" OVER
+$P GATE-92-BEGIN
+={{ZONE3}}
+handle any
+  $P GATE-92-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q MEM
+endhandle
+$P GATE-92-END
+ALPHA LOG END
+
+-- T1a: the GROU's reference list after A was added and B removed.
+ALPHA LOG "{{LOGDIR}}/93_move_grou.log" OVER
+$P GATE-93-BEGIN
+={{GROU}}
+handle any
+  $P GATE-93-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q MEM
+endhandle
+$P GATE-93-END
+ALPHA LOG END
+
+-- Plan 1.3 #11: the 8 200-member ZONE - E3D must list every member, measuring the chain.
+ALPHA LOG "{{LOGDIR}}/95_big_zone.log" OVER
+$P GATE-95-BEGIN
+={{BIGZONE}}
+handle any
+  $P GATE-95-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q NAME
+  Q MEM
+endhandle
+$P GATE-95-END
 ALPHA LOG END
 
 -- The driver reads <macro>.log as the scenario log: a summary marker.

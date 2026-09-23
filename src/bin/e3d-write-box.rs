@@ -34,10 +34,24 @@
 //! least one chain runs across a page boundary; the second puts a `FIXING`
 //! under the ZONE with `ROKEYS` inline (type 19) and `ROVALS` as a type-23 hunk.
 //!
-//! With `--text` it appends a fifth session: the BOX gets a Chinese `NAME`
+//! With `--move` it appends two sessions asking whether E3D reads a
+//! re-parented element (`Transaction::move_to`, E3D's `INCLUDE`), a reordered
+//! member list (`reorder`) and an edited reference list
+//! (`add_reference_member` / `remove_reference_member`; needs `--group` for
+//! the GROU): three named BOXes go under the second ZONE, then one is moved to
+//! the third ZONE, one is put before another, and the group gains one of them
+//! and loses another (plan T1a).
+//!
+//! With `--big` it appends one session: a new ZONE under the first ZONE's SITE
+//! with 8 200 BOXes — more than the format word's fourteen-bit member count
+//! holds, so the count is written saturated (`0x3FFF`) and E3D has to measure
+//! the member chain (plan §1.3 #11; the 20 128-member ZONE E3D listed as 3 744).
+//!
+//! With `--text` it appends a last session: the BOX gets a Chinese `NAME`
 //! (record and `NAME` table key, through `Transaction::rename`), the ZONE a
 //! Chinese `DESC`, and the session a Chinese comment — each stored the way the
-//! header's `FORMAT` says (`e3d_io::record::text::encode_as`, plan S5).
+//! header's `FORMAT` says (`e3d_io::record::text::encode_as`, plan S5). It goes
+//! last so `Q SESSION` shows its comment.
 //!
 //! It writes the database **in place**, so point it at a copy (or a backed-up
 //! project DB); the write is an append plus the page-0 commit, so restoring the
@@ -50,11 +64,11 @@ use e3d_io::engine::ScanTier;
 use e3d_io::record::descriptor::DescriptorValue;
 use e3d_io::record::template::{MemberListKind, NounTemplate, TemplateProvider};
 use e3d_io::record::text::TextFormat;
-use e3d_io::write::{RecordDraft, SessionRequest, Transaction};
+use e3d_io::write::{MemberPosition, RecordDraft, SessionRequest, Transaction};
 use e3d_io::{ReadOnlyEngine, RefNo};
 
 const DEFAULT_DESVIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/desvir.dat");
-const USAGE: &str = "usage: e3d-write-box <database> [desvir.dat] [--group] [--hunk] [--text]";
+const USAGE: &str = "usage: e3d-write-box <database> [desvir.dat] [--group] [--hunk] [--move] [--big] [--text]";
 
 /// The `NAME` the `--text` session gives the BOX and the `DESC` it gives the
 /// ZONE: text outside ASCII, stored as the header's `FORMAT` says.
@@ -62,25 +76,65 @@ pub const TEXT_BOX_NAME: &str = "/E3DIO-盒子";
 pub const TEXT_ZONE_DESC: &str = "反应堆厂房 -3.320m~±0.00m";
 pub const TEXT_COMMENT: &str = "e3d-io 写路径门：中文 NAME / DESC / 会话注释";
 
+/// The names of the three BOXes the `--move` sessions play with, so E3D's
+/// `Q MEM` lists them by name wherever they land.
+pub const MOVE_BOX_NAMES: [&str; 3] = ["/E3DIO-MOVE-A", "/E3DIO-MOVE-B", "/E3DIO-MOVE-C"];
+
+/// The `--big` ZONE's name and member count: past 8 191 the format word's
+/// member count no longer fits its fourteen bits.
+pub const BIG_ZONE_NAME: &str = "/E3DIO-BIG-ZONE";
+pub const BIG_ZONE_MEMBERS: u32 = 8_200;
+
 /// The database's header `FORMAT` reading, for text values.
 fn text_format(db: &str) -> Result<TextFormat, String> {
     let engine = ReadOnlyEngine::open(db).map_err(|e| format!("open {db}: {e}"))?;
     Ok(TextFormat::from_header(engine.descriptor().header_format))
 }
 
-/// The first ZONE in the database, to own the box.
-fn first_zone(db: &str) -> Result<RefNo, String> {
+/// The first `n` ZONEs in the database, in index order; the first owns the box.
+fn zones(db: &str, n: usize) -> Result<Vec<RefNo>, String> {
     let mut engine = ReadOnlyEngine::open(db).map_err(|e| format!("open {db}: {e}"))?;
     let zone_hash = e3d_attlib::db1_hash("ZONE");
-    engine
+    let found: Vec<RefNo> = engine
         .scan_elements(ScanTier::Header)
         .map_err(|e| e.to_string())?
         .map(|e| e.map_err(|e| e.to_string()))
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
-        .find(|e| e.noun_hash == zone_hash)
+        .filter(|e| e.noun_hash == zone_hash)
         .map(|e| e.refno)
-        .ok_or_else(|| "the database indexes no ZONE to own a BOX".to_string())
+        .take(n)
+        .collect();
+    if found.len() < n {
+        return Err(format!("the database indexes {} ZONE(s); {n} wanted", found.len()));
+    }
+    Ok(found)
+}
+
+/// The first ZONE in the database, to own the box.
+fn first_zone(db: &str) -> Result<RefNo, String> {
+    Ok(zones(db, 1)?[0])
+}
+
+/// An element's owner and member list as stored.
+fn owner_and_members(db: &str, refno: RefNo) -> Result<(RefNo, Vec<RefNo>), String> {
+    let mut engine = ReadOnlyEngine::open(db).map_err(|e| format!("open {db}: {e}"))?;
+    let view = engine
+        .find_element(refno)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("{refno} is not indexed"))?;
+    let parsed = e3d_io::record::element::ParsedElement::parse_as(&view.raw_bytes, engine.text_format())
+        .map_err(|e| e.to_string())?;
+    Ok((view.header().owner, parsed.members))
+}
+
+/// Refuse to reuse a name the database already has.
+fn name_is_free(db: &str, name: &str) -> Result<(), String> {
+    let mut engine = ReadOnlyEngine::open(db).map_err(|e| e.to_string())?;
+    if engine.find_by_name(name).map_err(|e| e.to_string())?.is_some() {
+        return Err(format!("{name} is already in use"));
+    }
+    Ok(())
 }
 
 /// The database's WORL element.
@@ -109,11 +163,15 @@ fn run() -> Result<(), String> {
     let mut desvir = None;
     let mut group = false;
     let mut hunk = false;
+    let mut moves = false;
+    let mut big = false;
     let mut text = false;
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
             "--group" => group = true,
             "--hunk" => hunk = true,
+            "--move" => moves = true,
+            "--big" => big = true,
             "--text" => text = true,
             other if other.starts_with("--") => return Err(format!("unknown flag {other}\n{USAGE}")),
             _ if db.is_none() => db = Some(arg),
@@ -150,12 +208,20 @@ fn run() -> Result<(), String> {
     println!("  Q SESSIONS                 -> the newest should be session {sesno} by user e3dio");
     println!("  Q ATT /{box_refno}                  -> POS/XLEN/YLEN/ZLEN as above, OWNER the ZONE");
 
+    let mut grou_refno = None;
     if group {
-        write_group(&db, &mut provider, zone_refno, box_refno)?;
+        grou_refno = Some(write_group(&db, &mut provider, zone_refno, box_refno)?);
     }
     if hunk {
         write_hunks(&db, &mut provider, format, zone_refno, box_refno)?;
     }
+    if moves {
+        write_moves(&db, &mut provider, format, grou_refno)?;
+    }
+    if big {
+        write_big(&db, &mut provider, format, zone_refno)?;
+    }
+    // Last, so `Q SESSION` (the newest session) shows the Chinese comment.
     if text {
         write_text(&db, &mut provider, format, zone_refno, box_refno)?;
     }
@@ -276,8 +342,8 @@ fn hunk_spans(db: &str, refno: RefNo) -> Result<Vec<(String, u16, u32, usize)>, 
 }
 
 /// The second session: a GPWL under the WORL, and under it a GROU whose members
-/// are references to the ZONE and the new BOX.
-fn write_group(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box_refno: RefNo) -> Result<(), String> {
+/// are references to the ZONE and the new BOX. Returns the GROU's refno.
+fn write_group(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box_refno: RefNo) -> Result<RefNo, String> {
     let grou_template = template_of(provider, "GROU")?;
     if grou_template.member_list_kind != MemberListKind::Referenced {
         return Err(format!(
@@ -321,6 +387,170 @@ fn write_group(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo, box
     println!("  ={}/{}   Q OWNER            -> the BOX still says OWNER the ZONE, not the group", box_refno.word0, box_refno.word1);
     println!("  ={}/{}   Q MEM              -> the WORL lists the GPWL behind its old members", world.word0, world.word1);
     println!("PASS = E3D navigates to the GROU, lists both reference members, and the BOX keeps its ZONE owner.");
+    Ok(grou)
+}
+
+/// The `--move` sessions (plan T1a). First: three named BOXes A, B, C under
+/// the second ZONE, and — with `--group` — A and B added to the GROU's
+/// reference list. Then, in one transaction: A is moved under the third ZONE
+/// (`move_to`, E3D's `INCLUDE`), C is put before B in the second ZONE's list
+/// (`reorder`), and B is taken out of the group's references.
+fn write_moves(db: &str, provider: &mut TemplateProvider, format: TextFormat, grou: Option<RefNo>) -> Result<(), String> {
+    let all = zones(db, 3)?;
+    let (zone2, zone3) = (all[1], all[2]);
+    for name in MOVE_BOX_NAMES {
+        name_is_free(db, name)?;
+    }
+    let box_hash = e3d_attlib::db1_hash("BOX");
+
+    // --- session: the three boxes, and two of them referenced by the group ---
+    let (boxes, sesno, previous, appended) = {
+        let mut tx = Transaction::open(db, &mut *provider).map_err(|e| e.to_string())?;
+        let mut boxes = Vec::new();
+        for (n, name) in MOVE_BOX_NAMES.iter().enumerate() {
+            let refno = tx
+                .insert(zone2, box_hash, Some(name), |draft, template| {
+                    build_box(draft, template, format)?;
+                    let offset = 1000.0 * (n as f64 + 1.0);
+                    draft.set_attribute(
+                        template,
+                        e3d_attlib::db1_hash("POS"),
+                        &DescriptorValue::RealArray(vec![offset, 2000.0, 3000.0]),
+                        format,
+                    )?;
+                    Ok(())
+                })
+                .map_err(|e| format!("{name}: {e}"))?;
+            boxes.push(refno);
+        }
+        if let Some(grou) = grou {
+            tx.add_reference_member(grou, boxes[0], MemberPosition::Last).map_err(|e| e.to_string())?;
+            tx.add_reference_member(grou, boxes[1], MemberPosition::Last).map_err(|e| e.to_string())?;
+        }
+        let report = tx
+            .commit(&session("e3d-io write-path gate: three BOXes under the second ZONE, two referenced by the GROU"))
+            .map_err(|e| e.to_string())?;
+        (boxes, report.written.sesno, report.previous.sesno, report.appended_pages)
+    };
+    println!();
+    println!("wrote session {sesno} to {db}");
+    println!("  previous session : {previous}");
+    for (refno, name) in boxes.iter().zip(MOVE_BOX_NAMES) {
+        println!("  new BOX {}       : {refno} ({name}, owner ZONE {zone2})", &name[name.len() - 1..]);
+    }
+    println!("  owner ZONE 2     : {zone2}");
+    println!("  owner ZONE 3     : {zone3}");
+    if let Some(grou) = grou {
+        println!("  GROU {grou} references: {} and {}", boxes[0], boxes[1]);
+    }
+    println!("  appended pages   : {appended:?}");
+
+    // --- session: A -> ZONE 3 (INCLUDE), C before B (REORDER), B out of the group ---
+    let (sesno, previous, appended) = {
+        let mut tx = Transaction::open(db, &mut *provider).map_err(|e| e.to_string())?;
+        tx.move_to(boxes[0], zone3, MemberPosition::Last).map_err(|e| format!("move A: {e}"))?;
+        tx.reorder(boxes[2], MemberPosition::Before(boxes[1])).map_err(|e| format!("reorder C: {e}"))?;
+        if let Some(grou) = grou {
+            tx.remove_reference_member(grou, boxes[1]).map_err(|e| format!("unreference B: {e}"))?;
+        }
+        let report = tx
+            .commit(&session("e3d-io write-path gate: move A to the third ZONE, C before B, B out of the GROU"))
+            .map_err(|e| e.to_string())?;
+        (report.written.sesno, report.previous.sesno, report.appended_pages)
+    };
+    // Read back through this crate before E3D gets to look.
+    let (a_owner, _) = owner_and_members(db, boxes[0])?;
+    let (_, zone2_members) = owner_and_members(db, zone2)?;
+    let (_, zone3_members) = owner_and_members(db, zone3)?;
+    if a_owner != zone3 || zone3_members.last() != Some(&boxes[0]) || zone2_members.contains(&boxes[0]) {
+        return Err(format!("move read-back: A owner {a_owner}, ZONE 3 last {:?}", zone3_members.last()));
+    }
+    let (c_at, b_at) = (
+        zone2_members.iter().position(|m| *m == boxes[2]),
+        zone2_members.iter().position(|m| *m == boxes[1]),
+    );
+    if !matches!((c_at, b_at), (Some(c), Some(b)) if c + 1 == b) {
+        return Err(format!("reorder read-back: C at {c_at:?}, B at {b_at:?}"));
+    }
+    println!();
+    println!("wrote session {sesno} to {db}");
+    println!("  previous session : {previous}");
+    println!("  moved            : {} {} -> owner ZONE {zone3}, last member", boxes[0], MOVE_BOX_NAMES[0]);
+    println!("  reordered        : {} {} before {} {}", boxes[2], MOVE_BOX_NAMES[2], boxes[1], MOVE_BOX_NAMES[1]);
+    if let Some(grou) = grou {
+        let (_, grou_members) = owner_and_members(db, grou)?;
+        if !grou_members.contains(&boxes[0]) || grou_members.contains(&boxes[1]) {
+            return Err(format!("reference read-back: GROU members {grou_members:?}"));
+        }
+        println!("  unreferenced     : {} {} out of GROU {grou} (which keeps {})", boxes[1], MOVE_BOX_NAMES[1], boxes[0]);
+    }
+    println!("  appended pages   : {appended:?}");
+    println!();
+    println!("In E3D 3.1 Design, on this database's project:");
+    println!("  ={}/{}   Q OWNER            -> ZONE {zone3}", boxes[0].word0, boxes[0].word1);
+    println!("  ={}/{}   Q MEM              -> {} before {}, no {}", zone2.word0, zone2.word1, MOVE_BOX_NAMES[2], MOVE_BOX_NAMES[1], MOVE_BOX_NAMES[0]);
+    println!("  ={}/{}   Q MEM              -> {} last", zone3.word0, zone3.word1, MOVE_BOX_NAMES[0]);
+    if let Some(grou) = grou {
+        println!("  ={}/{}   Q MEM              -> {} listed, {} not", grou.word0, grou.word1, MOVE_BOX_NAMES[0], MOVE_BOX_NAMES[1]);
+    }
+    Ok(())
+}
+
+/// The `--big` session (plan §1.3 #11): a new ZONE under the first ZONE's SITE
+/// with [`BIG_ZONE_MEMBERS`] BOXes, so its member block is 16 400 words and the
+/// format word's fourteen-bit member count is written saturated at `0x3FFF`.
+/// E3D then has to measure the chain; before the fix it read `16 400 & 0x3FFF`
+/// = 17 words = 8 members.
+fn write_big(db: &str, provider: &mut TemplateProvider, format: TextFormat, zone_refno: RefNo) -> Result<(), String> {
+    name_is_free(db, BIG_ZONE_NAME)?;
+    let (site, _) = owner_and_members(db, zone_refno)?;
+    let box_hash = e3d_attlib::db1_hash("BOX");
+    let zone_hash = e3d_attlib::db1_hash("ZONE");
+    let started = std::time::Instant::now();
+    let (big_zone, sesno, previous, appended) = {
+        let mut tx = Transaction::open(db, &mut *provider).map_err(|e| e.to_string())?;
+        let big_zone = tx.insert(site, zone_hash, Some(BIG_ZONE_NAME), |_, _| Ok(())).map_err(|e| e.to_string())?;
+        for n in 0..BIG_ZONE_MEMBERS {
+            tx.insert(big_zone, box_hash, None, |draft, template| {
+                build_box(draft, template, format)?;
+                draft.set_attribute(
+                    template,
+                    e3d_attlib::db1_hash("POS"),
+                    &DescriptorValue::RealArray(vec![f64::from(n) * 1000.0, 0.0, 0.0]),
+                    format,
+                )?;
+                Ok(())
+            })
+            .map_err(|e| format!("box {n}: {e}"))?;
+        }
+        let report = tx
+            .commit(&session("e3d-io write-path gate: a ZONE with 8200 BOXes (format word member count saturated)"))
+            .map_err(|e| e.to_string())?;
+        (big_zone, report.written.sesno, report.previous.sesno, report.appended_pages)
+    };
+    let elapsed = started.elapsed();
+    let (_, members) = owner_and_members(db, big_zone)?;
+    if members.len() != BIG_ZONE_MEMBERS as usize {
+        return Err(format!("big ZONE read-back: {} members, {BIG_ZONE_MEMBERS} written", members.len()));
+    }
+    let word10 = {
+        let mut engine = ReadOnlyEngine::open(db).map_err(|e| e.to_string())?;
+        let view = engine.find_element(big_zone).map_err(|e| e.to_string())?.ok_or("big ZONE not indexed")?;
+        u32::from_be_bytes(view.raw_bytes[40..44].try_into().unwrap())
+    };
+    if word10 & 0x3FFF != 0x3FFF {
+        return Err(format!("big ZONE format word {word10:#010x}: the member count did not saturate"));
+    }
+    println!();
+    println!("wrote session {sesno} to {db}");
+    println!("  previous session : {previous}");
+    println!("  new ZONE big     : {big_zone} ({BIG_ZONE_NAME}, owner SITE {site})");
+    println!("  big members      : {} BOXes, {} .. {}", members.len(), members[0], members[members.len() - 1]);
+    println!("  format word      : {word10:#010x} (member count saturated at 0x3FFF, explicit count {})", (word10 >> 14) & 0x3FFF);
+    println!("  appended pages   : {} pages, {elapsed:.1?}", appended.len());
+    println!();
+    println!("In E3D 3.1 Design, on this database's project:");
+    println!("  ={}/{}   Q MEM              -> {} BOX lines (8 before the format word was saturated)", big_zone.word0, big_zone.word1, members.len());
     Ok(())
 }
 
