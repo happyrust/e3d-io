@@ -245,13 +245,17 @@ fn a_new_zone_files_its_typex_key_and_its_reference_edges_and_builds_a_missing_t
     assert!(referrers.contains(&zone), "the zone is among {ispe_target}'s ISPE referrers");
     drop(view);
 
-    // --- the record: TYPEX first in the stream, the two references where set ---
+    // --- the record: TYPEX appended after what the caller set (the way
+    // `4SCEA` lands it — E3D 3.1's own ZONE reads `[DUNIO NAME FUNC TYPEX]`),
+    // the two references where set ---
     let mut engine = ReadOnlyEngine::open(&copy.path).expect("open written");
     let record = engine.find_element(zone).expect("lookup").expect("indexed");
     let parsed = ParsedElement::parse_as(&record.raw_bytes, engine.text_format()).expect("parse");
-    assert_eq!(parsed.explicit_attributes[0].hash, typex_table_hash(), "TYPEX opens the explicit stream");
-    assert_eq!(parsed.explicit_attributes[0].type_code, KEYED_TYPE_CODE);
-    assert_eq!(parsed.explicit_attributes[0].value, ExplicitValue::RawWords(vec![1, zone_hash]));
+    let typex_field = parsed.explicit_attributes.last().expect("the stream is not empty");
+    assert_eq!(typex_field.hash, typex_table_hash(), "TYPEX closes the explicit stream");
+    assert_eq!(typex_field.type_code, KEYED_TYPE_CODE);
+    assert_eq!(typex_field.value, ExplicitValue::RawWords(vec![1, zone_hash]));
+    assert_eq!(parsed.explicit_attributes.iter().filter(|a| a.hash == typex_table_hash()).count(), 1);
     let spcref_field = parsed.explicit_attributes.iter().find(|a| a.hash == spcref).expect("SPCREF stored");
     assert_eq!(spcref_field.type_code, REFERENCE_TYPE_CODE);
     assert_eq!(spcref_field.value, ExplicitValue::RefNo(spcref_target));

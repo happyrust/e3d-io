@@ -32,17 +32,29 @@
 //!   out `max + 1`, which never collides with a live element and, if it
 //!   collides with the latest session, is refused as conflict 590 at commit.
 //! - **owner membership** — an insert adds the new element to its owner's
-//!   member list; a delete takes it out. If the owner is already in the batch
-//!   the pending draft is edited; otherwise the owner is read from the base and
-//!   added as an update. A reference-list owner (`GROU`) is the caller's to
-//!   fill — its members are not children, so an insert under it changes no list.
+//!   member list; a delete takes it out; [`Transaction::move_to`] takes it out
+//!   of one owner's list and puts it into another's at a [`MemberPosition`]
+//!   (changing the record's owner word and nothing else in it, as `INCLUDE`
+//!   does); [`Transaction::reorder`] moves it within its owner's list
+//!   (`REORDER`). If the owner is already in the batch the pending draft is
+//!   edited; otherwise the owner is read from the base and added as an update.
+//!   A reference-list owner (`GROU`) holds references, not children: an insert
+//!   under it changes no list, a child cannot be moved under it, and its list
+//!   is edited through [`Transaction::add_reference_member`] /
+//!   [`Transaction::remove_reference_member`].
 //! - **`NAME`** — [`Transaction::rename`], and the `name` an insert is given,
 //!   set the record's `NAME` attribute and file the matching [`NamedEdit`], so
 //!   the record and the `NAME` table never drift apart. The old name's key is
 //!   withdrawn first, so a rename is one net change.
+//! - **the default record** — an insert starts from what `4CEIL` starts from:
+//!   the noun's chunk-1 implicit defaults and the chunk-2 explicit prefix
+//!   ([`RecordDraft::from_template`]), so a new `BRAN` opens its stream with
+//!   `[ISOH DELDSG SLOREF AEXCES LEXCES LOOS]` as E3D's own does; `build` sets
+//!   values on top of that.
 //! - **`TYPEX`, the reverse-reference tables and the claim tree** follow every
 //!   write through [`stage_element_session_with`], because the transaction
-//!   always carries the schema.
+//!   always carries the schema; `TYPEX` is appended after what `build` set,
+//!   where E3D 3.1 puts it.
 //!
 //! It is not a merge: it writes on top of the newest session. Use
 //! [`write_merge_session_with`](crate::write::write_merge_session_with) when the
@@ -52,7 +64,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::record::descriptor::DescriptorValue;
-use crate::record::template::{MemberListKind, NounTemplate, TemplateProvider, WIDE_LAYOUT_FLAG};
+use crate::record::template::{MemberListKind, NounTemplate, TemplateProvider};
 use crate::record::text::{TextEncodeError, TextFormat};
 use crate::refno::RefNo;
 use crate::ReadOnlyEngine;
@@ -93,6 +105,40 @@ pub enum TransactionError {
     OwnerDeleted { owner: RefNo },
     #[error("extent {word0} has no more refnos below the sign bit")]
     RefnoExhausted { word0: u32 },
+    #[error("{owner} is a reference-list noun: it has no children to move under it (use add_reference_member)")]
+    OwnerIsReferenceList { owner: RefNo },
+    #[error("{owner} is not a reference-list noun: its members are its children (use move_to)")]
+    NotAReferenceList { owner: RefNo },
+    #[error("moving {refno} under {owner} would make it its own ancestor")]
+    WouldOwnItself { refno: RefNo, owner: RefNo },
+    #[error("{anchor} is not a member of {owner}, so nothing can be placed next to it")]
+    AnchorNotAMember { owner: RefNo, anchor: RefNo },
+    #[error("{member} is not a member of {owner}")]
+    NotAMember { owner: RefNo, member: RefNo },
+}
+
+/// Where a member goes in its owner's list — the positions `REORDER` names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberPosition {
+    /// At the end of the list (where an insert puts a new element).
+    Last,
+    /// At the front.
+    First,
+    /// Directly after this member, which must be in the list.
+    After(RefNo),
+    /// Directly before this member, which must be in the list.
+    Before(RefNo),
+}
+
+/// One queued member-list change, applied at stage time in registration order.
+#[derive(Debug, Clone, Copy)]
+enum MemberOp {
+    /// Put `member` into `owner`'s list at `at`. `reference` says the owner is a
+    /// reference-list noun and the caller means its list (a child insert under
+    /// such an owner changes nothing).
+    Add { owner: RefNo, member: RefNo, at: MemberPosition, reference: bool },
+    /// Take `member` out of `owner`'s list.
+    Remove { owner: RefNo, member: RefNo, reference: bool },
 }
 
 /// A batch of element writes against the newest session of one database.
@@ -113,8 +159,8 @@ pub struct Transaction<'a> {
     /// Owner member-list changes, applied at stage time so an owner-only update
     /// lands after the child inserts that name it — the order the primitive path
     /// writes in, which keeps a new element's tail blocks (and hunks) where a
-    /// hand-written batch would put them. `(owner, member, add?)`.
-    member_ops: Vec<(RefNo, RefNo, bool)>,
+    /// hand-written batch would put them.
+    member_ops: Vec<MemberOp>,
     /// Per-extent (`word0`) next `word1` to hand out; seeded from the base.
     next_word1: HashMap<u32, u32>,
 }
@@ -188,20 +234,122 @@ impl<'a> Transaction<'a> {
             .ok_or(TransactionError::NoTemplate { noun })?
             .clone();
         let refno = self.allocate(owner.word0)?;
-        let mut implicit = vec![0u32; 11];
-        implicit.extend_from_slice(&template.defaults.implicit);
-        // A new element is written in the wide layout; word 10's format word is
-        // recomputed at placement, but `set_attribute` reads its wide bit to
-        // refuse a compact record, so a fresh draft must carry it.
-        implicit[10] |= WIDE_LAYOUT_FLAG;
-        let mut draft = RecordDraft::new(refno, noun, owner, implicit, Vec::new(), Vec::new())?;
+        // The record `4CEIL` starts from: chunk-1 defaults behind the header,
+        // the wide flag, and the chunk-2 explicit prefix seeded in order
+        // (`RecordDraft::from_template`); `build` then sets values on top, and
+        // `TYPEX` is appended at staging — the order E3D 3.1 itself writes.
+        let mut draft = RecordDraft::from_template(refno, owner, &template)?;
         build(&mut draft, &template)?;
         if let Some(name) = name {
             self.set_name(&mut draft, &template, refno, None, name)?;
         }
         self.register(ElementWrite::Insert(draft));
-        self.member_ops.push((owner, refno, true));
+        self.member_ops.push(MemberOp::Add { owner, member: refno, at: MemberPosition::Last, reference: false });
         Ok(refno)
+    }
+
+    /// Move an element under another owner — what `INCLUDE` does in E3D: the
+    /// record's owner word changes, the old owner's member list loses it, the
+    /// new owner's gains it at `at`, and everything else in the record (its
+    /// owner-relative `POS` / `ORI` included) is left exactly as stored. Both
+    /// owners are rewritten in this session, so each one's primary element is
+    /// refreshed in the claim tree by the staging path as for any update.
+    ///
+    /// Refused: a new owner that is a reference-list noun (`GROU`; its members
+    /// are references, see [`Transaction::add_reference_member`]), one deleted
+    /// in this transaction, one that is the element itself or sits beneath it,
+    /// and an anchor that is not a member. Moving under the current owner is a
+    /// [`Transaction::reorder`].
+    pub fn move_to(&mut self, refno: RefNo, new_owner: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
+        self.draft_noun(refno, "moved")?; // exists, not deleted
+        let old_owner = self.owner_of(refno)?.ok_or(TransactionError::NotFound { refno })?;
+        if old_owner == new_owner {
+            return self.reorder(refno, at);
+        }
+        if matches!(self.writes.get(&new_owner), Some(ElementWrite::Delete(_))) {
+            return Err(TransactionError::OwnerDeleted { owner: new_owner });
+        }
+        let owner_noun = self.draft_noun(new_owner, "an owner")?;
+        if self.member_list_is_referenced(owner_noun)? {
+            return Err(TransactionError::OwnerIsReferenceList { owner: new_owner });
+        }
+        // The new owner must not be the element or anything beneath it.
+        let mut cursor = Some(new_owner);
+        let mut hops = 0;
+        while let Some(at_ref) = cursor {
+            if at_ref == refno {
+                return Err(TransactionError::WouldOwnItself { refno, owner: new_owner });
+            }
+            hops += 1;
+            if hops > 10_000 {
+                break; // a cycle already on disk is not this call's to diagnose
+            }
+            cursor = self.owner_of(at_ref)?.filter(|o| o.is_valid());
+        }
+        self.check_anchor(new_owner, refno, at)?;
+        let stored_owner = match self.writes.get(&refno) {
+            Some(ElementWrite::Insert(_)) => None,
+            _ => self.engine.find_element(refno)?.map(|view| view.header().owner),
+        };
+        self.draft_mut(refno, "moved")?.owner = new_owner;
+        // A queued addition to the old owner (the insert's own, or an earlier
+        // move / reorder) is withdrawn rather than applied and undone, so an
+        // owner the element only passed through in this transaction is not
+        // rewritten for nothing. Only the owner whose stored list holds the
+        // element has to lose it.
+        self.member_ops.retain(|op| {
+            !matches!(op, MemberOp::Add { owner, member, reference: false, .. } if *owner == old_owner && *member == refno)
+        });
+        if stored_owner == Some(old_owner) {
+            self.member_ops.push(MemberOp::Remove { owner: old_owner, member: refno, reference: false });
+        }
+        self.member_ops.push(MemberOp::Add { owner: new_owner, member: refno, at, reference: false });
+        Ok(())
+    }
+
+    /// Move an element within its owner's member list — E3D's `REORDER`. Only
+    /// the owner is rewritten; the element's record is untouched.
+    pub fn reorder(&mut self, refno: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
+        self.draft_noun(refno, "reordered")?;
+        let owner = self.owner_of(refno)?.ok_or(TransactionError::NotFound { refno })?;
+        if !owner.is_valid() {
+            return Err(TransactionError::NotAMember { owner, member: refno });
+        }
+        let owner_noun = self.draft_noun(owner, "an owner")?;
+        if self.member_list_is_referenced(owner_noun)? {
+            return Err(TransactionError::OwnerIsReferenceList { owner });
+        }
+        self.check_anchor(owner, refno, at)?;
+        self.member_ops.push(MemberOp::Add { owner, member: refno, at, reference: false });
+        Ok(())
+    }
+
+    /// Put `member` into the reference list of `group` (a `GROU`-like noun whose
+    /// members are references, not children) at `at`, or move it there if the
+    /// list already holds it. The member's own owner is untouched.
+    pub fn add_reference_member(&mut self, group: RefNo, member: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
+        let group_noun = self.draft_noun(group, "a reference list")?;
+        if !self.member_list_is_referenced(group_noun)? {
+            return Err(TransactionError::NotAReferenceList { owner: group });
+        }
+        self.draft_noun(member, "referenced")?; // exists, not deleted
+        self.check_anchor(group, member, at)?;
+        self.member_ops.push(MemberOp::Add { owner: group, member, at, reference: true });
+        Ok(())
+    }
+
+    /// Take `member` out of `group`'s reference list. Refused when the list does
+    /// not hold it.
+    pub fn remove_reference_member(&mut self, group: RefNo, member: RefNo) -> Result<(), TransactionError> {
+        let group_noun = self.draft_noun(group, "a reference list")?;
+        if !self.member_list_is_referenced(group_noun)? {
+            return Err(TransactionError::NotAReferenceList { owner: group });
+        }
+        if !self.members_of(group)?.contains(&member) && !self.pending_add(group, member) {
+            return Err(TransactionError::NotAMember { owner: group, member });
+        }
+        self.member_ops.push(MemberOp::Remove { owner: group, member, reference: true });
+        Ok(())
     }
 
     /// Edit an existing element. It is read from the base the first time it is
@@ -264,7 +412,13 @@ impl<'a> Transaction<'a> {
             .map_err(|detail| TransactionError::Parse { refno, detail })?;
         let old = crate::element_name::stored_name(&parsed);
         self.register(ElementWrite::Delete(refno));
-        self.member_ops.push((owner, refno, false));
+        // A queued placement of the element in some owner's child list (a
+        // move or reorder earlier in this transaction) is withdrawn; the list
+        // that holds it on disk loses it. A reference list keeps its entry —
+        // that is the caller's list to edit.
+        self.member_ops
+            .retain(|op| !matches!(op, MemberOp::Add { member, reference: false, .. } if *member == refno));
+        self.member_ops.push(MemberOp::Remove { owner, member: refno, reference: false });
         let format = self.text_format;
         Self::file_name_edits(&mut self.names, refno, format, old.as_deref(), None)?;
         Ok(())
@@ -292,11 +446,10 @@ impl<'a> Transaction<'a> {
     /// for membership becomes an update appended after the explicit writes.
     fn resolve_members(&mut self) -> Result<(), TransactionError> {
         let ops = std::mem::take(&mut self.member_ops);
-        for (owner, member, add) in ops {
-            if add {
-                self.add_to_owner(owner, member)?;
-            } else {
-                self.remove_from_owner(owner, member)?;
+        for op in ops {
+            match op {
+                MemberOp::Add { owner, member, at, reference } => self.add_to_owner(owner, member, at, reference)?,
+                MemberOp::Remove { owner, member, reference } => self.remove_from_owner(owner, member, reference)?,
             }
         }
         Ok(())
@@ -345,11 +498,12 @@ impl<'a> Transaction<'a> {
         self.writes.insert(refno, write);
     }
 
-    /// Add `member` to `owner`'s member list — in the pending draft if the
-    /// owner is in the batch, else in the base record read as an update. A
-    /// reference-list owner (`GROU`) keeps the members the caller sets; a child
-    /// insert does not touch its list.
-    fn add_to_owner(&mut self, owner: RefNo, member: RefNo) -> Result<(), TransactionError> {
+    /// Put `member` into `owner`'s member list at `at` — in the pending draft if
+    /// the owner is in the batch, else in the base record read as an update. A
+    /// reference-list owner (`GROU`) keeps the members the caller sets: a child
+    /// insert (`reference == false`) does not touch its list, only
+    /// [`Transaction::add_reference_member`] does.
+    fn add_to_owner(&mut self, owner: RefNo, member: RefNo, at: MemberPosition, reference: bool) -> Result<(), TransactionError> {
         if !owner.is_valid() {
             return Ok(()); // the WORLD's owner is null; nothing owns it.
         }
@@ -357,32 +511,123 @@ impl<'a> Transaction<'a> {
             return Err(TransactionError::OwnerDeleted { owner });
         }
         let owner_noun = self.draft_noun(owner, "an owner")?;
-        if self.member_list_is_referenced(owner_noun)? {
+        if !reference && self.member_list_is_referenced(owner_noun)? {
             return Ok(());
         }
         let draft = self.draft_mut(owner, "an owner")?;
-        if !draft.members().contains(&member) {
-            draft.push_member(member);
-        }
-        Ok(())
+        Self::place_member(draft, owner, member, at)
     }
 
     /// Remove `member` from `owner`'s member list, if the owner is not itself
-    /// gone and is a child-list noun.
-    fn remove_from_owner(&mut self, owner: RefNo, member: RefNo) -> Result<(), TransactionError> {
+    /// gone. A child-list owner loses a child (`reference == false`); a
+    /// reference list loses a reference only when the caller asked for that.
+    fn remove_from_owner(&mut self, owner: RefNo, member: RefNo, reference: bool) -> Result<(), TransactionError> {
         if !owner.is_valid() || matches!(self.writes.get(&owner), Some(ElementWrite::Delete(_))) {
             return Ok(());
         }
-        if self.engine.find_element(owner)?.is_none() {
+        if !self.writes.contains_key(&owner) && self.engine.find_element(owner)?.is_none() {
             return Ok(());
         }
         let owner_noun = self.draft_noun(owner, "an owner")?;
-        if self.member_list_is_referenced(owner_noun)? {
+        if !reference && self.member_list_is_referenced(owner_noun)? {
             return Ok(());
         }
         let draft = self.draft_mut(owner, "an owner")?;
         draft.remove_member(member);
         Ok(())
+    }
+
+    /// Put `member` at `at` in `draft`'s list: appended first when it is not
+    /// there, then moved — `move_member_after` is the one list edit `REORDER`
+    /// makes, so `First` / `After` / `Before` all reduce to it.
+    fn place_member(draft: &mut RecordDraft, owner: RefNo, member: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
+        if !draft.members().contains(&member) {
+            draft.push_member(member);
+        }
+        let anchor = match at {
+            MemberPosition::Last => {
+                if draft.members().last() != Some(&member) {
+                    draft.remove_member(member);
+                    draft.push_member(member);
+                }
+                return Ok(());
+            }
+            MemberPosition::First => None,
+            MemberPosition::After(anchor) => {
+                if anchor == member {
+                    return Ok(());
+                }
+                if !draft.members().contains(&anchor) {
+                    return Err(TransactionError::AnchorNotAMember { owner, anchor });
+                }
+                Some(anchor)
+            }
+            MemberPosition::Before(anchor) => {
+                if anchor == member {
+                    return Ok(());
+                }
+                let members = draft.members();
+                let Some(index) = members.iter().position(|m| *m == anchor) else {
+                    return Err(TransactionError::AnchorNotAMember { owner, anchor });
+                };
+                // The member before the anchor, skipping the member itself
+                // (which is being moved out of wherever it sits).
+                members[..index].iter().rev().find(|m| **m != member).copied()
+            }
+        };
+        draft.move_member_after(member, anchor);
+        Ok(())
+    }
+
+    /// Refuse an anchor that is neither in the owner's list as stored nor
+    /// queued to be added to it in this transaction. The list itself is
+    /// checked again at stage time, when the queued additions have landed.
+    fn check_anchor(&mut self, owner: RefNo, member: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
+        let anchor = match at {
+            MemberPosition::After(anchor) | MemberPosition::Before(anchor) => anchor,
+            MemberPosition::Last | MemberPosition::First => return Ok(()),
+        };
+        if anchor == member {
+            return Ok(());
+        }
+        if self.members_of(owner)?.contains(&anchor) || self.pending_add(owner, anchor) {
+            return Ok(());
+        }
+        Err(TransactionError::AnchorNotAMember { owner, anchor })
+    }
+
+    /// Whether an addition of `member` to `owner` is already queued.
+    fn pending_add(&self, owner: RefNo, member: RefNo) -> bool {
+        self.member_ops
+            .iter()
+            .any(|op| matches!(op, MemberOp::Add { owner: o, member: m, .. } if *o == owner && *m == member))
+    }
+
+    /// The owner an element has right now: the pending draft's, else the base
+    /// record's. `None` when the element is nowhere.
+    fn owner_of(&mut self, refno: RefNo) -> Result<Option<RefNo>, TransactionError> {
+        match self.writes.get(&refno) {
+            Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => Ok(Some(draft.owner)),
+            Some(ElementWrite::Delete(_)) => Ok(None),
+            None => Ok(self.engine.find_element(refno)?.map(|view| view.header().owner)),
+        }
+    }
+
+    /// The member list an element has right now: the pending draft's, else the
+    /// base record's; empty when the element is nowhere.
+    fn members_of(&mut self, refno: RefNo) -> Result<Vec<RefNo>, TransactionError> {
+        match self.writes.get(&refno) {
+            Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => Ok(draft.members().to_vec()),
+            Some(ElementWrite::Delete(_)) => Ok(Vec::new()),
+            None => {
+                let Some(view) = self.engine.find_element(refno)? else {
+                    return Ok(Vec::new());
+                };
+                let parsed = crate::record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format)
+                    .map_err(|detail| TransactionError::Parse { refno, detail })?;
+                Ok(parsed.members)
+            }
+        }
     }
 
     fn member_list_is_referenced(&mut self, noun: u32) -> Result<bool, TransactionError> {

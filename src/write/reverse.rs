@@ -265,9 +265,15 @@ pub fn set_reference(draft: &mut RecordDraft, template: &NounTemplate, hash: u32
 }
 
 /// Give a new element the `TYPEX` its noun's template lists, the way
-/// `core.dll` does at creation: `[1, noun]` at the front of the explicit
-/// stream. Returns whether the field was added; a template without `TYPEX`
-/// (`BOX`, `WORL`, …) or a record that already carries it changes nothing.
+/// `core.dll` does at creation: `[1, noun]` **appended** to the explicit
+/// stream through the ordinary `4SCEA` path — after the chunk-2 prefix
+/// `RecordDraft::from_template` seeds and after whatever the caller set
+/// before staging, which is where E3D 3.1 itself puts it (`TES023`: `EQUI
+/// [NAME TYPEX]`, `ZONE [DUNIO NAME FUNC TYPEX]`; 3 251 of `ams8000_0001`'s
+/// 5 941 `TYPEX` records open with the seeded `ISOH`, not `TYPEX` —
+/// `docs/evidence/2026-09-22-core-dll-record-draft-data-flow.md` ①). Returns
+/// whether the field was added; a template without `TYPEX` (`BOX`, `WORL`, …)
+/// or a record that already carries it changes nothing.
 pub fn ensure_typex(draft: &mut RecordDraft, template: &NounTemplate) -> bool {
     let typex = typex_table_hash();
     let listed = template
@@ -277,7 +283,7 @@ pub fn ensure_typex(draft: &mut RecordDraft, template: &NounTemplate) -> bool {
     if !listed || draft.explicit_words(typex).is_some() {
         return false;
     }
-    draft.set_explicit_words_first(typex, KEYED_TYPE_CODE, vec![1, draft.noun_hash]);
+    draft.set_explicit_words(typex, KEYED_TYPE_CODE, vec![1, draft.noun_hash]);
     true
 }
 

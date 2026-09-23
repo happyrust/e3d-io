@@ -74,12 +74,14 @@ use keyed_cow::KeyedEditKind;
 pub use merge::{write_merge_session, write_merge_session_with, MergeConflict, MergeOptions};
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
-pub use record::{HunkDraft, MemberMerge, MemberStanding, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError};
+pub use record::{
+    HunkDraft, MemberMerge, MemberStanding, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError, FORMAT_COUNT_MAX,
+};
 pub use reverse::{
     ensure_typex, reference_array, reference_value, set_reference, set_reference_array, table_keys, typex_table_hash,
 };
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
-pub use transaction::{Transaction, TransactionError};
+pub use transaction::{MemberPosition, Transaction, TransactionError};
 
 /// Why a write did not happen. Nothing in this enum is returned after page 0
 /// has been written: past that point the session is committed.
@@ -168,6 +170,19 @@ pub enum WriteError {
          page can hold; the implicit region cannot span pages (only the tail blocks do)"
     )]
     RecordTooLong { words: usize, page_words: usize },
+    /// A tail block of `0x3FFF` words or more ends in a zero word. Its count in
+    /// the record's format word saturates at `0x3FFF`
+    /// ([`record::FORMAT_COUNT_MAX`]), and a block whose count reads `0x3FFF`
+    /// is measured by `core.dll` along its chain with the zero words at the end
+    /// of the last segment dropped (`sub_5AEA500`), so E3D would read this
+    /// block short. A member list never ends in zero (a member's `word0` is its
+    /// database number); an explicit stream does when its last field's data
+    /// does — store such a value as a hunk, or place it earlier in the stream.
+    #[error(
+        "{refno}: the {block} block is {words} words, at or past the format word's 0x3FFF, and ends \
+         in a zero word that core.dll's chain-length reading would drop"
+    )]
+    SaturatedBlockEndsInZero { refno: RefNo, block: &'static str, words: usize },
     /// The schema templates a write was given could not be read.
     #[error("{0}")]
     Template(#[from] crate::record::template::TemplateLoadError),
@@ -676,6 +691,15 @@ fn place_record(
         hunk_addresses.push((pending.hash, address.0, address.1));
     }
     let explicit_payload: Vec<u32> = draft.explicit_stream_words_with_hunks(&hunk_addresses);
+
+    // A block whose count saturates the format word is read by core.dll along
+    // its chain, minus the zero words at the end of its last segment; refuse
+    // the one shape that reading would truncate rather than write it.
+    for (block, payload) in [("member", &member_payload), ("explicit", &explicit_payload)] {
+        if payload.len() >= record::FORMAT_COUNT_MAX && payload.last() == Some(&0) {
+            return Err(WriteError::SaturatedBlockEndsInZero { refno: draft.refno, block, words: payload.len() });
+        }
+    }
 
     // The header page: the working page when the header and implicit region
     // still fit, else set it aside and start fresh.

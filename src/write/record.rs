@@ -19,7 +19,16 @@
 //! member list's word count, `members × 2`; bits 14..28 are the explicit
 //! stream's word count, `Σ(2 + data_words)`; bit 29 is the wide-layout flag,
 //! set on all of them). The reader does not consult it — it follows the two
-//! addresses instead — but E3D does, so it is written the way E3D writes it.
+//! addresses instead — but E3D does, so it is written the way E3D writes it:
+//! each count **saturates at `0x3FFF`** ([`FORMAT_COUNT_MAX`]), as
+//! `sub_5AEC110` writes it, and `core.dll`'s block loader (`sub_5AEA500`)
+//! copies exactly that many words unless the field reads `0x3FFF`, in which
+//! case it measures the block along its chain instead, dropping the zero words
+//! at the end of the last segment
+//! (`docs/evidence/2026-09-22-core-dll-record-draft-data-flow.md` §2.1, ⑤). A
+//! count written unsaturated past that range spills into the neighbouring
+//! field — a 20 128-member ZONE came back from E3D with 3 744 members, which
+//! is `40 256 & 0x3FFF` words.
 //!
 //! Values are laid into the implicit region in the wide form (bit 29), the one
 //! every sampled element uses: a real at a descriptor's wide word offset is two
@@ -187,6 +196,60 @@ impl RecordDraft {
             explicit_stream,
             hunks: Vec::new(),
         })
+    }
+
+    /// A new element's record as `core.dll`'s `4CEIL` drafts it before any
+    /// attribute is set: the noun's default implicit region (chunk 1 of its
+    /// `*vir.dat` child) behind an eleven-word header carrying the wide-layout
+    /// flag, no members, and the explicit stream **seeded** from chunk 2
+    /// ([`Self::seed_explicit_defaults`]). The header's addresses and counts
+    /// are recomputed at placement.
+    pub fn from_template(
+        refno: RefNo,
+        owner: RefNo,
+        template: &crate::record::template::NounTemplate,
+    ) -> Result<Self, RecordEncodeError> {
+        let mut implicit = vec![0u32; HEADER_WORDS];
+        implicit.extend_from_slice(&template.defaults.implicit);
+        // `set_attribute` reads the wide bit to refuse a compact record, so a
+        // fresh draft must carry it; the rest of word 10 is recomputed on encode.
+        implicit[10] |= WIDE_LAYOUT_FLAG;
+        let mut draft = Self::new(refno, template.noun_hash, owner, implicit, Vec::new(), Vec::new())?;
+        draft.seed_explicit_defaults(template);
+        Ok(draft)
+    }
+
+    /// Seed the explicit stream the way `4CEIL` does when it creates an
+    /// element (`docs/evidence/2026-09-22-core-dll-record-draft-data-flow.md`
+    /// §2.7, difference ①): every chunk-2 default whose attribute is
+    /// explicit-only (no wide implicit slot) and whose descriptor word 6 has
+    /// bit 1 clear (`compact.flags & 2 == 0`) is copied in, in chunk-2 order,
+    /// as `[hash][type << 26 | words][payload]`. That prefix — `PIPE`'s
+    /// `[ISOH DELDSG SLOREF]`, `BRAN`'s `[ISOH DELDSG SLOREF AEXCES LEXCES
+    /// LOOS]`, empty for `BOX` / `ZONE` / `EQUI` / `GROU` — opens the stream
+    /// of all 34 478 stream-carrying records of four sampled databases with no
+    /// exception; whatever the caller sets afterwards, `TYPEX` included,
+    /// follows it. An attribute the stream already carries is left as it is.
+    /// Returns how many entries were seeded.
+    pub fn seed_explicit_defaults(&mut self, template: &crate::record::template::NounTemplate) -> usize {
+        let mut seeded = 0;
+        for entry in &template.defaults.explicit {
+            let Some(attr) = template.attrs.iter().find(|attr| attr.hash == entry.hash) else {
+                continue;
+            };
+            if attr.wide.location.word_offset() != 0 || attr.compact.flags & 2 != 0 {
+                continue;
+            }
+            if self.explicit_words(entry.hash).is_some() {
+                continue;
+            }
+            let Ok(type_code) = u16::try_from(entry.storage_type_code << 10) else {
+                continue;
+            };
+            self.set_explicit_words(entry.hash, type_code, entry.words.clone());
+            seeded += 1;
+        }
+        seeded
     }
 
     /// Decode a gathered record ([`crate::record::read_record`] output) back
@@ -398,9 +461,11 @@ impl RecordDraft {
     }
 
     /// [`Self::set_explicit_words`], but a field the element lacks goes to the
-    /// **front** of the stream — where `core.dll` puts `TYPEX`, which it sets
-    /// before anything else at element creation (every `TYPEX`-carrying record
-    /// of `ams8000_0001` opens its stream with it).
+    /// **front** of the stream. `core.dll` never does this — an attribute lands
+    /// where it was set, `TYPEX` included (`ensure_typex` used to put it here
+    /// on the belief every `TYPEX`-carrying record opens with it; 3 251 of
+    /// `ams8000_0001`'s 5 941 open with the seeded `ISOH` instead) — so this
+    /// is for a caller reproducing a specific stream, not for new elements.
     pub fn set_explicit_words_first(&mut self, hash: u32, type_code: u16, data: Vec<u32>) {
         self.upsert_explicit(hash, type_code, data, true);
     }
@@ -733,14 +798,26 @@ impl RecordDraft {
     }
 }
 
+/// The largest value either block count of the format word can state: the
+/// fields are fourteen bits wide (`sub_5AEC110` writes `min(words, 0x3FFF)`
+/// into each). A block of that many words or more is read by `core.dll` by
+/// walking its chain (`sub_5AEA500`), which also drops the zero words at the
+/// end of the last segment — see [`crate::write::WriteError::SaturatedBlockEndsInZero`].
+pub const FORMAT_COUNT_MAX: usize = 0x3FFF;
+
 /// Word 10 of a record header, the storage-format word, in the wide layout
 /// every element uses: `0x20000000 | member_words | (explicit_stream_words <<
 /// 14)`. `member_words` is `members × 2`, `explicit_stream_words` the explicit
 /// stream's word count — the same fields whether the record is laid on one
 /// page or split across several, so the placer and [`RecordDraft::encode`]
-/// compute it here.
+/// compute it here. Each count saturates at [`FORMAT_COUNT_MAX`], as
+/// `core.dll` writes it; unsaturated, a member count past it would spill into
+/// the explicit count and E3D would load only the low fourteen bits' worth of
+/// members.
 pub fn wide_format_word(member_words: usize, explicit_stream_words: usize) -> u32 {
-    WIDE_LAYOUT_FLAG | member_words as u32 | ((explicit_stream_words as u32) << 14)
+    let members = member_words.min(FORMAT_COUNT_MAX) as u32;
+    let explicit = explicit_stream_words.min(FORMAT_COUNT_MAX) as u32;
+    WIDE_LAYOUT_FLAG | members | (explicit << 14)
 }
 
 /// The packed second word of a `(page, packed)` address: `ext | (offset << 13)`
@@ -1781,6 +1858,80 @@ mod tests {
         assert!(!draft.move_member_after(a, Some(m(99))), "missing anchor");
         assert!(!draft.move_member_after(a, Some(a)), "a member cannot anchor itself");
         assert_eq!(draft.members(), &[c, b, a], "a refused move changes nothing");
+    }
+
+    /// The format word's two fourteen-bit counts saturate at `0x3FFF` the way
+    /// `sub_5AEC110` writes them; below that they are exact, and neither ever
+    /// spills into the other (the T2 "3 744 members" symptom: 20 128 members =
+    /// 40 256 member words, `& 0x3FFF` = 7 488).
+    #[test]
+    fn the_format_word_saturates_each_count_at_0x3fff() {
+        assert_eq!(wide_format_word(4, 7), 0x2000_0000 | 4 | (7 << 14));
+        assert_eq!(wide_format_word(248, 12), 0x2000_0000 | 248 | (12 << 14));
+        assert_eq!(wide_format_word(0x3FFF, 0x3FFF), 0x2000_0000 | 0x3FFF | (0x3FFF << 14));
+        let word = wide_format_word(40_256, 7);
+        assert_eq!(word & 0x3FFF, FORMAT_COUNT_MAX as u32, "the member count saturates");
+        assert_eq!((word >> 14) & 0x3FFF, 7, "and leaves the explicit count alone");
+        assert_eq!(word >> 28, 0x2, "only the wide flag above the two counts");
+        let word = wide_format_word(6, 70_000);
+        assert_eq!(word & 0x3FFF, 6);
+        assert_eq!((word >> 14) & 0x3FFF, FORMAT_COUNT_MAX as u32, "the explicit count saturates");
+        assert_eq!(word >> 28, 0x2, "the explicit overflow does not reach the flag bits");
+    }
+
+    /// `from_template` seeds the explicit stream from chunk 2 the way `4CEIL`
+    /// does: explicit-only attributes with descriptor word 6 bit 1 clear, in
+    /// chunk-2 order; an implicit-slotted attribute and a bit-1 attribute are
+    /// skipped, and a value the caller set first is not overwritten.
+    #[test]
+    fn from_template_seeds_chunk_2_defaults_in_order_and_filtered() {
+        use crate::record::template::{EncodedLocation, NounDefaultEntry, NounTemplate, StorageDescriptor, TemplateAttr};
+        let attr = |hash: u32, wide_offset: u32, flags: u32| {
+            let mut attr = TemplateAttr::single_word(hash);
+            attr.storage_type_code = 3;
+            attr.compact = StorageDescriptor { storage_words: 1, location: EncodedLocation { raw: 0 }, flags };
+            attr.wide = StorageDescriptor { storage_words: 1, location: EncodedLocation { raw: wide_offset }, flags: 0 };
+            attr
+        };
+        let (isoh, deldsg, cachid, hdshap, aexces, stranger) = (0x1001, 0x1002, 0x1003, 0x1004, 0x1005, 0x1006);
+        let mut template = NounTemplate::new(0x861E0);
+        template.attrs = vec![
+            attr(isoh, 0, 0),      // explicit-only, seeded
+            attr(deldsg, 12, 0),   // implicit slot at wide word 12: not seeded
+            attr(cachid, 0, 0x3),  // word 6 bit 1 set: not seeded
+            attr(hdshap, 0, 0x2),  // bit 1 alone: not seeded
+            attr(aexces, 0, 0x1),  // bit 0 only: seeded
+        ];
+        template.defaults.implicit = vec![7, 8, 9];
+        template.defaults.explicit = vec![
+            NounDefaultEntry { hash: cachid, storage_type_code: 3, words: vec![0] },
+            NounDefaultEntry { hash: isoh, storage_type_code: 3, words: vec![0] },
+            NounDefaultEntry { hash: deldsg, storage_type_code: 3, words: vec![1] },
+            NounDefaultEntry { hash: hdshap, storage_type_code: 3, words: vec![0] },
+            NounDefaultEntry { hash: aexces, storage_type_code: 2, words: vec![0, 0] },
+            NounDefaultEntry { hash: stranger, storage_type_code: 3, words: vec![0] }, // not in attrs
+        ];
+
+        let draft = RecordDraft::from_template(RefNo::new(1, 10), RefNo::new(1, 1), &template).unwrap();
+        assert_eq!(draft.implicit().len(), HEADER_WORDS + 3);
+        assert_eq!(&draft.implicit()[HEADER_WORDS..], &[7, 8, 9], "chunk 1 behind the header");
+        assert_eq!(draft.implicit()[10] & WIDE_LAYOUT_FLAG, WIDE_LAYOUT_FLAG, "the wide flag is on");
+        assert!(draft.members().is_empty());
+        let fields: Vec<(u32, u16, Vec<u32>)> = draft.parse_explicit_fields();
+        assert_eq!(
+            fields,
+            vec![(isoh, 3 << 10, vec![0]), (aexces, 2 << 10, vec![0, 0])],
+            "only the explicit-only, bit-1-clear entries, in chunk-2 order"
+        );
+
+        // Seeding again adds nothing; a value set before seeding is kept.
+        let mut again = draft.clone();
+        assert_eq!(again.seed_explicit_defaults(&template), 0);
+        let mut preset = RecordDraft::new(RefNo::new(1, 11), 0x861E0, RefNo::new(1, 1), implicit(&[]), vec![], vec![]).unwrap();
+        preset.set_explicit_words(isoh, 3 << 10, vec![5]);
+        assert_eq!(preset.seed_explicit_defaults(&template), 1, "only AEXCES is new");
+        assert_eq!(preset.explicit_words(isoh), Some((3 << 10, vec![5])), "the preset value stands");
+        let _ = again;
     }
 
     /// `content_eq` sees past the header and explicit-stream padding, and
