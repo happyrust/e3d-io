@@ -21,8 +21,12 @@
   3. Renders write_gate.mac.template with the refnos the bin printed and runs it through
      gen-model's l3_suite `--check-driver` (des.exe TTY, login SYSTEM/XXXXXX, MDB /ALL,
      project AMS pointed at the copy via --project-dir). The macro is read-only.
-  4. Greps the per-question logs for the values written and prints PASS/FAIL per question;
-     exits 1 on any FAIL.
+  4. Greps the per-question logs for the values written and prints PASS/FAIL per question.
+  5. T1c, the merge: a second E3D session creates an EQUI (with a BOX in it) under the
+     first ZONE and SAVEWORKs (write_gate_e3d_saves.mac.template — the one macro that
+     writes); then `e3d-write-box --merge-from <the bin's last session>` opens a
+     transaction at that older base and commits a merge onto E3D's session; then a third
+     E3D session reads both back (write_gate_merge.mac.template). Exits 1 on any FAIL.
 
   Other E3D sessions may be running: the driver is told to tolerate them
   (L3_ALLOW_EXISTING_E3D_SESSION=1) and waits only for the session it starts.
@@ -104,6 +108,8 @@ $spanning = [regex]::Match($binOut, 'hunk chains that cross a page boundary: (\d
 $bigMembers = [int][regex]::Match($binOut, 'big members\s*:\s*(\d+)').Groups[1].Value
 # The text the FIXING's CREF was set from (the first ZONE's /NAME), which E3D prints back.
 $crefText = [regex]::Match($binOut, 'CREF text\s*:\s*(\S+)').Groups[1].Value
+# The bin's last session: the base the T1c merge transaction is opened at.
+$lastSesno = [int](([regex]::Matches($binOut, 'wrote session (\d+)') | Select-Object -Last 1).Groups[1].Value)
 Write-Output ("wrote: BOX {0} GPWL {1} GROU {2} EQUI {3} {4} FIXING {5}; hunk chains across a page: {6}" -f $ids.BOX, $ids.GPWL, $ids.GROU, $ids.EQUI1, $ids.EQUI2, $ids.FIXING, $spanning)
 Write-Output ("       moves: BOX A {0} B {1} C {2} under ZONE 2 {3}, A moved to ZONE 3 {4}; big ZONE {5} with {6} BOXes" -f $ids.BOXM1, $ids.BOXM2, $ids.BOXM3, $ids.ZONE2, $ids.ZONE3, $ids.BIGZONE, $bigMembers)
 Write-Output ("       by name: EQUI {0}, FIXING {1} (CREF = {2})" -f $ids.STREQUI, $ids.STRFIXING, $crefText)
@@ -112,22 +118,35 @@ Write-Output ("       by name: EQUI {0}, FIXING {1} (CREF = {2})" -f $ids.STREQU
 New-Item -ItemType Directory -Force $logDir, $driverOut | Out-Null
 Remove-Item (Join-Path $logDir '*.log') -Force -ErrorAction SilentlyContinue
 $forward = { param([string]$p) $p -replace '\\', '/' }
-$text = Get-Content (Join-Path $PSScriptRoot 'write_gate.mac.template') -Raw
-$text = $text.Replace('{{LOGDIR}}', (& $forward $logDir)).Replace('{{MACROLOG}}', (& $forward ([IO.Path]::ChangeExtension($macro, '.log'))))
-foreach ($key in $ids.Keys) { $text = $text.Replace("{{$key}}", $ids[$key]) }
-Set-Content -Path $macro -Value $text -Encoding ASCII
+# Render `$template` with `$vars` (plus {{LOGDIR}} / {{MACROLOG}}) to `$macroName` in the
+# scratch dir and run it through one E3D TTY session; the driver's own output goes to a
+# folder named after the macro. A macro that SAVEWORKs is "stateful" to the driver, which
+# then wants the database file it is expected to advance (and a project label it does not
+# read) and refuses to call the run done unless the file's session number moved.
+function Invoke-E3D([string]$template, [string]$macroName, [hashtable]$vars, [switch]$stateful) {
+    $macroPath = Join-Path $Scratch $macroName
+    $out = Join-Path $Scratch ('driver-out-' + [IO.Path]::GetFileNameWithoutExtension($macroName))
+    New-Item -ItemType Directory -Force $out | Out-Null
+    $text = Get-Content (Join-Path $PSScriptRoot $template) -Raw
+    $text = $text.Replace('{{LOGDIR}}', (& $forward $logDir)).Replace('{{MACROLOG}}', (& $forward ([IO.Path]::ChangeExtension($macroPath, '.log'))))
+    foreach ($key in $vars.Keys) { $text = $text.Replace("{{$key}}", $vars[$key]) }
+    Set-Content -Path $macroPath -Value $text -Encoding ASCII
 
-$previous = $env:L3_ALLOW_EXISTING_E3D_SESSION
-$env:L3_ALLOW_EXISTING_E3D_SESSION = '1'
-Push-Location $GenModel
-try {
-    & $L3Exe --check-driver $macro --project-dir $copy --output $driverOut 2>&1 | Tee-Object -FilePath (Join-Path $driverOut 'l3_suite.stdout.txt') | Select-Object -First 3
-    $driverExit = $LASTEXITCODE
-} finally {
-    Pop-Location
-    if ($null -eq $previous) { Remove-Item Env:\L3_ALLOW_EXISTING_E3D_SESSION -ErrorAction SilentlyContinue } else { $env:L3_ALLOW_EXISTING_E3D_SESSION = $previous }
+    $driverArgs = @('--check-driver', $macroPath, '--project-dir', $copy, '--output', $out)
+    if ($stateful) { $driverArgs += @('--target-db-file', $copyDb, '--aios-project', 'e3dio-write-gate') }
+    $previous = $env:L3_ALLOW_EXISTING_E3D_SESSION
+    $env:L3_ALLOW_EXISTING_E3D_SESSION = '1'
+    Push-Location $GenModel
+    try {
+        & $L3Exe @driverArgs 2>&1 | Tee-Object -FilePath (Join-Path $out 'l3_suite.stdout.txt') | Select-Object -First 3
+        $driverExit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+        if ($null -eq $previous) { Remove-Item Env:\L3_ALLOW_EXISTING_E3D_SESSION -ErrorAction SilentlyContinue } else { $env:L3_ALLOW_EXISTING_E3D_SESSION = $previous }
+    }
+    if ($driverExit) { throw "E3D TTY driver failed ($driverExit) on $macroName; see $out" }
 }
-if ($driverExit) { throw "E3D TTY driver failed ($driverExit); see $driverOut" }
+Invoke-E3D 'write_gate.mac.template' (Split-Path $macro -Leaf) $ids
 
 # 4. The verdicts.
 $failures = 0
@@ -234,6 +253,69 @@ Check "Q10 big ZONE: Q MEM lists all $bigMembers BOXes (format word count satura
 # typed — the strings here are e3d-write-box's STR_* constants.
 Check 'Q11a EQUI set by name: DESC / POS / FUNC / PURP print back as typed' '96_str_equi.log' @('Name /E3DIO-STR-EQUI', 'Description e3d-io T1b: DESC typed as text and set by name through Transaction::set', 'Position E 1234mm N 2345mm U 3456mm', 'Function STRING-PATH', 'Purpose PIPE')
 Check 'Q11b FIXING set by name: ROKEYS as a | list, BUIL true, NUMB 42, CREF from /NAME' '97_str_fixing.log' @('Name /E3DIO-STR-FIXING', 'Rokeys', ' 1 S1', ' 2 S2', ' 3 S3', 'Built true', 'Number 42', "Cref $crefText")
+
+# 5. T1c (plan §2 T1c: the gate's Q20). E3D saves a session of its own — an EQUI it
+# creates under the first ZONE, with a BOX in it — after the bin's last session; a
+# transaction opened at that last session then commits: a merge onto E3D's session (E3D
+# saves once more on quit, so the newest session is past the SAVEWORK's). E3D must read
+# both, and the ZONE's list must be the merge of both edits: E3D's EQUI where E3D put it
+# (first — `NEW` at the owner), the merged BOX anchored after the base's last member (its
+# preceding sibling in the transaction's list, `sub_5B20CA0`), i.e. last.
+try {
+    Invoke-E3D 'write_gate_e3d_saves.mac.template' 'write_gate_e3d_saves.mac' @{ ZONE = $ids.ZONE } -stateful
+} catch {
+    # The driver refuses to call a stateful run done unless the file's session advanced;
+    # the log below says what E3D did, so report rather than throw.
+    Write-Output "     (E3D's saving session: $($_.Exception.Message))"
+}
+$savesLog = Join-Path $logDir 'e3d_saves.log'
+$saves = if (Test-Path $savesLog) { Read-LogText $savesLog } else { '' }
+if ($saves -notmatch 'E3DSAVE-SAVED') {
+    Write-Output 'FAIL Q12  E3D did not save its own session (see e3d_saves.log); the merge was not attempted'
+    foreach ($e in @([regex]::Matches($saves, '(?m)^.*(ERROR|E3DSAVE-\S+-ERROR|\(\d+,\d+\)).*$') | ForEach-Object { $_.Value })) { Write-Output "     E3D said: $e" }
+    $failures++
+} else {
+    # The refnos E3D minted: the `Ref =` after each labelled line.
+    $e3dEqui = [regex]::Match($saves, 'E3DSAVE-EQUI\s+Ref =(\d+/\d+)').Groups[1].Value
+    $e3dBox = [regex]::Match($saves, 'E3DSAVE-BOX\s+Ref =(\d+/\d+)').Groups[1].Value
+    $e3dSesno = [regex]::Match($saves, 'Last saved session number (\d+)').Groups[1].Value
+    Push-Location $crate
+    try {
+        $mergeOut = & cargo run --quiet --bin e3d-write-box -- $copyDb --merge-from $lastSesno 2>&1 | Out-String
+    } finally { Pop-Location }
+    Set-Content -Path (Join-Path $Scratch 'e3d-write-box.merge.out.txt') -Value $mergeOut
+    if ($LASTEXITCODE) {
+        Write-Output "FAIL Q12  e3d-write-box --merge-from $lastSesno failed"
+        Write-Output $mergeOut
+        $failures++
+    } else {
+        $mergeBox = [regex]::Match($mergeOut, 'new BOX merge\s*:\s*(\d+/\d+)').Groups[1].Value
+        $mergeSesno = [regex]::Match($mergeOut, 'wrote session (\d+)').Groups[1].Value
+        $mergedOnto = [regex]::Match($mergeOut, 'merged onto\s*:\s*(\d+)').Groups[1].Value
+        $reminted = [regex]::Match($mergeOut, 're-minted\s*:\s*(.*)').Groups[1].Value.Trim()
+        Write-Output ("       merge: E3D saved session {0} (EQUI {1}, BOX {2}); the transaction at base {3} merged onto {4} as session {5}, its BOX {6}, re-minted {7}" -f $e3dSesno, $e3dEqui, $e3dBox, $lastSesno, $mergedOnto, $mergeSesno, $mergeBox, $reminted)
+        # E3D saves again when it quits (T2 saw its "Saving Meta Data" sessions), so the
+        # newest session the merge lands on may be past the SAVEWORK's number; it must not be
+        # before it.
+        if ([int]$mergedOnto -lt [int]$e3dSesno) {
+            Write-Output "FAIL Q12  the merge went onto session $mergedOnto, before E3D's save $e3dSesno"; $failures++
+        } elseif ([int]$mergedOnto -gt [int]$e3dSesno) {
+            Write-Output ("       (E3D saved {0} more session(s) after its SAVEWORK, on quit; the merge went onto the newest, {1})" -f ([int]$mergedOnto - [int]$e3dSesno), $mergedOnto)
+        }
+        Invoke-E3D 'write_gate_merge.mac.template' 'write_gate_merge.mac' @{ ZONE = $ids.ZONE; ZONE2 = $ids.ZONE2; E3DBOX = $e3dBox; MERGEBOX = $mergeBox }
+        Check 'Q12a the BOX E3D saved is still there after the merge, as E3D left it' '98_merge_e3d_box.log' @('Name /E3DIO-E3D-BOX', 'Owner /E3DIO-E3D-EQUI', 'Xlength 777mm')
+        # E3D's `NEW EQUI` with the ZONE as the current element puts the EQUI **first** in the
+        # ZONE's list (` 1 EQUI 1 /E3DIO-E3D-EQUI`), not last (2026-09-23, this run); the merged
+        # BOX, anchored after the base's last member (`/E3DIO-STR-FIXING`, `sub_5B20CA0`), is
+        # last — so the merged list is E3D's EQUI, the base's members, the merged BOX: one more
+        # than E3D's list, two more than the base's.
+        $zoneBefore = @([regex]::Matches((Read-LogText (Join-Path $logDir '50_zone.log')), $memberLine)).Count
+        Check 'Q12b the first ZONE lists E3D''s EQUI (first, where NEW put it), the base''s members, then the merged BOX after its anchor' '99_merge_zone.log' @(' 1 EQUI 1 /E3DIO-E3D-EQUI', '/E3DIO-STR-FIXING', '/E3DIO-MERGE-BOX') -ordered -lastMember '/E3DIO-MERGE-BOX' -memberLines ($zoneBefore + 2)
+        Check 'Q12c the merged BOX: name, owner, the values set by name' '99b_merge_box.log' @('Name /E3DIO-MERGE-BOX', "Owner $crefText", 'Xlength 555mm', 'Position E 5000mm N 5000mm U 5000mm')
+        Check 'Q12d the second ZONE''s FUNC from the merged session' '99c_merge_zone2.log' @('Function MERGED-BY-E3DIO')
+        Check 'Q12e the newest session is the merge, by e3dio, one past E3D''s' '99d_merge_session.log' @("Last saved session number $mergeSesno", 'User: e3dio')
+    }
+}
 
 Write-Output ''
 if ($failures) { Write-Output "$failures FAIL — logs in $logDir"; exit 1 }

@@ -1,0 +1,56 @@
+-- e3d-io write-path gate, the session E3D itself saves (plan T1c): run by
+-- tools/e3d/write_gate.ps1 after e3d-write-box's own sessions and after the read-back
+-- macro, and before `e3d-write-box --merge-from <that last session>` merges onto what
+-- E3D saved here. Rendered from this template: {{LOGDIR}}, {{MACROLOG}}, {{ZONE}} (the
+-- first ZONE, the one e3d-write-box put its BOX under).
+--
+-- E3D creates an EQUI under that ZONE, a BOX under the EQUI, and SAVEWORKs: a session
+-- E3D wrote, with refnos E3D minted, sitting between the transaction's base and its
+-- commit. (An EQUI, not a BOX: E3D's `NEW` keeps the hierarchy rules — `NEW BOX` at a
+-- ZONE is `(41,8) Cannot create a BOX at this level` — while it reads the BOXes e3d-io
+-- puts straight under a ZONE without complaint.) The refnos are printed on labelled
+-- lines the gate script picks up: E3DSAVE-EQUI / E3DSAVE-BOX.
+
+ALPHA LOG "{{LOGDIR}}/e3d_saves.log" OVER
+$P E3DSAVE-BEGIN
+={{ZONE}}
+handle any
+  $P E3DSAVE-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  NEW EQUI /E3DIO-E3D-EQUI
+  handle any
+    $P E3DSAVE-NEW-ERROR $!!error.text
+  elsehandle none
+    POS E 7000 N 7000 U 7000
+    $P E3DSAVE-EQUI
+    Q REF
+    Q OWNER
+    NEW BOX /E3DIO-E3D-BOX
+    handle any
+      $P E3DSAVE-NEW-ERROR $!!error.text
+    elsehandle none
+      XLEN 777
+      YLEN 777
+      ZLEN 777
+      POS E 7000 N 7000 U 7000
+      $P E3DSAVE-BOX
+      Q REF
+      Q OWNER
+      SAVEWORK
+      handle any
+        $P E3DSAVE-SAVE-ERROR $!!error.text
+      elsehandle none
+        $P E3DSAVE-SAVED
+        Q SESSION
+      endhandle
+    endhandle
+  endhandle
+endhandle
+$P E3DSAVE-END
+ALPHA LOG END
+
+-- The driver reads <macro>.log as the scenario log: a summary marker.
+ALPHA LOG "{{MACROLOG}}" OVER
+$P E3DIO-GATE-DONE see {{LOGDIR}}/e3d_saves.log
+ALPHA LOG END

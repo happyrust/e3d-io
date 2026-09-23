@@ -61,6 +61,14 @@
 //! header's `FORMAT` says (`e3d_io::record::text::encode_as`, plan S5). It goes
 //! last so `Q SESSION` shows its comment.
 //!
+//! `--merge-from <sesno>` is a different run (plan T1c): none of the sessions
+//! above, just one transaction opened at session `<sesno>` — a base the
+//! database has since moved past, E3D itself having saved in between — that
+//! inserts a BOX under the first ZONE and sets the second ZONE's `FUNC`, and
+//! commits: a **merge** onto the newest session (`BASESN` = `<sesno>`), the
+//! inserted refno re-minted if the sessions in between took it. The question
+//! is whether E3D then reads both what it wrote and what was merged in.
+//!
 //! It writes the database **in place**, so point it at a copy (or a backed-up
 //! project DB); the write is an append plus the page-0 commit, so restoring the
 //! original bytes undoes it. It prints the session numbers, the RefNos and
@@ -72,13 +80,14 @@ use e3d_io::engine::ScanTier;
 use e3d_io::record::descriptor::DescriptorValue;
 use e3d_io::record::template::{MemberListKind, NounTemplate, TemplateProvider};
 use e3d_io::record::text::TextFormat;
+use e3d_io::session::SessionSelector;
 use e3d_io::write::{Dictionary, DictionaryError, MemberPosition, RecordDraft, SessionRequest, Transaction, TransactionError};
 use e3d_io::{ReadOnlyEngine, RefNo};
 
 const DEFAULT_DESVIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/desvir.dat");
 /// E3D's dictionary export the schema pack carries, for `--strings`.
 const DICTIONARY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/catalog/noun_attr_fields.json");
-const USAGE: &str = "usage: e3d-write-box <database> [desvir.dat] [--group] [--hunk] [--move] [--big] [--strings] [--text]";
+const USAGE: &str = "usage: e3d-write-box <database> [desvir.dat] [--group] [--hunk] [--move] [--big] [--strings] [--text] | --merge-from <sesno>";
 
 /// The `NAME` the `--text` session gives the BOX and the `DESC` it gives the
 /// ZONE: text outside ASCII, stored as the header's `FORMAT` says.
@@ -106,6 +115,13 @@ pub const STR_EQUI_PURP: &str = "PIPE";
 pub const STR_FIXING_NAME: &str = "/E3DIO-STR-FIXING";
 pub const STR_FIXING_ROKEYS: &str = "S1|S2|S3";
 pub const STR_FIXING_NUMB: &str = "42";
+
+/// What the `--merge-from` transaction writes: a BOX under the first ZONE and
+/// the second ZONE's `FUNC`.
+pub const MERGE_BOX_NAME: &str = "/E3DIO-MERGE-BOX";
+pub const MERGE_BOX_XLEN: &str = "555";
+pub const MERGE_ZONE_FUNC: &str = "MERGED-BY-E3DIO";
+pub const MERGE_COMMENT: &str = "e3d-io write-path gate: merged onto a session E3D saved after this transaction's base";
 
 /// The database's header `FORMAT` reading, for text values.
 fn text_format(db: &str) -> Result<TextFormat, String> {
@@ -189,7 +205,9 @@ fn run() -> Result<(), String> {
     let mut big = false;
     let mut strings = false;
     let mut text = false;
-    for arg in std::env::args().skip(1) {
+    let mut merge_from: Option<u32> = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
         match arg.as_str() {
             "--group" => group = true,
             "--hunk" => hunk = true,
@@ -197,6 +215,10 @@ fn run() -> Result<(), String> {
             "--big" => big = true,
             "--strings" => strings = true,
             "--text" => text = true,
+            "--merge-from" => {
+                let sesno = args.next().ok_or_else(|| format!("--merge-from wants a session number\n{USAGE}"))?;
+                merge_from = Some(sesno.parse().map_err(|_| format!("--merge-from {sesno}: not a session number\n{USAGE}"))?);
+            }
             other if other.starts_with("--") => return Err(format!("unknown flag {other}\n{USAGE}")),
             _ if db.is_none() => db = Some(arg),
             _ if desvir.is_none() => desvir = Some(arg),
@@ -209,6 +231,10 @@ fn run() -> Result<(), String> {
     let zone_refno = first_zone(&db)?;
     let box_hash = e3d_attlib::db1_hash("BOX");
     let mut provider = TemplateProvider::open(&desvir, None).map_err(|e| format!("open {desvir}: {e}"))?;
+
+    if let Some(base) = merge_from {
+        return write_merge(&db, &mut provider, base);
+    }
 
     // --- session 1: the box, through the facade ---
     let (box_refno, sesno, previous, appended) = {
@@ -799,6 +825,64 @@ fn write_strings(db: &str, provider: &mut TemplateProvider, zone_refno: RefNo) -
     println!("In E3D 3.1 Design, on this database's project:");
     println!("  ={}/{}   Q DESC / Q POS / Q FUNC / Q PURP -> the texts above, verbatim", equi.word0, equi.word1);
     println!("  ={}/{}   Q ROKEYS / Q BUIL / Q NUMB / Q CREF -> S1 S2 S3, true, 42, the ZONE", fixing.word0, fixing.word1);
+    Ok(())
+}
+
+/// The `--merge-from` run (plan T1c): one transaction opened at `base`, a
+/// session the database has moved past — E3D saved in between — that inserts
+/// `/E3DIO-MERGE-BOX` under the first ZONE and sets the second ZONE's `FUNC`,
+/// and commits as a merge onto the newest session. What the merge did is
+/// printed: the base, the session merged onto, any re-minted refno.
+fn write_merge(db: &str, provider: &mut TemplateProvider, base: u32) -> Result<(), String> {
+    name_is_free(db, MERGE_BOX_NAME)?;
+    let all = zones(db, 2)?;
+    let (zone1, zone2) = (all[0], all[1]);
+    let latest_before = ReadOnlyEngine::open(db).map_err(|e| e.to_string())?.session().sesno;
+    if latest_before == base {
+        return Err(format!("the newest session is {base}, the base: nothing to merge onto — save something in E3D first"));
+    }
+    let (_, zone1_before) = owner_and_members(db, zone1)?;
+
+    let (given, commit) = {
+        let mut tx = Transaction::open_at(db, SessionSelector::Exact(base), &mut *provider).map_err(|e| e.to_string())?;
+        let given = tx
+            .insert(zone1, e3d_attlib::db1_hash("BOX"), Some(MERGE_BOX_NAME), |_, _| Ok(()))
+            .map_err(|e| e.to_string())?;
+        tx.set(given, "XLEN", MERGE_BOX_XLEN).map_err(|e| e.to_string())?;
+        tx.set(given, "YLEN", MERGE_BOX_XLEN).map_err(|e| e.to_string())?;
+        tx.set(given, "ZLEN", MERGE_BOX_XLEN).map_err(|e| e.to_string())?;
+        tx.set(given, "POS", "5000 5000 5000").map_err(|e| e.to_string())?;
+        tx.set(zone2, "FUNC", MERGE_ZONE_FUNC).map_err(|e| e.to_string())?;
+        let commit = tx.commit_reporting(&session(MERGE_COMMENT)).map_err(|e| e.to_string())?;
+        (given, commit)
+    };
+    let written = commit.reminted.iter().find(|(old, _)| *old == given).map_or(given, |(_, new)| *new);
+    // Read back through this crate before E3D gets to look: the box is under
+    // the ZONE, the ZONE's list is the committed one plus it, the FUNC is set.
+    let (box_owner, _) = owner_and_members(db, written)?;
+    let (_, zone1_after) = owner_and_members(db, zone1)?;
+    if box_owner != zone1 || !zone1_after.contains(&written) || zone1_after.len() != zone1_before.len() + 1 {
+        return Err(format!(
+            "merge read-back: box owner {box_owner}, ZONE 1 had {} members, has {}",
+            zone1_before.len(),
+            zone1_after.len()
+        ));
+    }
+    println!("wrote session {} to {db}", commit.report.written.sesno);
+    println!("  previous session : {}", commit.report.previous.sesno);
+    println!("  merge base       : {}", commit.base_sesno);
+    println!("  merged onto      : {}", commit.merged_onto.map_or("(nothing: written on the base)".to_string(), |s| s.to_string()));
+    println!("  refno given      : {given}");
+    println!("  new BOX merge    : {written} ({MERGE_BOX_NAME}, owner ZONE {zone1})");
+    println!("  re-minted        : {:?}", commit.reminted);
+    println!("  retried on Moved : {}", commit.retried_after_move);
+    println!("  ZONE 2 FUNC      : {zone2} = {MERGE_ZONE_FUNC}");
+    println!("  appended pages   : {:?}", commit.report.appended_pages);
+    println!();
+    println!("In E3D 3.1 Design, on this database's project:");
+    println!("  ={}/{}   Q MEM              -> what E3D saved, then {MERGE_BOX_NAME}", zone1.word0, zone1.word1);
+    println!("  ={}/{}   Q NAME / Q OWNER / Q XLEN -> {MERGE_BOX_NAME}, the ZONE, {MERGE_BOX_XLEN}mm", written.word0, written.word1);
+    println!("  ={}/{}   Q FUNC            -> {MERGE_ZONE_FUNC}", zone2.word0, zone2.word1);
     Ok(())
 }
 
