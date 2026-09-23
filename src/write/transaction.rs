@@ -70,8 +70,10 @@ use crate::refno::RefNo;
 use crate::ReadOnlyEngine;
 
 use super::attr::AttributeWriteError;
+use super::dictionary::{Dictionary, DictionaryError};
 use super::named_cow::{NamedEdit, NamedEditKind};
 use super::record::{RecordDraft, RecordEncodeError};
+use super::value::{parse_value, ValueParseError};
 use super::{
     stage_element_session_with, CommitReport, ElementWrite, SessionRequest, StagedSession, WriteError, WriteOptions,
 };
@@ -115,6 +117,12 @@ pub enum TransactionError {
     AnchorNotAMember { owner: RefNo, anchor: RefNo },
     #[error("{member} is not a member of {owner}")]
     NotAMember { owner: RefNo, member: RefNo },
+    #[error("noun {noun:#x} has no attribute named {name}")]
+    UnknownAttribute { noun: u32, name: String },
+    #[error("{name} = {input:?}: {source}")]
+    Value { name: String, input: String, source: ValueParseError },
+    #[error(transparent)]
+    Dictionary(#[from] DictionaryError),
 }
 
 /// Where a member goes in its owner's list — the positions `REORDER` names.
@@ -163,6 +171,8 @@ pub struct Transaction<'a> {
     member_ops: Vec<MemberOp>,
     /// Per-extent (`word0`) next `word1` to hand out; seeded from the base.
     next_word1: HashMap<u32, u32>,
+    /// E3D's dictionary limits, applied by [`Transaction::set`] when given.
+    dictionary: Option<&'a Dictionary>,
 }
 
 impl<'a> Transaction<'a> {
@@ -194,13 +204,77 @@ impl<'a> Transaction<'a> {
             names: Vec::new(),
             member_ops: Vec::new(),
             next_word1,
+            dictionary: None,
         })
+    }
+
+    /// Apply E3D's dictionary to every [`Transaction::set`]: an attribute the
+    /// dictionary does not know is refused as E3D refuses it, a text is held
+    /// to the dictionary's character count as well as the template's byte
+    /// capacity, an array to its element count, a set-once attribute to one
+    /// setting, a pseudo attribute to none (see [`super::dictionary`]).
+    /// Without one, `set` checks only what the template says.
+    pub fn with_dictionary(mut self, dictionary: &'a Dictionary) -> Self {
+        self.dictionary = Some(dictionary);
+        self
     }
 
     /// The header `FORMAT` reading text on this database is stored under, for a
     /// caller placing a text value.
     pub fn text_format(&self) -> TextFormat {
         self.text_format
+    }
+
+    /// Set attribute `name` of `refno` from its textual form — `"DESC"` to
+    /// `"反应堆厂房"`, `"POS"` to `"1000 2000 3000"`, `"LOCK"` to `"true"`,
+    /// `"SPRE"` to `"/A3B-SPEC"` or `"=13244/108564"`, `"ROKEYS"` to `"K1|K2"`,
+    /// anything to `"unset"` ([`super::value`] has the table). The element may
+    /// be one inserted in this transaction. The name is resolved on the noun's
+    /// template (`UnknownAttribute` when it is not there), the text read into
+    /// the shape the descriptor stores (`Value` when it cannot be), the value
+    /// checked against the dictionary when one was given
+    /// ([`Transaction::with_dictionary`]), then placed as
+    /// [`RecordDraft::set_attribute`] places it — so the template's own
+    /// capacity check applies as well. `NAME` goes through
+    /// [`Transaction::rename`], keeping the `NAME` table in step.
+    pub fn set(&mut self, refno: RefNo, name: &str, value: &str) -> Result<(), TransactionError> {
+        let noun = self.draft_noun(refno, "set")?;
+        let template = self
+            .templates
+            .template_for(noun)?
+            .ok_or(TransactionError::NoTemplate { noun })?
+            .clone();
+        let hash = e3d_attlib::db1_hash(name);
+        let attr = template
+            .attrs
+            .iter()
+            .find(|attr| attr.hash == hash)
+            .ok_or_else(|| TransactionError::UnknownAttribute { noun, name: name.to_string() })?
+            .clone();
+        let parsed = {
+            let engine = &mut self.engine;
+            parse_value(&attr, value, &mut |named: &str| engine.find_by_name(named).map_err(|e| e.to_string()))
+        }
+        .map_err(|source| TransactionError::Value { name: name.to_string(), input: value.to_string(), source })?;
+        if let Some(dictionary) = self.dictionary {
+            let already_set = self.attribute_is_set(refno, &attr)?;
+            dictionary.check(hash, name, &parsed, already_set)?;
+        }
+        if hash == e3d_attlib::db1_hash("NAME") {
+            return match &parsed {
+                DescriptorValue::Text(new_name) => self.set_name_to(refno, &template, Some(new_name)),
+                DescriptorValue::Unset => self.set_name_to(refno, &template, None),
+                other => Err(TransactionError::Value {
+                    name: name.to_string(),
+                    input: value.to_string(),
+                    source: ValueParseError::Token { token: format!("{other:?}"), expected: "a name" },
+                }),
+            };
+        }
+        let format = self.text_format;
+        let draft = self.draft_mut(refno, "set")?;
+        super::attr::set_attribute(draft, &template, hash, &parsed, format)?;
+        Ok(())
     }
 
     /// A fresh `word1` in `word0`'s extent, past every one seen at open and
@@ -379,24 +453,62 @@ impl<'a> Transaction<'a> {
             .template_for(noun)?
             .ok_or(TransactionError::NoTemplate { noun })?
             .clone();
-        let old = self.stored_name(refno)?;
+        self.set_name_to(refno, &template, Some(name))
+    }
+
+    /// Give `refno` the name `new` (or none): the record's `NAME` attribute and
+    /// the `NAME` table together. The table edits are reckoned against the
+    /// **base** — a key this transaction already queued for the element (an
+    /// insert's name, an earlier rename) is withdrawn first, so renaming twice
+    /// in one transaction files one net change, and renaming back to the
+    /// stored name files none.
+    fn set_name_to(&mut self, refno: RefNo, template: &NounTemplate, new: Option<&str>) -> Result<(), TransactionError> {
+        let stored = self.stored_name(refno)?;
         let format = self.text_format;
         // Make sure the element is a pending draft carrying its base bytes.
         self.draft_mut(refno, "renamed")?;
         match self.writes.get_mut(&refno) {
             Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => {
-                super::attr::set_attribute(
-                    draft,
-                    &template,
-                    e3d_attlib::db1_hash("NAME"),
-                    &DescriptorValue::Text(name.to_string()),
-                    format,
-                )?;
+                let value = match new {
+                    Some(name) => DescriptorValue::Text(name.to_string()),
+                    None => DescriptorValue::Unset,
+                };
+                super::attr::set_attribute(draft, template, e3d_attlib::db1_hash("NAME"), &value, format)?;
             }
             _ => return Err(TransactionError::Deleted { refno, what: "renamed" }),
         }
-        Self::file_name_edits(&mut self.names, refno, format, old.as_deref(), Some(name))?;
+        // Whatever this transaction had queued for the element's name is
+        // superseded: the record now says `new`, the table must say the same.
+        self.names.retain(|edit| edit.refno != refno);
+        Self::file_name_edits(&mut self.names, refno, format, stored.as_deref(), new)?;
         Ok(())
+    }
+
+    /// Whether `attr` holds a value on `refno` as it stands — the pending
+    /// draft's, else the base record's: an explicit field that is present, an
+    /// implicit slot whose first word is neither an unset sentinel nor zero
+    /// (an empty array or a zero scalar counts as unset here, which is the
+    /// lenient reading a set-once rule wants). A packed bit is never "set".
+    fn attribute_is_set(&mut self, refno: RefNo, attr: &crate::record::template::TemplateAttr) -> Result<bool, TransactionError> {
+        let draft = match self.writes.get(&refno) {
+            Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => draft.clone(),
+            Some(ElementWrite::Delete(_)) => return Err(TransactionError::Deleted { refno, what: "set" }),
+            None => {
+                let view = self.engine.find_element(refno)?.ok_or(TransactionError::NotFound { refno })?;
+                RecordDraft::from_record_bytes(&view.raw_bytes)?
+            }
+        };
+        let offset = attr.wide.location.word_offset() as usize;
+        if offset == 0 {
+            return Ok(draft.explicit_words(attr.hash).is_some());
+        }
+        if attr.storage_type_code == 5 {
+            return Ok(false);
+        }
+        Ok(draft
+            .implicit()
+            .get(offset)
+            .is_some_and(|word| *word != 0 && !crate::record::descriptor::UNSET_SENTINELS.contains(word)))
     }
 
     /// Delete an element: drop its key, and take it out of its owner's member
@@ -420,6 +532,8 @@ impl<'a> Transaction<'a> {
             .retain(|op| !matches!(op, MemberOp::Add { member, reference: false, .. } if *member == refno));
         self.member_ops.push(MemberOp::Remove { owner, member: refno, reference: false });
         let format = self.text_format;
+        // A name this transaction queued for the element (a rename) goes with it.
+        self.names.retain(|edit| edit.refno != refno);
         Self::file_name_edits(&mut self.names, refno, format, old.as_deref(), None)?;
         Ok(())
     }

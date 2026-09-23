@@ -39,6 +39,7 @@ pub mod attr;
 // user-facing `NamedEdit` are re-exported below.
 pub(crate) mod claim;
 pub(crate) mod claim_cow;
+pub mod dictionary;
 pub(crate) mod index_cow;
 pub(crate) mod keyed_cow;
 pub mod merge;
@@ -48,6 +49,7 @@ pub mod record;
 pub mod reverse;
 pub mod session_page;
 pub mod transaction;
+pub mod value;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -80,8 +82,10 @@ pub use record::{
 pub use reverse::{
     ensure_typex, reference_array, reference_value, set_reference, set_reference_array, table_keys, typex_table_hash,
 };
+pub use dictionary::{Dictionary, DictionaryEntry, DictionaryError, DictionaryLoadError};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
 pub use transaction::{MemberPosition, Transaction, TransactionError};
+pub use value::{parse_value, ValueParseError};
 
 /// Why a write did not happen. Nothing in this enum is returned after page 0
 /// has been written: past that point the session is committed.
