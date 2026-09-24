@@ -1,0 +1,28 @@
+-- e3d-io write-path gate, T4 alternate-write read-back (plan §2 T4): after N rounds of
+-- E3D and e3d-io writing in turn on the same first ZONE, one read-only E3D session lists
+-- the ZONE's members — every EQUI both sides created must be there, by name — and prints
+-- the newest session page. Rendered by tools/e3d/alternate_write_gate.ps1: {{LOGDIR}},
+-- {{MACROLOG}}, {{ZONE}} (=refno of the first ZONE).
+
+ALPHA LOG "{{LOGDIR}}/alt_readback.log" OVER
+$P ALT-READBACK-BEGIN
+={{ZONE}}
+handle any
+  $P ALT-READBACK-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q MEM
+endhandle
+$P ALT-READBACK-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/alt_session.log" OVER
+$P ALT-SESSION-BEGIN
+Q SESSION
+$P ALT-SESSION-END
+ALPHA LOG END
+
+-- The driver reads <macro>.log as the scenario log: a summary marker.
+ALPHA LOG "{{MACROLOG}}" OVER
+$P E3DIO-GATE-DONE alt readback, see {{LOGDIR}}/alt_readback.log
+ALPHA LOG END
