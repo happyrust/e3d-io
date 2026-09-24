@@ -143,6 +143,11 @@ pub enum TransactionError {
     Value { name: String, input: String, source: ValueParseError },
     #[error(transparent)]
     Dictionary(#[from] DictionaryError),
+    /// [`Transaction::set_hunk`] was asked to store out of the record what
+    /// only lives inline: a value that is not a text, a real array, an integer
+    /// array or a string list; `NAME`; an attribute with an implicit slot.
+    #[error("{name} cannot be stored as a hunk: {reason}")]
+    NotAHunk { name: String, reason: &'static str },
     /// The database moved on since the base and the committed sessions conflict
     /// with this batch the way `core.dll` refuses a `SAVEWORK`: 561 a name
     /// taken, 562 an element changed here but deleted there, 590 deleted here
@@ -297,7 +302,7 @@ impl<'a> Transaction<'a> {
         self
     }
 
-    /// Apply E3D's dictionary to every [`Transaction::set`]: an attribute the
+    /// Apply E3D's dictionary to every [`Transaction::set`] / [`Transaction::set_hunk`]: an attribute the
     /// dictionary does not know is refused as E3D refuses it, a text is held
     /// to the dictionary's character count as well as the template's byte
     /// capacity, an array to its element count, a set-once attribute to one
@@ -327,6 +332,27 @@ impl<'a> Transaction<'a> {
     /// capacity check applies as well. `NAME` goes through
     /// [`Transaction::rename`], keeping the `NAME` table in step.
     pub fn set(&mut self, refno: RefNo, name: &str, value: &str) -> Result<(), TransactionError> {
+        self.set_stored(refno, name, value, false)
+    }
+
+    /// [`Transaction::set`], with the value stored **out of the record** as a
+    /// hunk (storage types 20–23): a text as type 22, a real array as 21, an
+    /// integer array as 20, a string list as 23 — what `core.dll` does on its
+    /// own for a value past `HUNK_THRESHOLD_WORDS`, and what the E3D gate asks
+    /// E3D to read back (`tools/e3d/write_gate.ps1` Q3 / Q4b). The name, the
+    /// text and the dictionary are handled exactly as `set` handles them; the
+    /// placing goes through [`RecordDraft::set_text_hunk`] and its siblings
+    /// instead of [`RecordDraft::set_attribute`]. Refused as
+    /// [`TransactionError::NotAHunk`]: a value of any other shape (a scalar, a
+    /// reference, `unset` — use `set`), `NAME`, and an attribute with an
+    /// implicit slot, which E3D reads instead of the explicit stream the
+    /// hunk's directory entry sits in. An array past the descriptor's count
+    /// is refused as an inline one is.
+    pub fn set_hunk(&mut self, refno: RefNo, name: &str, value: &str) -> Result<(), TransactionError> {
+        self.set_stored(refno, name, value, true)
+    }
+
+    fn set_stored(&mut self, refno: RefNo, name: &str, value: &str, hunk: bool) -> Result<(), TransactionError> {
         let noun = self.draft_noun(refno, "set")?;
         let template = self
             .templates
@@ -349,6 +375,9 @@ impl<'a> Transaction<'a> {
             let already_set = self.attribute_is_set(refno, &attr)?;
             dictionary.check(hash, name, &parsed, already_set)?;
         }
+        if hunk {
+            return self.set_as_hunk(refno, name, &attr, &parsed);
+        }
         if hash == e3d_attlib::db1_hash("NAME") {
             return match &parsed {
                 DescriptorValue::Text(new_name) => self.set_name_to(refno, &template, Some(new_name)),
@@ -363,6 +392,45 @@ impl<'a> Transaction<'a> {
         let format = self.text_format;
         let draft = self.draft_mut(refno, "set")?;
         super::attr::set_attribute(draft, &template, hash, &parsed, format)?;
+        Ok(())
+    }
+
+    /// Place a parsed value as a hunk ([`Transaction::set_hunk`]): the shape
+    /// picks the hunk type, the descriptor's count bounds an array as
+    /// [`super::attr::set_attribute`] bounds an inline one.
+    fn set_as_hunk(
+        &mut self,
+        refno: RefNo,
+        name: &str,
+        attr: &crate::record::template::TemplateAttr,
+        value: &DescriptorValue,
+    ) -> Result<(), TransactionError> {
+        let refuse = |reason: &'static str| TransactionError::NotAHunk { name: name.to_string(), reason };
+        if attr.hash == e3d_attlib::db1_hash("NAME") {
+            return Err(refuse("NAME is the record's name and the NAME table's key; it is set inline"));
+        }
+        if attr.wide.location.word_offset() != 0 {
+            return Err(refuse("the attribute has an implicit slot, which E3D reads instead of the explicit stream"));
+        }
+        let count = match value {
+            DescriptorValue::Text(text) => text.len(),
+            DescriptorValue::RealArray(reals) => reals.len(),
+            DescriptorValue::IntArray(ints) => ints.len(),
+            DescriptorValue::TextList(items) => items.len(),
+            _ => return Err(refuse("only a text, a real array, an integer array or a string list is stored as a hunk")),
+        };
+        if attr.logical_count != 0 && count > attr.logical_count as usize && !matches!(value, DescriptorValue::TextList(_)) {
+            return Err(AttributeWriteError::TooManyElements { hash: attr.hash, count, max: attr.logical_count }.into());
+        }
+        let format = self.text_format;
+        let draft = self.draft_mut(refno, "set")?;
+        match value {
+            DescriptorValue::Text(text) => draft.set_text_hunk(attr.hash, text, format)?,
+            DescriptorValue::RealArray(reals) => draft.set_real_array_hunk(attr.hash, reals)?,
+            DescriptorValue::IntArray(ints) => draft.set_int_array_hunk(attr.hash, ints)?,
+            DescriptorValue::TextList(items) => draft.set_text_list_hunk(attr.hash, items, format)?,
+            _ => unreachable!("the shape was checked above"),
+        }
         Ok(())
     }
 
@@ -383,7 +451,9 @@ impl<'a> Transaction<'a> {
     /// is added to `owner`'s member list (unless `owner` is a reference-list
     /// noun, whose members `build` sets on the owner itself), and `name`, when
     /// given, is stored as its `NAME` and filed in the `NAME` table. Returns
-    /// the refno it was given.
+    /// the refno it was given. An owner deleted in this transaction is refused
+    /// at once (`OwnerDeleted`); one that is not in the base is found out at
+    /// staging, when its member list is read (`NotFound`).
     pub fn insert(
         &mut self,
         owner: RefNo,
@@ -396,6 +466,9 @@ impl<'a> Transaction<'a> {
             .template_for(noun)?
             .ok_or(TransactionError::NoTemplate { noun })?
             .clone();
+        if matches!(self.writes.get(&owner), Some(ElementWrite::Delete(_))) {
+            return Err(TransactionError::OwnerDeleted { owner });
+        }
         let refno = self.allocate(owner.word0)?;
         // The record `4CEIL` starts from: chunk-1 defaults behind the header,
         // the wide flag, and the chunk-2 explicit prefix seeded in order

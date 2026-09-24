@@ -463,3 +463,106 @@ fn what_cannot_be_read_is_refused_and_writes_nothing() {
     assert_eq!(latest(&copy.path), sesno_before);
     assert_eq!(value(&extract(&copy.path, the_box), "XLEN"), Some(DescriptorValue::Real(1.0)), "the box is as it was");
 }
+
+/// `set_hunk` stores a value set by name **out of the record**: the explicit
+/// stream carries a hunk directory entry of the type the shape picks (22 for a
+/// text, 21 for reals, 20 for ints, 23 for a string list) and the value reads
+/// back through the descriptors — which resolve the chain — as the text names
+/// it. The dictionary applies as to `set`. What is not a hunk's to hold is
+/// refused with nothing written: a scalar, a reference, `unset`, `NAME`, an
+/// attribute with an implicit slot, more elements than the descriptor counts.
+#[test]
+fn a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back() {
+    use e3d_io::record::element::ParsedElement;
+    use e3d_io::record::hunk::HunkRef;
+    use e3d_io::write::AttributeWriteError;
+
+    if common::missing(&[AMS8000, DESVIR, ATTLIB, DICTIONARY]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS8000);
+    let zone = first_zone(&copy.path);
+    let dictionary = Dictionary::read(DICTIONARY).expect("dictionary");
+    let mut desc = String::from("e3d-io T1d: DESC set by name and stored as a type-22 hunk ");
+    while desc.len() < 120 {
+        desc.push('@'); // padded to the dictionary's DESC limit: the gate's hunk size
+    }
+    let desp: Vec<f64> = (1..=100).map(|i| 1000.0 + f64::from(i) + 0.25).collect();
+    let desp_text = desp.iter().map(|v| format!("{v}")).collect::<Vec<_>>().join(" ");
+    let s0 = latest(&copy.path);
+
+    let (equi, fixing) = {
+        let mut prov = provider();
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_dictionary(&dictionary);
+        let equi = tx.insert(zone, db1_hash("EQUI"), Some("/E3DIO-HUNK-EQUI"), |_, _| Ok(())).expect("equi");
+        tx.set_hunk(equi, "DESC", &desc).expect("DESC as a hunk");
+        tx.set_hunk(equi, "DESP", &desp_text).expect("DESP as a hunk");
+        tx.set_hunk(equi, "UUIDIA", "11 12 13 14").expect("UUIDIA as a hunk");
+        let fixing = tx.insert(zone, db1_hash("FIXING"), None, |_, _| Ok(())).expect("fixing");
+        tx.set(fixing, "ROKEYS", "K1|K2").expect("ROKEYS inline");
+        tx.set_hunk(fixing, "ROVALS", "V1|V2").expect("ROVALS as a hunk");
+
+        // The dictionary and the shape rules apply before anything is placed.
+        assert!(matches!(
+            tx.set_hunk(equi, "DESC", &"x".repeat(121)),
+            Err(TransactionError::Dictionary(DictionaryError::TextTooLong { chars: 121, max: 120, .. }))
+        ));
+        assert!(matches!(
+            tx.set_hunk(equi, "UUIDIA", "1 2 3 4"),
+            Err(TransactionError::Dictionary(DictionaryError::SetOnce { .. }))
+        ), "set-once holds for a hunk too");
+        assert!(matches!(tx.set_hunk(equi, "FUNC", "unset"), Err(TransactionError::NotAHunk { name, .. }) if name == "FUNC"), "unset is set's");
+        assert!(matches!(tx.set_hunk(equi, "PURP", "PIPE"), Err(TransactionError::NotAHunk { .. })), "a word is a scalar");
+        assert!(matches!(tx.set_hunk(fixing, "CREF", "nulref"), Err(TransactionError::NotAHunk { .. })), "a reference is a scalar");
+        assert!(matches!(tx.set_hunk(equi, "NAME", "/E3DIO-NO"), Err(TransactionError::NotAHunk { .. })));
+        assert!(matches!(tx.set_hunk(equi, "POS", "1 2 3"), Err(TransactionError::NotAHunk { .. })), "POS has an implicit slot");
+        let too_many = (1..=101).map(|i| i.to_string()).collect::<Vec<_>>().join(" ");
+        assert!(matches!(
+            tx.set_hunk(equi, "DESP", &too_many),
+            Err(TransactionError::Dictionary(DictionaryError::TooManyElements { count: 101, max: 100, .. }))
+        ), "the dictionary's count comes first");
+        tx.commit(&request("e3d-io T1d: hunks set by name")).expect("commit");
+        (equi, fixing)
+    };
+    let s1 = latest(&copy.path);
+    assert_eq!(s1, s0 + 1);
+    assert_eq!(tally(&copy.path, s0, s1), (0, 2, 1));
+    {
+        // Without the dictionary the descriptor's own count still bounds a hunk array.
+        let mut prov = provider();
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let too_many = (1..=101).map(|i| i.to_string()).collect::<Vec<_>>().join(" ");
+        assert!(matches!(
+            tx.set_hunk(equi, "DESP", &too_many),
+            Err(TransactionError::Attribute(AttributeWriteError::TooManyElements { count: 101, max: 100, .. }))
+        ));
+    }
+
+    // On disk: hunk directory entries of the types the shapes pick.
+    let entries = |refno: RefNo| -> Vec<(u32, u16)> {
+        let mut engine = ReadOnlyEngine::open(&copy.path).expect("open");
+        let view = engine.find_element(refno).expect("find").expect("indexed");
+        let parsed = ParsedElement::parse_as(&view.raw_bytes, engine.text_format()).expect("parse");
+        parsed
+            .explicit_attributes
+            .iter()
+            .filter_map(|attribute| HunkRef::from_explicit(attribute).map(|entry| (attribute.hash, entry.hunk_type)))
+            .collect()
+    };
+    let equi_entries = entries(equi);
+    assert!(equi_entries.contains(&(db1_hash("DESC"), 22)), "DESC is a type-22 hunk: {equi_entries:?}");
+    assert!(equi_entries.contains(&(db1_hash("DESP"), 21)), "DESP is a type-21 hunk: {equi_entries:?}");
+    assert!(equi_entries.contains(&(db1_hash("UUIDIA"), 20)), "UUIDIA is a type-20 hunk: {equi_entries:?}");
+    let fixing_entries = entries(fixing);
+    assert_eq!(fixing_entries, vec![(db1_hash("ROVALS"), 23)], "ROVALS is the one hunk; ROKEYS is inline");
+
+    // Read back through the descriptors, which resolve the chains.
+    let equi_x = extract(&copy.path, equi);
+    assert_eq!(value(&equi_x, "DESC"), Some(DescriptorValue::Text(desc)));
+    assert_eq!(value(&equi_x, "DESP"), Some(DescriptorValue::RealArray(desp)));
+    assert_eq!(ints(&equi_x, "UUIDIA"), Some(vec![11, 12, 13, 14]));
+    assert!(matches!(value(&equi_x, "FUNC"), None | Some(DescriptorValue::Unset)), "the refused sets placed nothing");
+    let fixing_x = extract(&copy.path, fixing);
+    assert_eq!(value(&fixing_x, "ROKEYS"), Some(DescriptorValue::TextList(vec!["K1".into(), "K2".into()])));
+    assert_eq!(value(&fixing_x, "ROVALS"), Some(DescriptorValue::TextList(vec!["V1".into(), "V2".into()])));
+}
