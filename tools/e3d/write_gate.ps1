@@ -323,9 +323,9 @@ Check 'Q3b EQUI 1: DESP as a type-21 hunk (100 reals)' '32_equi1_desp.log' @('De
 Check 'Q3c EQUI 1: UUIDIA as a type-20 hunk' '33_equi1_uuidia.log' @('Uuidia 11 12 13 14')
 Check 'Q3d EQUI 2: DESC as a type-22 hunk' '36_equi2_desc.log' @((& $desc 2))
 # Two EQUIs with 200-word DESP hunks in one session lay the second's chain across a page
-# boundary (the layout `e3d-write-box --hunk` measured on every run: EQUI 2's DESP in a
-# chain of two pages); `e3d-write` writes the same values through the same facade, and
-# tests/write_stage2_hunks.rs pins the continuation link.
+# boundary (the layout the hand-written fixture that used to drive this gate measured on
+# every run: EQUI 2's DESP in a chain of two pages); `e3d-write` writes the same values
+# through the same facade, and tests/write_stage2_hunks.rs pins the continuation link.
 Check 'Q3e EQUI 2: DESP as a type-21 hunk whose chain crosses a page' '37_equi2_desp.log' @('Desparam 2001.3 2002.3', '2100.3')
 Check 'Q3f EQUI 2: UUIDIA as a type-20 hunk' '38_equi2_uuidia.log' @('Uuidia 21 22 23 24')
 Check 'Q4a FIXING: ROKEYS, a type-19 list stored inline' '41_fixing_rokeys.log' @('Rokeys', ' 1 K1', ' 2 K2')

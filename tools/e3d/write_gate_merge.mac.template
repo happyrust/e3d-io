@@ -1,5 +1,5 @@
--- e3d-io write-path gate, read back after the merge (plan T1c): e3d-write-box
--- --merge-from opened a transaction at the session before E3D's own save
+-- e3d-io write-path gate, read back after the merge (plan T1c): e3d-write apply
+-- --base (90_merge.json) opened a transaction at the session before E3D's own save
 -- (write_gate_e3d_saves.mac.template) and committed a merge onto it. Rendered by
 -- tools/e3d/write_gate.ps1: {{ZONE}} the first ZONE, {{ZONE2}} the second, {{E3DBOX}} the
 -- BOX E3D created and saved, {{MERGEBOX}} the BOX the merge put under the same ZONE.

@@ -1,8 +1,8 @@
 -- e3d-io write-path gate, the session E3D itself saves (plan T1c): run by
--- tools/e3d/write_gate.ps1 after e3d-write-box's own sessions and after the read-back
--- macro, and before `e3d-write-box --merge-from <that last session>` merges onto what
--- E3D saved here. Rendered from this template: {{LOGDIR}}, {{MACROLOG}}, {{ZONE}} (the
--- first ZONE, the one e3d-write-box put its BOX under).
+-- tools/e3d/write_gate.ps1 after e3d-write's own sessions and after the read-back
+-- macro, and before `e3d-write apply --base <that last session>` (90_merge.json) merges
+-- onto what E3D saved here. Rendered from this template: {{LOGDIR}}, {{MACROLOG}}, {{ZONE}}
+-- (the first ZONE, the one e3d-write put its BOX under).
 --
 -- E3D creates an EQUI under that ZONE, a BOX under the EQUI, and SAVEWORKs: a session
 -- E3D wrote, with refnos E3D minted, sitting between the transaction's base and its

@@ -1,9 +1,9 @@
 -- e3d-io write-path gate, read back by E3D itself in a TTY session (read-only: no
 -- SAVEWORK, no QUIT — the l3_suite driver's wrapper owns the session). Rendered by
 -- tools/e3d/write_gate.ps1 from this template: {{LOGDIR}} and the refnos come from the
--- e3d-write-box run on the project copy.
+-- e3d-write apply runs (tools/e3d/write_gate_ops/*.json) on the project copy.
 --
--- Sessions e3d-write-box --group --hunk appended:
+-- Sessions e3d-write appended:
 --   BOX {{BOX}} under the first ZONE {{ZONE}}
 --   GPWL {{GPWL}} under the WORL, GROU {{GROU}} with reference members ZONE + BOX
 --   EQUI {{EQUI1}} and EQUI {{EQUI2}}: DESC / DESP / UUIDIA as hunks (types 22/21/20),
