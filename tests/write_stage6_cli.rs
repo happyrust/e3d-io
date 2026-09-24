@@ -322,6 +322,53 @@ fn an_instruction_file_is_applied_as_one_session_through_the_facade() {
     assert_eq!(second.op(6)["op"], "delete");
 }
 
+/// A name an earlier instruction bound in the same file — an insert's name or a
+/// rename's new name — resolves to that element before the commit, so
+/// `rename X to /Y` then `set /Y` works, and an insert's name can be referenced
+/// as a `/NAME` later in the file. The base table still answers to the old name.
+#[test]
+fn a_name_bound_earlier_in_the_file_resolves_before_the_commit() {
+    if common::missing(&[AMS8000, DESVIR, ATTLIB, DICTIONARY]) {
+        return;
+    }
+    let copy = DbCopy::of(AMS8000);
+    let zone = zones(&copy.path, 1)[0];
+    // Something with a base name to rename.
+    let setup = apply(
+        &copy,
+        "bound-setup",
+        r##"[{"op": "insert", "id": "e", "owner": "/1RX03-MSUP", "noun": "EQUI", "name": "/E3DIO-BOUND-OLD", "attrs": {"FUNC": "OLD"}}]"##,
+        &[],
+    );
+    assert!(setup.ok(), "stderr:\n{}", setup.stderr());
+    let equi = refno(&setup.op(0)["refno"]);
+    let s1 = latest(&copy.path);
+
+    // rename OLD -> NEW, then set NEW's DESC and reference NEW as a FIXING's CREF —
+    // all by the new name, which the base table does not carry yet; and an insert's
+    // own name used as an owner later in the file.
+    let ops = r##"{
+      "ops": [
+        {"op": "rename", "refno": "/E3DIO-BOUND-OLD", "name": "/E3DIO-BOUND-NEW"},
+        {"op": "set", "refno": "/E3DIO-BOUND-NEW", "attrs": {"DESC": "bound by the new name"}},
+        {"op": "insert", "id": "z", "owner": "/*", "noun": "GPWL", "name": "/E3DIO-BOUND-GPWL"},
+        {"op": "insert", "owner": "/E3DIO-BOUND-GPWL", "noun": "GROU", "name": "/E3DIO-BOUND-GROU"},
+        {"op": "reference", "group": "/E3DIO-BOUND-GROU", "member": "/E3DIO-BOUND-NEW"}
+      ]
+    }"##;
+    let run = apply(&copy, "bound", ops, &[]);
+    assert!(run.ok(), "stdout:\n{}\nstderr:\n{}", run.stdout(), run.stderr());
+    let s2 = latest(&copy.path);
+    assert_eq!(s2, s1 + 1);
+    assert_eq!(named(&copy.path, "/E3DIO-BOUND-NEW"), Some(equi), "renamed to the new name");
+    assert_eq!(named(&copy.path, "/E3DIO-BOUND-OLD"), None, "the old name is gone");
+    assert_eq!(value(&extract(&copy.path, equi), "DESC"), Some(DescriptorValue::Text("bound by the new name".into())), "set by the new name");
+    let grou = named(&copy.path, "/E3DIO-BOUND-GROU").expect("the GROU by its insert name");
+    assert!(parsed(&copy.path, grou).members.contains(&equi), "referenced by the new name");
+    assert_eq!(owner_of(&copy.path, grou), named(&copy.path, "/E3DIO-BOUND-GPWL").unwrap(), "GROU under the GPWL named earlier in the file");
+    let _ = zone;
+}
+
 /// `--dry-run` runs the whole batch through the staging — the shapes, the
 /// dictionary, the records, the merge's scan on a moved-on base — and rolls it
 /// back: exit 0 when a commit would have gone through, the report saying which

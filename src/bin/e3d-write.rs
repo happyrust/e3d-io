@@ -36,9 +36,12 @@
 //! | `unreference` | `group`, `member` | `remove_reference_member` |
 //!
 //! An element — `owner`, `refno`, `group`, `member`, the anchor of an `at` — is
-//! written as `=24384/26484` or `24384/26484` (a refno), `/NAME` (looked up in
-//! the base session's `NAME` table; `/*` is the `WORL`), or `@id`: an element
-//! inserted **earlier in the same file** with that `id`. `at` is `"last"` (the
+//! written as `=24384/26484` or `24384/26484` (a refno), `/NAME` (the base
+//! session's `NAME` table, or a name this file has bound; `/*` is the `WORL`),
+//! or `@id`: an element inserted **earlier in the same file** with that `id`. A
+//! name an earlier instruction bound — an insert's `name`, a `rename`'s new
+//! name — resolves to that element even before the commit, so `rename X to /Y`
+//! then `set /Y` works; the base table still answers to the old name too. `at` is `"last"` (the
 //! default), `"first"`, `{"after": <element>}` or `{"before": <element>}`.
 //! `attrs` maps attribute names to their text — `"POS": "1000 2000 3000"`,
 //! `"DESC": "反应堆厂房"`, `"PURP": "PIPE"`, `"CREF": "/PUMP-1"`, `"ROKEYS":
@@ -429,11 +432,14 @@ fn parse_op(item: Value) -> Result<Op, String> {
 
 // --- resolving elements ---
 
-/// Names to refnos: the base session's `NAME` table and `WORL`, and the ids of
-/// the inserts made so far.
+/// Names to refnos: the base session's `NAME` table and `WORL`, the ids of the
+/// inserts made so far, and the names this file has bound (an insert's name, a
+/// rename's new name), so `rename X to /Y` then `set /Y` resolves `/Y` to the
+/// element even though the base table still calls it `X` until the commit.
 struct Resolver {
     engine: ReadOnlyEngine,
     ids: HashMap<String, RefNo>,
+    named: HashMap<String, RefNo>,
 }
 
 impl Resolver {
@@ -463,6 +469,9 @@ impl Resolver {
                 .ok_or("/*: the database indexes no WORL")?
                 .header()
                 .refno),
+            // A name this file has bound (an insert or a rename) wins over the
+            // base table, so a rename's new name resolves before it is committed.
+            Element::Name(name) if self.named.contains_key(name) => Ok(self.named[name]),
             Element::Name(name) => self
                 .engine
                 .find_by_name(name)
@@ -550,6 +559,7 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
     let mut resolver = Resolver {
         engine: ReadOnlyEngine::open_at(&args.db, SessionSelector::Exact(base)).map_err(|e| setup(format!("{db}: {e}")))?,
         ids: HashMap::new(),
+        named: HashMap::new(),
     };
     out.report.insert("base_sesno".into(), json!(base));
     out.report.insert("latest_before".into(), json!(latest_before));
@@ -594,6 +604,9 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
                     resolver.ids.insert(id.clone(), refno);
                     entry.insert("id".into(), json!(id));
                 }
+                if let Some(name) = name {
+                    resolver.named.insert(name.clone(), refno);
+                }
                 entry.insert("noun".into(), json!(noun));
                 entry.insert("owner".into(), refno_json(owner_refno));
                 if let Some(name) = name {
@@ -623,6 +636,7 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
                 let what = format!("rename {refno} {name}");
                 let target = resolver.resolve(refno).map_err(|r| refused(what.clone(), r))?;
                 tx.rename(target, name).map_err(|e| refused(what, e.to_string()))?;
+                resolver.named.insert(name.clone(), target);
                 entry.insert("refno".into(), refno_json(target));
                 entry.insert("name".into(), json!(name));
                 out.say(format!("  #{index} rename {target} {name}"));
