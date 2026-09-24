@@ -2,29 +2,35 @@
 .SYNOPSIS
   The E3D gate for the write path, run unattended: write sessions with e3d-io into a
   copy of the AMS sample project, then have a real E3D 3.1 Design TTY session read them
-  back and check what it prints (docs/plans/2026-09-20-dabacon-write-plan.md §7, Q8).
+  back and check what it prints (docs/plans/2026-09-20-dabacon-write-plan.md §7, Q8;
+  docs/plans/2026-09-22-write-path-phase-2-plan.md §2 T1a–T1d).
 
 .DESCRIPTION
   1. Copies the sample project (all but the picture and drawing folders) to a scratch
      directory once, and resets its ams8000_0001 from the original before every run —
      the live project is never touched.
-  2. Runs `e3d-write-box <copy db> --group --hunk --move --big --strings --text`: nine
-     sessions — a BOX, a GPWL+GROU with reference members, two EQUIs whose
-     DESC/DESP/UUIDIA are hunks (one chain across a page boundary), a FIXING with a
-     type-19 string list inline and as a hunk, three BOXes under the second ZONE (two
-     referenced by the GROU) then one moved to the third ZONE / one reordered / one
-     unreferenced (T1a: move_to, reorder, reference members), a ZONE with 8 200 BOXes
-     (the format word's member count saturated at 0x3FFF, plan §1.3 #11), an EQUI and a
-     FIXING whose every value was typed as text and set by attribute name under E3D's
-     dictionary (T1b: Transaction::set), and last a Chinese NAME on the BOX / DESC on the
-     ZONE / session comment stored the way the header's FORMAT says (S5).
-  3. Renders write_gate.mac.template with the refnos the bin printed and runs it through
-     gen-model's l3_suite `--check-driver` (des.exe TTY, login SYSTEM/XXXXXX, MDB /ALL,
-     project AMS pointed at the copy via --project-dir). The macro is read-only.
+  2. Writes the sessions with `e3d-write apply` (plan T1d), one instruction file per
+     session from tools/e3d/write_gate_ops/ (rendered with the refnos earlier sessions
+     minted, read from each run's --report): a BOX, a GPWL+GROU with reference members,
+     two EQUIs whose DESC/DESP/UUIDIA are hunks, a FIXING with a type-19 string list
+     inline and as a hunk, three BOXes under the second ZONE (two referenced by the GROU)
+     then one moved to the third ZONE / one reordered / one unreferenced (T1a), a ZONE
+     with 8 200 BOXes (the format word's member count saturated at 0x3FFF, plan §1.3
+     #11; that file is generated here, 8 200 inserts), an EQUI and a FIXING whose every
+     value was typed as text under E3D's dictionary (T1b), and last a Chinese NAME on the
+     BOX / DESC on the ZONE / session comment (S5). Before any of them, Q0: the
+     instruction files under write_gate_ops/refused/ (a 121-character DESC, a
+     four-element POS, RATM, a misspelt attribute, a refno nobody has, an owner deleted
+     earlier in the file) must each be refused with a readable reason, and
+     `--dry-run` of the first file must go through — with the database byte-identical
+     after all of them.
+  3. Renders write_gate.mac.template with those refnos and runs it through gen-model's
+     l3_suite `--check-driver` (des.exe TTY, login SYSTEM/XXXXXX, MDB /ALL, project AMS
+     pointed at the copy via --project-dir). The macro is read-only.
   4. Greps the per-question logs for the values written and prints PASS/FAIL per question.
   5. T1c, the merge: a second E3D session creates an EQUI (with a BOX in it) under the
      first ZONE and SAVEWORKs (write_gate_e3d_saves.mac.template — the one macro that
-     writes); then `e3d-write-box --merge-from <the bin's last session>` opens a
+     writes); then `e3d-write apply --base <the last session written here>` opens a
      transaction at that older base and commits a merge onto E3D's session; then a third
      E3D session reads both back (write_gate_merge.mac.template). Exits 1 on any FAIL.
 
@@ -59,10 +65,19 @@ $copyDb = Join-Path $copy $DbRelative
 $logDir = Join-Path $Scratch 'logs'
 $macro = Join-Path $Scratch 'write_gate.mac'
 $driverOut = Join-Path $Scratch 'driver-out'
+$opsDir = Join-Path $PSScriptRoot 'write_gate_ops'
+$opsOut = Join-Path $Scratch 'ops'
+# The names the instruction files use for the sample's elements (the first three ZONEs in
+# index order, and the SITE that owns the first); the files are written against them, and
+# E3D prints the first one back as the FIXING's `Cref` and the merged BOX's `Owner`.
+$zoneName = '/1RX03-MSUP'
+$siteName = '/1RX03-PIPEBJ'
+$bigMembers = 8200
 
-foreach ($required in @($Project, (Join-Path $Project $DbRelative), $GenModel, $L3Exe)) {
+foreach ($required in @($Project, (Join-Path $Project $DbRelative), $GenModel, $L3Exe, $opsDir)) {
     if (-not (Test-Path $required)) { throw "missing: $required" }
 }
+$failures = 0
 
 # 1. The project copy (evars + ams000 + the small folders; no pictures, no drawings).
 if ($RefreshCopy -or -not (Test-Path (Join-Path $copy 'ams000\amssys'))) {
@@ -74,45 +89,128 @@ if ($RefreshCopy -or -not (Test-Path (Join-Path $copy 'ams000\amssys'))) {
 Copy-Item (Join-Path $Project $DbRelative) $copyDb -Force
 Write-Output "reset $copyDb from the original"
 
-# 2. The sessions.
+# 2. The sessions, through `e3d-write apply`.
+# Run a native command with its stderr folded into the text it returns: under
+# $ErrorActionPreference = 'Stop', a line on stderr through `2>&1` would otherwise end the
+# script as a NativeCommandError (a refusal e3d-write reports is exactly such a line).
+function Invoke-Native([scriptblock]$command) {
+    $eap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $lines = & $command 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ } }
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $eap }
+    [pscustomobject]@{ Output = (($lines | Where-Object { $_ -ne $null }) -join "`n"); ExitCode = $code }
+}
 Push-Location $crate
 try {
-    $binOut = & cargo run --quiet --bin e3d-write-box -- $copyDb --group --hunk --move --big --strings --text 2>&1 | Out-String
+    $build = Invoke-Native { cargo build --quiet --bin e3d-write }
+    if ($build.ExitCode) { Write-Output $build.Output; throw 'cargo build --bin e3d-write failed' }
+    $eap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $metaJson = & cargo metadata --format-version 1 --no-deps 2>$null | Out-String } finally { $ErrorActionPreference = $eap }
+    $targetDir = ($metaJson | ConvertFrom-Json).target_directory
 } finally { Pop-Location }
-if ($LASTEXITCODE) { Write-Output $binOut; throw 'e3d-write-box failed' }
-Set-Content -Path (Join-Path $Scratch 'e3d-write-box.out.txt') -Value $binOut
-$refno = {
-    param([string]$label)
-    $m = [regex]::Match($binOut, "$label\s*:\s*(\d+/\d+)")
-    if (-not $m.Success) { throw "e3d-write-box output has no '$label'" }
-    $m.Groups[1].Value
+$exe = Join-Path $targetDir 'debug\e3d-write.exe'
+if (-not (Test-Path $exe)) { throw "e3d-write was built but is not at $exe" }
+New-Item -ItemType Directory -Force $opsOut | Out-Null
+Remove-Item (Join-Path $opsOut '*') -Recurse -Force -ErrorAction SilentlyContinue
+$utf8 = New-Object Text.UTF8Encoding($false)
+# Render the instruction file `$name` (from tools/e3d/write_gate_ops, or `$source`) with
+# `$vars` ({{KEY}} -> value) into the scratch ops dir and run `e3d-write apply` on the copy
+# with `--report`. Returns the exit code, the report (parsed) and the run's output; a
+# session that fails is the caller's to throw on, a refusal the caller's to expect.
+function Invoke-Apply([string]$name, [hashtable]$vars = @{}, [string[]]$extra = @(), [string]$source = '') {
+    if (-not $source) { $source = Join-Path $opsDir "$name.json" }
+    $rendered = Join-Path $opsOut ("$name.json" -replace '[\\/]', '_')
+    $report = [IO.Path]::ChangeExtension($rendered, '.report.json')
+    $outFile = [IO.Path]::ChangeExtension($rendered, '.out.txt')
+    $text = [IO.File]::ReadAllText($source, $utf8)
+    foreach ($key in $vars.Keys) { $text = $text.Replace("{{$key}}", [string]$vars[$key]) }
+    if ($text -match '\{\{[A-Z0-9]+\}\}') { throw "$name still has a placeholder: $($Matches[0])" }
+    [IO.File]::WriteAllText($rendered, $text, $utf8)
+    Remove-Item $report -Force -ErrorAction SilentlyContinue
+    $run = Invoke-Native { & $exe apply --db $copyDb --ops $rendered --report $report @extra }
+    [IO.File]::WriteAllText($outFile, $run.Output, $utf8)
+    $parsed = if (Test-Path $report) { [IO.File]::ReadAllText($report, $utf8) | ConvertFrom-Json } else { $null }
+    [pscustomobject]@{ Name = $name; ExitCode = $run.ExitCode; Report = $parsed; Output = $run.Output }
 }
-$ids = @{
-    BOX     = & $refno 'new BOX'
-    GPWL    = & $refno 'new GPWL'
-    GROU    = & $refno 'new GROU'
-    EQUI1   = & $refno 'new EQUI 1'
-    EQUI2   = & $refno 'new EQUI 2'
-    FIXING  = & $refno 'new FIXING'
-    ZONE    = & $refno 'owner ZONE'
-    BOXM1   = & $refno 'new BOX A'
-    BOXM2   = & $refno 'new BOX B'
-    BOXM3   = & $refno 'new BOX C'
-    ZONE2   = & $refno 'owner ZONE 2'
-    ZONE3   = & $refno 'owner ZONE 3'
-    BIGZONE = & $refno 'new ZONE big'
-    STREQUI   = & $refno 'new EQUI str'
-    STRFIXING = & $refno 'new FIXING str'
+# One gate session: `Invoke-Apply`, thrown on when it fails, its line printed to the host
+# (not the pipeline, which is the returned run).
+function Invoke-Session([string]$name, [hashtable]$vars = @{}, [string[]]$extra = @(), [string]$source = '') {
+    $run = Invoke-Apply $name $vars $extra $source
+    if ($run.ExitCode) { Write-Host $run.Output; throw "e3d-write apply $name failed ($($run.ExitCode))" }
+    Write-Host ("  {0,-16} session {1} ({2} instruction(s), {3} page(s))" -f $name, $run.Report.commit.written.sesno, $run.Report.ops.Count, $run.Report.commit.appended_pages.Count)
+    $run
 }
-$spanning = [regex]::Match($binOut, 'hunk chains that cross a page boundary: (\d+)').Groups[1].Value
-$bigMembers = [int][regex]::Match($binOut, 'big members\s*:\s*(\d+)').Groups[1].Value
+
+# Q0: what must be refused is, with a reason, and a dry run goes through — and none of it
+# changes a byte.
+$hashBefore = (Get-FileHash $copyDb -Algorithm SHA256).Hash
+$refusals = @()
+foreach ($file in Get-ChildItem (Join-Path $opsDir 'refused') -Filter '*.json' | Sort-Object Name) {
+    $run = Invoke-Apply ("refused\" + $file.BaseName) @{} @() $file.FullName
+    $reason = if ($run.Report) { $run.Report.error.message } else { '' }
+    if ($run.ExitCode -ne 1 -or -not $reason) {
+        Write-Output "FAIL Q0  $($file.Name): exit $($run.ExitCode), no reason in the report"; Write-Output $run.Output; $failures++
+    } else {
+        $refusals += "$($file.BaseName): $reason"
+    }
+}
+$dry = Invoke-Apply '10_box' @{} @('--dry-run')
+if ($dry.ExitCode -or -not $dry.Report.staged.rolled_back) { Write-Output "FAIL Q0  --dry-run of 10_box did not go through"; Write-Output $dry.Output; $failures++ }
+$hashAfter = (Get-FileHash $copyDb -Algorithm SHA256).Hash
+if ($hashAfter -ne $hashBefore) {
+    Write-Output 'FAIL Q0  the refusals / the dry run changed the database'; $failures++
+} elseif ($refusals.Count -eq 6 -and -not $dry.ExitCode) {
+    Write-Output "PASS Q0  e3d-write refused $($refusals.Count) bad instruction files with a reason each, --dry-run staged session $($dry.Report.staged.sesno) and rolled it back; the database is byte-identical"
+    foreach ($r in $refusals) { Write-Output "         $r" }
+}
+
+Write-Output 'sessions:'
+$r10 = Invoke-Session '10_box'
+$ids = @{ BOX = $r10.Report.ops[0].refno; ZONE = $r10.Report.ops[0].owner }
+$r20 = Invoke-Session '20_group' @{ BOX = $ids.BOX }
+$ids.GPWL = $r20.Report.ops[0].refno
+$ids.GROU = $r20.Report.ops[1].refno
+$r30 = Invoke-Session '30_hunk_equis'
+$ids.EQUI1 = $r30.Report.ops[0].refno
+$ids.EQUI2 = $r30.Report.ops[1].refno
+$r40 = Invoke-Session '40_hunk_fixing'
+$ids.FIXING = $r40.Report.ops[0].refno
+$r50 = Invoke-Session '50_moves' @{ GROU = $ids.GROU }
+$ids.BOXM1 = $r50.Report.ops[0].refno
+$ids.BOXM2 = $r50.Report.ops[1].refno
+$ids.BOXM3 = $r50.Report.ops[2].refno
+$ids.ZONE2 = $r50.Report.ops[0].owner
+$r51 = Invoke-Session '51_moves_apply' @{ GROU = $ids.GROU }
+$ids.ZONE3 = $r51.Report.ops[0].owner
+# The big ZONE's file is generated: one ZONE under the first ZONE's SITE, then 8 200 BOX
+# inserts under it — more members than the format word's fourteen-bit count holds.
+$bigFile = Join-Path $opsOut '60_big.source.json'
+$sb = New-Object Text.StringBuilder
+[void]$sb.Append("{`n  `"comment`": `"e3d-io write-path gate: a ZONE with $bigMembers BOXes (format word member count saturated)`",`n  `"ops`": [`n")
+[void]$sb.Append("    {`"op`": `"insert`", `"id`": `"zone`", `"owner`": `"$siteName`", `"noun`": `"ZONE`", `"name`": `"/E3DIO-BIG-ZONE`"}")
+for ($n = 0; $n -lt $bigMembers; $n++) {
+    [void]$sb.Append(",`n    {`"op`": `"insert`", `"owner`": `"@zone`", `"noun`": `"BOX`", `"attrs`": {`"POS`": `"$($n * 1000) 0 0`", `"XLEN`": `"300`", `"YLEN`": `"400`", `"ZLEN`": `"500`"}}")
+}
+[void]$sb.Append("`n  ]`n}`n")
+[IO.File]::WriteAllText($bigFile, $sb.ToString(), $utf8)
+$r60 = Invoke-Session '60_big' @{} @() $bigFile
+$ids.BIGZONE = $r60.Report.ops[0].refno
+if ($r60.Report.ops.Count -ne $bigMembers + 1) { throw "60_big: $($r60.Report.ops.Count) instructions, wanted $($bigMembers + 1)" }
+$r70 = Invoke-Session '70_strings'
+$ids.STREQUI = $r70.Report.ops[0].refno
+$ids.STRFIXING = $r70.Report.ops[1].refno
+$r80 = Invoke-Session '80_text' @{ BOX = $ids.BOX }
 # The text the FIXING's CREF was set from (the first ZONE's /NAME), which E3D prints back.
-$crefText = [regex]::Match($binOut, 'CREF text\s*:\s*(\S+)').Groups[1].Value
-# The bin's last session: the base the T1c merge transaction is opened at.
-$lastSesno = [int](([regex]::Matches($binOut, 'wrote session (\d+)') | Select-Object -Last 1).Groups[1].Value)
-Write-Output ("wrote: BOX {0} GPWL {1} GROU {2} EQUI {3} {4} FIXING {5}; hunk chains across a page: {6}" -f $ids.BOX, $ids.GPWL, $ids.GROU, $ids.EQUI1, $ids.EQUI2, $ids.FIXING, $spanning)
+$crefText = $zoneName
+if ($r70.Report.ops[1].owner -ne $ids.ZONE) { throw "70_strings: the FIXING's owner $($r70.Report.ops[1].owner) is not the ZONE $($ids.ZONE) $zoneName names" }
+# The last session written here: the base the T1c merge transaction is opened at.
+$lastSesno = [int]$r80.Report.commit.written.sesno
+Write-Output ("wrote: BOX {0} GPWL {1} GROU {2} EQUI {3} {4} FIXING {5}" -f $ids.BOX, $ids.GPWL, $ids.GROU, $ids.EQUI1, $ids.EQUI2, $ids.FIXING)
 Write-Output ("       moves: BOX A {0} B {1} C {2} under ZONE 2 {3}, A moved to ZONE 3 {4}; big ZONE {5} with {6} BOXes" -f $ids.BOXM1, $ids.BOXM2, $ids.BOXM3, $ids.ZONE2, $ids.ZONE3, $ids.BIGZONE, $bigMembers)
-Write-Output ("       by name: EQUI {0}, FIXING {1} (CREF = {2})" -f $ids.STREQUI, $ids.STRFIXING, $crefText)
+Write-Output ("       by name: EQUI {0}, FIXING {1} (CREF = {2}); last session {3}" -f $ids.STREQUI, $ids.STRFIXING, $crefText, $lastSesno)
 
 # 3. The macro, rendered; then E3D.
 New-Item -ItemType Directory -Force $logDir, $driverOut | Out-Null
@@ -149,7 +247,6 @@ function Invoke-E3D([string]$template, [string]$macroName, [hashtable]$vars, [sw
 Invoke-E3D 'write_gate.mac.template' (Split-Path $macro -Leaf) $ids
 
 # 4. The verdicts.
-$failures = 0
 # E3D writes ALPHA LOG in the process's ANSI code page (GBK on a Chinese Windows), not
 # UTF-8; the ASCII questions read the same either way, the text question does not. Read a
 # log as UTF-8 when it is valid UTF-8, else as the ANSI code page, and say which.
@@ -214,7 +311,7 @@ $desc = { param([int]$n) "Description e3d-io hunk gate EQUI ${n}: DESC stored ou
 # The text session (plan S5) names the BOX, so E3D lists it by name from then on. The
 # expected strings are spelled as code points so this file reads the same under any
 # PowerShell encoding: /E3DIO-盒子, 反应堆厂房 -3.320m~±0.00m, 中文 NAME / DESC / 会话注释
-# (e3d-write-box's TEXT_BOX_NAME / TEXT_ZONE_DESC / TEXT_COMMENT).
+# (write_gate_ops/80_text.json's name, DESC and comment).
 $cjk = { param([int[]]$points) -join ($points | ForEach-Object { [char]$_ }) }
 $boxName = '/E3DIO-' + (& $cjk 0x76D2, 0x5B50)
 $zoneDesc = (& $cjk 0x53CD, 0x5E94, 0x5806, 0x5382, 0x623F) + ' -3.320m~' + [char]0x00B1 + '0.00m'
@@ -225,6 +322,10 @@ Check 'Q3a EQUI 1: DESC as a type-22 hunk' '31_equi1_desc.log' @((& $desc 1))
 Check 'Q3b EQUI 1: DESP as a type-21 hunk (100 reals)' '32_equi1_desp.log' @('Desparam 1001.3 1002.3', '1100.3')
 Check 'Q3c EQUI 1: UUIDIA as a type-20 hunk' '33_equi1_uuidia.log' @('Uuidia 11 12 13 14')
 Check 'Q3d EQUI 2: DESC as a type-22 hunk' '36_equi2_desc.log' @((& $desc 2))
+# Two EQUIs with 200-word DESP hunks in one session lay the second's chain across a page
+# boundary (the layout `e3d-write-box --hunk` measured on every run: EQUI 2's DESP in a
+# chain of two pages); `e3d-write` writes the same values through the same facade, and
+# tests/write_stage2_hunks.rs pins the continuation link.
 Check 'Q3e EQUI 2: DESP as a type-21 hunk whose chain crosses a page' '37_equi2_desp.log' @('Desparam 2001.3 2002.3', '2100.3')
 Check 'Q3f EQUI 2: UUIDIA as a type-20 hunk' '38_equi2_uuidia.log' @('Uuidia 21 22 23 24')
 Check 'Q4a FIXING: ROKEYS, a type-19 list stored inline' '41_fixing_rokeys.log' @('Rokeys', ' 1 K1', ' 2 K2')
@@ -237,7 +338,6 @@ Check 'Q7  E3D reads the session page (user e3dio, our comment, in Chinese)' '70
 Check 'Q8a BOX: a Chinese NAME, record and table (last session)' '80_box_name.log' @("Name $boxName")
 Check 'Q8b ZONE: a Chinese DESC with an escaped run inside plain text' '81_zone_desc.log' @("Description $zoneDesc")
 Write-Output ("     (text logs decoded as: {0})" -f (($script:logEncodings.GetEnumerator() | Where-Object { $_.Key -match '^(70|8)' } | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', '))
-if ([int]$spanning -lt 1) { Write-Output 'FAIL     no hunk chain crossed a page boundary in this run, so the continuation link went unexercised'; $failures++ }
 # T1a (plan §2 T1a: the gate's Q OWNER / Q MEMBERS questions). The moved BOX A says its
 # owner is ZONE 3 and navigating OWNER lands there; ZONE 2 lists C before B and no A;
 # ZONE 3 lists A last; the GROU gained A and lost B.
@@ -250,17 +350,18 @@ Check 'Q9d GROU (reference members): A added, B removed, old members kept' '93_m
 Check "Q10 big ZONE: Q MEM lists all $bigMembers BOXes (format word count saturated)" '95_big_zone.log' @('Name /E3DIO-BIG-ZONE') -memberLines $bigMembers
 # T1b (plan §2 T1b: the gate's Q19). Every value was typed as text and set by attribute
 # name (Transaction::set) under E3D's dictionary; E3D must print back exactly what was
-# typed — the strings here are e3d-write-box's STR_* constants.
+# typed — the strings here are write_gate_ops/70_strings.json's.
 Check 'Q11a EQUI set by name: DESC / POS / FUNC / PURP print back as typed' '96_str_equi.log' @('Name /E3DIO-STR-EQUI', 'Description e3d-io T1b: DESC typed as text and set by name through Transaction::set', 'Position E 1234mm N 2345mm U 3456mm', 'Function STRING-PATH', 'Purpose PIPE')
 Check 'Q11b FIXING set by name: ROKEYS as a | list, BUIL true, NUMB 42, CREF from /NAME' '97_str_fixing.log' @('Name /E3DIO-STR-FIXING', 'Rokeys', ' 1 S1', ' 2 S2', ' 3 S3', 'Built true', 'Number 42', "Cref $crefText")
 
 # 5. T1c (plan §2 T1c: the gate's Q20). E3D saves a session of its own — an EQUI it
-# creates under the first ZONE, with a BOX in it — after the bin's last session; a
-# transaction opened at that last session then commits: a merge onto E3D's session (E3D
-# saves once more on quit, so the newest session is past the SAVEWORK's). E3D must read
-# both, and the ZONE's list must be the merge of both edits: E3D's EQUI where E3D put it
-# (first — `NEW` at the owner), the merged BOX anchored after the base's last member (its
-# preceding sibling in the transaction's list, `sub_5B20CA0`), i.e. last.
+# creates under the first ZONE, with a BOX in it — after the last session written above; a
+# transaction opened at that last session (`e3d-write apply --base`) then commits: a merge
+# onto E3D's session (E3D saves once more on quit, so the newest session is past the
+# SAVEWORK's). E3D must read both, and the ZONE's list must be the merge of both edits:
+# E3D's EQUI where E3D put it (first — `NEW` at the owner), the merged BOX anchored after
+# the base's last member (its preceding sibling in the transaction's list, `sub_5B20CA0`),
+# i.e. last.
 try {
     Invoke-E3D 'write_gate_e3d_saves.mac.template' 'write_gate_e3d_saves.mac' @{ ZONE = $ids.ZONE } -stateful
 } catch {
@@ -279,29 +380,27 @@ if ($saves -notmatch 'E3DSAVE-SAVED') {
     $e3dEqui = [regex]::Match($saves, 'E3DSAVE-EQUI\s+Ref =(\d+/\d+)').Groups[1].Value
     $e3dBox = [regex]::Match($saves, 'E3DSAVE-BOX\s+Ref =(\d+/\d+)').Groups[1].Value
     $e3dSesno = [regex]::Match($saves, 'Last saved session number (\d+)').Groups[1].Value
-    Push-Location $crate
-    try {
-        $mergeOut = & cargo run --quiet --bin e3d-write-box -- $copyDb --merge-from $lastSesno 2>&1 | Out-String
-    } finally { Pop-Location }
-    Set-Content -Path (Join-Path $Scratch 'e3d-write-box.merge.out.txt') -Value $mergeOut
-    if ($LASTEXITCODE) {
-        Write-Output "FAIL Q12  e3d-write-box --merge-from $lastSesno failed"
-        Write-Output $mergeOut
+    $merge = Invoke-Apply '90_merge' @{} @('--base', "$lastSesno")
+    if ($merge.ExitCode) {
+        Write-Output "FAIL Q12  e3d-write apply 90_merge --base $lastSesno failed"
+        Write-Output $merge.Output
         $failures++
     } else {
-        $mergeBox = [regex]::Match($mergeOut, 'new BOX merge\s*:\s*(\d+/\d+)').Groups[1].Value
-        $mergeSesno = [regex]::Match($mergeOut, 'wrote session (\d+)').Groups[1].Value
-        $mergedOnto = [regex]::Match($mergeOut, 'merged onto\s*:\s*(\d+)').Groups[1].Value
-        $reminted = [regex]::Match($mergeOut, 're-minted\s*:\s*(.*)').Groups[1].Value.Trim()
+        $mergeBox = $merge.Report.ops[0].refno
+        $mergeSesno = [int]$merge.Report.commit.written.sesno
+        $mergedOnto = [int]$merge.Report.commit.merged_onto
+        $reminted = (@($merge.Report.commit.reminted | ForEach-Object { "$($_.given) -> $($_.written)" }) -join ', ')
+        if (-not $reminted) { $reminted = 'none' }
         Write-Output ("       merge: E3D saved session {0} (EQUI {1}, BOX {2}); the transaction at base {3} merged onto {4} as session {5}, its BOX {6}, re-minted {7}" -f $e3dSesno, $e3dEqui, $e3dBox, $lastSesno, $mergedOnto, $mergeSesno, $mergeBox, $reminted)
         # E3D saves again when it quits (T2 saw its "Saving Meta Data" sessions), so the
         # newest session the merge lands on may be past the SAVEWORK's number; it must not be
         # before it.
-        if ([int]$mergedOnto -lt [int]$e3dSesno) {
+        if ($mergedOnto -lt [int]$e3dSesno) {
             Write-Output "FAIL Q12  the merge went onto session $mergedOnto, before E3D's save $e3dSesno"; $failures++
-        } elseif ([int]$mergedOnto -gt [int]$e3dSesno) {
-            Write-Output ("       (E3D saved {0} more session(s) after its SAVEWORK, on quit; the merge went onto the newest, {1})" -f ([int]$mergedOnto - [int]$e3dSesno), $mergedOnto)
+        } elseif ($mergedOnto -gt [int]$e3dSesno) {
+            Write-Output ("       (E3D saved {0} more session(s) after its SAVEWORK, on quit; the merge went onto the newest, {1})" -f ($mergedOnto - [int]$e3dSesno), $mergedOnto)
         }
+        if ($merge.Report.commit.base_sesno -ne $lastSesno) { Write-Output "FAIL Q12  the report says base $($merge.Report.commit.base_sesno), wanted $lastSesno"; $failures++ }
         Invoke-E3D 'write_gate_merge.mac.template' 'write_gate_merge.mac' @{ ZONE = $ids.ZONE; ZONE2 = $ids.ZONE2; E3DBOX = $e3dBox; MERGEBOX = $mergeBox }
         Check 'Q12a the BOX E3D saved is still there after the merge, as E3D left it' '98_merge_e3d_box.log' @('Name /E3DIO-E3D-BOX', 'Owner /E3DIO-E3D-EQUI', 'Xlength 777mm')
         # E3D's `NEW EQUI` with the ZONE as the current element puts the EQUI **first** in the
@@ -319,4 +418,4 @@ if ($saves -notmatch 'E3DSAVE-SAVED') {
 
 Write-Output ''
 if ($failures) { Write-Output "$failures FAIL — logs in $logDir"; exit 1 }
-Write-Output "all PASS — E3D 3.1 read every session e3d-io wrote (logs in $logDir)"
+Write-Output "all PASS — E3D 3.1 read every session e3d-write wrote (logs in $logDir)"

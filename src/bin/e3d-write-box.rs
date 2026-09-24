@@ -1,9 +1,12 @@
 //! Append one session to a dabacon DESIGN database: a new `BOX` under the
-//! first `ZONE`, added to that ZONE's member list. This is the fixture for the
+//! first `ZONE`, added to that ZONE's member list. This was the fixture for the
 //! E3D manual gate (`docs/plans/2026-09-20-dabacon-write-plan.md` §2 阶段 2 用例
 //! A / §7 Q8) — write with this crate, then open the database in AVEVA E3D 3.1
 //! Design and `Q SESSIONS` / `Q ATT` the box to see whether E3D reads back what
-//! was written.
+//! was written. Since plan T1d the gate (`tools/e3d/write_gate.ps1`) writes the
+//! same sessions through `e3d-write apply` and the instruction files in
+//! `tools/e3d/write_gate_ops/`; this bin is kept as the hand-written form of
+//! them and still runs.
 //!
 //! ```text
 //! e3d-write-box <database> [desvir.dat] [--group] [--hunk] [--text]

@@ -1,0 +1,7 @@
+{
+  "comment": "e3d-io write-path gate: one BOX",
+  "ops": [
+    {"op": "insert", "id": "box", "owner": "/1RX03-MSUP", "noun": "BOX",
+     "attrs": {"POS": "1000 2000 3000", "XLEN": "300", "YLEN": "400", "ZLEN": "500"}}
+  ]
+}

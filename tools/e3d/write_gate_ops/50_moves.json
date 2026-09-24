@@ -1,0 +1,13 @@
+{
+  "comment": "e3d-io write-path gate: three BOXes under the second ZONE, two referenced by the GROU",
+  "ops": [
+    {"op": "insert", "id": "a", "owner": "/1RX03-MCT", "noun": "BOX", "name": "/E3DIO-MOVE-A",
+     "attrs": {"POS": "1000 2000 3000", "XLEN": "300", "YLEN": "400", "ZLEN": "500"}},
+    {"op": "insert", "id": "b", "owner": "/1RX03-MCT", "noun": "BOX", "name": "/E3DIO-MOVE-B",
+     "attrs": {"POS": "2000 2000 3000", "XLEN": "300", "YLEN": "400", "ZLEN": "500"}},
+    {"op": "insert", "id": "c", "owner": "/1RX03-MCT", "noun": "BOX", "name": "/E3DIO-MOVE-C",
+     "attrs": {"POS": "3000 2000 3000", "XLEN": "300", "YLEN": "400", "ZLEN": "500"}},
+    {"op": "reference", "group": "={{GROU}}", "member": "@a"},
+    {"op": "reference", "group": "={{GROU}}", "member": "@b"}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "comment": "e3d-io write-path gate: move A to the third ZONE, C before B, B out of the GROU",
+  "ops": [
+    {"op": "move", "refno": "/E3DIO-MOVE-A", "owner": "/1RX03-LCT", "at": "last"},
+    {"op": "reorder", "refno": "/E3DIO-MOVE-C", "at": {"before": "/E3DIO-MOVE-B"}},
+    {"op": "unreference", "group": "={{GROU}}", "member": "/E3DIO-MOVE-B"}
+  ]
+}
