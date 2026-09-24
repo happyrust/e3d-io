@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-24
+
+The `Transaction` facade grows into what a project needs on its first day of changing a model, and gets a scriptable front (phase-2 plan T1a–T1d, `docs/plans/2026-09-22-write-path-phase-2-plan.md`): re-parenting and reordering members and editing a group's references (`move_to` / `reorder` / `add_reference_member` / `remove_reference_member`), setting any attribute by name from its text under E3D's own dictionary limits (`set` / `set_hunk` / `with_dictionary`), opening at a base session and merging at commit onto whatever was saved meanwhile — clashes refused by default, refnos the other side took re-minted (`open_at` / `with_on_clash`) — and the `e3d-write apply` CLI that runs one JSON file of instructions as one session, with `--dry-run` and `--report`. A new record starts the way `4CEIL` starts it, and the format word's block counts saturate at `0x3FFF` as `core.dll`'s do — the fix behind a 20 128-member ZONE that E3D listed as 3 744. Two E3D 3.1 gates read it all back: `tools/e3d/write_gate.ps1` (Q0 + 28 questions, now driven by `e3d-write`) and `tools/e3d/alternate_write_gate.ps1` (E3D and e3d-io writing to one ZONE in turn for five rounds). One breaking edge: `MergeOptions` gains `on_clash`, so a literal construction needs `..Default::default()`. 101 test binaries, 622 passed / 0 failed / 30 ignored; the downstream crates (`e3d-model` and its variants) `cargo check` clean against it.
 
 ### Added
 
