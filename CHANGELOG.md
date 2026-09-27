@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `DbElementParamEnv` answers `OPAR` / `ODES` / `APAR` / `ADES`, in both spellings (`ATTRIB OPAR[n]` and the tuple bands `OPARAM n` / `ODESP n` / `APARAM n` / `ADESP n`), where it answered nothing before. They name another element's parameters, as Core3D's `getattlib_des/DESPRE@0x10031CE0` reads them: `APAR` / `ADES` the design element's `CREF`; `OPAR` / `ODES` the owning section — for a `FIXING` whose owner is an `ENDATU`, that datum's `OWNREF`, otherwise the `desgetattlib/GTOREF@0x10018BC0` table (`FIXING` climbs to its `GENSEC`, `SJOI` / `SCOJ` / `CMFI` / `FITT` / `SBFI` / `SNOD` to their `SCTN`, `SUBJ` takes its `OWNER`; any other noun has none). `*PAR` is that element's catalogue `PARA` (through `SPRE → [SPCO → CATR]*`, `GATGOC`'s walk, when the element carries no `PARA` itself), `*DES` its own `DESP`; a tuple index past the end folds to 0 as `PARAM n` does, a PML subscript past it answers nothing. The first reader is the column base plate of aps250110 (SFIT `/F1_SQR_PFI_6H_003`): its negative box is `PXLE = ( ATTRIB OPAR[2 ] )`, `PZLE = ( ATTRIB OPAR[1 ] )` — 309.2 × 320.5 on a `/BS-UC305x305x137` column — and E3D's TTY RVM cuts exactly that section off the column's first 30 mm.
+
 ### Removed
 
 - `e3d-write-box` (`src/bin/e3d-write-box.rs`), the hand-written fixture that drove the E3D gate until `e3d-write apply` took over in 0.4.0 (plan T1d: "kept until the new gate runs green" — it has, Q0 + 28 questions, on the same refnos and page counts). Everything it wrote is an instruction file under `tools/e3d/write_gate_ops/`; the gate's macro templates and `write_gate.ps1` no longer mention it.
