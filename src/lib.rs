@@ -8,6 +8,7 @@ pub mod error;
 pub mod index;
 pub mod meta;
 pub mod page;
+pub mod picture;
 pub mod read_stats;
 pub mod record;
 pub mod refno;

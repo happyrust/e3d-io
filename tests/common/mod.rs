@@ -64,6 +64,22 @@ pub const TEST_FILE_ATTLIB: &str = r"D:\work\plant-code\plant-io\test-file\attli
 /// against. The database indexes 1156 of them.
 pub const NXTR_HASH: u32 = 0x000DBF71;
 
+/// The DRAFT fixtures: the two AVEVA sample projects' picture directories
+/// (`<proj>pic\NN\M<w0>-<w1>-<EXFI>-<PVNO>`, 881 Plant + 1 885 Marine files)
+/// and the Plant PADD databases. Sample-project data, not committed
+/// (`docs/plans/2026-09-24-gw-picture-read-plan.md` Q2).
+pub const PLANT_PIC_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\apspic";
+pub const MARINE_PIC_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\amspic";
+pub const PLANT_PADD_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\aps000";
+
+/// `/APS-0001`'s smallest sheet picture (SHEE 2013286677/4350, 42 KB: 31
+/// segments, 655 primitives) and its biggest (`/APS-0001/1`, SHEE
+/// 2013286677/265, 14 MB: 4 715 segments, 351 819 primitives).
+pub const PLANT_PIC_SMALL: &str =
+    r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\apspic\30\M2013286677-4350-10000-11";
+pub const PLANT_PIC_BIG: &str =
+    r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\apspic\09\M2013286677-265-10000-11";
+
 /// True when any fixture is absent, after printing which. Call it as the first
 /// line of a test and return.
 pub fn missing(paths: &[&str]) -> bool {
