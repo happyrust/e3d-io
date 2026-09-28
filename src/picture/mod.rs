@@ -20,6 +20,7 @@
 //! crate reads, so it has its own error type and shares only [`crate::RefNo`]
 //! and the noun hash.
 
+pub mod colour_data;
 pub mod directory;
 pub mod file;
 pub mod geom;
@@ -33,13 +34,13 @@ pub mod word;
 
 pub use directory::{DirEntry, Node, Picture};
 pub use file::{Header, PictureFile, PictureName, HEADER_WORDS, RECORD_BYTES};
-pub use geom::Transform;
+pub use geom::{ArcCheck, ArcStats, Transform};
 pub use prim::{kind, Payload, Primitive, Span, Text2Body, Text2Prim, TextPrim};
 pub use roundtrip::{
     roundtrip, roundtrip_dir, CorpusFailure, CorpusReport, Mismatch, RoundtripReport,
 };
 pub use segment::{flags, Group, Member, Role, Segment, TexpNote, UserBlock};
-pub use style::{pen_name, Pen};
+pub use style::{colour_name, colour_rgb8, pen_name, Colour, Pen, COLOUR_TABLE_SIZE};
 pub use text::{Run, TextFormat};
 pub use word::{Word, Words};
 
