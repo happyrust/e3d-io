@@ -230,6 +230,51 @@ The primitive form underneath — `write_element_session_with(path, &request, &[
 - **What E3D said**: `tools/e3d/write_gate.ps1` writes — with `e3d-write apply`, one instruction file per session from `tools/e3d/write_gate_ops/` — a box, a group of references, hunks of every kind, a string list, three boxes that are then moved / reordered / referenced, a ZONE of 8 200 boxes, and an EQUI and a FIXING whose every value was typed as text and set by attribute name into a scratch copy of the AMS sample project and reads them back through a real E3D 3.1 Design TTY session — first Q0 (six instruction files that must be refused with a reason — a 121-character `DESC`, a four-element `POS`, `RATM`, a misspelt attribute, a refno nobody has, an owner deleted earlier in the file — and a `--dry-run`, with the database byte-identical after all of them), then twenty-three questions (a Chinese `NAME`, `DESC` and session comment among them; `Q OWNER` and `Q MEM` after `move_to` / `reorder`; all 8 200 members listed, which takes the format word's member count written saturated at `0x3FFF` the way `core.dll` writes it; `Q DESC` / `Q POS` / `Q ROKEYS` / `Q CREF` printing back exactly the strings `Transaction::set` was given) — then has E3D itself `NEW` an EQUI and a BOX under the first ZONE and `SAVEWORK`, commits a transaction opened at the session before that as a merge onto E3D's (`e3d-write apply --base`), and asks five more: E3D's BOX as E3D left it, the ZONE listing E3D's EQUI (first, where `NEW` at the owner puts it) and the merged BOX (last, after its anchor), the merged BOX's name / owner / `XLEN` / `POS`, the other ZONE's `FUNC`, `Q SESSION` = the merge. Q0 and twenty-eight questions, about a minute (the 8 200 inserts through the CLI included); the sessions come out on the same refnos and page counts the hand-written fixture the gate used to run (`e3d-write-box`, since removed) wrote. A second gate, `tools/e3d/alternate_write_gate.ps1`, has E3D and `e3d-write` write to one ZONE **in turn** for five rounds — each E3D `SAVEWORK` opening on e3d-io's latest session and each `e3d-write` appending on E3D's — then a read-only E3D session lists all ten EQUIs (both sides) by name and the session tail `BASESN` chain is checked contiguous and unbroken (`e3d-descriptor sessions`); all rounds pass, about seventy seconds. Three rules a caller needs from that run: a template's count for a text attribute is its **byte** capacity (`DESC` is 480 bytes for E3D's 120-character limit), `UUIDIA` is set-once, and `RATM` / `UNIPAR` / `USRWEI` are not attributes E3D's dictionary answers for.
 - **Not written**: `SPAMAP` (needs the geometry the spatial grid is computed from), the UDA tables (`UDATAB` / `UDAFTB` / `UUIDAR`), the extract model (attribute 17), page 1's bucket table, multi-extent files (refused), records in the compact layout (refused), text with no stored form under the file's `FORMAT` (refused, as `core.dll` refuses it: a GBK code with a byte below `0xA0` such as `–`, anything outside the BMP).
 
+## DRAFT pictures
+
+A DRAFT sheet's view graphics are not in the PADD database: DRAW writes them
+with core.dll's Wigwam kernel to `<proj>pic\NN\M<w0>-<w1>-<EXFI>-<PVNO>`
+(`w0/w1` the sheet's refno, `EXFI` its extract database, `PVNO` its picture
+version, `NN = w1 mod 32`). `e3d_io::picture` reads those files the way
+`sub_54DC674` op 9 loads them and encodes every item back to the bytes it
+came from (format: `docs/evidence/2026-09-28-gw-picture-format.md`; plan:
+`docs/plans/2026-09-24-gw-picture-read-plan.md`).
+
+```rust
+use e3d_io::picture::{locate, thumbnail, PaddProject, Payload, PictureFile, Transform};
+use e3d_io::SchemaPack;
+
+// From the database: where the sheet's picture is, and its stored thumbnail.
+let pack = SchemaPack::open(r"schema\e3d31")?;
+let project = PaddProject::open(&pack, r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\aps000")?;
+let sheet = project.find_named("/APS-0001/1")?.remove(0);
+let where_ = locate(std::path::Path::new(r"...\apspic"), &sheet)?.expect("PVNO > 0");
+let png = thumbnail(&sheet)?.expect("a displayed sheet has one").png;   // 128 × 128 PNG bytes
+
+// The file: header, name, one picture, its segment tree, groups, primitives.
+let file = PictureFile::open(&where_.path)?;
+let picture = &file.pictures()[0];
+for (index, depth) in picture.walk() {                    // pre-order, transforms compose down
+    let segment = picture.segment(index).unwrap();
+    let to_sheet: Transform = picture.composed_transform(index);   // local → sheet mm
+    for (group, prim) in segment.prims() {
+        match &prim.payload {
+            Payload::Points(points) => { /* MARKER / LINE / FILL / BOUNDARY */ }
+            Payload::Conic { start, spans } => { /* arcs: spans[i].points(from, 24) */ }
+            Payload::Text(text) => { /* text.text(), text.format() */ }
+            _ => {}
+        }
+    }
+}
+```
+
+- **Layout** (`word`, `file`, `directory`): 128-byte records of 8-byte words, each half big-endian; a 21-word header (15 version characters, then the name block, attribute table and picture table positions); the picture table's directory replays into a segment tree with the `rel | levels << 4` rule core.dll uses. Positions are trusted, the file is never scanned to its end (re-saved pictures keep their old tail).
+- **Content** (`segment`, `prim`, `text`): segment flags / transform / user block (`Role` = the DRAFT noun the segment stands for — `SHEE`, `VIEW`, `DESI`, `GEOM` with its member table, `PPTS`, Marine `TEXP` notes), groups, and the ten primitive kinds field by field — `TextFormat` unpacks the mixed-radix attribute word to `FONT    11,RIGHT,CENTRE,HBODY`, TEXT2 runs rebuild their escaped source (`SHOP&/TEST`). Writer residue (a TEXT's last-word tail, an odd run's pad) is kept so `encode()` is the original bytes.
+- **Semantics** (`geom`, `style`): `Transform` composition; arc spans `[mx, my, w, ex, ey]` with `M` the arc's midpoint and `w = bulge²`, expanded clockwise by θ = 4·atan(√w) (`Span::points`); the 365-entry DRAFT colour table replayed from core.dll `FWSCOL` + DruidNet `ColourTableManager` (`Colour::of(n)`, `> 365` is a layer id); pen names (`8004` = `THIN CHAIN`).
+- **Gate** (`roundtrip`): `roundtrip(&file)` / `roundtrip_dir(pic_dir)` re-encode header, name, table, directory, every segment and group header and every primitive and compare bytes. Plant 881 + Marine 1 885 = 2 766 files, 24 873 647 primitives, 0 differing bytes; the ten kind counts and every listing line match the Python reference (`draft31\gwdump.py`, frozen as the oracle) character for character (`tests/picture_*.rs`).
+- **CLI** `e3d-picture`: `info <file>` · `list <file> [--page] [--csv] [-o out]` · `roundtrip <file | dir>` · `locate --db <padd | dir> --pic-dir <dir> [--refno w0/w1 | --name N]` · `thumbnail --db … (--refno | --name) -o x.png`.
+- **Not done here**: annotation / background redraw, SVG / PNG rendering, INSTANCE resolution across pictures, writing pictures E3D would load (the DRAFT semantics layer is planned as a separate crate, `docs/plans/2026-09-28-draft-module-next-steps-plan.md` P3 / P4).
+
 ## API surface (key types)
 
 | Type / fn | Purpose |
@@ -254,6 +299,11 @@ The primitive form underneath — `write_element_session_with(path, &request, &[
 | `write::RecordDraft` | An element record to write: `from_record_bytes`, `set_attribute`, members, hunks |
 | `write::set_reference` / `set_reference_array` / `table_keys` | Type-16 / type-17 references and the keyed-table keys a record files |
 | `write::WriteOptions { templates }` / `MergeOptions` | Hand the schema over and the tables follow the write |
+| `picture::PictureFile::open(path)` | A DRAFT picture file: header, name, pictures → segment tree → groups → primitives |
+| `picture::{Picture::walk, composed_transform}`, `Span::points`, `Colour::of`, `TextFormat::decode` | Tree order, local → sheet mm, arc expansion, the 365-colour table, text attribute words |
+| `picture::{locate, thumbnail, PaddProject}` | From a PADD sheet to its picture file and its stored 128 × 128 PNG |
+| `picture::{roundtrip, roundtrip_dir}` | Re-encode every decoded item and compare bytes — the corpus gate |
+| `e3d-picture` (bin) | `info` / `list` / `roundtrip` / `locate` / `thumbnail` |
 
 ## Byte-order convention
 

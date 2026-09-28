@@ -167,32 +167,37 @@ fn every_marine_sheet_picture_but_the_two_marks_sheets_is_on_disk() {
 }
 
 #[test]
-fn the_thirty_plant_thumbnails_come_out_as_the_pngs_thumbs_py_wrote() {
+fn every_plant_thumbnail_comes_out_as_the_png_thumbs_py_wrote() {
     let tsv = format!(r"{}\thumbs.tsv", common::DRAFT31_THUMBS);
     if common::missing(&[common::PLANT_PADD_DIR, &tsv]) {
         return;
     }
-    // thumbs.tsv：db, refno, name, exfi, pvno, png, picture。同名 sheet（两个库都有
-    // /APS-0001/1…）写到同一个 png，磁盘上留下的是最后一行的——只对那些比字节。
+    // thumbs.tsv（2026-09-29 修过配对 bug 的 thumbs.py 写的）：db, refno, name, exfi, pvno,
+    // png, picture, how。how = paddprobe：Python 自己从 `paddprobe dump` 的树配对 SHEE →
+    // THUMBN → ARCHIV → ATTDAT 再取 ELDATA（独立于本 crate）；how = e3d-picture：那棵树
+    // 每层只印 4 个成员，THUMBN 被截掉，thumbs.py 退到 `e3d-picture thumbnail`（只是自证）。
+    // 老版 thumbs.py 把截掉的 sheet 配到后面别的元素的 ATTDAT 上——/APS-1000/1 拿到一张
+    // 194 字节的空白 PNG——并把两个库里同名 sheet 写进同一个文件。
     let rows: Vec<Vec<String>> = std::fs::read_to_string(&tsv)
         .unwrap()
         .lines()
         .map(|l| l.split('\t').map(str::to_string).collect())
         .collect();
-    assert_eq!(rows.len(), 30);
-    let mut last_writer: BTreeMap<String, usize> = BTreeMap::new();
-    for (i, row) in rows.iter().enumerate() {
-        last_writer.insert(row[5].clone(), i);
-    }
+    assert_eq!(
+        rows.len(),
+        57,
+        "every SHEE with a THUMBN in the 8 databases that have sheets"
+    );
+    let independent = rows.iter().filter(|r| r[7] == "paddprobe").count();
+    assert_eq!(independent, 28);
+    let paths: std::collections::BTreeSet<&str> = rows.iter().map(|r| r[5].as_str()).collect();
+    assert_eq!(paths.len(), rows.len(), "one file per sheet");
 
     let pack = SchemaPack::open(common::SCHEMA_PACK).unwrap();
     let project = PaddProject::open(&pack, common::PLANT_PADD_DIR).unwrap();
-    let mut extracted = 0usize;
-    let mut compared = 0usize;
-    let mut differing = Vec::new();
     // 同名 sheet（aps250133 与 aps250501 是同一套图的两份库）的缩略图应两两相同。
     let mut by_name: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
-    for (i, row) in rows.iter().enumerate() {
+    for row in &rows {
         let (w0, w1) = row[1].split_once('/').unwrap();
         let sheet = project.element(RefNo::new(w0.parse().unwrap(), w1.parse().unwrap()));
         assert_eq!(sheet.element_type().unwrap(), "SHEE");
@@ -209,7 +214,6 @@ fn the_thirty_plant_thumbnails_come_out_as_the_pngs_thumbs_py_wrote() {
         let thumb = thumbnail(&sheet)
             .unwrap()
             .unwrap_or_else(|| panic!("{} has a thumbnail", row[2]));
-        extracted += 1;
         assert!(thumb.png.starts_with(b"\x89PNG\r\n\x1a\n"));
         assert!(thumb.png.ends_with(b"IEND\xae\x42\x60\x82"));
         // IHDR：128 × 128。
@@ -222,36 +226,26 @@ fn the_thirty_plant_thumbnails_come_out_as_the_pngs_thumbs_py_wrote() {
             u32::from_be_bytes(thumb.png[20..24].try_into().unwrap()),
             128
         );
-        by_name
-            .entry(row[2].clone())
-            .or_default()
-            .push(thumb.png.clone());
-        if last_writer[&row[5]] == i {
-            let want = std::fs::read(&row[5]).unwrap();
-            compared += 1;
-            if thumb.png != want {
-                differing.push((row[2].clone(), thumb.png.len(), want.len()));
-            }
-        }
+        let want = std::fs::read(&row[5]).unwrap();
+        assert_eq!(
+            thumb.png, want,
+            "{} ({}) differs from {}",
+            row[2], row[7], row[5]
+        );
+        by_name.entry(row[2].clone()).or_default().push(thumb.png);
     }
-    assert_eq!(extracted, 30);
-    assert_eq!(compared, last_writer.len());
-    assert_eq!(compared, 18);
     for (name, pngs) in &by_name {
         assert!(
             pngs.windows(2).all(|w| w[0] == w[1]),
             "{name}: the two databases' copies differ"
         );
     }
-    // thumbs.py 靠 `paddprobe dump` 的文本树配对 SHEE 与 ATTDAT，而那份树每层只印
-    // 前几个成员（"… +3 more"），/APS-1000/1 的 THUMBN 被截掉，配到了别的元素的
-    // 194 字节空白 PNG 上；按成员表走的 `thumbnail()` 给出 2 574 字节的真图，两份库
-    // 一致。其余 17 张逐字节相同。
-    assert_eq!(
-        differing,
-        vec![("/APS-1000/1".to_string(), 2574, 194)],
-        "{differing:?}"
-    );
+    // 老 oracle 配错的那张：现在是 2 574 字节的真图。
+    let aps_1000 = rows
+        .iter()
+        .find(|r| r[2] == "/APS-1000/1")
+        .expect("/APS-1000/1 is in the table");
+    assert_eq!(std::fs::read(&aps_1000[5]).unwrap().len(), 2574);
 
     // /APS-0001/1 of aps250133: 898 words → 3 564-byte payload → 3 402-byte PNG.
     let sheet = project.element(RefNo::new(2013286677, 265));
