@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- `DbElement::get_number` reads the slot when the body stored under the attribute's negated hash is **neither a whole PML program nor a four-word tuple** — the same rule `extract_attribute` has always applied ("only a body that decodes whole is a formula"). The AVEVA sample's four NOZZ (`/P_S_01/N1` `N2`, `/P_D_01/N1` `N2`) carry a **design-side attribute rule** there for `HEIG` / `POS` / `ORI` — `[0, 2, 10, 1, 106, 2, 897510, 1, 1, 712463, 1601, 1701]`, a two-word header followed by the program `( ATTRIB CDPR NHEI )`. The rule is an annotation; the value it produced is in the slot (`HEIG = 180`, what TTY `Q HEIG` prints and what Core3D's `DECARG -5 → GATRE(HEIG)` draws). Treating it as an unreadable tuple made `HEIG` `Unresolved`, so the catalogue neck `SCYL.PHEI = DDHEIGHT` failed and each nozzle lost its 148–151 mm neck (aps250110 NOZZ 0 / 4 against the E3D RVM; 4 / 4 after).
+
 ### Added
 
 - `DbElementParamEnv` answers `OPAR` / `ODES` / `APAR` / `ADES`, in both spellings (`ATTRIB OPAR[n]` and the tuple bands `OPARAM n` / `ODESP n` / `APARAM n` / `ADESP n`), where it answered nothing before. They name another element's parameters, as Core3D's `getattlib_des/DESPRE@0x10031CE0` reads them: `APAR` / `ADES` the design element's `CREF`; `OPAR` / `ODES` the owning section — for a `FIXING` whose owner is an `ENDATU`, that datum's `OWNREF`, otherwise the `desgetattlib/GTOREF@0x10018BC0` table (`FIXING` climbs to its `GENSEC`, `SJOI` / `SCOJ` / `CMFI` / `FITT` / `SBFI` / `SNOD` to their `SCTN`, `SUBJ` takes its `OWNER`; any other noun has none). `*PAR` is that element's catalogue `PARA` (through `SPRE → [SPCO → CATR]*`, `GATGOC`'s walk, when the element carries no `PARA` itself), `*DES` its own `DESP`; a tuple index past the end folds to 0 as `PARAM n` does, a PML subscript past it answers nothing. The first reader is the column base plate of aps250110 (SFIT `/F1_SQR_PFI_6H_003`): its negative box is `PXLE = ( ATTRIB OPAR[2 ] )`, `PZLE = ( ATTRIB OPAR[1 ] )` — 309.2 × 320.5 on a `/BS-UC305x305x137` column — and E3D's TTY RVM cuts exactly that section off the column's first 30 mm.
