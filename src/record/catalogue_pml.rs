@@ -152,6 +152,22 @@ const NUMBER_WORDS: usize = 7;
 const NUMBER_WITH_UNIT_SHAPE: i32 = 9;
 const NUMBER_WITH_UNIT_WORDS: usize = 10;
 const DISTANCE_UNIT: [i32; 3] = [11, 1, 1];
+/// A typed number without the unit words: `101 7 <four words of number> 11 1`. The
+/// same four-word payload, the same `11 1` the distance form opens its trailer with,
+/// and nothing after it — the count word says 7, so the record ends there.
+///
+/// aps250110's door SFIT `/IS-SRO-NS/900x2045` (15193/25228) writes every whole-number
+/// literal of its jamb and head profiles this way: `SVER 15193/25272 PY` is
+/// `( ( ATTRIB RPRO WIDT - ATTRIB RPRO DWID - 2 ) * 0.5 + 15 )` with the 2 and the 15 in
+/// this shape (the 0.5 stays a plain [`NUMBER_SHAPE`] number), its `PRAD` is one such 5,
+/// and the neighbouring vertices put `( ( ATTRIB RPRO THK + 1 ) * -1 )` in `PX`. Unread,
+/// every one of those vertices fell back to the all-zero tuple and the 95 × 61 jamb with
+/// its 5 mm fillet built as the 35 × 10 door stop alone; E3D's TTY RVM draws
+/// `FITTING 1 of STWALL 5 of CWALL /B01_LEV01_INT_WALLS` with the full 61 (900 − 806 − 2
+/// halved, plus 15) and the arc from (56, −95) to (61, −90). Only this trailer is read.
+const NUMBER_TYPED_SHAPE: i32 = 7;
+const NUMBER_TYPED_WORDS: usize = 8;
+const TYPED_TRAILER: [i32; 2] = [11, 1];
 /// `106` is followed by this word, a name, three words of qualifier and two
 /// closing words.
 const ATTRIBUTE_SHAPE: i32 = 2;
@@ -716,6 +732,18 @@ fn parse_number(words: &[i32]) -> Option<(Step, usize)> {
             let value = decode_number(*first, *second, *third)?;
             Some((Step::Number(value), NUMBER_WITH_UNIT_WORDS))
         }
+        [
+            OP_PUSH_NUMBER,
+            NUMBER_TYPED_SHAPE,
+            first,
+            second,
+            third,
+            0,
+            trailer @ ..,
+        ] if trailer.len() >= 2 && trailer[..2] == TYPED_TRAILER => {
+            let value = decode_number(*first, *second, *third)?;
+            Some((Step::Number(value), NUMBER_TYPED_WORDS))
+        }
         _ => None,
     }
 }
@@ -1096,6 +1124,46 @@ mod tests {
         // Any other trailer is a unit this has not seen: unreadable, not a guess.
         let mut other = plate;
         other[24] = 2;
+        assert_eq!(evaluate_words(&other, &env), None);
+    }
+
+    #[test]
+    fn a_typed_number_without_unit_words_reads_as_its_value() {
+        // Door SFIT `/IS-SRO-NS/900x2045` (=15193/25228), jamb SEXT 15193/25264, SVER
+        // 15193/25272 PY: the 2 and the 15 are `101 7 … 11 1`, the 0.5 a plain number.
+        // WIDT 900 / DWID 806 → 61, the jamb width E3D's TTY RVM draws on
+        // `FITTING 1 of STWALL 5 of CWALL /B01_LEV01_INT_WALLS` (aps250110).
+        let jamb_width = [
+            45, 1, 106, 2, 840258, 1, 1, 928283, 1601, 1701, 106, 2, 840258, 1, 1, 617359, 1601,
+            1701, 803, 101, 7, 16384, 0, 2, 0, 11, 1, 803, 101, 6, 16384, 0, 0, 0, 6, 804, 101, 7,
+            30720, 0, 4, 0, 11, 1, 802,
+        ];
+        assert_eq!(
+            render(&jamb_width).as_deref(),
+            Some("( ( ATTRIB RPRO WIDT - ATTRIB RPRO DWID - 2 ) * 0.5 + 15 )")
+        );
+        let env = MapParamEnv::new()
+            .set_attribute("RPRO WIDT", 900.0)
+            .set_attribute("RPRO DWID", 806.0)
+            .set_attribute("RPRO THK", 40.0);
+        assert_eq!(evaluate_words(&jamb_width, &env), Some(61.0));
+        // The same vertex's PRAD: a lone 5, the fillet the RVM arc (56, -95) → (61, -90) turns.
+        let fillet = [10, 1, 101, 7, 20480, 0, 3, 0, 11, 1];
+        assert_eq!(render(&fillet).as_deref(), Some("( 5 )"));
+        assert_eq!(evaluate_words(&fillet, &env), Some(5.0));
+        // SVER 15193/25273 PX: `( ( ATTRIB RPRO THK + 1 ) * -1 )`, the 1 typed, the -1 plain.
+        let rebate = [
+            27, 1, 106, 2, 840258, 1, 1, 539696, 1601, 1701, 101, 7, 16384, 0, 1, 0, 11, 1, 802,
+            101, 6, -16384, 0, 1, 0, 6, 804,
+        ];
+        assert_eq!(
+            render(&rebate).as_deref(),
+            Some("( ( ATTRIB RPRO THK + 1 ) * -1 )")
+        );
+        assert_eq!(evaluate_words(&rebate, &env), Some(-41.0));
+        // Any other trailer is a shape this has not seen: unreadable, not a guess.
+        let mut other = fillet;
+        other[9] = 2;
         assert_eq!(evaluate_words(&other, &env), None);
     }
 
