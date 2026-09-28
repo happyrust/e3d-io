@@ -25,6 +25,7 @@ pub mod file;
 pub mod geom;
 pub mod listing;
 pub mod prim;
+pub mod roundtrip;
 pub mod segment;
 pub mod style;
 pub mod text;
@@ -34,6 +35,9 @@ pub use directory::{DirEntry, Node, Picture};
 pub use file::{Header, PictureFile, PictureName, HEADER_WORDS, RECORD_BYTES};
 pub use geom::Transform;
 pub use prim::{kind, Payload, Primitive, Span, Text2Body, Text2Prim, TextPrim};
+pub use roundtrip::{
+    roundtrip, roundtrip_dir, CorpusFailure, CorpusReport, Mismatch, RoundtripReport,
+};
 pub use segment::{flags, Group, Member, Role, Segment, TexpNote, UserBlock};
 pub use style::{pen_name, Pen};
 pub use text::{Run, TextFormat};

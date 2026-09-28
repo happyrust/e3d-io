@@ -1,6 +1,6 @@
 # 计划：e3d-io 读 DRAFT 图片文件（GW / Wigwam GTIGS picture）——把 `gwdump.py` 移植成 Rust 模块
 
-状态：**评审通过**（2026-09-28，会话 fable-5-1-2：用户在面板上批「Q1–Q9 全按推荐项定」并在 Plannotator 门 Approve——Q1 `e3d_io::picture` 顶层、Q2 样例路径夹具 + corpus `#[ignore]`、Q3 只编回不写新图、Q4 新 bin `e3d-picture`；上位计划 `docs/plans/2026-09-28-draft-module-next-steps-plan.md` 把 S1–S3 编为 P1、S4–S6 编为 P2）。起草：2026-09-24，会话 fable-5-1-14，用户点选「先给范围与计划」。评审要定的四件事在 §6（Q1–Q4）。
+状态：**评审通过**（2026-09-28，会话 fable-5-1-2：用户在面板上批「Q1–Q9 全按推荐项定」并在 Plannotator 门 Approve——Q1 `e3d_io::picture` 顶层、Q2 样例路径夹具 + corpus `#[ignore]`、Q3 只编回不写新图、Q4 新 bin `e3d-picture`；上位计划 `docs/plans/2026-09-28-draft-module-next-steps-plan.md` 把 S1–S3 编为 P1、S4–S6 编为 P2）→ **S1–S3 已落地**（2026-09-28/29，会话 fable-5-1-8，提交 `7bbc5cf` / `39bc8f8` / 本条；§7）：**2 766 文件 roundtrip 0 失败、10 种 kind 计数 = 第八轮**——本计划的门已过。S4–S6 待开工。起草：2026-09-24，会话 fable-5-1-14，用户点选「先给范围与计划」。评审要定的四件事在 §6（Q1–Q4）。
 日期：2026-09-24
 分支 / worktree：`main` @ `D:\work\plant-code\old\vendor\e3d-io`，HEAD `0ae6364`（0.4.0）。本计划只加新文件，不碰写路径。
 依据（全在 `D:\ida_scratch\draft31\`，本计划落地时把格式说明搬进 `docs/evidence/`）：`GW-PICTURE-FORMAT.md`（格式说明，§3.3 颜色条目 2026-09-24 已按二进制改写）、读法 3 第二～八轮报告（core.dll `sub_54DC674` op 6 / op 9 成帧、G-API 逐图元编解码）、第十三轮报告（颜色表、进度盘点）、参考实现 `gwdump.py` v4（937 行，解析 + 回写 + 清单）、`gw\gwpic.py`（几何：变换复合、弧展开）、`gw\draft_colours.py`（颜色表）。
@@ -127,3 +127,10 @@ Q1–Q4 全按推荐项定的话，S1 当天可以开工。
 
 - 2026-09-24：草案（fable-5-1-14）。写在第十三轮进度盘点之后：PADD 三层存储与处理链已解完、GW 格式 2 766 文件逐字节回写零差异、颜色表已从二进制读出，但实现全在 `D:\ida_scratch\draft31\`，e3d-io 没有 PADD / GW 代码。
 - 2026-09-28：评审通过（fable-5-1-2，Q1–Q4 全按推荐项）。格式说明已搬入 `docs/evidence/2026-09-28-gw-picture-format.md`；`manifest.json` 已登 `PADD`（§2.1 F 的那一行提前做了，`tests/padd_open.rs`）。S1 待开工。
+- 2026-09-28/29：**S1–S3 落地**（fable-5-1-8；三个提交 `7bbc5cf` S1、`39bc8f8` S2、S3 = 本条所在的提交）。
+  - S1 `src/picture/{mod,word,file,directory}.rs`：`Word{u0,u1}` 三种读法与构造互逆；`PictureFile::open` 只信头 [16..21]；`PictureName` 解成 RefNo / EXFI / PVNO；目录按 op 9 回放成索引树（`walk()` 前序 = gwdump 打印顺序）。`picture_small` 2 条：小样本 31 条 `(rec, rel, nwords)` 与树逐条 = gwdump；`picture_big`：4 715 段回放零异常。
+  - S2 `segment.rs / prim.rs / text.rs / geom.rs / style.rs / listing.rs`：段头 / 变换 / 用户块（原字保留，GEOM / PPTS 成员表，TEXP 文本框）、组头与裸图元、10 种图元（TEXT 末字残留 `tail`、TEXT2 run 表与 Raw 兜底）、`TextFormat` 混合基数、TEXT2 源串重建、`Transform` 复合、笔名。**清单同形**：`listing.rs` 把 gwdump 的 `--list` / `--csv` / `--page` / 摘要一字不差地复现，小样本 655 行 raw + 655 行 page、大样本 351 819 行 page、Marine `M2013287597-16864-10000-1`（TEXT 57 / INSTANCE 7）67 行 + `M2013287597-1792-10000-1`（TEXT2 78 全部解成 run、7 个多 run 源串 `SHOP&/TEST` / `Block &&&/Unit No.` / `&USEC.(Right)`…）95 行——全部与 `draft31\lists\*.txt` 逐行相同。大样本 kind 直方图 MARKER 300 211 / LINE 48 915 / CONIC 2 465 / FILL 228 = 第八轮；GEOM 组 id 全在成员表。
+  - S3 `roundtrip.rs` + `src/bin/e3d-picture.rs`（`info / list [--page] [--csv] [-o] / roundtrip <file|dir> [-v]`）+ `tests/picture_corpus.rs`：头 / 名字 / 图片表 / 目录 / 段头 / 组头 / 图元逐字节编回比对。**门：Plant 881 文件 seg 191 374 / grp 2 204 157 / prim 8 640 993、Marine 1 885 文件 1 365 582 / 2 581 787 / 16 232 654，全部 0 差异；10 种 kind 计数与第八轮 §0.2 逐个相同**；`e3d-picture roundtrip <dir>` 的报告文本与 `lists\corpus-roundtrip-*.txt` 用 `fc` 比无差异。耗时 Plant 8.4 s + Marine 10.9 s（Python 105 s + 4 min）。
+  - 与 Python 的两处「更严」：名字块按「字符 + 空格补齐」编回（gwdump 只重编 u1）；TEXT 末字之后若还有整字、TEXT2 解不开时的 Raw 都原字编回（gwdump 会丢）。语料上两者都没触发差异。
+  - 验证：`cargo test --release --lib picture::` 30/0；`picture_small` 6/0、`picture_big` 1/0 + ignored 1/0、`picture_marine` 2/0、`picture_corpus` 3/0 + ignored 3/0；`cargo clippy --release --all-targets` 新模块与新 bin 0 warning；rustfmt 过。共享 target 目录被别的会话锁住，本会话用 `CARGO_TARGET_DIR=D:\Rust\target-draft`。
+  - 下一步 S4（P2）：`Span::points(n)` 弧展开 + 58 629 条弧 `√w` 几何零例外、365 项颜色表进 `style.rs`（`draft_colours.tsv` 生成）、`picture_style` 测试。
