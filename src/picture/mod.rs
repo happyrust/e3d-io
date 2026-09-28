@@ -25,6 +25,7 @@ pub mod directory;
 pub mod file;
 pub mod geom;
 pub mod listing;
+pub mod locate;
 pub mod prim;
 pub mod roundtrip;
 pub mod segment;
@@ -35,6 +36,7 @@ pub mod word;
 pub use directory::{DirEntry, Node, Picture};
 pub use file::{Header, PictureFile, PictureName, HEADER_WORDS, RECORD_BYTES};
 pub use geom::{ArcCheck, ArcStats, Transform};
+pub use locate::{locate, thumbnail, LocateError, PaddProject, PictureLocation, Thumbnail};
 pub use prim::{kind, Payload, Primitive, Span, Text2Body, Text2Prim, TextPrim};
 pub use roundtrip::{
     roundtrip, roundtrip_dir, CorpusFailure, CorpusReport, Mismatch, RoundtripReport,

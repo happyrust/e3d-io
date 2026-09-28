@@ -71,6 +71,12 @@ pub const NXTR_HASH: u32 = 0x000DBF71;
 pub const PLANT_PIC_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\apspic";
 pub const MARINE_PIC_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\amspic";
 pub const PLANT_PADD_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\aps000";
+pub const MARINE_PADD_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
+
+/// The 30 Plant sheet thumbnails `draft31\gw\thumbs.py` pulled out of the
+/// PADD databases (`<sheet name with / → _>.png`, plus `thumbs.tsv`: db,
+/// refno, name, EXFI, PVNO, png, picture).
+pub const DRAFT31_THUMBS: &str = r"D:\ida_scratch\draft31\gw\thumbs";
 
 /// `/APS-0001`'s smallest sheet picture (SHEE 2013286677/4350, 42 KB: 31
 /// segments, 655 primitives) and its biggest (`/APS-0001/1`, SHEE
