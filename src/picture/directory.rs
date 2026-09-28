@@ -25,6 +25,8 @@
 //! The tree is kept as indices into the entry list — `parent` and `children`
 //! per node — so it needs no shared ownership and a walk is a small stack.
 
+use super::geom::Transform;
+use super::segment::Segment;
 use super::word::Words;
 use super::PictureError;
 
@@ -38,6 +40,9 @@ pub struct DirEntry {
 impl DirEntry {
     /// Words an entry occupies.
     pub const WORDS: usize = 7;
+
+    /// The element type of a segment — the only one the samples hold.
+    pub const SEGMENT: i32 = 3;
 
     /// The `(w0, w1)` DB reference the entry carries; non-zero only when the
     /// segment header's flag `0x20` is set (a handful of Marine segments).
@@ -88,11 +93,8 @@ pub struct Node {
     pub depth: usize,
 }
 
-/// One picture: its table entry, directory, and replayed tree.
-///
-/// Segment contents live beside the tree in [`Picture::segments`] once the
-/// segment layer decodes them; here the picture knows where each element's
-/// words are and how the elements nest.
+/// One picture: its table entry, directory, replayed tree, and the decoded
+/// segments.
 #[derive(Clone, Debug)]
 pub struct Picture {
     /// Picture number (`GSVPI0`'s picture id; 76 in the small sample).
@@ -107,6 +109,9 @@ pub struct Picture {
     pub dir_len: i32,
     /// The entries in directory (save) order.
     pub entries: Vec<DirEntry>,
+    /// The decoded segment of each entry (indexed like `entries`); `None`
+    /// for an element type other than 3, which no sample has.
+    pub segments: Vec<Option<Segment>>,
     nodes: Vec<Node>,
     roots: Vec<usize>,
 }
@@ -145,6 +150,15 @@ impl Picture {
             i += DirEntry::WORDS;
         }
         let (nodes, roots) = replay(number, &entries)?;
+        let mut segments = Vec::with_capacity(entries.len());
+        for entry in &entries {
+            if entry.elem_type() != DirEntry::SEGMENT {
+                segments.push(None);
+                continue;
+            }
+            let nwords = usize::try_from(entry.nwords()).unwrap_or(0);
+            segments.push(Some(Segment::parse(&words_at(entry.rec())?, nwords)?));
+        }
         Ok(Self {
             number,
             dir_rec,
@@ -152,6 +166,7 @@ impl Picture {
             window,
             dir_len,
             entries,
+            segments,
             nodes,
             roots,
         })
@@ -160,6 +175,44 @@ impl Picture {
     /// The tree node of entry `index`.
     pub fn node(&self, index: usize) -> &Node {
         &self.nodes[index]
+    }
+
+    /// The decoded segment of entry `index`, when it is one.
+    pub fn segment(&self, index: usize) -> Option<&Segment> {
+        self.segments.get(index).and_then(|s| s.as_ref())
+    }
+
+    /// The transform from entry `index`'s local frame to the sheet: its
+    /// ancestors' transforms applied outside its own
+    /// (`gwdump.py load_segments`).
+    pub fn composed_transform(&self, index: usize) -> Transform {
+        let mut composed = Transform::IDENTITY;
+        for ancestor in self.ancestry(index) {
+            if let Some(t) = self.segment(ancestor).and_then(|s| s.transform) {
+                composed = composed.then_outer(&Transform(t));
+            }
+        }
+        composed
+    }
+
+    /// The labels of the segments with a user block on the way down to
+    /// entry `index`, `index` included — `gwdump.py`'s `path` column.
+    pub fn path_labels(&self, index: usize) -> Vec<String> {
+        self.ancestry(index)
+            .into_iter()
+            .filter_map(|i| self.segment(i))
+            .filter(|s| s.user.is_some())
+            .map(Segment::label)
+            .collect()
+    }
+
+    /// Primitives across every segment.
+    pub fn prim_count(&self) -> usize {
+        self.segments
+            .iter()
+            .flatten()
+            .map(Segment::prim_count)
+            .sum()
     }
 
     /// Every node, indexed like [`Picture::entries`].
@@ -351,6 +404,7 @@ mod tests {
             window: [0.0; 4],
             dir_len: 0,
             entries: entries.to_vec(),
+            segments: vec![None; entries.len()],
             nodes,
             roots,
         };

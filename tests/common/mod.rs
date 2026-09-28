@@ -80,6 +80,42 @@ pub const PLANT_PIC_SMALL: &str =
 pub const PLANT_PIC_BIG: &str =
     r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\apspic\09\M2013286677-265-10000-11";
 
+/// Two Marine background pictures: `M2013287597-16864-10000-1` holds TEXT
+/// (kind 1) and INSTANCE primitives, `M2013287597-1792-10000-1` TEXT2
+/// (kind 10) with multi-run strings (`SHOP&/TEST`, `Block &&&/Unit No.`,
+/// `&USEC.(Right)`), BOUNDARY and BOUNDCONIC.
+pub const MARINE_PIC_TEXT: &str =
+    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\amspic\00\M2013287597-16864-10000-1";
+pub const MARINE_PIC_TEXT2: &str =
+    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\amspic\00\M2013287597-1792-10000-1";
+
+/// Listings the frozen reference implementation (`draft31\gwdump.py`, DRAFT
+/// plan Q8) wrote for those files — `<name>.raw.txt` in local coordinates,
+/// `<name>.page.txt` / `marine_<name>.page.txt` in sheet mm. The Rust
+/// listing is diffed against them line for line.
+pub const DRAFT31_LISTS: &str = r"D:\ida_scratch\draft31\lists";
+
+/// Diff the `gwdump.py` listing of `file` (`--list`, `--page` when `page`)
+/// against the Rust one, line for line, and panic on the first difference.
+/// `oracle` is the file the Python script wrote.
+pub fn assert_listing_matches(file: &e3d_io::picture::PictureFile, page: bool, oracle: &str) {
+    let expected = std::fs::read_to_string(oracle).expect("the oracle listing reads");
+    let expected: Vec<&str> = expected.lines().collect();
+    let mut ours = vec![e3d_io::picture::listing::list_header(file, page)];
+    ours.extend(e3d_io::picture::listing::list_lines(file, page, false));
+    for (i, (ours, theirs)) in ours.iter().zip(expected.iter()).enumerate() {
+        assert_eq!(
+            ours, theirs,
+            "line {i} of {oracle} differs (ours first, gwdump.py second)"
+        );
+    }
+    assert_eq!(
+        ours.len(),
+        expected.len(),
+        "{oracle}: line counts differ (ours, gwdump.py)"
+    );
+}
+
 /// True when any fixture is absent, after printing which. Call it as the first
 /// line of a test and return.
 pub fn missing(paths: &[&str]) -> bool {

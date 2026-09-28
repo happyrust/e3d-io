@@ -22,10 +22,21 @@
 
 pub mod directory;
 pub mod file;
+pub mod geom;
+pub mod listing;
+pub mod prim;
+pub mod segment;
+pub mod style;
+pub mod text;
 pub mod word;
 
 pub use directory::{DirEntry, Node, Picture};
 pub use file::{Header, PictureFile, PictureName, HEADER_WORDS, RECORD_BYTES};
+pub use geom::Transform;
+pub use prim::{kind, Payload, Primitive, Span, Text2Body, Text2Prim, TextPrim};
+pub use segment::{flags, Group, Member, Role, Segment, TexpNote, UserBlock};
+pub use style::{pen_name, Pen};
+pub use text::{Run, TextFormat};
 pub use word::{Word, Words};
 
 use std::path::PathBuf;
@@ -57,6 +68,22 @@ pub enum PictureError {
     BadDirectory {
         picture: i32,
         entry: usize,
+        reason: String,
+    },
+
+    /// A segment header or group that cannot be walked.
+    #[error("segment at record {rec}, word {word}: {reason}")]
+    BadSegment {
+        rec: u32,
+        word: usize,
+        reason: String,
+    },
+
+    /// A primitive header that cannot be walked.
+    #[error("primitive at record {rec}, word {word}: {reason}")]
+    BadPrimitive {
+        rec: u32,
+        word: usize,
         reason: String,
     },
 }
