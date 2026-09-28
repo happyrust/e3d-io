@@ -150,6 +150,8 @@ pub struct DbElementParamEnv {
     design: Option<DbElement>,
     catalogue: Option<DbElement>,
     insulation: bool,
+    /// 调用方现算好交进来的伪属性（[`Self::with_derived`]）。
+    derived: Vec<(&'static str, f64)>,
     depth: Cell<u32>,
 }
 
@@ -169,6 +171,7 @@ impl DbElementParamEnv {
             design,
             catalogue,
             insulation: true,
+            derived: Vec::new(),
             depth: Cell::new(0),
         }
     }
@@ -176,6 +179,16 @@ impl DbElementParamEnv {
     /// Evaluate a narrow, uninsulated model: every positive `IPARAM n` is 0.
     pub fn without_insulation(mut self) -> Self {
         self.insulation = false;
+        self
+    }
+
+    /// 一条由调用方现算的伪属性：`ATTRIB <name>`（不带下标、限定词、属主链）答这个值。
+    ///
+    /// 有些伪属性是 Core3D 按**世界几何**现算的——FIXING 的 `AANGYZ` / `AANGXZ`
+    /// （`pllib/PATANG`）量的是连接对象的截面轴在 FIXING 标架里的转角，要 datum 的现算标架与
+    /// SPINE 路径，读库这一层都没有。算得出来的一方把值交进来；没交的名字照旧按存储读。
+    pub fn with_derived(mut self, name: &'static str, value: f64) -> Self {
+        self.derived.push((name, value));
         self
     }
 
@@ -928,7 +941,12 @@ impl ParamEnv for DbElementParamEnv {
                 DESIGN_PROPERTY => self.design_property(qualifier),
                 reference => self.through_reference(reference, qualifier),
             },
-            (None, None) => self.number(attribute.name),
+            (None, None) => self
+                .derived
+                .iter()
+                .find(|(name, _)| *name == attribute.name)
+                .map(|(_, value)| *value)
+                .or_else(|| self.number(attribute.name)),
         }
     }
 
@@ -1075,6 +1093,21 @@ mod tests {
         assert_eq!(related_array("OPAR"), Some(ParamArray::OPar));
         assert_eq!(related_array("ADES"), Some(ParamArray::ADes));
         assert_eq!(related_array("PARA"), None);
+    }
+
+    /// 调用方交进来的伪属性只答不带下标 / 限定词的那个名字，别的名字照旧答不上。
+    #[test]
+    fn a_derived_attribute_answers_its_plain_name_only() {
+        let env = DbElementParamEnv::new(None, None).with_derived("AANGYZ", -14.481);
+        assert_eq!(
+            env.attribute_number(&AttribRef::named("AANGYZ")),
+            Some(-14.481)
+        );
+        assert_eq!(env.attribute_number(&AttribRef::named("AANGXZ")), None);
+        assert_eq!(
+            env.attribute_number(&AttribRef::subscripted("AANGYZ", 1.0)),
+            None
+        );
     }
 
     /// 下标得是整数。`PARA[1.5]` 没有读法，截断成 `PARA[1]` 是编答案。

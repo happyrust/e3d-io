@@ -74,7 +74,14 @@ const OP_PUSH_TEXT: i32 = 118;
 /// first, see [`equal_within_slack`]. 402 is the text form, 403 the logical one
 /// and 404 the two-component one; none is in the corpus, so none is read here.
 const OP_EQUAL: i32 = 401;
+/// The real comparisons of the same interpreter (`case 601` … `case 607`), each
+/// against the [`comparison_slack`] `EQ` uses: `GT` is `a - b > slack`, `LT`
+/// `b - a > slack`, `GE` `a - b >= -slack`, `LE` `b - a >= -slack`. 602 / 604 /
+/// 606 are the position forms and are not read.
 const OP_GREATER_THAN: i32 = 601;
+const OP_LESS_THAN: i32 = 603;
+const OP_GREATER_EQUAL: i32 = 605;
+const OP_LESS_EQUAL: i32 = 607;
 const OP_NEGATE: i32 = 801;
 const OP_ADD: i32 = 802;
 const OP_SUBTRACT: i32 = 803;
@@ -132,6 +139,19 @@ const NUMBER_SHAPE: i32 = 6;
 /// PTCD programs use both forms (`... 0 6` for angles, `... 0 0` for DESP[n]).
 const NUMBER_ENDS: [i32; 2] = [0, NUMBER_SHAPE];
 const NUMBER_WORDS: usize = 7;
+/// A number stored with a unit: `101 9 <four words of number> 11 1 1 0`. The
+/// word after `101` counts the record from itself — 6 for the plain number, 9
+/// for this one — and the three extra words are the unit a literal typed as a
+/// distance carries. The value is the same four-word number, in millimetres.
+///
+/// aps250110's column base plate SFIT `/F1_SQR_PFI_6H_003` sizes its plate as
+/// `OPAR[2]` plus one such 20 (`SBOX.PXLE`), and E3D's TTY RVM draws that plate
+/// 329.2 wide on a 309.2 column; the eaves haunch JOIN `/J2S4_EAV_PFI_PFI_003`
+/// extrudes its rafter cutter `PARA[1]` plus one such 1, the 16 mm the rafters
+/// end short of the column in the same RVM. Only the trailer seen there is read.
+const NUMBER_WITH_UNIT_SHAPE: i32 = 9;
+const NUMBER_WITH_UNIT_WORDS: usize = 10;
+const DISTANCE_UNIT: [i32; 3] = [11, 1, 1];
 /// `106` is followed by this word, a name, three words of qualifier and two
 /// closing words.
 const ATTRIBUTE_SHAPE: i32 = 2;
@@ -275,8 +295,10 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             OP_PUSH_TEXT => parse_text(&program[cursor..])?,
             OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
             | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_ABS_REAL
-            | OP_MAX | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_MATCH | OP_TRIM
-            | OP_LOGICAL_STRING | OP_IF_REAL => (Step::Operator(program[cursor]), 1),
+            | OP_MAX | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_LESS_THAN | OP_GREATER_EQUAL
+            | OP_LESS_EQUAL | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING | OP_IF_REAL => {
+                (Step::Operator(program[cursor]), 1)
+            }
             // An opcode this has never seen used is a program it has not read.
             _ => return None,
         };
@@ -470,9 +492,16 @@ impl Value {
 
 fn apply_value(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
     let value = match operator {
-        OP_GREATER_THAN => {
+        OP_GREATER_THAN | OP_LESS_THAN | OP_GREATER_EQUAL | OP_LESS_EQUAL => {
             let right = stack.pop()?.number()?;
-            Value::Logical(stack.pop()?.number()? > right)
+            let left = stack.pop()?.number()?;
+            let slack = comparison_slack(left, right);
+            Value::Logical(match operator {
+                OP_GREATER_THAN => left - right > slack,
+                OP_LESS_THAN => right - left > slack,
+                OP_GREATER_EQUAL => left - right >= -slack,
+                _ => right - left >= -slack,
+            })
         }
         OP_EQUAL => {
             let right = stack.pop()?.number()?;
@@ -566,6 +595,11 @@ fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
 /// [`decode_number`] and from `PARA`/`DESP` arrays, so a discriminator written
 /// as `DESP[3] EQ 1` is comparing a stored float against a literal.
 fn equal_within_slack(left: f64, right: f64) -> bool {
+    (left - right).abs() <= comparison_slack(left, right)
+}
+
+/// The slack `exprlib/EXRCTL` hands every real comparison (see [`equal_within_slack`]).
+fn comparison_slack(left: f64, right: f64) -> f64 {
     const RELATIVE: f64 = 1e-6;
     const WHOLE_NUMBER_CAP: f64 = 0.9;
     let whole = |value: f64| {
@@ -573,11 +607,12 @@ fn equal_within_slack(left: f64, right: f64) -> bool {
             && value <= f64::from(i32::MAX)
             && (value - value.round()).abs() <= RELATIVE
     };
-    let mut slack = RELATIVE * left.abs().max(right.abs());
+    let slack = RELATIVE * left.abs().max(right.abs());
     if whole(left) && whole(right) {
-        slack = slack.min(WHOLE_NUMBER_CAP);
+        slack.min(WHOLE_NUMBER_CAP)
+    } else {
+        slack
     }
-    (left - right).abs() <= slack
 }
 
 /// Spell an operand the way E3D's `Q` does, taking its subscript off the stack.
@@ -653,16 +688,36 @@ fn parse_text(words: &[i32]) -> Option<(Step, usize)> {
 }
 
 fn parse_number(words: &[i32]) -> Option<(Step, usize)> {
-    let [OP_PUSH_NUMBER, NUMBER_SHAPE, first, second, third, fourth, end, ..] = words else {
-        return None;
-    };
     // The fourth word is zero throughout the sample. Reading a formula whose
     // meaning turns on a word this has never seen used would be a guess.
-    if *fourth != 0 || !NUMBER_ENDS.contains(end) {
-        return None;
+    match words {
+        [
+            OP_PUSH_NUMBER,
+            NUMBER_SHAPE,
+            first,
+            second,
+            third,
+            0,
+            end,
+            ..,
+        ] if NUMBER_ENDS.contains(end) => {
+            let value = decode_number(*first, *second, *third)?;
+            Some((Step::Number(value), NUMBER_WORDS))
+        }
+        [
+            OP_PUSH_NUMBER,
+            NUMBER_WITH_UNIT_SHAPE,
+            first,
+            second,
+            third,
+            0,
+            unit @ ..,
+        ] if unit.len() >= 4 && unit[..3] == DISTANCE_UNIT && unit[3] == 0 => {
+            let value = decode_number(*first, *second, *third)?;
+            Some((Step::Number(value), NUMBER_WITH_UNIT_WORDS))
+        }
+        _ => None,
     }
-    let value = decode_number(*first, *second, *third)?;
-    Some((Step::Number(value), NUMBER_WORDS))
 }
 
 fn decode_number(first: i32, second: i32, third: i32) -> Option<f64> {
@@ -894,6 +949,9 @@ fn apply_binary(operator: i32, stack: &mut Vec<Term>) -> Option<()> {
         OP_DIVIDE => ("/", PRECEDENCE_MULTIPLICATIVE),
         OP_EQUAL => ("EQ", PRECEDENCE_COMPARISON),
         OP_GREATER_THAN => ("GT", PRECEDENCE_COMPARISON),
+        OP_LESS_THAN => ("LT", PRECEDENCE_COMPARISON),
+        OP_GREATER_EQUAL => ("GE", PRECEDENCE_COMPARISON),
+        OP_LESS_EQUAL => ("LE", PRECEDENCE_COMPARISON),
         _ => return None,
     };
     let right = stack.pop()?;
@@ -1013,6 +1071,92 @@ mod tests {
                 .set_attribute("DESP[2]", 350.0)
                 .set_attribute("DESP[15]", distance);
             assert_eq!(evaluate_words(&words, &env), Some(diameter));
+        }
+    }
+
+    #[test]
+    fn a_number_with_a_distance_unit_reads_as_its_value() {
+        // `/F1_SQR_PFI_6H_003` GMSE SBOX (=2013287246/21086) PXLE: OPAR[2] plus a 20 stored with its
+        // unit. With OPAR[2] = 309.2 (`/BS-UC305x305x137`) E3D draws the plate 329.2 wide.
+        let plate = [
+            28, 1, 101, 6, 0, 0, 1073742848, 0, 0, 106, 2, 886911, -1, -1, 0, 1601, 1701, 101, 9,
+            1310720, 0, 1073742851, 0, 11, 1, 1, 0, 802,
+        ];
+        assert_eq!(render(&plate).as_deref(), Some("( ATTRIB OPAR[2 ] + 20 )"));
+        let env = MapParamEnv::new().set_attribute("OPAR[2]", 309.2);
+        assert_eq!(evaluate_words(&plate, &env), Some(309.2 + 20.0));
+        // `/J2S4_EAV_PFI_PFI_003` NGMS NSEX (=2013287246/25848) PZ: `- PARA[1] - 1`, the 1 with its
+        // unit — the rafter cutter starts 16 mm back (PARA[1] = 15).
+        let cutter = [
+            29, 1, 101, 6, 1048576, 0, 1073742847, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 801,
+            101, 9, 1048576, 0, 1073742847, 0, 11, 1, 1, 0, 803,
+        ];
+        let env = MapParamEnv::new().set_attribute("PARA[1]", 15.0);
+        assert_eq!(evaluate_words(&cutter, &env), Some(-16.0));
+        // Any other trailer is a unit this has not seen: unreadable, not a guess.
+        let mut other = plate;
+        other[24] = 2;
+        assert_eq!(evaluate_words(&other, &env), None);
+    }
+
+    #[test]
+    fn real_comparisons_select_the_eaves_haunch_depths() {
+        // `/J2S4_EAV_PFI_PFI_003` DTSE rows BONE / BTWO (=2013287246/25771, 25772):
+        // `IFTRUE ( ANYZ LT 0 , BLEN / 2 , BLEN / 2 + OPYZ )` and
+        // `IFTRUE ( ANYZ LT 0 , BLEN / 2 - OPYZ , BLEN / 2 )`, LT stored as 603.
+        let bone = [
+            60, 1, 106, 2, 840258, 1, 1, 1061803, 1601, 1701, 101, 6, 0, 0, 1073741824, 0, 0, 603,
+            106, 2, 840258, 1, 1, 810974, 1601, 1701, 101, 6, 0, 0, 1073742848, 0, 0, 805, 106, 2,
+            840258, 1, 1, 810974, 1601, 1701, 101, 6, 0, 0, 1073742848, 0, 0, 805, 106, 2, 840258,
+            1, 1, 1061871, 1601, 1701, 802, 1822,
+        ];
+        let btwo = [
+            60, 1, 106, 2, 840258, 1, 1, 1061803, 1601, 1701, 101, 6, 0, 0, 1073741824, 0, 0, 603,
+            106, 2, 840258, 1, 1, 810974, 1601, 1701, 101, 6, 0, 0, 1073742848, 0, 0, 805, 106, 2,
+            840258, 1, 1, 1061871, 1601, 1701, 803, 106, 2, 840258, 1, 1, 810974, 1601, 1701, 101,
+            6, 0, 0, 1073742848, 0, 0, 805, 1822,
+        ];
+        assert_eq!(
+            render(&bone).as_deref(),
+            Some(
+                "( IFTRUE ( ATTRIB RPRO ANYZ LT 0 , ATTRIB RPRO BLEN / 2 , ATTRIB RPRO BLEN / 2 + ATTRIB RPRO OPYZ ) )"
+            )
+        );
+        let env = |anyz: f64| {
+            MapParamEnv::new()
+                .set_attribute("RPRO ANYZ", anyz)
+                .set_attribute("RPRO BLEN", 200.0)
+                .set_attribute("RPRO OPYZ", 0.4 * anyz)
+        };
+        assert_eq!(evaluate_words(&bone, &env(10.0)), Some(104.0));
+        assert_eq!(evaluate_words(&btwo, &env(10.0)), Some(100.0));
+        assert_eq!(evaluate_words(&bone, &env(-10.0)), Some(100.0));
+        assert_eq!(evaluate_words(&btwo, &env(-10.0)), Some(104.0));
+        // LT against the slack: 0 is not below 0.
+        assert_eq!(evaluate_words(&bone, &env(0.0)), Some(100.0));
+    }
+
+    #[test]
+    fn the_real_comparisons_follow_core_with_its_slack() {
+        let mut stack = vec![Value::Number(1.0), Value::Number(1.0)];
+        apply_value(OP_GREATER_EQUAL, &mut stack).unwrap();
+        assert!(matches!(stack.as_slice(), [Value::Logical(true)]));
+        for (operator, left, right, expected) in [
+            (OP_GREATER_THAN, 2.0, 1.0, true),
+            (OP_GREATER_THAN, 1.0, 1.0, false),
+            (OP_LESS_THAN, 1.0, 2.0, true),
+            (OP_LESS_THAN, 1.0, 1.0, false),
+            (OP_GREATER_EQUAL, 1.0, 1.0 + 1e-9, true),
+            (OP_GREATER_EQUAL, 1.0, 2.0, false),
+            (OP_LESS_EQUAL, 1.0 + 1e-9, 1.0, true),
+            (OP_LESS_EQUAL, 2.0, 1.0, false),
+        ] {
+            let mut stack = vec![Value::Number(left), Value::Number(right)];
+            apply_value(operator, &mut stack).unwrap();
+            assert!(
+                matches!(stack.as_slice(), [Value::Logical(got)] if *got == expected),
+                "{operator} {left} {right}"
+            );
         }
     }
 
