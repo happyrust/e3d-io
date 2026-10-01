@@ -405,8 +405,14 @@ pub fn project_version_evidence(
 ///
 /// Descriptor-prefix validation excludes secondary extents and the many
 /// extensionless text files found under project defaults directories without
-/// paying to open a session chain for each one.
-pub(crate) fn project_database_paths(root: &Path) -> Result<Vec<PathBuf>, SchemaError> {
+/// paying to open a session chain for each one. A `root` that is a file is
+/// returned alone and unvalidated, so a caller handed one database gets it
+/// back rather than an empty list. A directory that cannot be listed is an
+/// `Err`: a partial list would read as a complete one.
+///
+/// This is the candidate set [`crate::project_dabacon_tags`] reports on.
+pub fn project_database_paths(root: impl AsRef<Path>) -> Result<Vec<PathBuf>, SchemaError> {
+    let root = root.as_ref();
     if root.is_file() {
         return Ok(vec![root.to_path_buf()]);
     }

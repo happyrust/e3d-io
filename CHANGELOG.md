@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+Read-side seams for the e3d-studio converter and browser (`docs/plans/2026-09-30-e3d-studio-gui-design.md` §4.7, T2). All additive.
+
+- `project_database_paths(root)` is public and re-exported at the crate root: the primary, extensionless databases under a project tree — the candidate set `project_dabacon_tags` reports on — for a caller that lists a project's databases itself. A file root comes back alone and unvalidated; a directory that cannot be listed is still an `Err`.
+- `ReadOnlyEngine::extent_paths()` / `PageReader::extent_paths()`: the files a reader reads, as `(extent, path)` in extent order — the primary, the siblings the open attached, and any extent attached by hand. A copy of a database is a copy of exactly these files. A unit test pins a primary, a sibling, a gap and a hand-attached extent.
+- `impl Display for DescriptorValue`: the text form of a value. `write::value::parse_value` reads it back, for the attribute it came from, into the same stored words. Reals print as the shortest decimal that parses to the same `f64` (`300`, `1e-7`); references as `=w0/w1` or `nulref`; a word by name when the name hashes back and would not be read as `unset` or a boolean; a text inside `'…'` only where the parser would trim it, unquote it or read `unset`; a string list `|`-separated, or as a JSON array when an item would not survive the split. `tests/value_text_round_trip.rs` covers every decoded row of `ams8000_0001`, `ams5100_0001` and `ams251142_0001`, 149 527 in all: printed, parsed and set back, every record comes out word for word as it was. Formulas, hunk entries, empty arrays and the 87 type-17 arrays the decoder hands over as stored words have no such text; they are counted separately and not set back. `write::value`'s unit tests pin the texts and how they read back.
+- `e3d_io::VERSION`: the crate version, for a report that names the reader that produced it.
+- `tests/send_sync.rs` asserts what a threaded caller relies on. `ReadOnlyEngine`, `TemplateProvider`, `SchemaPack`, `ElementExtraction` and the error types are `Send`; `AttlibData` and `DbSet` are `Send + Sync`.
+
 ### Removed
 
 - `e3d-write-box` (`src/bin/e3d-write-box.rs`), the hand-written fixture that drove the E3D gate until `e3d-write apply` took over in 0.4.0 (plan T1d: "kept until the new gate runs green" — it has, Q0 + 28 questions, on the same refnos and page counts). Everything it wrote is an instruction file under `tools/e3d/write_gate_ops/`; the gate's macro templates and `write_gate.ps1` no longer mention it.

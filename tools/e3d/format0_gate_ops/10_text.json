@@ -1,0 +1,10 @@
+{
+  "user": "e3dio",
+  "comment": "e3d-io FORMAT 0 门：中文 NAME / DESC / 会话注释",
+  "ops": [
+    {"op": "rename", "refno": "/10HDE", "name": "/反应堆厂房-E3DIO"},
+    {"op": "set", "refno": "/反应堆厂房-E3DIO", "attrs": {"DESC": "反应堆厂房 -3.320m~±0.00m"}},
+    {"op": "insert", "id": "equi", "owner": "/反应堆厂房-E3DIO", "noun": "EQUI", "name": "/E3DIO-锅炉设备",
+     "attrs": {"DESC": "锅炉岛设备 e3d-io 写入", "POS": "1000 2000 3000"}}
+  ]
+}

@@ -300,6 +300,13 @@ impl ReadOnlyEngine {
         &self.path
     }
 
+    /// The files this engine reads, as `(extent number, path)` in extent
+    /// order: the primary it was opened on and the sibling extents the open
+    /// attached (see [`crate::page::io::PageReader::extent_paths`]).
+    pub fn extent_paths(&self) -> Vec<(u16, PathBuf)> {
+        self.cache.reader().extent_paths()
+    }
+
     /// Read raw page bytes.
     pub fn read_page(&mut self, page_no: u32) -> Result<&[u8], E3dReaderError> {
         if page_no >= self.readable_page_count() {

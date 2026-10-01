@@ -298,6 +298,73 @@ mod tests {
         assert_eq!(parse(&attr("DESC", 10, 480), "unset"), Ok(DescriptorValue::Unset));
     }
 
+    /// A value's `Display` is text this module reads back into the same value
+    /// for the attribute it belongs to.
+    #[test]
+    fn a_value_printed_reads_back_as_itself() {
+        let on = db1_hash("ON");
+        let cases: Vec<(TemplateAttr, DescriptorValue)> = vec![
+            (attr("XLEN", 2, 1), DescriptorValue::Real(300.0)),
+            (attr("XLEN", 2, 1), DescriptorValue::Real(-3.5)),
+            (attr("XLEN", 2, 1), DescriptorValue::Real(1e-7)),
+            (attr("XLEN", 2, 1), DescriptorValue::Real(0.1 + 0.2)),
+            (attr("XLEN", 2, 1), DescriptorValue::Real(1e300)),
+            (attr("POS", 2, 3), DescriptorValue::RealArray(vec![1000.0, 2000.5, -3000.25])),
+            (attr("NUMB", 3, 1), DescriptorValue::Int(-7)),
+            (attr("LOCK", 3, 1), DescriptorValue::Bool(true)),
+            (attr("DTYP", 3, 1), DescriptorValue::Word { raw: db1_hash("TEXT"), text: Some("TEXT".into()) }),
+            (attr("BANG", 3, 1), DescriptorValue::Real(-90.0)),
+            (attr("BANG", 3, 1), DescriptorValue::Real(0.29)),
+            (attr("UUIDIA", 7, 4), DescriptorValue::IntArray(vec![11, -12, 13])),
+            (attr("PARA", 7, 4), DescriptorValue::WordArray(vec![db1_hash("TEXT"), db1_hash("REAL"), on])),
+            (attr("TYPEX", 14, 1), DescriptorValue::RawWords(vec![1, u32::MAX])),
+            (attr("SETX", 18, 3), DescriptorValue::RawWords(vec![1, 2])),
+            (attr("CREF", 4, 1), DescriptorValue::RefNo(RefNo::new(24_384, 26_484))),
+            (attr("CREF", 4, 1), DescriptorValue::RefNo(RefNo::new(0, 0))),
+            (attr("HREF", 8, 2), DescriptorValue::RefNoArray(vec![RefNo::new(24_384, 100), RefNo::new(0, 0)])),
+            (attr("SPRE", 16, 1), DescriptorValue::RefNo(RefNo::new(13_244, 108_564))),
+            (attr("INVI", 5, 1), DescriptorValue::Bool(false)),
+            (attr("DEPTYP", 9, 40), DescriptorValue::BoolArray(vec![true, false, true])),
+            (attr("DESC", 10, 480), DescriptorValue::Text("反应堆厂房 -3.320m~±0.00m".into())),
+            (attr("DESC", 10, 480), DescriptorValue::Text(String::new())),
+            (attr("DESC", 10, 480), DescriptorValue::Text("  padded ".into())),
+            (attr("DESC", 10, 480), DescriptorValue::Text("UNSET".into())),
+            (attr("DESC", 10, 480), DescriptorValue::Text("'quoted'".into())),
+            (attr("DESC", 10, 480), DescriptorValue::Text("|pml|".into())),
+            (attr("DESC", 10, 480), DescriptorValue::Text("'".into())),
+            (attr("NAME", 15, 200), DescriptorValue::Text("/E3DIO-1".into())),
+            (attr("ROKEYS", 19, 500_000), DescriptorValue::TextList(vec!["K1".into(), "K2".into()])),
+            (attr("ROKEYS", 19, 500_000), DescriptorValue::TextList(vec!["".into(), "b".into(), "".into()])),
+            (attr("ROKEYS", 19, 500_000), DescriptorValue::TextList(vec!["a|b".into(), " c".into()])),
+            (attr("ROKEYS", 19, 500_000), DescriptorValue::TextList(Vec::new())),
+            (attr("ROKEYS", 19, 500_000), DescriptorValue::TextList(vec![String::new()])),
+            (attr("ROKEYS", 19, 500_000), DescriptorValue::TextList(vec!["[x".into()])),
+            (attr("ROKEYS", 19, 500_000), DescriptorValue::TextList(vec!["unset".into()])),
+            (attr("XLEN", 2, 1), DescriptorValue::Unset),
+        ];
+        for (attr, value) in cases {
+            let text = value.to_string();
+            assert_eq!(parse(&attr, &text), Ok(value.clone()), "{value:?} printed as {text:?}");
+        }
+
+        // What the texts look like.
+        assert_eq!(DescriptorValue::Real(300.0).to_string(), "300");
+        assert_eq!(DescriptorValue::Real(1e-7).to_string(), "1e-7");
+        assert_eq!(DescriptorValue::RealArray(vec![1.0, 2.5]).to_string(), "1 2.5");
+        assert_eq!(DescriptorValue::RefNo(RefNo::new(0, 0)).to_string(), "nulref");
+        assert_eq!(DescriptorValue::RefNo(RefNo::new(24_384, 26_484)).to_string(), "=24384/26484");
+        assert_eq!(DescriptorValue::Text(String::new()).to_string(), "''");
+        assert_eq!(DescriptorValue::TextList(vec!["a|b".into()]).to_string(), r#"["a|b"]"#);
+        assert_eq!(DescriptorValue::RealArray(Vec::new()).to_string(), "");
+
+        // A lone word the parser would take for a boolean, and a word with no
+        // name, print as the word's integer: the same word, read back as `Int`.
+        let word_on = DescriptorValue::Word { raw: on, text: Some("ON".into()) };
+        assert_eq!(parse(&attr("DTYP", 3, 1), &word_on.to_string()), Ok(DescriptorValue::Int(on as i32)));
+        let nameless = DescriptorValue::Word { raw: 5, text: None };
+        assert_eq!(nameless.to_string(), "5");
+    }
+
     #[test]
     fn what_has_no_reading_is_refused() {
         assert_eq!(parse(&attr("XLEN", 2, 1), ""), Err(ValueParseError::Empty));

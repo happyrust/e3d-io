@@ -36,7 +36,12 @@ pub use page::{PageHeader, PageType};
 pub use refno::{PageAddress, RefNo};
 pub use schema::{
     bundled_schema_root, database_version_evidence, detect_database_version,
-    detect_project_version, project_version_evidence, DatabaseVersionEvidence, E3dVersion,
-    SchemaError, SchemaPack, VersionEvidenceSource, E3D210, E3D31,
+    detect_project_version, project_database_paths, project_version_evidence,
+    DatabaseVersionEvidence, E3dVersion, SchemaError, SchemaPack, VersionEvidenceSource, E3D210,
+    E3D31,
 };
 pub mod noun_catalog;
+
+/// This crate's version as its manifest states it, for a report that has to
+/// say which reader produced it.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

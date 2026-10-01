@@ -22,3 +22,8 @@ schema/*/metadata/
 # Build output of the runtime UDA exporter, rebuilt from its own source.
 tools/e3d/*.dll
 __pycache__/
+
+# repowise's local index: caches, a vector store (LanceDB) and a wiki DB
+# rebuilt from the tree and git history on `repowise init`/`update`. May also
+# hold an LLM provider key in `.env` if one was ever saved (`--save-key`).
+.repowise/

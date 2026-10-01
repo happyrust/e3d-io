@@ -182,6 +182,148 @@ pub enum DescriptorValue {
     RawWords(Vec<u32>),
 }
 
+/// The textual form of a value: what a report or a table shows, and what
+/// [`crate::write::value::parse_value`] reads back — for the attribute the
+/// value was decoded from — into the words it was decoded from.
+/// `tests/value_text_round_trip.rs` holds that over every decoded row of three
+/// sample databases.
+///
+/// | value | text |
+/// |---|---|
+/// | `Unset` | `unset` |
+/// | `Bool` | `true` / `false` |
+/// | `Int` | the integer |
+/// | `Real` | the shortest decimal that reads back as the same `f64`: `300`, `-3.5`, `1e-7` |
+/// | `Text` | the text as it is; inside `'…'` when it is empty, has blanks at either end, is the word `unset`, or is itself wrapped in `'…'`, `"…"` or `\|…\|` |
+/// | `RefNo` | `=word0/word1`, and `nulref` for `0/0` |
+/// | `Word` | its name (`PIPE`) when that name hashes back to the word and reads as nothing else; otherwise the word as an integer |
+/// | arrays | the items separated by one blank; a word array by name when every word has such a name, otherwise as integers |
+/// | `TextList` | the items separated by `\|`, or a JSON array when an item would not survive that |
+/// | `RawWords` | the words as signed integers, separated by one blank |
+///
+/// A word printed as an integer reads back as [`DescriptorValue::Int`], and a
+/// run of raw words as an integer array: the words are the same, the variant
+/// is the one the text names. Three things print without reading back: an
+/// empty array prints as nothing, which the parser refuses (`unset` would
+/// store the sentinel, not a zero count); a formula held in place of a number
+/// prints as its formula text; and a reference array the decoder hands over
+/// as stored — `RawWords([count, word0, word1, …])` for a type-17 attribute —
+/// prints its words, where the parser wants references.
+impl std::fmt::Display for DescriptorValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unset => f.write_str("unset"),
+            Self::Bool(value) => write_bool(f, *value),
+            Self::Int(value) => write!(f, "{value}"),
+            Self::Real(value) => write_real(f, *value),
+            Self::Text(text) => write_text(f, text),
+            Self::RefNo(refno) => write_refno(f, *refno),
+            Self::Word { raw, .. } => match scalar_word_text(*raw) {
+                Some(name) => f.write_str(&name),
+                None => write!(f, "{}", *raw as i32),
+            },
+            Self::IntArray(values) => write_items(f, values, |f, value| write!(f, "{value}")),
+            Self::RealArray(values) => write_items(f, values, |f, value| write_real(f, *value)),
+            Self::RefNoArray(values) => write_items(f, values, |f, refno| write_refno(f, *refno)),
+            Self::WordArray(words) => {
+                let names: Option<Vec<String>> = words.iter().map(|word| listed_word_text(*word)).collect();
+                match names {
+                    // A lone `UNSET` would read back as the unset value itself.
+                    Some(names) if !(names.len() == 1 && names[0].eq_ignore_ascii_case("unset")) => {
+                        write_items(f, &names, |f, name| f.write_str(name))
+                    }
+                    _ => write_items(f, words, |f, word| write!(f, "{}", *word as i32)),
+                }
+            }
+            Self::BoolArray(values) => write_items(f, values, |f, value| write_bool(f, *value)),
+            Self::TextList(items) => write_text_list(f, items),
+            Self::RawWords(words) => write_items(f, words, |f, word| write!(f, "{}", *word as i32)),
+        }
+    }
+}
+
+fn write_bool(f: &mut std::fmt::Formatter<'_>, value: bool) -> std::fmt::Result {
+    f.write_str(if value { "true" } else { "false" })
+}
+
+/// The shortest decimal that parses back to the same `f64`, without the
+/// `.0` of a whole number; exponent form at the magnitudes `{:?}` uses it.
+fn write_real(f: &mut std::fmt::Formatter<'_>, value: f64) -> std::fmt::Result {
+    let text = format!("{value:?}");
+    f.write_str(text.strip_suffix(".0").unwrap_or(&text))
+}
+
+/// A text the parser would change — trim, unquote or read as `unset` — goes
+/// inside one layer of `'…'`, which the parser strips again.
+fn write_text(f: &mut std::fmt::Formatter<'_>, text: &str) -> std::fmt::Result {
+    let wrapped = text.len() >= 2
+        && [('\'', '\''), ('"', '"'), ('|', '|')]
+            .iter()
+            .any(|(open, close)| text.starts_with(*open) && text.ends_with(*close));
+    if text.is_empty() || text.trim() != text || text.eq_ignore_ascii_case("unset") || wrapped {
+        write!(f, "'{text}'")
+    } else {
+        f.write_str(text)
+    }
+}
+
+fn write_refno(f: &mut std::fmt::Formatter<'_>, refno: RefNo) -> std::fmt::Result {
+    if refno.word0 == 0 && refno.word1 == 0 {
+        f.write_str("nulref")
+    } else {
+        write!(f, "={}/{}", refno.word0, refno.word1)
+    }
+}
+
+fn write_items<T>(
+    f: &mut std::fmt::Formatter<'_>,
+    items: &[T],
+    mut write: impl FnMut(&mut std::fmt::Formatter<'_>, &T) -> std::fmt::Result,
+) -> std::fmt::Result {
+    for (index, item) in items.iter().enumerate() {
+        if index > 0 {
+            f.write_str(" ")?;
+        }
+        write(f, item)?;
+    }
+    Ok(())
+}
+
+/// `|`-separated when every item survives the parser's split-and-trim, a JSON
+/// array of strings otherwise.
+fn write_text_list(f: &mut std::fmt::Formatter<'_>, items: &[String]) -> std::fmt::Result {
+    let joined = items.join("|");
+    let plain = !joined.is_empty()
+        && items.iter().all(|item| !item.contains('|') && item.trim() == item)
+        && !joined.starts_with('[')
+        && !joined.eq_ignore_ascii_case("unset");
+    if plain {
+        f.write_str(&joined)
+    } else {
+        f.write_str(&serde_json::to_string(items).map_err(|_| std::fmt::Error)?)
+    }
+}
+
+/// The name a word prints as inside a list: upper-case letters whose base-27
+/// hash is the word, which is what the parser's word reading accepts.
+fn listed_word_text(raw: u32) -> Option<String> {
+    let name = word_name(raw)?;
+    let letters = !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_uppercase());
+    (letters && e3d_attlib::db1_hash(&name) == raw).then_some(name)
+}
+
+/// The name a lone word prints as: [`listed_word_text`], unless the parser
+/// would read that name as `unset` or as a boolean first.
+fn scalar_word_text(raw: u32) -> Option<String> {
+    let name = listed_word_text(raw)?;
+    let lower = name.to_ascii_lowercase();
+    let taken = matches!(
+        lower.as_str(),
+        "unset" | "true" | "t" | "yes" | "on" | "false" | "f" | "no" | "off"
+    );
+    (!taken).then_some(name)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttributeExtractionStatus {
     Decoded,

@@ -163,6 +163,17 @@ impl ExtentSet {
         self.extents.iter().find(|e| e.ext == ext)
     }
 
+    /// Every attached extent as `(extent number, file)`, in extent order.
+    fn paths(&self) -> Vec<(u16, PathBuf)> {
+        let mut out: Vec<(u16, PathBuf)> = self
+            .extents
+            .iter()
+            .map(|extent| (extent.ext, extent.path.clone()))
+            .collect();
+        out.sort_by_key(|(ext, _)| *ext);
+        out
+    }
+
     fn resolve(&self, id: PageId) -> Result<&Extent, PageIoError> {
         self.get(id.ext).ok_or_else(|| PageIoError::MissingExtent {
             ext: id.ext,
@@ -247,6 +258,14 @@ impl PageReader {
     /// Path of the primary extent.
     pub fn path(&self) -> &Path {
         &self.extents.primary_extent().path
+    }
+
+    /// The files this reader reads, as `(extent number, path)` in extent
+    /// order: the primary, the siblings the open attached, and any extent
+    /// attached by hand since. A copy of the database is a copy of exactly
+    /// these files.
+    pub fn extent_paths(&self) -> Vec<(u16, PathBuf)> {
+        self.extents.paths()
     }
 
     /// Complete pages present in the primary extent when it was opened.
@@ -422,6 +441,26 @@ mod tests {
         let mut buf = vec![0u8; reader.page_size().bytes()];
         reader.read_into(PageId::new(2, 2), &mut buf).unwrap();
         assert_eq!(buf[0], 0xAB);
+    }
+
+    /// `extent_paths` lists what the open attached — the primary, its
+    /// consecutive siblings, a hand-attached extent — and nothing past a gap.
+    #[test]
+    fn extent_paths_name_exactly_the_files_the_reader_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let primary = db_file(dir.path(), "ams1000_0001", 32, 4);
+        let second = db_file(dir.path(), "ams1000_0002", 32, 4);
+        db_file(dir.path(), "ams1000_0004", 32, 4);
+        let elsewhere = db_file(dir.path(), "elsewhere.db", 32, 4);
+
+        let mut reader = PageReader::open(&primary).unwrap();
+        assert_eq!(reader.extent_paths(), vec![(1, primary.clone()), (2, second.clone())]);
+
+        reader.attach_extent(5, &elsewhere).unwrap();
+        assert_eq!(reader.extent_paths(), vec![(1, primary), (2, second), (5, elsewhere)]);
+
+        let lone = db_file(dir.path(), "scratch", 32, 4);
+        assert_eq!(PageReader::open(&lone).unwrap().extent_paths(), vec![(PageId::PRIMARY, lone)]);
     }
 
     /// Extents run consecutively, so a gap ends the probe: `_0004` next to a
