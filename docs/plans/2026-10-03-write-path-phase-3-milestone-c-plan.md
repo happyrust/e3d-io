@@ -89,4 +89,20 @@ k = 1 的条目 B 没有候选，只知道「k = 1 的框与同元素 k = 0 的�
 
 ## 6. 执行记录
 
-（空）
+### C0 入口（2026-10-03，只读，经 IB_Wrapper；查询脚本 `tools/ida/pseudo.ps1`、`tools/ida/sql.ps1` 本步新增）
+
+**结论：SPAMAP 的条目计算不在 core.dll，在 Core3D.dll 的 FORTRAN 库 `maplib` / `mapboxlib` / `dbboxlib`**；core.dll 只出三样：类型 14 键控表属性的通用读写（表与记录项）、noun 字段 IMAP、盒算术 `boxlib`。§2 第一行的入口不成立：`sub_5AADB30` 只是例程 380 的包装（`sub_5AC0810(380, …)`，extract 间刷写），`internalFlush` 也不是 SAVEWORK；core.dll 里 SPAMAP 名 hash 的唯一立即数 `sub_544FCF7` 是完整性检查 `integ/GTTREF`。
+
+Core3D_IDB：`D:\ida_scratch\plant3\Core3D.dll.i64`（桥上常驻，C0 结束时文件 SHA-256 `03129C29…A712`；Core_IDB 首末仍是 `18D5C155…992C`），IDB 记录的输入 SHA-256 `E43EC507…D790` 与门用 E3D 的 `Core3D.dll`（`E:\reverse\e3d\shadow_e3d31_gen_model_test`）相同。Core3D 导入 `ATT_SPAMAP`、`DB_Spatial::setInstance`，`DB_SpatialActual` / `CLI_SpatialMap::BuildSpatialMap` 都在它里面（安装目录里另有 AfiModeling、FunctionalModelling、MarAccessor 引用 `ATT_SPAMAP`，未读）。
+
+| 环节 | 例程 | 读到的行为 | 对照 B 的候选 |
+|---|---|---|---|
+| 走树 | Core3D `mapboxlib/MPBOX` @ 0x102FB475 | 逐级取 noun 的 IMAP（`ATNINT(noun, 847458)`，指令 @ 0x102FB8E7）：1 / 5 → `MPBOX2` 记本元素；7 → 看 owner 的 IMAP，为 2 当 1、否则当 3；0 → 不再下探；BRAN 与 `HTCOMP` 真者走 `MPBXBR`（带 tube） | 覆盖 = noun 的 IMAP（7.2） |
+| 取框 | Core3D `MPBOX2` @ 0x102FBD62 → `dbboxlib/BOXELE` @ 0x1036A31C | 元素有 WBOX 就用它，flags 按 OBST 1–3 置第 OBST 位；否则 BOXELE 按 noun 的 BOXTYP 分派：3 = XLEN/YLEN/ZLEN → core `MBXBOX`，2 = HEIG/DIAM → core `MBXSNO`，这些尺寸小于 0.5 一律取 0.5；OBST 1–2 置 flags 第 OBST 位；IMAP 5 再并入 IMAP 3 成员的框 | `aabb.degenerate`：负尺寸也取 0.5，不是取绝对值 |
+| 盒算术 | core `boxlib/MBXBOX` @ 0x55FACE8、`MBXSNO` @ 0x55FCA18、`MBXPOI` @ 0x55FB7B4 | BOX：中心 ± Σ\|R·半长\|；CYLI：两端圆（`MBXCIR`）各自的框求并 | box 同候选；cyli 待读 `MBXCIR`（B8 的 2.1 mm） |
+| 插入 | Core3D `mapboxlib/MBXGO` @ 0x102FD8C2 → `maplib/MAPINS` @ 0x1038F5E4 | 框有效 → MAPINS，否则 `MAPREM` 删条目。MAPINS：每轴 datum = trunc（\|值\| 较大的一端 / 10^8 mm）；取整 `f_ldnint_val(10 × (坐标 − datum × 10^8))`（libifcoremd，Fortran DNINT）；flags = 三个逻辑量按 1 / 2 / 4 相加；下标 = tube ? 2 : 1；旧条目六个值都在 ±1 内、flags 与 datum 不变、旧 Key0 与旧框相符（±1）则不重写；`BTSELE(SPAMAP)` 不过不写；`DPUTIT(SPAMAP, 下标, Key0, 7 字)` 交 core | rounding 同候选；k = 1 是 tube 条目；「±1 不重写」是 7.3 与 B8 反例的线索 |
+| Key0 | Core3D `maplib/MAPKEY` @ 0x1039277C、`MAPKY2` @ 0x1039210C | 最短轴：z ≤ x 且 z ≤ y 取 z，否则 y ≤ x 且 y ≤ z 取 y，否则 x（并列取后一根）；桶按最短 extent：< 600、< 2 000、< 6 000、< 20 000、< 200 000 依次 1–5，否则桶 6 且轴强制 x；min 先 `% 5×10^7` 再夹到 ±5×10^7；Key0 = min + 10^8 × (6 × (轴 − 1) + 桶) | 轴、桶 1–5、Key0 同候选；新增桶 6 与 ±5 km 取模 |
+| 表与记录项 | core `DPUTIT` @ 0x5AB0E60 → 例程 147 → `sub_5AB91B0` | 类型 14：键 = [值, refno 高, refno 低, 下标 − 1]，删旧键、插新键，条目值 = 调用方给的 7 字；523 时 `sub_5AFF6D0` 建表；最后 `4SCEA` 写记录项（各下标的 Key0 数组，空槽 0x80000001） | `table_shape`、`record_item` 可在 core.dll 坐实 |
+| 覆盖字段 | core `DB_Noun::spatialMap` @ 0x58DB9D0 ← `DB_Noun::ReadData` @ 0x58D6D20 n 79 | 字典属性 847458（IMAP）读进 noun +0xA8；core 内无调用方，Core3D 经 `ATNINT` 读同一字段 | |
+
+**影响**：需求 1 把 E3D_Core 定为 core.dll，出处 ① 只认 Core_IDB。照已批的 Q1 = A，7.1 的八条编码规则与 `aabb.ori_form` / `compose` / `degenerate` 都拿不到 ①，需求 4.18 的并列取轴也就坐实不了；能落在 core.dll 的只有 `table_shape`、`table_header_rest`、`record_item` 与 `aabb.box` / `cyli` 的盒算术。是否把 Core3D.dll 纳入 E3D_Core 交用户拍板，定之前不进 C1。
