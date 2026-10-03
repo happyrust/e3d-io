@@ -4,10 +4,20 @@
 //! `RuleSet::confirmed` in `src/core_rules.rs`.
 //!
 //! Evidence: `docs/evidence/2026-10-03-spamap-encoding.md` — Core3D.dll's
-//! `maplib/MAPINS`, `MAPKEY` and `MAPKY2`, core.dll's table code.
+//! `maplib/MAPINS`, `MAPKEY` and `MAPKY2`, core.dll's table code;
+//! `docs/evidence/2026-10-03-spamap-coverage.md` — Core3D.dll's
+//! `mapboxlib/MPBOX`, `maplist/MLSADD`, `dbboxlib/BOXELE` and the `IMAP` of
+//! the noun dictionary.
 
-use super::Axis;
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+use e3d_attlib::db1_hash;
+
+use super::{Axis, SpatialState, UndecodableAttr};
 use crate::core_rules::candidate;
+use crate::record::descriptor::DescriptorValue;
+use crate::refno::RefNo;
 
 // --- spamap.rounding ---------------------------------------------------------------
 
@@ -98,6 +108,172 @@ pub fn key0_by_mapky2(axis: Axis, bucket: u8, min: i64) -> Result<u32, (i64, i64
     }
 }
 
+// --- spamap.coverage ---------------------------------------------------------------
+
+/// Whether Core3D gives the element entries: `Some(true)` when
+/// `mapboxlib/MPBOX` records it through `MPBOX2`, which writes its entries
+/// whenever E3D has a box for it; `Some(false)` when E3D never writes it any;
+/// `None` where the evidence does not say.
+///
+/// - Its noun's `IMAP` (noun field 847458, read by `ATNINT` after `UDSOFT`):
+///   1 and 5 record it, 7 records it under an owner whose `IMAP` is 2 and
+///   merges it into the owner otherwise, 0, 2, 3 — and a noun the dictionary
+///   lacks, which `ATNINT` reads as 0 — never record it (`MPBOX`, and
+///   `maplist/MLSADD`, which queues a changed element for it).
+/// - BRAN and the nouns whose `HNGT` is set (`HTCOMP`) go to
+///   `mapboxlib/MPBXBR` instead, which is not read: unsaid.
+/// - An element whose noun is a UDET, or whose `UDTYPE` names one, takes the
+///   UDET's `IMAP` from the project's dictionary: unsaid.
+/// - `maplib/MAPINS` writes only where `BTSELE(SPAMAP)` passes, and
+///   [`NO_SPAMAP_IN_TEMPLATE`] lack SPAMAP in the design template: unsaid.
+/// - The nouns `DB_Model::getBoxType` gives box type 1, but for SCTN, GENSEC
+///   and WLJOIN, have no box without a catalogue: `dbboxlib/GTSTDT` finds no
+///   geometry for an unset `SPRE`, `MBXSTL` fails, and `MBXGO` removes the
+///   element's entries. Whether any other box E3D computes exists is the
+///   World_AABB's to say.
+pub fn coverage_by_imap(refno: RefNo, state: &dyn SpatialState) -> Result<Option<bool>, UndecodableAttr> {
+    let Some(noun) = state.noun(refno) else { return Ok(None) };
+    let Some(imap) = soft_imap(refno, noun, state)? else { return Ok(None) };
+    if noun == db1_hash("BRAN") || noun_in(&HNGT_SET, HNGT, noun) || noun_in(&NO_SPAMAP_SET, NO_SPAMAP_IN_TEMPLATE, noun) {
+        return Ok(None);
+    }
+    let recorded = match imap {
+        1 | 5 => true,
+        7 => {
+            let Some(owner) = state.owner(refno) else { return Ok(None) };
+            let Some(owner_noun) = state.noun(owner) else { return Ok(None) };
+            match soft_imap(owner, owner_noun, state)? {
+                Some(owner_imap) => owner_imap == 2,
+                None => return Ok(None),
+            }
+        }
+        _ => false,
+    };
+    if recorded && noun_in(&CATALOGUE_BOXED_SET, CATALOGUE_BOXED, noun) && !has_catalogue(refno, state)? {
+        return Ok(Some(false));
+    }
+    Ok(Some(recorded))
+}
+
+/// The `IMAP` `UDSOFT` and `ATNINT` read for the element, or `None` when its
+/// soft type is a UDET.
+fn soft_imap(refno: RefNo, noun: u32, state: &dyn SpatialState) -> Result<Option<u8>, UndecodableAttr> {
+    if noun > LAST_SYSTEM_NOUN {
+        return Ok(None);
+    }
+    let udet = match state.attr(refno, db1_hash("UDTYPE"))? {
+        Some(DescriptorValue::Word { raw, .. }) => raw != 0,
+        Some(DescriptorValue::Int(value)) => value != 0,
+        _ => false,
+    };
+    Ok((!udet).then(|| imap_of(noun)))
+}
+
+/// The dictionary `IMAP` of a system noun: 0 for one that is in no list.
+pub fn imap_of(noun: u32) -> u8 {
+    static IMAP: OnceLock<HashMap<u32, u8>> = OnceLock::new();
+    let table = IMAP.get_or_init(|| {
+        [(1, IMAP_1), (2, IMAP_2), (3, IMAP_3), (5, IMAP_5), (7, IMAP_7)]
+            .into_iter()
+            .flat_map(|(imap, nouns)| nouns.iter().map(move |noun| (db1_hash(noun), imap)))
+            .collect()
+    });
+    table.get(&noun).copied().unwrap_or(0)
+}
+
+fn has_catalogue(refno: RefNo, state: &dyn SpatialState) -> Result<bool, UndecodableAttr> {
+    Ok(matches!(state.attr(refno, db1_hash("SPRE"))?, Some(DescriptorValue::RefNo(spre)) if spre.word0 != 0 || spre.word1 != 0))
+}
+
+fn noun_in(set: &'static OnceLock<Vec<u32>>, names: &[&str], noun: u32) -> bool {
+    set.get_or_init(|| names.iter().map(|name| db1_hash(name)).collect()).contains(&noun)
+}
+
+static HNGT_SET: OnceLock<Vec<u32>> = OnceLock::new();
+static NO_SPAMAP_SET: OnceLock<Vec<u32>> = OnceLock::new();
+static CATALOGUE_BOXED_SET: OnceLock<Vec<u32>> = OnceLock::new();
+
+/// The last hash of the base-27 system names; a UDET's is past it.
+const LAST_SYSTEM_NOUN: u32 = 387_951_929;
+
+/// The nouns whose `HNGT` is set: `HTCOMP` is true, and `MPBOX` hands them to
+/// `MPBXBR` as it does BRAN.
+pub const HNGT: &[&str] = &["HANG", "LUG", "SUPC", "TRUNNI"];
+
+/// The recorded nouns whose design template (`desvir.dat`) has no SPAMAP.
+pub const NO_SPAMAP_IN_TEMPLATE: &[&str] = &["DTPNCH", "DTSTEL", "DTSUBM", "FSPINS", "ICRPNT", "LADDER", "RSFINS", "TUBI"];
+
+/// Box type 1 in `DB_Model::getBoxType` but for SCTN, GENSEC and WLJOIN.
+pub const CATALOGUE_BOXED: &[&str] =
+    &["CMFI", "CMPF", "COFI", "FITT", "FIXING", "PCOJ", "PFIT", "PJOI", "SBFI", "SCOJ", "SJOI", "SUBJ"];
+
+/// `IMAP` 1 in the E3D 3.1 dictionary (`tests/spamap_coverage_real.rs`
+/// rereads every list from `schema/e3d31/binaries/attlib.dat`).
+pub const IMAP_1: &[&str] = &[
+    "AHU", "AIDARC", "AIDCIR", "AIDLIN", "ANCI", "ATTA", "BATT", "BBLT", "BEND", "BNDLIN", "BOUN", "BRCO", "BWLD",
+    "CABLE", "CAP", "CBSEG", "CCURVE", "CLEV", "CLOS", "CMFI", "CMPF", "CNODE", "CNVCOM", "COUP", "COWL", "CPLANE",
+    "CPLATE", "CPOINT", "CPROTR", "CROS", "CSEAM", "CSTIFF", "CSURF", "CTJOIN", "CTRAY", "CTSUPP", "DAMP", "DATU",
+    "DOOR", "DRAW", "DTPNCH", "DTSTEL", "DTSUBM", "DUCT", "ELBO", "ELCONN", "ELFITT", "EQUCOM", "EYNT", "EYRD",
+    "FBLI", "FEBEAM", "FEFRED", "FEMIMG", "FESHEL", "FETRUS", "FILT", "FIXTUR", "FLAN", "FLEX", "FLOOR", "FLRCOV",
+    "FNCARE", "FNCBRN", "FPFITT", "FSPINS", "FTUB", "FURNIT", "GASK", "GENNC", "GENNG", "GENPRI", "GRDM", "GRIDCY",
+    "GRIDPL", "GRIL", "GWALL", "HACC", "HANCI", "HBEAD", "HBRCKT", "HBRFLA", "HBRSTI", "HCLIP", "HCOMPT", "HCURVE",
+    "HDOPLA", "HELE", "HFAN", "HFLANG", "HIBEA", "HIBRA", "HICPLA", "HICSTI", "HICUR", "HIDOU", "HIFLA", "HIPIL",
+    "HIPLA", "HISTI", "HMARK", "HNUT", "HPILLR", "HPIN", "HPLATE", "HRGATE", "HROD", "HRPANE", "HRPOST", "HRSOF",
+    "HRTERM", "HSAD", "HSTIFF", "HULCON", "HVACFI", "HVBRCO", "HVFLAN", "HVHACC", "HVIDAM", "HVSADD", "HVSKIR",
+    "HVSPLR", "HVSTIF", "HVTPPO", "IBNDRY", "ICLIP", "ICRCUR", "ICRPNT", "ICTOUT", "IDAM", "IEDGE", "IENDFR",
+    "IENDTO", "IFCPLA", "IHOLE", "ILIM", "INFITT", "INODE", "INOTCH", "INST", "IPANE", "IPILLR", "IPLATE", "ISEAM",
+    "ISECT", "ISTIFF", "JNODE", "KICKPL", "LDRRUN", "LJSE", "LOAP", "LUANCI", "MESH", "MNOZ", "MPLATE", "MPROF",
+    "NOZZ", "OFST", "OLET", "PANE", "PCLA", "PCLI", "PCOJ", "PCOM", "PEXSP", "PGBOX", "PIACT", "PIBLK", "PIGEN",
+    "PLAT", "PLEN", "PLUG", "PNOD", "POHE", "POST", "PTAP", "PULLN", "PVOL", "PWCHA", "PWMAN", "RAIL", "RCPL",
+    "REDU", "RNODE", "ROD", "RPLA", "RSEG", "RSFINS", "SBFI", "SCLA", "SCOJ", "SCREED", "SHOE", "SHU", "SILE",
+    "SKIR", "SLUG", "SNUB", "SOST", "SPAC", "SPLR", "SPMSPC", "SRFCUR", "SRFSUR", "STIF", "STLS", "STRT", "SUBCOM",
+    "SWBR", "TAPE", "TCOM", "TEE", "THRE", "TP", "TRANCI", "TRAP", "TREAD", "TRNB", "TRNCUR", "TRNN", "TRNS",
+    "TRREDU", "TUBI", "UBOL", "UNIO", "VALV", "VENT", "VFWA", "VSPR", "VTWA", "WASH", "WELD", "WINDOW", "WKSUR",
+    "WLJOIN", "WLPANE", "WLPROF", "WPAD", "XGEOM",
+];
+
+/// `IMAP` 2: containers, recorded only through their members.
+pub const IMAP_2: &[&str] = &[
+    "AIDGRO", "APPDAR", "APPLDA", "APPLDW", "AREADE", "AREASE", "AREAWL", "ASWL", "BBLOCK", "BLEVEL", "BLOCK",
+    "BOTEXT", "BPFEAT", "BRAN", "BUNDLE", "CAGSEG", "CEILIN", "CFLOOR", "CGRDCP", "CGRDLP", "CLNCGR", "CLNLAT",
+    "CLNPNG", "COMWLD", "CONGRP", "CONVEY", "CONWLD", "CPANEL", "CPLANS", "CPOINS", "CPROF", "CRMCUR", "CRMPNT",
+    "CSCREE", "CSURPX", "CTBEND", "CTCOUP", "CTCROS", "CTFEAT", "CTMTRL", "CTREDU", "CTRISE", "CTSTRA", "CTTEE",
+    "CURWLD", "CWALL", "CWAREA", "CWAY", "DEMOPA", "DEMOSE", "DEMOWL", "DETGRP", "DIMGRO", "DTGRID", "DTJOB",
+    "DTMAIN", "DTPHSE", "DTSTRU", "DTWRLD", "ENVLOP", "EQUI", "EXTFRM", "FAWLD", "FEMODL", "FEMWLD", "FEMZON",
+    "FMGRP", "FMWL", "FNCAAR", "FNCAW", "FNCCAR", "FNCCW", "FRMW", "GENPI", "GENPKG", "GPKGFL", "GPSET", "GPWL",
+    "GRIDEL", "GRIDFA", "GRIDWL", "GROU", "HANG", "HBLWLD", "HCMWLD", "HIBLO", "HICPAN", "HIPAN", "HMKWLD",
+    "HOOPSE", "HPANEL", "HRFEAT", "HRKPSE", "HRPNSE", "HRSO", "HSLIST", "HSPOOL", "HSUBPN", "HVAC", "IBRCKT",
+    "IDLWLD", "INTFRM", "INTLNG", "ISTRU", "ISTRUR", "JNTBOX", "KSUEDS", "KSUFAS", "KSUNDS", "LDREXT", "LDRSTR",
+    "LUG", "MANPKG", "MPKGFL", "OPENSP", "ORDWLD", "PIPE", "PLTGRD", "PNTWLD", "POSTSE", "PPIECE", "PPLIST",
+    "PSLIST", "PSPOOL", "PTRA", "PULLP", "RAILSE", "REFDAT", "REFGRD", "REST", "RLCAGE", "RLGATE", "ROOM", "RPLG",
+    "RSOWLD", "RSTARE", "RTFEAT", "RUNGSE", "RUTVOL", "SBFR", "SEGSEQ", "SITE", "SLRAIL", "SPMSA", "SPMSW",
+    "SSOWLD", "STRSET", "STRSTR", "STRTWR", "STRU", "STRWEL", "SUBCNV", "SUBE", "SUBS", "SUPC", "SUPPO", "SVOLM",
+    "TMAR", "TMPL", "TOPEXT", "TPWL", "TREADS", "TRNCC", "TRNCEL", "TRNCUC", "TRNCUS", "TRNDEF", "TRNMOD", "TRNPRI",
+    "TRNSLD", "TRNWLD", "TRUNNI", "TWRSTL", "UPANEL", "VOLM", "WKPACK", "WKPKWL", "WKSWLD", "WLCOMP", "WLFEAT",
+    "WLFITT", "WLJNTS", "WLOPEN", "WLPRSE", "WORL", "XCELS", "XCLTN", "ZONE",
+];
+
+/// `IMAP` 3: merged into the owner's box (`MPBOX2` of an `IMAP` 5 owner).
+pub const IMAP_3: &[&str] = &[
+    "COFI", "COMFIX", "CURVE", "DTGEOM", "ENDATU", "FCUTPL", "FLRLAY", "HCTOUT", "HNODE", "HTFEAT", "IPOI",
+    "JLDATU", "KSUSVE", "LOOP", "NBOX", "NCON", "NCTO", "NCYL", "NDIS", "NPOLYH", "NPYR", "NREV", "NRTO", "NSLC",
+    "NSNO", "NXTR", "PAVE", "PLDATU", "PLOO", "POGO", "POIN", "POINSP", "POINTR", "POLPTL", "RPATH", "SNOD",
+    "SPINE", "TANP", "VERT",
+];
+
+/// `IMAP` 5: recorded, with the boxes of its `IMAP` 3 members merged in.
+pub const IMAP_5: &[&str] = &[
+    "ABOX", "ACONE", "ACTOR", "ACYLI", "ADISH", "AEXTR", "APOLYH", "APYRA", "AREVO", "ARTOR", "ASLCY", "ASNOU",
+    "BOX", "BPANEL", "BPFITT", "CLNTIL", "CONE", "CTOR", "CTWALL", "CWBRAN", "CYLI", "DISH", "DTBOLT", "DTHOLE",
+    "DTPLAT", "DTPROF", "DTWELD", "EXTR", "FITT", "FIXING", "GENCUR", "GENPC", "GENPG", "GENSEC", "HANDRA",
+    "INSURQ", "LADDER", "LDRCAG", "MFIX", "PFIT", "PJOI", "PLTFRM", "POLYHE", "PYRA", "RBRAN", "REVO", "RLADDR",
+    "RTOR", "SCTN", "SDAFIX", "SJOI", "SLADDR", "SLCY", "SNOU", "STRFLT", "STRLNG", "STWALL", "SUBJ", "WALL",
+    "XCELL",
+];
+
+/// `IMAP` 7: recorded or merged as the owner's `IMAP` says.
+pub const IMAP_7: &[&str] = &["PALJ"];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,5 +326,87 @@ mod tests {
         assert_eq!((SIGNED_WORDS.encode)(WITHIN_DATUM), Some(999_999_999));
         assert_eq!((SIGNED_WORDS.encode)(WITHIN_DATUM + 1), None);
         assert_eq!((SIGNED_WORDS.encode)(-WITHIN_DATUM - 1), None);
+    }
+
+    struct Element {
+        noun: u32,
+        owner: Option<RefNo>,
+        attrs: HashMap<u32, DescriptorValue>,
+    }
+
+    /// Elements in memory.
+    #[derive(Default)]
+    struct Tree {
+        elements: HashMap<RefNo, Element>,
+    }
+
+    impl Tree {
+        fn with(mut self, refno: RefNo, noun: u32, owner: Option<RefNo>, attrs: &[(&str, DescriptorValue)]) -> Self {
+            let attrs = attrs.iter().map(|(name, value)| (db1_hash(name), value.clone())).collect();
+            self.elements.insert(refno, Element { noun, owner, attrs });
+            self
+        }
+    }
+
+    impl SpatialState for Tree {
+        fn noun(&self, refno: RefNo) -> Option<u32> {
+            self.elements.get(&refno).map(|element| element.noun)
+        }
+        fn owner(&self, refno: RefNo) -> Option<RefNo> {
+            self.elements.get(&refno).and_then(|element| element.owner)
+        }
+        fn attr(&self, refno: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr> {
+            Ok(self.elements.get(&refno).and_then(|element| element.attrs.get(&hash).cloned()))
+        }
+    }
+
+    const OWNER: RefNo = RefNo { word0: 24_384, word1: 1 };
+    const ELEMENT: RefNo = RefNo { word0: 24_384, word1: 2 };
+    const A_UDET: u32 = LAST_SYSTEM_NOUN + 1;
+
+    /// What the rule makes of an element of `noun` under an owner of `owner`.
+    fn covered_under(owner: u32, noun: u32, attrs: &[(&str, DescriptorValue)]) -> Option<bool> {
+        let tree = Tree::default().with(OWNER, owner, None, &[]).with(ELEMENT, noun, Some(OWNER), attrs);
+        coverage_by_imap(ELEMENT, &tree).expect("every attribute decodes")
+    }
+
+    fn covered(noun: &str, attrs: &[(&str, DescriptorValue)]) -> Option<bool> {
+        covered_under(db1_hash("EQUI"), db1_hash(noun), attrs)
+    }
+
+    #[test]
+    fn the_nouns_imap_decides_and_imap_7_asks_the_owner() {
+        assert_eq!(covered("BOX", &[]), Some(true));
+        assert_eq!(covered("FTUB", &[]), Some(true));
+        assert_eq!(covered("EQUI", &[]), Some(false));
+        assert_eq!(covered("NBOX", &[]), Some(false));
+        assert_eq!(covered("TEXT", &[]), Some(false));
+        assert_eq!(covered("DBMETA", &[]), Some(false), "a noun the dictionary lacks reads as IMAP 0");
+        assert_eq!(covered("PALJ", &[]), Some(true), "under an IMAP 2 owner");
+        assert_eq!(covered_under(db1_hash("BOX"), db1_hash("PALJ"), &[]), Some(false));
+        assert_eq!(coverage_by_imap(OWNER, &Tree::default()).unwrap(), None, "no element");
+    }
+
+    #[test]
+    fn mpbxbr_udets_and_nouns_without_spamap_are_unsaid() {
+        assert_eq!(covered("BRAN", &[]), None);
+        assert_eq!(covered("HANG", &[]), None);
+        assert_eq!(covered("TUBI", &[]), None);
+        let udtype = DescriptorValue::Word { raw: A_UDET, text: None };
+        assert_eq!(covered("BOX", &[("UDTYPE", udtype)]), None);
+        assert_eq!(covered("BOX", &[("UDTYPE", DescriptorValue::Int(0))]), Some(true));
+        assert_eq!(covered_under(db1_hash("EQUI"), A_UDET, &[]), None);
+        assert_eq!(covered_under(A_UDET, db1_hash("PALJ"), &[]), None);
+    }
+
+    #[test]
+    fn box_type_1_nouns_but_the_profiles_need_a_catalogue() {
+        let spre = |word0, word1| ("SPRE", DescriptorValue::RefNo(RefNo { word0, word1 }));
+        assert_eq!(covered("PJOI", &[]), Some(false));
+        assert_eq!(covered("PJOI", &[spre(0, 0)]), Some(false));
+        assert_eq!(covered("PJOI", &[spre(24_384, 100)]), Some(true));
+        assert_eq!(covered("SCOJ", &[spre(24_384, 100)]), Some(true));
+        assert_eq!(covered("SCTN", &[]), Some(true), "MBXSTL boxes it by its ends");
+        assert_eq!(covered("COFI", &[spre(24_384, 100)]), Some(false), "IMAP 3");
     }
 }

@@ -1876,7 +1876,7 @@ struct SpamapCheck<'a> {
 
 impl SpamapCheck<'_> {
     fn database(&self, path: &Path, session: Option<u32>) -> Result<Value, String> {
-        use e3d_io::spatial::check::{check, Authors};
+        use e3d_io::spatial::check::{check, check_coverage, Authors};
         let at = session.map_or(SessionSelector::Latest, SessionSelector::Exact);
         let mut view = DbView::open_at(path, at).map_err(|e| format!("open: {e}"))?;
         let sesno = view.selected_session();
@@ -1901,6 +1901,17 @@ impl SpamapCheck<'_> {
         let composer = e3d_io::spatial::aabb::ChainComposer::new(self.rules);
         let built_in = e3d_io::spatial::aabb::BuiltInAabb::new(self.rules, &composer);
         let checked = check(&entries, &state, &codec, &built_in, &authored, &excluded);
+        let elements: Vec<RefNo> = match self.only {
+            Some(refno) => vec![refno],
+            None => {
+                let mut engine = ReadOnlyEngine::open_at(path, sesno).map_err(|e| format!("open the engine: {e}"))?;
+                let scan = engine.scan_elements(ScanTier::Header).map_err(|e| format!("walk the refno index: {e}"))?;
+                scan.map(|element| element.map(|element| element.refno))
+                    .collect::<Result<_, _>>()
+                    .map_err(|e| format!("read an indexed element: {e}"))?
+            }
+        };
+        let coverage = check_coverage(&elements, &entries, &state, self.rules, &authored);
         let item = |item: &e3d_io::spatial::check::Item| {
             json!({
                 "agree": item.agree,
@@ -1926,6 +1937,7 @@ impl SpamapCheck<'_> {
             "entries_k": item(&checked.entries_k),
             "flags": item(&checked.flags),
             "built_in_aabb": item(&checked.built_in_aabb),
+            "coverage": item(&coverage),
         }))
     }
 }

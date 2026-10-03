@@ -180,7 +180,7 @@
     - 规则：`spamap.rounding`、`spamap.word_sign`、`spamap.short_axis`、`spamap.zero_extent`、`spamap.bucket`、`spamap.key0`、`spamap.entries_k`、`spamap.flags`；另取证表形 `spamap.table_shape` 与页头其余字 `spamap.table_header_rest`（供 8.1、8.6 写内结点页与建表）
     - 经 IB_Wrapper 读 E3D_Core 例程（编码在 Core3D_IDB 的 `maplib`，表与记录项在 Core_IDB）；用 `spamap-check --rules candidates` 在 Corpus 上核对，一致数 / 总数写入「结论」；最短轴并列的取轴只认 E3D_IDB 出处
     - _Requirements: 2.4, 4.1, 4.4, 4.5, 4.6, 4.8, 4.13, 4.14, 4.17, 4.18, 7.8_
-  - [~] 7.2 取证覆盖判定 `spamap.coverage` 与 Geometric_Noun 清单，并写 Property 7 Corpus 测试
+  - [x] 7.2 取证覆盖判定 `spamap.coverage` 与 Geometric_Noun 清单，并写 Property 7 Corpus 测试
     - 证据写明被检查的每个因素（noun 及 noun 之外的因素）与逐 noun 的三态结论
     - 在 `tests/spamap_codec_real.rs` 加覆盖对账；E3D_Authored_Element 按会话 USER ≠ `e3dio` 判定；坐实前用 candidates 跑、只作取证数据
     - **Property 7: 覆盖对账**
@@ -556,7 +556,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `spamap.bucket` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | Core3D `MAPKEY`：600 / 2 000 / 6 000 / 20 000 / 200 000，界值归上一桶；≥ 200 000 为桶 6（只以出处 ①） |
 | `spamap.entries_k` | 7.1 | 未坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | | k = `MAPINS` 下标 − 1（tube 为 2）；`MPBOX2` 路径一条 k = 0、用自身框；k = 1 只来自 `MPBXBR`（BRAN 与管件），tube 框（`MGTUBE`）未读；候选「单条 k = 0」3 507 / 3 628、18 404 / 21 257 |
 | `spamap.flags` | 7.1 | 未坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | | `MAPINS` 三个逻辑量按 1 / 2 / 4；`BOXELE` 按 OBST 1–2 置位、`MPBOX` 上溯 SITE 等定是否启用；管件 flags 来自 `MPBXBR`，未读；候选 BOX / CYLI 1 590 / 1 590 |
-| `spamap.coverage` | 7.2 | 未坐实 | | | 候选按普查：43 个 noun 有、51 个无，BRAN / PJOI / SCOJ 不说；Property 7 未写（7.2） |
+| `spamap.coverage` | 7.2 | 坐实 | `docs/evidence/2026-10-03-spamap-coverage.md` | C2 | 按元素三态：Core3D `MPBOX` / `MLSADD` 按 noun 的 IMAP（字典字段 847458）1、5 记，7 看 owner 的 IMAP 是否为 2，box type 1（`getBoxType`，SCTN / GENSEC / WLJOIN 除外）须 SPRE 非 0（`GTSTDT` → `MBXSTL` 失败 → `MAPREM`）；BRAN 与 HNGT 四个（`MPBXBR` 未读）、UDET、模板无 SPAMAP 的八个未坐实。Property 7 坐实集 40 556 / 40 556 判定无反例，`waiting` 2 060（BRAN 1 819、HANG 241） |
 | `spamap.recompute.<NOUN>` | 7.3 | | | | B8 线索：ams7999 有几处 BOX / CYLI 条目只在一侧比按现属性算出的多 1.5 mm 或 28–33 mm（如 `24383/78369` minz、`24383/77136` minz），像「改尺寸与位置后条目未重算」；待 7.3 |
 | `spamap.descendants.{move,pos,ori}` | 7.3 | | | | B8 线索：ams7999 EQUI `24383/76459` 下几个 SUBE 的 BOX 条目与按现位姿算出的差 10–273 mm（成对：−1 291 / +2 575、−908 / −2 733 等），像后代未随祖先改动重算；待 7.3 以会话链 / 探针坐实，可作需求 4.17 剔除清单的候选 |
 | `spamap.delete_residue` | 7.3 | | | | |

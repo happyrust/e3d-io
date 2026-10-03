@@ -7,18 +7,20 @@
 use super::{ATTLIB, DESVIR};
 use e3d_attlib::AttlibData;
 use e3d_io::core_rules::RuleSet;
+use e3d_io::engine::ScanTier;
 use e3d_io::index::{read_spamap, SpamapEntry, SpamapRead};
 use e3d_io::record::template::TemplateProvider;
 use e3d_io::session::{DbView, SessionSelector};
 use e3d_io::spatial::aabb::{BuiltInAabb, ChainComposer};
-use e3d_io::spatial::check::{check, Authors, Checked};
+use e3d_io::spatial::check::{check, check_coverage, Authors, Checked, Item};
 use e3d_io::spatial::codec::SpamapCodec;
 use e3d_io::spatial::state::ReadState;
-use e3d_io::RefNo;
+use e3d_io::{ReadOnlyEngine, RefNo};
 
 const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
 
 pub struct Session {
+    pub path: String,
     pub sesno: u32,
     /// The entries in key order.
     pub table: Vec<SpamapEntry>,
@@ -39,7 +41,19 @@ impl Session {
         let attlib = AttlibData::parse_file(ATTLIB).expect("attlib");
         let templates = TemplateProvider::open(DESVIR, Some(DESIGN_TEMPLATE_TYPE)).expect("desvir");
         let state = ReadState::open(path, sesno, attlib, templates).expect("open the element state");
-        Some(Session { sesno, table, state, authors })
+        Some(Session { path: path.to_owned(), sesno, table, state, authors })
+    }
+
+    /// Every element the session's refno index lists, in index order.
+    pub fn elements(&self) -> Vec<RefNo> {
+        let mut engine = ReadOnlyEngine::open_at(&self.path, self.sesno).expect("open the engine");
+        let scan = engine.scan_elements(ScanTier::Header).expect("walk the refno index");
+        scan.map(|element| element.expect("read an indexed element's header").refno).collect()
+    }
+
+    /// Property 7's reconciliation over every element of the session under `rules`.
+    pub fn coverage(&self, rules: &RuleSet) -> Item {
+        check_coverage(&self.elements(), &self.table, &self.state, rules, &|refno| self.e3d_wrote(refno))
     }
 
     /// Whether E3D wrote the element (E3D_Authored_Element).

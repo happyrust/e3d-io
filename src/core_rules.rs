@@ -123,7 +123,6 @@ impl RuleStatus {
 }
 
 const NO_CANDIDATE: &str = "no candidate yet";
-const T3: Option<&str> = Some("docs/evidence/2026-09-22-e3d-spamap-consequences.md#0. 结论");
 const ENCODING: Option<&str> = Some("docs/evidence/2026-10-03-spamap-encoding.md#结论");
 
 const fn unconfirmed(inputs: &'static str, evidence: Option<&'static str>) -> RuleStatus {
@@ -209,8 +208,9 @@ pub const RULES: &[Rule] = &[
     Rule {
         id: RuleId::SpamapCoverage,
         name: "spamap.coverage",
-        governs: "which nouns are Geometric_Noun: yes, no or unconfirmed, per noun",
-        status: unconfirmed("every inserted or changed element", T3),
+        governs: "whether E3D gives an element entries once it has a box: yes, no or unsaid, from its noun's IMAP, \
+                  its owner's for IMAP 7, and its catalogue for the box type 1 nouns",
+        status: confirmed("docs/evidence/2026-10-03-spamap-coverage.md#spamap.coverage"),
     },
     Rule {
         id: RuleId::SpamapRecompute,
@@ -370,7 +370,6 @@ macro_rules! called_as_candidates {
 called_as_candidates! {
     EntriesK => candidate::EntriesK;
     Flags => candidate::Flags;
-    Coverage => candidate::Coverage;
     OriForm => candidate::OriForm;
     Compose => candidate::Compose;
     BoxAabb => candidate::BoxAabb;
@@ -422,9 +421,10 @@ pub mod candidate {
     /// candidate does not cover the element.
     pub type Flags = fn(refno: RefNo, state: &dyn SpatialState, k: u32) -> Result<Option<u32>, UndecodableAttr>;
 
-    /// `spamap.coverage`: whether a noun is a Geometric_Noun, `None` when the
-    /// candidate does not say.
-    pub type Coverage = fn(noun: u32) -> Option<bool>;
+    /// `spamap.coverage`: whether E3D gives the element entries once it has a
+    /// box — the element is of a Geometric_Noun — or never does; `None` when
+    /// the candidate does not say.
+    pub type Coverage = fn(refno: RefNo, state: &dyn SpatialState) -> Result<Option<bool>, UndecodableAttr>;
 
     /// `aabb.ori_form`: the rotation a stored ORI stands for — the matrix
     /// whose columns are the element's axes in its owner's — or `None` for a
@@ -525,6 +525,13 @@ pub enum Bucket {
     Mapkey,
 }
 
+/// `spamap.coverage`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Coverage {
+    /// [`crate::spatial::rules::coverage_by_imap`].
+    ByImap,
+}
+
 impl Implementation<candidate::WordSign> for WordSign {
     fn function(&self) -> candidate::WordSign {
         match self {
@@ -573,13 +580,19 @@ impl Implementation<candidate::Bucket> for Bucket {
     }
 }
 
+impl Implementation<candidate::Coverage> for Coverage {
+    fn function(&self) -> candidate::Coverage {
+        match self {
+            Coverage::ByImap => crate::spatial::rules::coverage_by_imap,
+        }
+    }
+}
+
 implementations! {
     /// `spamap.entries_k`.
     EntriesK;
     /// `spamap.flags`.
     Flags;
-    /// `spamap.coverage`.
-    Coverage;
     /// `spamap.recompute.<NOUN>`: the recompute table and member-order rows.
     Recompute;
     /// `spamap.descendants.{move,pos,ori}`.
@@ -654,7 +667,7 @@ const CONFIRMED: RuleSet = RuleSet {
     bucket: Slot::Confirmed(Bucket::Mapkey),
     entries_k: Slot::Pending,
     flags: Slot::Pending,
-    coverage: Slot::Pending,
+    coverage: Slot::Confirmed(Coverage::ByImap),
     recompute: Slot::Pending,
     descendants_move: Slot::Pending,
     descendants_pos: Slot::Pending,

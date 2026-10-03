@@ -1,7 +1,8 @@
 //! Codec_Check on the installed Corpus (Property 5): Key0, entry count and k,
 //! and Spatial_Flags counted apart on SPAMAP_Baseline and on every Corpus
 //! database's newest session, and a mismatch planted in one item moving that
-//! item's count alone.
+//! item's count alone. With them the coverage reconciliation (Property 7):
+//! every element E3D wrote, entries or none, against `spamap.coverage`.
 //!
 //! Until the codec's rules are confirmed, what the candidates make of the
 //! Corpus is evidence data: printed, not judged. What is judged now is that
@@ -16,11 +17,12 @@ use std::collections::HashMap;
 use common::corpus::{CORPUS, SPAMAP_BASELINE, SPAMAP_BASELINE_SESSION};
 use common::spamap_session::Session;
 use common::{ATTLIB, DESVIR};
+use e3d_attlib::{db1_dehash, db1_hash};
 use e3d_io::core_rules::RuleSet;
 use e3d_io::index::SpamapEntry;
 use e3d_io::session::SessionSelector;
-use e3d_io::spatial::candidates;
 use e3d_io::spatial::check::{Checked, Item, Miss};
+use e3d_io::spatial::{candidates, rules};
 use e3d_io::RefNo;
 use proptest::prelude::*;
 use proptest::sample::Index;
@@ -166,5 +168,63 @@ fn a_mismatch_planted_in_one_item_moves_that_items_count_alone() {
     });
     if let Err(failure) = result {
         panic!("{failure}");
+    }
+}
+
+// Feature: write-path-phase-3, Property 7: 覆盖对账
+//
+// Every element E3D wrote in every Corpus database's newest session has
+// entries exactly when `spamap.coverage` says E3D gives it entries; the only
+// misses left wait on the elements the rule leaves unsaid (D7). A database
+// whose session lists no SPAMAP table has no entries, so every noun it holds
+// must be one the rule never records — judged by noun, the catalogue
+// template's elements not being decodable with the design one.
+#[test]
+fn every_element_e3d_wrote_has_entries_exactly_when_coverage_says_so() {
+    if common::missing(&[DESVIR, ATTLIB]) || common::missing(CORPUS) {
+        return;
+    }
+    for path in CORPUS {
+        let Some(session) = Session::open(path, SessionSelector::Latest) else {
+            let mut engine = e3d_io::ReadOnlyEngine::open_at(path, SessionSelector::Latest).expect("open the engine");
+            let mut nouns: Vec<u32> = engine
+                .scan_elements(e3d_io::engine::ScanTier::Header)
+                .expect("walk the refno index")
+                .map(|element| element.expect("read an indexed element's header").noun_hash)
+                .collect();
+            nouns.sort_unstable();
+            nouns.dedup();
+            let recorded: Vec<String> = nouns
+                .iter()
+                .filter(|&&noun| matches!(rules::imap_of(noun), 1 | 5 | 7) || rules::HNGT.iter().any(|name| db1_hash(name) == noun))
+                .map(|&noun| db1_dehash(noun).unwrap_or_else(|| format!("#{noun}")))
+                .collect();
+            assert!(recorded.is_empty(), "{path} has no SPAMAP table and holds nouns E3D records: {recorded:?}");
+            eprintln!("{path}: no SPAMAP table; none of its {} nouns is recorded", nouns.len());
+            continue;
+        };
+        let coverage = session.coverage(RuleSet::confirmed());
+        assert!(session.state.failures().is_empty(), "{path}: {:?}", session.state.failures());
+        let decided: Vec<_> = coverage.misses.iter().filter(|miss| !waits(miss)).collect();
+        assert_eq!(
+            coverage.agree + coverage.waiting,
+            coverage.total,
+            "{path} session {}: coverage has misses that wait on no rule, as {decided:?}",
+            session.sesno
+        );
+        let waiting: Vec<String> = coverage
+            .by_noun
+            .iter()
+            .filter(|(_, (agree, total))| agree != total)
+            .map(|(noun, (agree, total))| format!("{noun} {agree} / {total}"))
+            .collect();
+        eprintln!(
+            "{path} session {}: coverage {} / {} ({} waiting: {})",
+            session.sesno,
+            coverage.agree,
+            coverage.total,
+            coverage.waiting,
+            waiting.join(", ")
+        );
     }
 }

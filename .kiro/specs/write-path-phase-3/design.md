@@ -179,7 +179,7 @@ pub fn descendants_included(kind: DescendantKind, depth: u32) -> bool;  // depth
 | `spamap.bucket` | 桶划分、分界归属、超出语料所见范围时的取值 | 需求 4 第 6 条 |
 | `spamap.entries_k` | 条目数、k 的含义、k ≥ 1 条目值字的来源 | 需求 4 第 7、14、15 条 |
 | `spamap.flags` | Spatial_Flags 逐位的含义 | 需求 4 第 8、9、11 条 |
-| `spamap.coverage` | 每个 noun 是否为 Geometric_Noun（三态） | 需求 5 第 1、7、10 条 |
+| `spamap.coverage` | 每个元素是否属 Geometric_Noun（三态）：按 noun 的 IMAP，IMAP 7 另看 owner，box type 1 另看 SPRE（2026-10-03 坐实，`docs/evidence/2026-10-03-spamap-coverage.md`） | 需求 5 第 1、7、10 条 |
 | `spamap.recompute.<NOUN>` | 重算表「自身」一类各行与成员次序 | 需求 5 第 2 条 |
 | `spamap.descendants.{move,pos,ori}` | 换 owner、改 POS、改 ORI 时各层后代是否重算 | 需求 5 第 3、8 条 |
 | `spamap.delete_residue` | 删除后后代条目是否残留（写侧按需求 7 第 5 条一律删去） | 需求 5 第 4 条 |
@@ -276,7 +276,7 @@ pub struct TransactionCommit { /* 现有字段 */ pub spatial: SpatialReport }
 pub enum TransactionError { /* 现有变体 */ Spatial(SpatialError) }
 ```
 
-- `set_aabb` 在调用处校验，出错时草稿不变：含非有限数或某轴 min > max，返回 `SpatialError::InvalidAabb { refno, axis }`；noun 已按 `spamap.coverage` 坐实为非 Geometric_Noun，返回 `NotGeometric { refno, noun }`。noun 的覆盖状态尚未坐实时，调用处不拒，留给 stage 按 D7 处理。
+- `set_aabb` 在调用处校验，出错时草稿不变：含非有限数或某轴 min > max，返回 `SpatialError::InvalidAabb { refno, axis }`；`spamap.coverage` 对该元素（按草稿中的状态）判否，返回 `NotGeometric { refno, noun }`。判定「不说」时，调用处不拒，留给 stage 按 D7 处理。
 - 兼容：新类型 `SpatialReport`、`SpatialError`、`AllocationBasis` 都标 `#[non_exhaustive]`，`SpatialReport` 与 `SpatialPolicy` 实现 `Default`。`TransactionCommit` 加字段、`TransactionError` 加变体都是破坏性变化：前者没有 `Default` / builder，按需求 15 第 9 条在 CHANGELOG 写明结构体字面量与解构的迁移方法；后者写明 match 的迁移方法，并借这次给 `TransactionError` 标上 `#[non_exhaustive]`，以后再加变体就不会破坏下游。落地前先在 Downstream_Crates 中搜这两个类型的穷尽 match 与字面量（本步未核对）；搜到即与需求 15 第 4 条冲突，先停下与用户确认。
 - D3 默认「要求」：对插入非 Built_In_AABB 几何 noun 的调用方是行为变化，记入 CHANGELOG（需求 14 第 4 条）。`open` / `open_at` 签名不变，发号改由 `alloc.rs` 提供。
 

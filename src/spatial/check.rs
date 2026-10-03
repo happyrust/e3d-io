@@ -10,6 +10,9 @@
 //! - Built_In_AABB: every BOX or CYLI E3D wrote that has entries, encoded
 //!   from the box the built-in AABB computes, word for word.
 //!
+//! Apart from them, [`check_coverage`] holds `spamap.coverage` against every
+//! element E3D wrote, entries or none (Property 7).
+//!
 //! Counting only; `e3d-descriptor spamap-check` and the corpus tests call the
 //! same functions.
 
@@ -20,8 +23,8 @@ use e3d_attlib::db1_dehash;
 use super::aabb::{AabbOutcome, BuiltInAabb};
 use super::codec::{Encoded, EntriesOf, SpamapCodec};
 use super::state::ReadState;
-use super::{SpatialState, WorldAabb};
-use crate::core_rules::RuleId;
+use super::{SpatialState, Walk, WorldAabb};
+use crate::core_rules::{RuleId, RuleSet};
 use crate::index::SpamapEntry;
 use crate::refno::RefNo;
 use crate::session::SessionPage;
@@ -217,6 +220,45 @@ pub fn check(
         checked.flags.count(Some(noun), made, || vec![*entry]);
     }
     checked
+}
+
+/// Property 7 (requirement 5.7) over `elements`, the elements of the session
+/// `table` belongs to: each one E3D wrote has entries exactly when
+/// `spamap.coverage` says E3D gives it entries. The rule's word is `1` or `0`
+/// in a miss; a rule pending, or unsaid for the element, is waiting (D7).
+pub fn check_coverage(
+    elements: &[RefNo],
+    table: &[SpamapEntry],
+    state: &dyn SpatialState,
+    rules: &RuleSet,
+    authored: &dyn Fn(RefNo) -> bool,
+) -> Item {
+    let mut stored: HashMap<RefNo, Vec<SpamapEntry>> = HashMap::new();
+    for entry in table {
+        stored.entry(entry.refno()).or_default().push(*entry);
+    }
+    let mut item = Item::default();
+    for &refno in elements {
+        if !authored(refno) {
+            continue;
+        }
+        let entries = stored.get(&refno);
+        let mut walk = Walk::default();
+        let made = match walk.take(RuleId::SpamapCoverage, &rules.coverage) {
+            None => Err(Unmade::Pending(walk.pending)),
+            Some(coverage) => match coverage(refno, state) {
+                Ok(Some(gives)) => Ok((gives == entries.is_some(), vec![u32::from(gives)])),
+                Ok(None) => Err(Unmade::Pending(vec![RuleId::SpamapCoverage])),
+                Err(undecodable) => Err(Unmade::Other(undecodable.to_string())),
+            },
+        };
+        let noun = match state.noun(refno) {
+            Some(noun) => db1_dehash(noun).unwrap_or_else(|| format!("#{noun}")),
+            None => "(no element)".to_owned(),
+        };
+        item.count(Some(&noun), made, || entries.cloned().unwrap_or_default());
+    }
+    item
 }
 
 /// The k of each entry the codec gives `refno` for the box of `first`, in

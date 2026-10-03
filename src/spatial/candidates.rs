@@ -156,15 +156,17 @@ pub fn flags_from_obst(refno: RefNo, state: &dyn SpatialState, _k: u32) -> Resul
 /// Geometric where every corpus element of the noun has an entry, not where
 /// none has, unsaid where some have (BRAN, PJOI, SCOJ: something besides the
 /// noun decides) or the corpus has no element of the noun.
-pub fn coverage_seen_in_corpus(noun: u32) -> Option<bool> {
+pub fn coverage_seen_in_corpus(refno: RefNo, state: &dyn SpatialState) -> Result<Option<bool>, UndecodableAttr> {
     static SEEN: OnceLock<HashMap<u32, bool>> = OnceLock::new();
-    SEEN.get_or_init(|| {
-        let geometric = GEOMETRIC_IN_CORPUS.iter().map(|noun| (db1_hash(noun), true));
-        let not = NOT_GEOMETRIC_IN_CORPUS.iter().map(|noun| (db1_hash(noun), false));
-        geometric.chain(not).collect()
-    })
-    .get(&noun)
-    .copied()
+    let Some(noun) = state.noun(refno) else { return Ok(None) };
+    Ok(SEEN
+        .get_or_init(|| {
+            let geometric = GEOMETRIC_IN_CORPUS.iter().map(|noun| (db1_hash(noun), true));
+            let not = NOT_GEOMETRIC_IN_CORPUS.iter().map(|noun| (db1_hash(noun), false));
+            geometric.chain(not).collect()
+        })
+        .get(&noun)
+        .copied())
 }
 
 /// Nouns every corpus element of which has an entry (census, 2026-10-03).
