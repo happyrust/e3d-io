@@ -118,3 +118,14 @@ C 坐实了编码、覆盖、记录项与 `aabb.degenerate`。剩下的规则都
 |---|---|---|
 | `selfcheck_box_xlen` | 原生 BOX `24384/24777` XLEN 310 → 333，SAVEWORK 会话 647 | rewritten（需求 5 第 2 条）：`[299969986, …, −30014, 76966, 11250, −26411, 83113, 16750, 2]` → `[299969872, …, −30128, 76956, 11250, −26297, 83123, 16750, 2]`；绕 Z 转 5° 的盒子 XLEN +23 mm → x 宽 3 603 → 3 831、y 宽 6 147 → 6 167（0.1 mm），与 23·cos 5°、23·sin 5° 相符；整表 3 628 个 refno 只改写这 1 个 |
 | `selfcheck_e3dio_box_xlen` | setup `write_gate_ops/10_box.json`（e3d-io 会话 647 插 BOX `24384/26484`）后 XLEN 300 → 301，SAVEWORK 会话 648 | appeared：`[300008495, 24384, 26484, 0, 8495, 18000, 27500, 11505, 22000, 32500, 2]`，与 `docs/evidence/2026-09-22-e3d-spamap-consequences.md` §0 第 5 条逐字相同；整表 3 628 → 3 629，只新增这 1 个。这正是 D4（4.20 示例）要的那一会话 |
+
+### D2（2026-10-03 20:2x–21:xx，7.3；探针产物 `.agents/tasks/write-path-phase-3-milestone-d/d2/`）
+
+证据 `docs/evidence/2026-10-03-spamap-recompute.md`（`check_evidence` PASS；两个 IDB 首末 SHA-256 不变；8 个地址 `check_xrefs` PASS），**五条规则坐实**：`spamap.recompute.<NOUN>`、`spamap.descendants.{move, pos, ori}`、`spamap.delete_residue`。
+
+- 方法：§3.1 的盘上不可见由「用 e3d-io 写的无条目元素」解决——E3D 一重算就给它登记条目（appeared = 触发，none = 不触发）。探针加 `-- prepare-end`（同一 TTY 先 SAVEWORK 准备段，比对从准备会话起）与「传目录逐个跑」；setup `tools/e3d/spamap_probes/setup/{cyli, others, equi_tree, equi_members}.json`；35 个探针 `tools/e3d/spamap_probes/d2/`，`-- expect:` 全满足，整表比对无 watch 外的变化，E3D 无报错。
+- 重算表：触发 ⇔ 字典 `DCHC` ≠ 0 且不为 `WNOEVT`，与 noun 无关；成员次序只重算被挪的那个成员。300 个 Geometric_Noun 模板 722 个属性中 176 个触发（`rules::RECOMPUTING` / `recompute_by_dchc`，`tests/spamap_recompute_real.rs` 与 `attlib.dat` 核对并逐 noun 打印）；E3D_Session 32 / 32。
+- 后代：换 owner、POS、ORI 都重算整棵子树的各层（move 4 / 4、POS 7 / 7、ORI 6 / 6），不在 IMAP 0、BRAN、HNGT 之下继续（`rules::mpbox_walks_below`）；`descendants_included` 改为恒真（D8 的推荐默认即与 E3D 一致）。
+- 删除：被删元素及各层后代的条目在删除会话中都已删去，无残留（4 / 4，出处 ②）。需求 5 第 9 条：删无条目 BOX、删其 owner 都能 `SAVEWORK`，无错误号。
+- 规格外的发现：① owner 的其他重算属性（NUMB 已探；DESP、ISPE、STMF、SPRE 同 DCHC 4）也让整棵子树重算，需求 7 第 4 条与 Recompute_Set ④⑤ 未收——后代已有条目时盘上等价，无条目时（0.4.0 BOX）E3D 会补条目，待定是否扩；② E3D 的 `REORDER` / `INCLUDE` 经 `DINSER` 查层级，ZONE 下的 BOX 不能排序或挪入（Database error 4 后 TTY 退出），探针改在 EQUI / SUBE 下做。
+- 检查：lib 单测 401 过，`core_rules_registry` 4 过，clippy 63、`cargo doc` 25 同基线。tasks 7.3 打勾、Ledger 三行。

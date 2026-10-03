@@ -1,0 +1,14 @@
+{
+  "comment": "e3d-io SPAMAP probe setup: an EQUI holding two BOXes and two CYLIs (E3D reorders only legal members, so not under a ZONE)",
+  "ops": [
+    {"op": "insert", "id": "equi", "owner": "/1RX03-MSUP", "noun": "EQUI", "attrs": {"POS": "5000 5000 0"}},
+    {"op": "insert", "owner": "@equi", "noun": "BOX",
+     "attrs": {"POS": "0 0 0", "XLEN": "300", "YLEN": "400", "ZLEN": "500"}},
+    {"op": "insert", "owner": "@equi", "noun": "BOX",
+     "attrs": {"POS": "500 0 0", "XLEN": "300", "YLEN": "400", "ZLEN": "500"}},
+    {"op": "insert", "owner": "@equi", "noun": "CYLI",
+     "attrs": {"POS": "1000 0 0", "DIAM": "200", "HEIG": "500"}},
+    {"op": "insert", "owner": "@equi", "noun": "CYLI",
+     "attrs": {"POS": "1500 0 0", "DIAM": "200", "HEIG": "500"}}
+  ]
+}

@@ -6,6 +6,7 @@
 
 .DESCRIPTION
   powershell -NoProfile -ExecutionPolicy Bypass -File tools/e3d/spamap_probe.ps1 <probe.pml>
+  powershell -NoProfile -ExecutionPolicy Bypass -File tools/e3d/spamap_probe.ps1 <directory of probes>
   powershell -NoProfile -ExecutionPolicy Bypass -File tools/e3d/spamap_probe.ps1 -SelfCheck
 
   A probe file (tools/e3d/spamap_probes/*.pml) is the PML E3D runs before the SAVEWORK,
@@ -18,11 +19,14 @@
                                           in the body and in the watch list
     -- expect: 24384/24777=rewritten      verdicts the run must give (exit 1 otherwise)
     -- comment: text                      the SAVEWORK comment
+    -- prepare-end                        the body above this line is a preparation E3D
+                                          SAVEWORKs first, in the same TTY session; the
+                                          entries are then compared from that session on
   1. Resets ams8000_0001 of the gate's project copy (tools/e3d/write_gate.ps1; copied
      there once if missing) from -Source, by default the installed original, which is
      only read. The probe never touches the original or D:\e3dio-fixtures.
   2. Runs the setup, if any.
-  3. Reads the newest session and each watched refno's entries (`e3d-descriptor spamap`).
+  3. Notes the newest session: the one compared from, unless there is a preparation.
   4. Renders the body into one ALPHA LOG block that ends with SAVEWORK and Q SESSION and
      runs it through gen-model's l3_suite --check-driver (des.exe TTY, login SYSTEM). The
      driver calls a run that SAVEWORKs done only when the file's session moved; when it
@@ -32,8 +36,9 @@
      the wrapper has written L3-DONE, E3D gets -QuitGraceSeconds to exit, then the
      des.exe the driver started is stopped. The driver judges by its markers, not the
      exit code, and reads that as "completed, then exited dirty".
-  5. Reads the entries again in the session the SAVEWORK wrote and gives each refno a
-     verdict: rewritten (entries differ), same (identical), appeared, vanished, none.
+  5. Reads each watched refno's entries (`e3d-descriptor spamap`) in the session compared
+     from and in the session the SAVEWORK wrote, and gives each refno a verdict:
+     rewritten (entries differ), same (identical), appeared, vanished, none.
      E3D's SAVEWORK session is E3D's own (its USER is the Windows account, not e3dio),
      so its elements count as E3D_Authored_Element.
   The whole table is compared as well: every refno whose entries the SAVEWORK session
@@ -58,16 +63,18 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($SelfCheck) {
+# -SelfCheck, or a directory: every probe in it, one run each.
+if ($SelfCheck -or ($ProbeFile -and (Test-Path $ProbeFile -PathType Container))) {
+    $probes = if ($SelfCheck) { Get-ChildItem (Join-Path $PSScriptRoot 'spamap_probes') -Filter 'selfcheck_*.pml' } else { Get-ChildItem $ProbeFile -Filter '*.pml' }
     $forwarded = @()
     foreach ($key in $PSBoundParameters.Keys) { if ($key -notin 'SelfCheck', 'ProbeFile') { $forwarded += @("-$key", [string]$PSBoundParameters[$key]) } }
     $failed = @()
-    foreach ($probe in @(Get-ChildItem (Join-Path $PSScriptRoot 'spamap_probes') -Filter 'selfcheck_*.pml' | Sort-Object Name)) {
+    foreach ($probe in @($probes | Sort-Object Name)) {
         & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath $probe.FullName @forwarded
         if ($LASTEXITCODE) { $failed += $probe.BaseName }
     }
-    if ($failed.Count) { Write-Output "SELF-CHECK FAIL: $($failed -join ', ')"; exit 1 }
-    Write-Output 'SELF-CHECK PASS'
+    if ($failed.Count) { Write-Output "FAIL: $($failed -join ', ')"; exit 1 }
+    Write-Output "PASS: $(@($probes).Count) probe(s)"
     exit 0
 }
 if (-not $ProbeFile) { throw 'usage: tools/e3d/spamap_probe.ps1 <probe.pml> | -SelfCheck' }
@@ -109,8 +116,10 @@ function Read-LogText([string]$path) {
 # The probe file: directives, then the body.
 $watch = @(); $expect = [ordered]@{}; $setup = ''; $comment = "e3d-io SPAMAP probe $name"
 $body = New-Object Collections.Generic.List[string]
+$prepare = $null
 foreach ($line in [IO.File]::ReadAllLines($ProbeFile, $utf8)) {
-    if ($line -match '^--\s*watch:\s*(.+)$') { $watch += @($Matches[1].Trim() -split '[\s,]+' | Where-Object { $_ }) }
+    if ($line -match '^--\s*prepare-end\s*$') { $prepare = $body; $body = New-Object Collections.Generic.List[string] }
+    elseif ($line -match '^--\s*watch:\s*(.+)$') { $watch += @($Matches[1].Trim() -split '[\s,]+' | Where-Object { $_ }) }
     elseif ($line -match '^--\s*setup:\s*(.+)$') { $setup = $Matches[1].Trim() }
     elseif ($line -match '^--\s*comment:\s*(.+)$') { $comment = $Matches[1].Trim() }
     elseif ($line -match '^--\s*expect:\s*(.+)$') {
@@ -200,11 +209,8 @@ $expanded = [ordered]@{}
 foreach ($key in $expect.Keys) { $expanded[(Expand $key)] = $expect[$key] }
 $expect = $expanded
 
-# 3. Before.
-$beforeSesno = Get-Newest
-$before = @{}
-foreach ($refno in $watch) { $before[$refno] = @(Get-Entries $refno $beforeSesno) }
-$tableBefore = Get-Table $beforeSesno
+# 3. The session E3D starts from.
+$startSesno = Get-Newest
 
 # 4. E3D.
 $bodyLog = Join-Path $runDir 'body.log'
@@ -213,6 +219,17 @@ $macroLog = [IO.Path]::ChangeExtension($macroPath, '.log')
 $macro = New-Object Text.StringBuilder
 [void]$macro.AppendLine("ALPHA LOG `"$(& $forward $bodyLog)`" OVER")
 [void]$macro.AppendLine("`$P PROBE-BEGIN $name")
+if ($null -ne $prepare) {
+    foreach ($line in $prepare) { [void]$macro.AppendLine((Expand $line)) }
+    [void]$macro.AppendLine('$P PROBE-PREPARE-SAVE')
+    [void]$macro.AppendLine("SAVEWORK '$comment (prepare)'")
+    [void]$macro.AppendLine('handle any')
+    [void]$macro.AppendLine('  $P PROBE-PREPARE-SAVE-ERROR $!!error.text')
+    [void]$macro.AppendLine('elsehandle none')
+    [void]$macro.AppendLine('  $P PROBE-PREPARED')
+    [void]$macro.AppendLine('  Q SESSION')
+    [void]$macro.AppendLine('endhandle')
+}
 foreach ($line in $body) { [void]$macro.AppendLine((Expand $line)) }
 [void]$macro.AppendLine('$P PROBE-SAVE')
 [void]$macro.AppendLine("SAVEWORK '$comment'")
@@ -281,14 +298,28 @@ $driver = [pscustomobject]@{ Output = $driverText; ExitCode = $driver.ExitCode }
 [IO.File]::WriteAllText((Join-Path $runDir 'driver.out.txt'), $driverText, $utf8)
 $log = Read-LogText $bodyLog
 $errors = @([regex]::Matches($log, '(?m)^.*(ERROR|\(\d+,\s*\d+\)).*$') | ForEach-Object { $_.Value.Trim() })
-$saved = [regex]::Match($log, 'Last saved session number (\d+)')
-$savedSesno = if ($saved.Success) { [int]$saved.Groups[1].Value } else { $null }
+# The log splits at the final save's marker line: the preparation's Q SESSION above it,
+# the final one below.
+$split = [regex]::Match($log, '(?m)^PROBE-SAVE\s*$')
+$above = if ($split.Success) { $log.Substring(0, $split.Index) } else { $log }
+$below = if ($split.Success) { $log.Substring($split.Index) } else { '' }
+function Get-SavedSesno([string]$text, [string]$marker) {
+    $saved = [regex]::Match($text, 'Last saved session number (\d+)')
+    if ($text -match $marker -and $saved.Success) { [int]$saved.Groups[1].Value } else { $null }
+}
+$preparedSesno = Get-SavedSesno $above '(?m)^PROBE-PREPARED\s*$'
+$savedSesno = Get-SavedSesno $below '(?m)^PROBE-SAVED\s*$'
 $newestAfter = Get-Newest
 
-# 5. After, and the verdicts.
-$afterSesno = if ($savedSesno) { $savedSesno } else { $newestAfter }
-$rows = @()
+# 5. Before and after, and the verdicts.
 $unmet = @()
+if ($null -ne $prepare -and -not $preparedSesno) { $unmet += 'the preparation did not save' }
+$beforeSesno = if ($preparedSesno) { $preparedSesno } else { $startSesno }
+$afterSesno = if ($savedSesno) { $savedSesno } else { $newestAfter }
+$before = @{}
+foreach ($refno in $watch) { $before[$refno] = @(Get-Entries $refno $beforeSesno) }
+$tableBefore = Get-Table $beforeSesno
+$rows = @()
 foreach ($refno in $watch) {
     $was = @($before[$refno])
     $now = @(Get-Entries $refno $afterSesno)
@@ -318,6 +349,8 @@ $result = [ordered]@{
     probe = (& $forward $probeShown)
     source = [ordered]@{ path = $Source; sha256 = $sourceHash }
     setup = $setupInfo
+    start_sesno = $startSesno
+    prepared_sesno = $preparedSesno
     before_sesno = $beforeSesno
     saved_sesno = $savedSesno
     newest_after = $newestAfter
@@ -330,7 +363,7 @@ $result = [ordered]@{
 }
 [IO.File]::WriteAllText((Join-Path $runDir 'result.json'), ($result | ConvertTo-Json -Depth 8), $utf8)
 
-Write-Output ("probe {0}: source {1} ({2}), before session {3}, SAVEWORK session {4}, newest after {5}" -f $name, $Source, $sourceHash.Substring(0, 16), $beforeSesno, $(if ($savedSesno) { $savedSesno } else { 'none' }), $newestAfter)
+Write-Output ("probe {0}: source {1} ({2}), compared from session {3}{4}, SAVEWORK session {5}, newest after {6}" -f $name, $Source, $sourceHash.Substring(0, 16), $beforeSesno, $(if ($preparedSesno) { ' (the preparation)' } else { '' }), $(if ($savedSesno) { $savedSesno } else { 'none' }), $newestAfter)
 if ($setupInfo) { Write-Output ("  setup {0}: e3d-io session {1}, refnos {2}" -f $setupInfo.ops, $setupInfo.session, ($setupInfo.refnos -join ' ')) }
 foreach ($row in $rows) {
     Write-Output ("  {0,-14} {1}" -f $row.refno, $row.verdict)

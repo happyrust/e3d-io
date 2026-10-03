@@ -417,6 +417,78 @@ pub const IMAP_5: &[&str] = &[
 /// `IMAP` 7: recorded or merged as the owner's `IMAP` says.
 pub const IMAP_7: &[&str] = &["PALJ"];
 
+// --- spamap.recompute.<NOUN>, spamap.descendants.* -------------------------------------
+
+/// Whether writing `attr` on an element of `noun` makes Core3D recompute its
+/// entries. `descases/VDESPT` queues the element (`maplist/MLSADD`) when the
+/// attribute's dictionary `DCHC` is not 0, and core.dll's
+/// `DB_ElementChangesPlugger::PostSetAttribute` sends no change event at all
+/// for a `WNOEVT` attribute; none of the seven is in a Geometric_Noun template.
+/// The table covers the Geometric_Nouns (`IMAP` 1, 5 and 7): another noun, or
+/// an attribute outside the system names (a UDA), is unconfirmed.
+pub fn recompute_by_dchc(noun: u32, attr: u32) -> crate::core_rules::Trigger {
+    use crate::core_rules::Trigger;
+    static SET: OnceLock<Vec<u32>> = OnceLock::new();
+    if !matches!(imap_of(noun), 1 | 5 | 7) {
+        return Trigger::Unconfirmed;
+    }
+    if SET.get_or_init(|| RECOMPUTING.iter().map(|&(_, hash)| hash).collect()).contains(&attr) {
+        Trigger::Triggers
+    } else if e3d_attlib::is_system_hash(attr) {
+        Trigger::DoesNotTrigger
+    } else {
+        Trigger::Unconfirmed
+    }
+}
+
+/// Whether `mapboxlib/MPBOX`, walking the subtree of a queued element, goes on
+/// below an element of `noun`: not below one of `IMAP` 0, nor below a BRAN or
+/// an [`HNGT`] noun, whose members `MPBXBR` maps (MPBOX n 99–119).
+pub fn mpbox_walks_below(noun: u32) -> bool {
+    imap_of(noun) != 0 && !records_its_members(noun)
+}
+
+/// The attributes of the Geometric_Noun templates whose `DCHC` is not 0, with
+/// their hashes (a long name's hash is not its base-27 name);
+/// `tests/spamap_recompute_real.rs` rereads them from
+/// `schema/e3d31/binaries/attlib.dat` and `schema/e3d31/catalog/noun_layout.json`.
+pub const RECOMPUTING: &[(&str, u32)] = &[
+    ("AHEIGHT", 4432537), ("ANGL", 773119), ("ARRI", 722197), ("ATTY", 1038637), ("BANG", 679457),
+    ("BENDCORNERS", 217448444), ("BFORI", 5679803), ("BOTCUT", 298743878), ("BOTSTR", 269829551),
+    ("CAGOFF", 90113907), ("CAGSIZ", 378765102), ("CATR", 900345), ("CBSTA", 1470450), ("CELLID", 62955120),
+    ("CFRA", 564411), ("CHNGD", 2805411), ("CLOSEFLAG", 89667327), ("CREF", 653673), ("CRFA", 555987),
+    ("CTYE", 648624), ("CTYS", 924186), ("CUTB", 585957), ("CUTP", 861519), ("CWJUSL", 183236961), ("DBOT", 936094),
+    ("DELP", 855256), ("DESP", 860359), ("DIAM", 788296), ("DRNE", 640552), ("DRNS", 916114), ("DTMODD", 60358099),
+    ("DTOP", 857848), ("EDISTA", 25889819), ("ENDREF", 89639681), ("EPKDI", 5401598), ("EPOSTO", 226779215),
+    ("EXDIST", 297787676), ("EXEXTE", 83381486), ("EXHEIG", 105861659), ("EXTDIR", 263688701), ("EXTOFF", 90124007),
+    ("EXTVOLUME", 181138199), ("EXWIDTH", 289829912), ("EZDI", 712211), ("FOOTRO", 225735990), ("FRAD", 611394),
+    ("FTHICKNESS", 160147266), ("GRADE", 611395), ("HEADCL", 174392252), ("HEADRO", 225410588), ("HEID", 616877),
+    ("HEIG", 675926), ("HGSIDE", 74592935), ("HRCLE", 3427523), ("HRJUSL", 183236831), ("HROBS", 10679615),
+    ("HROFF", 3849614), ("HRSTAR", 259751213), ("IDLRFA", 18432153), ("INRE", 643365), ("ISOHIDDEN", 700362),
+    ("ISPE", 642042), ("JLIN", 813898), ("JLNE", 640396), ("JLNS", 915958), ("JOIE", 636832), ("JOIS", 912394),
+    ("JUSL", 782065), ("LAXE", 647391), ("LCUTDI", 132206430), ("LEAV", 965343), ("LENG", 679575), ("LEVE", 646041),
+    ("LEXTNS", 281012151), ("LMIRR", 10458597), ("LOFF", 654330), ("LOWGAP", 230800359), ("LPITCH", 117317685),
+    ("LRISE", 3569682), ("LSRO", 840333), ("LSTU", 959889), ("LVIS", 912585), ("MEML", 777262), ("MODID", 2837686),
+    ("NCUTS", 11037884), ("NOMDIR", 263683364), ("NPOS", 916799), ("NUMB", 580865), ("OBSDEP", 232863810),
+    ("OBST", 939021), ("OBSWID", 63176667), ("OGOING", 108602250), ("OPDI", 711951), ("OPNSIZE", 378770622),
+    ("ORI", 538503), ("ORIF", 774699), ("ORISE", 3569685), ("OTRUNG", 108840984), ("PKDI", 711817), ("POS", 545713),
+    ("POSE", 644128), ("POSF", 722860), ("POSL", 781909), ("POSREF", 89650654), ("POSS", 919690),
+    ("POSTEX", 347970346), ("POSTOF", 95004430), ("POSTSP", 240619264), ("RADI", 711549), ("RADIPLANE", 181401489),
+    ("RADS", 908379), ("RAILHE", 76770306), ("RAILTR", 269683389), ("RESVOLUME", 181136970), ("RINS", 915885),
+    ("RISE", 643968), ("RNTYPE", 81286083), ("ROUT", 940833), ("RUNGSP", 240359904), ("RWIDTH", 126037449),
+    ("SDISTA", 25889833), ("SHOWKP", 236423683), ("SJUS", 921016), ("SLODIR", 263684746), ("SPKBRK", 167983192),
+    ("SPKDI", 5401612), ("SPRE", 643429), ("STAN", 808291), ("STAREF", 89637670), ("STEX", 1008037),
+    ("STILEX", 347805730), ("STMF", 659575), ("STRJUS", 284531446), ("STRSN", 8359273), ("SWEEP", 9137197),
+    ("SZDI", 712225), ("TANGLE", 78801302), ("TANGOF", 94744532), ("TEMP", 856001), ("THICKNESS", 207327836),
+    ("TOPCUT", 298740980), ("TOPOLOGY", 222449672), ("TOPSTR", 269826653), ("TPOSTO", 226779230),
+    ("TREADD", 60076667), ("TREADO", 217914644), ("TWIDTH", 126037451), ("UCUTDI", 132206439),
+    ("UEXTNS", 281012160), ("VANGLE", 78801304), ("VDISTA", 25889836), ("VERTDI", 132204307), ("VHEIGHT", 4432558),
+    ("VSHAPE", 80805082), ("VWIDT", 11246197), ("WIDT", 928283), ("WJUSL", 7298312), ("WLDRND", 65724800),
+    ("WTHICK", 160147283), ("XBOT", 936114), ("XBSH", 702834), ("XLEN", 810996), ("XOFF", 654342), ("XTOP", 857868),
+    ("XTSH", 703320), ("YBOT", 936115), ("YBSH", 702835), ("YDIR", 892429), ("YLEN", 810997), ("YOFF", 654343),
+    ("YTOP", 857869), ("YTSH", 703321), ("ZDIR", 892430), ("ZDIS", 912113), ("ZLEN", 810998), ("ZOFF", 654344),
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;

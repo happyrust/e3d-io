@@ -1,0 +1,7 @@
+{
+  "comment": "e3d-io SPAMAP probe setup: one CYLI under the first ZONE",
+  "ops": [
+    {"op": "insert", "owner": "/1RX03-MSUP", "noun": "CYLI",
+     "attrs": {"POS": "1000 2000 3000", "DIAM": "200", "HEIG": "500"}}
+  ]
+}

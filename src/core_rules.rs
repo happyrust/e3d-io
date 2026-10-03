@@ -205,31 +205,31 @@ pub const RULES: &[Rule] = &[
         id: RuleId::SpamapRecompute,
         name: "spamap.recompute.<NOUN>",
         governs: "which own attributes, and member order, make E3D recompute an element's entries",
-        status: unconfirmed("every attribute write and member reorder", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-recompute.md#spamap.recompute.<NOUN>"),
     },
     Rule {
         id: RuleId::SpamapDescendantsMove,
         name: "spamap.descendants.move",
         governs: "which levels of descendants are recomputed when an element changes owner",
-        status: unconfirmed("move_to on an element with descendants", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-recompute.md#spamap.descendants.move"),
     },
     Rule {
         id: RuleId::SpamapDescendantsPos,
         name: "spamap.descendants.pos",
         governs: "which levels of descendants are recomputed when an element's POS changes",
-        status: unconfirmed("a POS write on an element with descendants", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-recompute.md#spamap.descendants.pos"),
     },
     Rule {
         id: RuleId::SpamapDescendantsOri,
         name: "spamap.descendants.ori",
         governs: "which levels of descendants are recomputed when an element's ORI changes",
-        status: unconfirmed("an ORI write on an element with descendants", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-recompute.md#spamap.descendants.ori"),
     },
     Rule {
         id: RuleId::SpamapDeleteResidue,
         name: "spamap.delete_residue",
         governs: "whether a deleted element's descendants keep entries (the write side deletes them either way)",
-        status: unconfirmed("a delete of an element with descendants", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-recompute.md#spamap.delete_residue"),
     },
     Rule {
         id: RuleId::SpamapRecordItem,
@@ -629,13 +629,34 @@ impl Implementation<candidate::Coverage> for Coverage {
     }
 }
 
+/// `spamap.recompute.<NOUN>`: the recompute table and member-order rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recompute {
+    /// Core3D `descases/VDESPT` queues the element for an attribute whose
+    /// dictionary `DCHC` is not 0, `descases/VDESRO` the element reordered
+    /// ([`crate::spatial::rules::recompute_by_dchc`]).
+    ByDchc,
+}
+
+/// `spamap.descendants.{move,pos,ori}`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DescendantRecompute {
+    /// The element is queued (`descases/VDESIR` for a move, `VDESPT` for POS
+    /// and ORI, `DCHC` 3) and `mapboxlib/MPBOX` recomputes its whole subtree,
+    /// every level, not walking below where
+    /// [`crate::spatial::rules::mpbox_walks_below`] says no.
+    WholeSubtree,
+}
+
+/// `spamap.delete_residue`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeleteResidue {
+    /// The deleting session's table keeps no entry of the deleted element nor
+    /// of any element below it.
+    NoneLeft,
+}
+
 implementations! {
-    /// `spamap.recompute.<NOUN>`: the recompute table and member-order rows.
-    Recompute;
-    /// `spamap.descendants.{move,pos,ori}`.
-    DescendantRecompute;
-    /// `spamap.delete_residue`.
-    DeleteResidue;
     /// `aabb.ori_form`.
     OriForm;
     /// `aabb.compose`.
@@ -701,11 +722,11 @@ const CONFIRMED: RuleSet = RuleSet {
     entries_k: Slot::Confirmed(EntriesK::ByMpbox),
     flags: Slot::Confirmed(Flags::ByMpbox),
     coverage: Slot::Confirmed(Coverage::ByImap),
-    recompute: Slot::Pending,
-    descendants_move: Slot::Pending,
-    descendants_pos: Slot::Pending,
-    descendants_ori: Slot::Pending,
-    delete_residue: Slot::Pending,
+    recompute: Slot::Confirmed(Recompute::ByDchc),
+    descendants_move: Slot::Confirmed(DescendantRecompute::WholeSubtree),
+    descendants_pos: Slot::Confirmed(DescendantRecompute::WholeSubtree),
+    descendants_ori: Slot::Confirmed(DescendantRecompute::WholeSubtree),
+    delete_residue: Slot::Confirmed(DeleteResidue::NoneLeft),
     record_item: Slot::Confirmed(RecordItem::Key0ByK),
     ori_form: Slot::Pending,
     compose: Slot::Pending,
@@ -901,10 +922,9 @@ pub enum Trigger {
 /// entries (`spamap.recompute.<NOUN>`). An attribute the confirmed table does
 /// not list is [`Trigger::Unconfirmed`].
 pub fn recompute_row(noun: u32, attr: u32) -> Trigger {
-    let _ = (noun, attr);
     match CONFIRMED.recompute {
         Slot::Pending => Trigger::Unconfirmed,
-        Slot::Confirmed(table) => match table {},
+        Slot::Confirmed(Recompute::ByDchc) => crate::spatial::rules::recompute_by_dchc(noun, attr),
         Slot::Candidate(none) => match none {},
     }
 }
@@ -915,7 +935,7 @@ pub fn member_order_row(noun: u32) -> Trigger {
     let _ = noun;
     match CONFIRMED.recompute {
         Slot::Pending => Trigger::Unconfirmed,
-        Slot::Confirmed(table) => match table {},
+        Slot::Confirmed(Recompute::ByDchc) => Trigger::Triggers,
         Slot::Candidate(none) => match none {},
     }
 }
@@ -932,7 +952,9 @@ pub enum DescendantKind {
 }
 
 /// Whether descendants `depth` levels below such an element (1 = its members)
-/// have their entries recomputed (`spamap.descendants.{move,pos,ori}`).
+/// have their entries recomputed (`spamap.descendants.{move,pos,ori}`). Every
+/// level is, as far as Core3D walks: a walk for Recompute_Set stops below an
+/// element [`crate::spatial::rules::mpbox_walks_below`] refuses.
 ///
 /// Unconfirmed is `false`: Recompute_Set takes only the descendants confirmed
 /// to be recomputed (definitions ④ and ⑤, D8). This is the one place to
@@ -946,7 +968,7 @@ pub fn descendants_included(kind: DescendantKind, depth: u32) -> bool {
     };
     match slot {
         Slot::Pending => false,
-        Slot::Confirmed(rule) => match rule {},
+        Slot::Confirmed(DescendantRecompute::WholeSubtree) => true,
         Slot::Candidate(none) => match none {},
     }
 }
@@ -970,11 +992,29 @@ mod tests {
             assert_eq!(filled, rule(id).status.is_confirmed(), "{}", id.name());
             assert_ne!(RuleSet::confirmed().state(id), SlotState::Candidate, "{}", id.name());
         }
+    }
+
+    #[test]
+    fn the_recompute_rows_and_the_descendant_levels() {
+        use crate::spatial::rules::mpbox_walks_below;
+        let hash = e3d_attlib::db1_hash;
+        let bx = hash("BOX");
+        assert_eq!(recompute_row(bx, hash("XLEN")), Trigger::Triggers);
+        assert_eq!(recompute_row(bx, hash("POS")), Trigger::Triggers);
+        assert_eq!(recompute_row(bx, hash("NAME")), Trigger::DoesNotTrigger);
+        // A UDA is past the system names; EQUI is no Geometric_Noun.
+        assert_eq!(recompute_row(bx, 0x7FFF_FFFF), Trigger::Unconfirmed);
+        assert_eq!(recompute_row(hash("EQUI"), hash("POS")), Trigger::Unconfirmed);
         assert_eq!(recompute_row(0, 0), Trigger::Unconfirmed);
-        assert_eq!(member_order_row(0), Trigger::Unconfirmed);
+        assert_eq!(member_order_row(bx), Trigger::Triggers);
         for kind in [DescendantKind::Move, DescendantKind::Pos, DescendantKind::Ori] {
-            assert!(!descendants_included(kind, 1));
+            assert!((1..=4).all(|depth| descendants_included(kind, depth)));
         }
+        assert!(mpbox_walks_below(hash("SUBE")));
+        // 0 is in no IMAP list.
+        assert!(!mpbox_walks_below(0));
+        assert!(!mpbox_walks_below(hash("BRAN")));
+        assert!(!mpbox_walks_below(hash("HANG")));
     }
 
     #[test]

@@ -186,9 +186,10 @@
     - **Property 7: 覆盖对账**
     - **Validates: Requirements 5.7**
     - _Requirements: 2.4, 5.1, 5.10_
-  - [~] 7.3 取证重算时机
+  - [x] 7.3 取证重算时机
     - 内容：各 Geometric_Noun 的重算表（「自身」各属性与成员次序）；换 owner、改 POS、改 ORI 时各层后代是否重算；删除后的残留（`spamap.delete_residue`）；无条目元素能否删除并提交
     - 须 E3D_Session 实测的部分写探针脚本 `tools/e3d/spamap_probe.ps1`：副本每轮从原件重置，会话 USER 为 `e3dio`
+    - 已做（里程碑 D 的 D1、D2）：`docs/evidence/2026-10-03-spamap-recompute.md`，五条规则坐实；探针 `tools/e3d/spamap_probes/d2/` 35 个
     - 结论写入 `spamap.recompute.<NOUN>` 与 `spamap.descendants.{move,pos,ori}`（D7、D8）
     - _Requirements: 2.4, 5.2, 5.3, 5.4, 5.8, 5.9_
   - [x] 7.4 取证 SPAMAP_Record_Item
@@ -558,9 +559,9 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `spamap.entries_k` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-branch-entries.md` | C2 | `MBXGO` 只由 `MPBOX2`（tube 0：一条 k = 0、自身框）与 `MPBXBR` 调；`MPBXBR` 只走 BRAN 与 HNGT noun，从尾到头给成员记 k = 0 与离开它的管子 k = 1、给 BRAN 记头管 k = 1，管框要目录 P 点与管径 → 分支 / 吊架树为 MissingInput（需求 6.15，Codec_Check 记 waiting）。坐实集 Corpus 判定 11 167 / 11 167、基线 986 / 986，waiting 14 350 / 2 642 |
 | `spamap.flags` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-flags.md` | C2 | `MAPINS` 三个逻辑量按 1 / 2 / 4；`MPBOX` 上溯（DDEP 1、SITE / BLOCK / SSOWLD / HBLWLD 启用，WORL 不启用），不启用全 0；WBOX 时 OBST 1–3，否则 `BOXELE` OBST 1–2，IMAP 5 并入 IMAP 3 成员；box type 1 / 18 / 19 / 23 与分支树不说。坐实集 Corpus 判定 4 783 / 4 783、基线 402 / 402 |
 | `spamap.coverage` | 7.2 | 坐实 | `docs/evidence/2026-10-03-spamap-coverage.md` | C2 | 按元素三态：Core3D `MPBOX` / `MLSADD` 按 noun 的 IMAP（字典字段 847458）1、5 记，7 看 owner 的 IMAP 是否为 2，box type 1（`getBoxType`，SCTN / GENSEC / WLJOIN 除外）须 SPRE 非 0（`GTSTDT` → `MBXSTL` 失败 → `MAPREM`）；BRAN 与 HNGT 四个（`MPBXBR` 未读）、UDET、模板无 SPAMAP 的八个未坐实。Property 7 坐实集 40 556 / 40 556 判定无反例，`waiting` 2 060（BRAN 1 819、HANG 241） |
-| `spamap.recompute.<NOUN>` | 7.3 | | | | B8 线索：ams7999 有几处 BOX / CYLI 条目只在一侧比按现属性算出的多 1.5 mm 或 28–33 mm（如 `24383/78369` minz、`24383/77136` minz），像「改尺寸与位置后条目未重算」；待 7.3 |
-| `spamap.descendants.{move,pos,ori}` | 7.3 | | | | B8 线索：ams7999 EQUI `24383/76459` 下几个 SUBE 的 BOX 条目与按现位姿算出的差 10–273 mm（成对：−1 291 / +2 575、−908 / −2 733 等），像后代未随祖先改动重算；待 7.3 以会话链 / 探针坐实，可作需求 4.17 剔除清单的候选 |
-| `spamap.delete_residue` | 7.3 | | | | |
+| `spamap.recompute.<NOUN>` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 与 noun 无关：Core3D `VDESPT` 对字典 `DCHC` 非 0 的属性入队，core `PostSetAttribute` 不为 `WNOEVT` 属性发事件；`VDESRO` 入队被挪的成员。300 个 Geometric_Noun 模板 722 个属性中 176 个触发（`rules::RECOMPUTING`，`tests/spamap_recompute_real.rs` 逐 noun 打印并与 `attlib.dat` 核对）。E3D_Session 以 e3d-io 写的无条目元素区分触发与否：32 / 32（BOX 10、CYLI 8、CONE / DISH / PYRA 6、成员次序 8）。B8 那几处反例按此本应重算，归 D3 走会话链 |
+| `spamap.descendants.{move,pos,ori}` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 换 owner（`VDESIR`）与 POS / ORI 改动（`VDESPT`，DCHC 3）入队该元素，`MPBOX` 走整棵子树，各层都重算，不在 IMAP 0、BRAN、HNGT 之下继续（`rules::mpbox_walks_below`）。E3D_Session：move 4 / 4、POS 7 / 7、ORI 6 / 6（第 1、2 层，有无条目两种）。另见证据「规格外的发现」：owner 的 NUMB 等其他重算属性同样整树重算，需求 7 第 4 条未收，待定 |
+| `spamap.delete_residue` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 不留残留：删除那一会话中被删元素与其各层后代的条目都已删去（出处 ②，4 / 4；Core3D 删除路径只动队列，删键之处未读）。需求 5 第 9 条：删无条目 BOX、删其 owner 都能 `SAVEWORK`，无错误号 |
 | `spamap.record_item.<NOUN>` | 7.4 | 坐实 | `docs/evidence/2026-10-03-spamap-record-item.md` | C3 | 各 noun 相同：core `sub_5AB91B0` 类型 14 写条目时把 Key0 写进记录 `SPAMAP` 属性第 k 槽，新项整列先填 0x80000001；位置按模板（BOX implicit word 35、存储 2 字）。Corpus 25 517 / 25 517、基线 3 628 / 3 628 带且逐槽相符，46 个 noun 无例外（`tests/spamap_record_item_real.rs`） |
 | `aabb.ori_form` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① core `GTORI1`：R = Rz·Ry·Rx，`SINCOS` 在 0 / ±90 / ±180（`LREQ` 容差 0.0001）给精确值，其余 sin / cos(角 / 57.29577951308232)；候选改为同式 `ori_by_gtori1`，Built_In_AABB 仍 1 572 / 1 590；18 个反例待 D（7.3、需求 4.17）剔除 |
 | `aabb.compose` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① Core3D `WSTRAM`：从元素往上 `CONCAT(T_级, 已累积)` 到 WORL；候选改为 `every_pose_from_the_element_up`；同上待 D |

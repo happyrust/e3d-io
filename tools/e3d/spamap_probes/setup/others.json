@@ -1,0 +1,11 @@
+{
+  "comment": "e3d-io SPAMAP probe setup: a CONE, a DISH and a PYRA under the first ZONE",
+  "ops": [
+    {"op": "insert", "owner": "/1RX03-MSUP", "noun": "CONE",
+     "attrs": {"POS": "1000 2000 3000", "DTOP": "100", "DBOT": "200", "HEIG": "300"}},
+    {"op": "insert", "owner": "/1RX03-MSUP", "noun": "DISH",
+     "attrs": {"POS": "2000 2000 3000", "DIAM": "400", "HEIG": "100", "RADI": "0"}},
+    {"op": "insert", "owner": "/1RX03-MSUP", "noun": "PYRA",
+     "attrs": {"POS": "3000 2000 3000", "XBOT": "300", "YBOT": "300", "XTOP": "100", "YTOP": "100", "HEIG": "200"}}
+  ]
+}
