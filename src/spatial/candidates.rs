@@ -32,11 +32,11 @@ pub fn pick() -> CandidatePick {
         entries_k: Some(one_entry),
         flags: Some(flags_from_obst),
         coverage: Some(coverage_seen_in_corpus),
-        ori_form: Some(ori_degrees_x_then_y_then_z),
-        compose: Some(every_pose_in_its_owners_frame),
+        ori_form: Some(ori_by_gtori1),
+        compose: Some(every_pose_from_the_element_up),
         box_aabb: Some(box_about_its_centre),
-        cyli_aabb: Some(cylinder_about_its_centre),
-        degenerate: Some(zero_as_half_a_millimetre),
+        cyli_aabb: Some(cylinder_by_end_circles),
+        degenerate: Some(super::rules::degenerate_below_half),
         arithmetic: Some(double_precision),
     }
 }
@@ -204,6 +204,37 @@ pub fn ori_degrees_y_then_x_then_z(ori: &DescriptorValue) -> Option<[[f64; 3]; 3
     Some(multiply(&about_z(z), &multiply(&about_x(x), &about_y(y))))
 }
 
+/// Core's `mathlib/GTORI1` (`docs/evidence/2026-10-03-spamap-aabb.md`): the
+/// same R = Rz · Ry · Rx, each turn's sine and cosine from `mathlib/SINCOS`,
+/// which gives 0, ±90 and ±180 degrees exact values and divides any other
+/// angle by 57.29577951308232.
+pub fn ori_by_gtori1(ori: &DescriptorValue) -> Option<[[f64; 3]; 3]> {
+    let [x, y, z] = three_angles(ori)?;
+    let (sx, cx) = sincos(x);
+    let (sy, cy) = sincos(y);
+    let (sz, cz) = sincos(z);
+    let about_x = [[1.0, 0.0, 0.0], [0.0, cx, -sx], [0.0, sx, cx]];
+    let about_y = [[cy, 0.0, sy], [0.0, 1.0, 0.0], [-sy, 0.0, cy]];
+    let about_z = [[cz, -sz, 0.0], [sz, cz, 0.0], [0.0, 0.0, 1.0]];
+    Some(multiply(&about_z, &multiply(&about_y, &about_x)))
+}
+
+/// `mathlib/SINCOS`: `(sin, cos)` of an angle in degrees, exact where
+/// `LREQ` (tolerance 0.0001) finds it 0, ±90 or ±180.
+pub fn sincos(degrees: f64) -> (f64, f64) {
+    let near = |a: f64, b: f64| (a - b).abs() < 0.0001f64.max(0.00001 * (a.abs() + b.abs()));
+    if near(degrees, 0.0) {
+        (0.0, 1.0)
+    } else if near(degrees.abs(), 90.0) {
+        (if degrees < 0.0 { -1.0 } else { 1.0 }, 0.0)
+    } else if near(degrees.abs(), 180.0) {
+        (0.0, -1.0)
+    } else {
+        let radians = degrees / 57.29577951308232;
+        (radians.sin(), radians.cos())
+    }
+}
+
 fn three_angles(ori: &DescriptorValue) -> Option<[f64; 3]> {
     match ori {
         DescriptorValue::RealArray(degrees) if degrees.len() == 3 => Some([degrees[0], degrees[1], degrees[2]]),
@@ -237,6 +268,22 @@ fn about_z(degrees: f64) -> [[f64; 3]; 3] {
 pub fn every_pose_in_its_owners_frame(chain: &[Link]) -> Option<WorldFrame> {
     Some(chain.iter().rev().fold(WorldFrame::WORLD, |frame, link| {
         frame.then(link.pos_mm.unwrap_or([0.0; 3]), link.rotation.unwrap_or(IDENTITY))
+    }))
+}
+
+/// Core3D's `desdblib/WSTRAM`: from the element up to the WORL, each level's
+/// pose put in front of what is gathered so far, `T_owner ∘ (… ∘ T_element)`,
+/// with core's `mathlib/CONCAT` arithmetic. Equal to
+/// [`every_pose_in_its_owners_frame`] but for the order of rounding.
+pub fn every_pose_from_the_element_up(chain: &[Link]) -> Option<WorldFrame> {
+    Some(chain.iter().fold(WorldFrame::WORLD, |gathered, link| {
+        let (rotation, origin) = (link.rotation.unwrap_or(IDENTITY), link.pos_mm.unwrap_or([0.0; 3]));
+        let mut frame = WorldFrame { rotation: multiply(&rotation, &gathered.rotation), origin_mm: [0.0; 3] };
+        for (axis, row) in rotation.iter().enumerate() {
+            let turned = row[0] * gathered.origin_mm[0] + row[1] * gathered.origin_mm[1] + row[2] * gathered.origin_mm[2];
+            frame.origin_mm[axis] = turned + origin[axis];
+        }
+        frame
     }))
 }
 
@@ -274,6 +321,30 @@ pub fn cylinder_about_its_centre(frame: &WorldFrame, diam_mm: f64, heig_mm: f64)
         let reach = lean.abs() * half_height + radius * (1.0 - lean * lean).max(0.0).sqrt();
         aabb[axis] = frame.origin_mm[axis] - reach;
         aabb[axis + 3] = frame.origin_mm[axis] + reach;
+    }
+    aabb
+}
+
+/// Core's `boxlib/MBXSNO` for a CYLI: each end disc's centre placed by
+/// `CONCAT` at `±h/2` along the frame's z, and bounded by `MBXCIR` at
+/// `r·√(1 − z_i²)` per world axis, the second disc joined to the first.
+pub fn cylinder_by_end_circles(frame: &WorldFrame, diam_mm: f64, heig_mm: f64) -> [f64; 6] {
+    let (radius, half_height) = (diam_mm * 0.5, heig_mm * 0.5);
+    let mut aabb = [0.0; 6];
+    for (end, along) in [half_height, -half_height].into_iter().enumerate() {
+        for axis in 0..3 {
+            let lean = frame.rotation[axis][2];
+            let centre = frame.rotation[axis][0] * 0.0 + frame.rotation[axis][1] * 0.0 + lean * along + frame.origin_mm[axis];
+            let square = 1.0 - lean * lean;
+            let reach = if square >= 0.0 { radius * square.sqrt() } else { 0.0 };
+            let (low, high) = (centre - reach, centre + reach);
+            if end == 0 {
+                (aabb[axis], aabb[axis + 3]) = (low, high);
+            } else {
+                aabb[axis] = aabb[axis].min(low);
+                aabb[axis + 3] = aabb[axis + 3].max(high);
+            }
+        }
     }
     aabb
 }

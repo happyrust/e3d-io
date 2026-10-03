@@ -561,12 +561,12 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `spamap.descendants.{move,pos,ori}` | 7.3 | | | | B8 线索：ams7999 EQUI `24383/76459` 下几个 SUBE 的 BOX 条目与按现位姿算出的差 10–273 mm（成对：−1 291 / +2 575、−908 / −2 733 等），像后代未随祖先改动重算；待 7.3 以会话链 / 探针坐实，可作需求 4.17 剔除清单的候选 |
 | `spamap.delete_residue` | 7.3 | | | | |
 | `spamap.record_item.<NOUN>` | 7.4 | 坐实 | `docs/evidence/2026-10-03-spamap-record-item.md` | C3 | 各 noun 相同：core `sub_5AB91B0` 类型 14 写条目时把 Key0 写进记录 `SPAMAP` 属性第 k 槽，新项整列先填 0x80000001；位置按模板（BOX implicit word 35、存储 2 字）。Corpus 25 517 / 25 517、基线 3 628 / 3 628 带且逐槽相符，46 个 noun 无例外（`tests/spamap_record_item_real.rs`） |
-| `aabb.ori_form` | 7.5 | 未坐实 | | | 候选「三个角度（度），R = Rz·Ry·Rx」：Built_In_AABB 1 572 / 1 590；备选 Rz·Rx·Ry 在 ams7999 降到 1 120、基线降到 78 / 79（§6 B8） |
-| `aabb.compose` | 7.5 | 未坐实 | | | 候选「每级位姿都在其 owner 系中复合」：同上 1 572 / 1 590；原生 BOX 的位姿全在 EQUI 上 |
-| `aabb.box` | 7.5 | 未坐实 | | | 候选「以原点为中心的精确外包」：BOX 370 / 384（ams8000 45 / 45、ams7999 261 / 275、TES023 64 / 64） |
-| `aabb.cyli` | 7.5 | 未坐实 | | | 候选「以原点为中心、轴沿自身 z 的精确外包」：CYLI 1 202 / 1 206；备选「自身外包盒转到世界」ams7999 降到 718；两个绕 Z −35° 的 CYLI（`24383/71552`、`71555`）x 向两侧各宽 2.1 mm，原因未明 |
-| `aabb.degenerate` | 7.5 | 未坐实 | | | 候选「尺寸 0 量作 0.5 mm、负取绝对值」：TES023 两个 DIAM 0 / HEIG 0 的 CYLI 逐字；备选「取绝对值」199 / 201；分不清「尺寸 0.5」与「框最小 0.5」 |
-| `aabb.arithmetic` | 7.5 | 未坐实 | | | 候选「全程 f64」：1 572 / 1 590，18 个反例无一差 ±1，暂无单精度迹象（§6 B8） |
+| `aabb.ori_form` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① core `GTORI1`：R = Rz·Ry·Rx，`SINCOS` 在 0 / ±90 / ±180（`LREQ` 容差 0.0001）给精确值，其余 sin / cos(角 / 57.29577951308232)；候选改为同式 `ori_by_gtori1`，Built_In_AABB 仍 1 572 / 1 590；18 个反例待 D（7.3、需求 4.17）剔除 |
+| `aabb.compose` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① Core3D `WSTRAM`：从元素往上 `CONCAT(T_级, 已累积)` 到 WORL；候选改为 `every_pose_from_the_element_up`；同上待 D |
+| `aabb.box` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① core `MBXBOX`：中心 ± Σ\|R·半长\|（= 候选）；BOX 370 / 384，反例待 D |
+| `aabb.cyli` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① core `MBXSNO` → 两端圆 `MBXCIR` r·√(1 − z_i²) 求并；候选改为 `cylinder_by_end_circles`；CYLI 1 202 / 1 206，`24383/71552`、`71555` 的 2.1 mm 仍在反例里，待 D |
+| `aabb.degenerate` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | C4 | ① Core3D `BOXELE`：HEIG / DIAM、XLEN / YLEN / ZLEN 小于 0.5 一律取 0.5（含负、0）；`aabb.rs` 改为对 < 0.5 的尺寸查此规则；TES023 两个零尺寸 CYLI 2 / 2；Corpus 分不出与旧候选，只以 ① 坐实 |
+| `aabb.arithmetic` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① 上列例程全 double，未见单精度；18 个反例无一差 ±1；待 D |
 | `alloc.counter_semantics` | 11.1 | | | | |
 | `alloc.index_order` | 11.1 | | | | |
 | `bucket.collision` | 13.1 | | | | |

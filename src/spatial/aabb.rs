@@ -6,7 +6,7 @@
 //! As in the codec, every step that depends on E3D_Core is a rule of
 //! [`crate::core_rules`]: how ORI is stored (`aabb.ori_form`), how poses
 //! compose and which owners take part (`aabb.compose`), how each noun's box
-//! follows from its sizes (`aabb.box`, `aabb.cyli`), sizes of zero or below
+//! follows from its sizes (`aabb.box`, `aabb.cyli`), sizes below 0.5 mm
 //! (`aabb.degenerate`, consulted only when a size is), and the precision
 //! (`aabb.arithmetic`). A pending rule is noted and the walk goes on; then no
 //! box comes out.
@@ -242,9 +242,9 @@ impl<'r> BuiltInAabb<'r> {
             Solid::Box(size) => size.to_vec(),
             Solid::Cylinder { diam, heig } => vec![diam, heig],
         };
-        if sizes.iter().any(|&size| size <= 0.0) {
+        if sizes.iter().any(|&size| size < DEGENERATE_BELOW_MM) {
             if let Some(degenerate) = walk.take(RuleId::AabbDegenerate, &rules.degenerate) {
-                for size in sizes.iter_mut().filter(|size| **size <= 0.0) {
+                for size in sizes.iter_mut().filter(|size| **size < DEGENERATE_BELOW_MM) {
                     match degenerate(*size) {
                         Some(measured) => *size = measured,
                         None => walk.need(RuleId::AabbDegenerate),
@@ -267,6 +267,10 @@ impl<'r> BuiltInAabb<'r> {
         AabbOutcome::Aabb(WorldAabb::from_mm(aabb_mm.map(held)).expect("finite poses and sizes bound a box"))
     }
 }
+
+/// The size below which Core3D's `dbboxlib/BOXELE` measures a BOX or CYLI by
+/// `aabb.degenerate` rather than as stored.
+const DEGENERATE_BELOW_MM: f64 = 0.5;
 
 /// A length attribute in mm: present, a real, finite.
 fn length(state: &dyn SpatialState, refno: RefNo, name: &str) -> Result<f64, UndecodableAttr> {
@@ -437,18 +441,19 @@ mod tests {
     }
 
     #[test]
-    fn only_a_size_of_zero_or_below_consults_the_degenerate_rule() {
+    fn only_a_size_below_half_a_millimetre_consults_the_degenerate_rule() {
         let flat_refno = RefNo::new(24_384, 30_000);
         let flat = a_box(owners([0.0; 3], [0.0; 3]), flat_refno, [0.0; 3], [100.0, -200.0, 0.0]);
         let pick = CandidatePick { degenerate: None, ..candidates::pick() };
         assert_eq!(
-            compute(&RuleSet::candidates(&pick), &flat, flat_refno).unwrap(),
+            compute(&RuleSet::candidates_alone(&pick), &flat, flat_refno).unwrap(),
             AabbOutcome::NeedsUnconfirmed(vec![RuleId::AabbDegenerate])
         );
-        assert!(matches!(compute(&RuleSet::candidates(&pick), &native_box(), NATIVE_BOX).unwrap(), AabbOutcome::Aabb(_)));
+        assert!(matches!(compute(&RuleSet::candidates_alone(&pick), &native_box(), NATIVE_BOX).unwrap(), AabbOutcome::Aabb(_)));
         assert_eq!(
             compute(&RuleSet::candidates(&candidates::pick()), &flat, flat_refno).unwrap(),
-            AabbOutcome::Aabb(WorldAabb::new([-50.0, -100.0, -0.25], [50.0, 100.0, 0.25]).unwrap())
+            AabbOutcome::Aabb(WorldAabb::new([-50.0, -0.25, -0.25], [50.0, 0.25, 0.25]).unwrap()),
+            "BOXELE measures −200 and 0 alike as 0.5"
         );
     }
 

@@ -264,8 +264,8 @@ pub const RULES: &[Rule] = &[
     Rule {
         id: RuleId::AabbDegenerate,
         name: "aabb.degenerate",
-        governs: "a size of zero or below",
-        status: unconfirmed("a BOX or CYLI with a zero or negative size", None),
+        governs: "a size below 0.5 mm",
+        status: confirmed("docs/evidence/2026-10-03-spamap-aabb.md#aabb.degenerate"),
     },
     Rule {
         id: RuleId::AabbArithmetic,
@@ -361,7 +361,6 @@ called_as_candidates! {
     Compose => candidate::Compose;
     BoxAabb => candidate::BoxAabb;
     CyliAabb => candidate::CyliAabb;
-    Degenerate => candidate::Degenerate;
     Arithmetic => candidate::Arithmetic;
 }
 
@@ -430,8 +429,8 @@ pub mod candidate {
     /// `aabb.cyli`: a CYLI's world box in mm from its frame, DIAM and HEIG.
     pub type CyliAabb = fn(frame: &WorldFrame, diam_mm: f64, heig_mm: f64) -> [f64; 6];
 
-    /// `aabb.degenerate`: the size measured for a stored size of zero or
-    /// below, or `None` when the candidate does not say.
+    /// `aabb.degenerate`: the size measured for a stored size below 0.5 mm,
+    /// or `None` when the candidate does not say.
     pub type Degenerate = fn(size_mm: f64) -> Option<f64>;
 
     /// `aabb.arithmetic`: how a value of the computation is held — as it is
@@ -468,6 +467,21 @@ pub enum TableHeaderRest {
     /// 7, and 1; word 6 the free words, page words − 7 on a new root
     /// (core.dll `sub_5AFF6D0`).
     KeyWidthValueWidthOne,
+}
+
+/// `aabb.degenerate`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Degenerate {
+    /// [`crate::spatial::rules::degenerate_below_half`].
+    BelowHalf,
+}
+
+impl Implementation<candidate::Degenerate> for Degenerate {
+    fn function(&self) -> candidate::Degenerate {
+        match self {
+            Degenerate::BelowHalf => crate::spatial::rules::degenerate_below_half,
+        }
+    }
 }
 
 /// `spamap.record_item.<NOUN>`.
@@ -630,8 +644,6 @@ implementations! {
     BoxAabb;
     /// `aabb.cyli`.
     CyliAabb;
-    /// `aabb.degenerate`.
-    Degenerate;
     /// `aabb.arithmetic`.
     Arithmetic;
     /// `alloc.counter_semantics`.
@@ -699,7 +711,7 @@ const CONFIRMED: RuleSet = RuleSet {
     compose: Slot::Pending,
     box_aabb: Slot::Pending,
     cyli_aabb: Slot::Pending,
-    degenerate: Slot::Pending,
+    degenerate: Slot::Confirmed(Degenerate::BelowHalf),
     arithmetic: Slot::Pending,
     counter_semantics: Slot::Pending,
     index_order: Slot::Pending,

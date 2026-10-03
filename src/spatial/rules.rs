@@ -238,6 +238,14 @@ pub const FLAGS_BY_OBST_ALONE: &[&str] = &[
     "LOAP", "DATU", "POINTR", "SELJ", "SEVE", "PNOD", "SNOD", "CABLE", "POINSP", "CURVE", "PLDATU",
 ];
 
+// --- aabb.degenerate ---------------------------------------------------------------
+
+/// Core3D's `dbboxlib/BOXELE` before it boxes a BOX or CYLI: a size below
+/// 0.5 mm, zero and negative included, measures as 0.5 mm.
+pub fn degenerate_below_half(size_mm: f64) -> Option<f64> {
+    Some(if size_mm < 0.5 { 0.5 } else { size_mm })
+}
+
 // --- spamap.coverage ---------------------------------------------------------------
 
 /// Whether Core3D gives the element entries: `Some(true)` when

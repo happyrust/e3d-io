@@ -132,3 +132,7 @@ Core3D_IDB：`D:\ida_scratch\plant3\Core3D.dll.i64`（桥上常驻，C0 结束�
 ### 中途检查点（C3 之后，2026-10-03）
 
 Build_Checks（`CARGO_TARGET_DIR=target-phase3`，`cargo test --release --no-fail-fast -- --show-output`；日志与解析只在本机 `.agents/tasks/write-path-phase-3-milestone-c/`）：113 个测试二进制 + Doc-tests 1 个，690 / 0 / 30（里程碑 B 末 110 个、669 / 0 / 30；新增 `spamap_page_headers_real`、`spamap_coverage_real`、`spamap_record_item_real`）；报 skip 的仍是基线那 7 个；clippy 63、`cargo doc` 25 同基线。C 余下 C4（7.5）、C5（按 Q3 留 D）、C6。
+
+### C4（7.5，2026-10-03）
+
+`docs/evidence/2026-10-03-spamap-aabb.md`（`check_evidence.ps1` PASS，两个 IDB 首末 SHA-256 不变，12 个地址 `check_xrefs` PASS）。读到：Core3D `WSTRAM` 从元素往上 `CONCAT(T_级, 已累积)` 到 WORL；`GETRAM` → `GETORI` → core `GTORI1`：R = Rz·Ry·Rx，core `SINCOS` 在 0 / ±90 / ±180（`LREQ` 容差 0.0001）给精确值、其余除 57.29577951308232；`BOXELE` 尺寸 < 0.5 取 0.5 后交 core `MBXBOX`（中心 ± Σ\|R·半长\|）或 `MBXSNO` → 两端圆 `MBXCIR`（r·√(1 − z_i²) 求并）；全程 double。候选换成同式（`ori_by_gtori1`、`every_pose_from_the_element_up`、`cylinder_by_end_circles`），Built_In_AABB 仍 1 572 / 1 590、18 个反例不变（1.5–273 mm，非算式或取整）。**`aabb.degenerate` 坐实**（`rules::degenerate_below_half`，`aabb.rs` 阈值改为 0.5；TES023 2 / 2，Corpus 分不出新旧，只以 ①）；其余五条记 ① 与反例清单（evidence 表），按「坐实」定义待 D 的 7.3 按需求 4.17 剔除后再判。tasks 7.5 保持进行中（待 D）。clippy 63、`cargo doc` 25 同基线。
