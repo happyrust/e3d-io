@@ -105,3 +105,16 @@ C 坐实了编码、覆盖、记录项与 `aabb.degenerate`。剩下的规则都
 - 对 D3 的影响：E3D 正常改 POS / ORI / 尺寸都会重算，B8 的「祖先改了、后代没重算」只能出自不经 `DESDRA_SCPlugs` 的改动（非设计模块、库级操作或旧版本）；按 Q3，指不出这类改动的反例不能剔除。
 
 `sub_102FE99B`（BRAN / HNGT 增量重记哪些成员）未读：分支 / 吊架树在 C2 已判 MissingInput，写侧按 D7 回退，不影响 D2。xrefs：`0x10220F82` 11、`0x101F33A9` 1、`0x10220D21` 3、`0x10FC1780` 17（Core3D_IDB）、`0x591E5B0` 2、`0x58DE220` 178（Core_IDB），6 / 6 PASS。
+
+### D1（2026-10-03 20:1x，探针工具；产物在门用副本 `D:\e3dio-gate\probe\<探针名>\`）
+
+`tools/e3d/spamap_probe.ps1 <probe.pml>`：一个探针文件 = 头部指令（`-- watch:` 要比对的 refno、`-- setup:` 先以 e3d-io 会话执行的 `e3d-write apply` 指令文件，其新 refno 填 `{{SETUP0}}`…、`-- expect:` 期望判定、`-- comment:` SAVEWORK 注释）+ E3D 宏体。每次：从原件重置副本的 `ams8000_0001`（原件只读，记 SHA-256）→ 可选 setup 会话（USER e3dio）→ 读 SAVEWORK 前最新会话的条目 → 宏体包成一段 ALPHA LOG、末尾 `SAVEWORK` + `Q SESSION`，经 gen-model `l3_suite --check-driver`（有状态：`--target-db-file`）跑 des.exe TTY → 读 SAVEWORK 那一会话的条目，逐个 watch 判 rewritten / same / appeared / vanished / none，并做**整表比对**（列出该会话改写、新增、消失条目的全部 refno，不限 watch）。结果写 `result.json`。E3D 自己的 SAVEWORK 会话 USER 是 Windows 账户（本机 `dpc`），不是 e3dio，元素照旧算 E3D_Authored_Element。
+
+**本机 E3D 不再响应 wrapper 的 QUIT**：L3-DONE 写出后 des.exe 一直空转，launcher 要等满 1200 s 超时（19:26 那次即 exit 124）；只读宏（`Q SESSION`）同样如此，而 9-22 至 9-28 门用副本上十几次有状态运行都是 L3-DONE 后约 6 s 退出——是本机环境变化，与探针无关。探针因此改为后台起 driver、轮询 `gen-model\output\l3-suite\driver-<pid>-*\driver-done.log`，L3-DONE 后宽限 `-QuitGraceSeconds`（默认 20）仍未退就停该目录 `driver.pid` 所指的 des.exe（核进程名）及其子进程；driver 以标记而非退出码定论，记为 "completed, then exited dirty" / outcome `Completed`（与 shadow 安装退出时崩溃同一路径）。代价：不再有退出时的 "Saving Meta Data." 会话，比对用的是 SAVEWORK 那一会话，不受影响。脚本异常退出时 finally 停掉本轮起的 E3D 与 driver。
+
+**自检** `-SelfCheck`（逐个跑 `spamap_probes/selfcheck_*.pml`，共约 55 s），两条已知行都复现，原件 SHA `3CAB5D7D…E023`、最新会话 646：
+
+| 探针 | E3D 的改动 | 结果 |
+|---|---|---|
+| `selfcheck_box_xlen` | 原生 BOX `24384/24777` XLEN 310 → 333，SAVEWORK 会话 647 | rewritten（需求 5 第 2 条）：`[299969986, …, −30014, 76966, 11250, −26411, 83113, 16750, 2]` → `[299969872, …, −30128, 76956, 11250, −26297, 83123, 16750, 2]`；绕 Z 转 5° 的盒子 XLEN +23 mm → x 宽 3 603 → 3 831、y 宽 6 147 → 6 167（0.1 mm），与 23·cos 5°、23·sin 5° 相符；整表 3 628 个 refno 只改写这 1 个 |
+| `selfcheck_e3dio_box_xlen` | setup `write_gate_ops/10_box.json`（e3d-io 会话 647 插 BOX `24384/26484`）后 XLEN 300 → 301，SAVEWORK 会话 648 | appeared：`[300008495, 24384, 26484, 0, 8495, 18000, 27500, 11505, 22000, 32500, 2]`，与 `docs/evidence/2026-09-22-e3d-spamap-consequences.md` §0 第 5 条逐字相同；整表 3 628 → 3 629，只新增这 1 个。这正是 D4（4.20 示例）要的那一会话 |
