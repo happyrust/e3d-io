@@ -251,13 +251,20 @@ impl<'r> SpamapCodec<'r> {
             (Some(axis), Some(extents)) => Some(extents[axis as usize]),
             _ => None,
         };
-        let zero_bucket = match (axis, extent) {
-            (Some(axis), Some(0)) => walk.take(RuleId::SpamapZeroExtent, &rules.zero_extent).map(|rule| rule(axis)),
+        // `Some` when the extent is known to be 0: the zero-extent rule's
+        // answer, or `None` while that rule is pending.
+        let flat = match (axis, extent) {
+            (Some(axis), Some(0)) => {
+                Some(walk.take(RuleId::SpamapZeroExtent, &rules.zero_extent).map(|rule| rule(axis)))
+            }
             _ => None,
         };
         let bucket_rule = walk.take(RuleId::SpamapBucket, &rules.bucket);
-        let bucket = match (zero_bucket, bucket_rule, extent) {
-            (Some(Some(bucket)), _, _) => Some(bucket),
+        let bucket = match (flat, bucket_rule, extent) {
+            (Some(Some(Some(bucket))), _, _) => Some(bucket),
+            // A pending zero-extent rule may name any bucket, and with it
+            // any range for Key0.
+            (Some(None), _, _) => None,
             (_, Some(bucket_rule), Some(extent)) => match bucket_rule(extent) {
                 Some(bucket) => Some(bucket),
                 None => {
@@ -395,6 +402,20 @@ mod tests {
     fn a_flat_short_axis_consults_the_zero_extent_rule() {
         let (state, _) = box_26484();
         let flat = WorldAabb::new([849.5, 1800.0, 2750.0], [849.5, 2200.0, 3250.0]).unwrap();
+        let pick = CandidatePick { zero_extent: None, ..candidates::pick() };
+        let rules = RuleSet::candidates(&pick);
+        assert_eq!(
+            SpamapCodec::new(&rules).encode(BOX_26484, &state, &flat).unwrap(),
+            Encoded::NeedsUnconfirmed(vec![RuleId::SpamapZeroExtent])
+        );
+    }
+
+    /// Flat on x at 20 km west: bucket 1 would put Key0 below zero, but which
+    /// bucket a flat box takes is the pending rule's to say.
+    #[test]
+    fn a_pending_zero_extent_rule_leaves_a_flat_boxs_key0_unknown() {
+        let (state, _) = box_26484();
+        let flat = WorldAabb::new([-20_000_000.0, 1800.0, 2750.0], [-20_000_000.0, 2200.0, 3250.0]).unwrap();
         let pick = CandidatePick { zero_extent: None, ..candidates::pick() };
         let rules = RuleSet::candidates(&pick);
         assert_eq!(

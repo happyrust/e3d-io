@@ -147,7 +147,7 @@
     - Key0（只用条目自身 6 个值字）、条目数与 k、Spatial_Flags 三项分开报一致数 / 总数，各列前 100 个反例，每个反例附所依的未坐实规则名
     - 参数 `--input …`、`--rules confirmed|candidates`、`--exclude <文件>`（受版本管理的剔除清单，每条附会话链证据出处），另支持 `--refno`（供 Q13g）；E3D_Authored_Element 按元素最新记录所在会话 USER ≠ `e3dio` 判定
     - _Requirements: 4.10, 4.11, 4.15, 4.16, 4.17_
-  - [ ]* 5.4 写 Codec proptest：`tests/spamap_codec_props.rs`
+  - [x]* 5.4 写 Codec proptest：`tests/spamap_codec_props.rs`
     - 随机 `CandidatePick` 决定哪些规则有实现；坐标含各轴边界附近与超出可表示范围、最短轴并列、最短轴 extent 为 0
     - **Property 6: Codec 结果三分**
     - **Validates: Requirements 4.12, 4.19**

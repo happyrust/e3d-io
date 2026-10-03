@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c9b9beb8dffe8d369dbdb7189bbb70967600d7bd35ed25a30bea8a1a987491e3 # shrinks to pick = Pick { rounding: Some(round_to_nearest), word_sign: None, short_axis: Some(last_shortest_axis), zero_extent: None, bucket: Some(bucket_by_extent), key0: Some(key0_in_signed_word), entries_k: Some(second_entry), flags: None }, element = Element { refno: RefNo(24384/-1270949880, dbno=8000), noun: "BOX", obst: None }, aabb = WorldAabb { min_mm: [0.0, 0.0, 204748364.7], max_mm: [0.0, 0.0, 204748364.7] }
