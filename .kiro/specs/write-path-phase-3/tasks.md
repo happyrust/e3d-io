@@ -548,25 +548,25 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 |---|---|---|---|---|---|
 | `spamap.table_shape` | 7.1 | | | | |
 | `spamap.table_header_rest` | 7.1 | | | | |
-| `spamap.word_sign` | 7.1 | | | | |
-| `spamap.rounding` | 7.1 | | | | |
-| `spamap.key0` | 7.1 | | | | |
-| `spamap.short_axis` | 7.1 | | | | |
-| `spamap.zero_extent` | 7.1 | | | | |
-| `spamap.bucket` | 7.1 | | | | |
-| `spamap.entries_k` | 7.1 | | | | |
-| `spamap.flags` | 7.1 | | | | |
-| `spamap.coverage` | 7.2 | | | | |
-| `spamap.recompute.<NOUN>` | 7.3 | | | | |
-| `spamap.descendants.{move,pos,ori}` | 7.3 | | | | |
+| `spamap.word_sign` | 7.1 | 未坐实 | | | 候选「有符号 32 位字」：Key0 28 269 / 28 269（`spamap-check --rules candidates`，里程碑 B 计划 §6 B3、B5） |
+| `spamap.rounding` | 7.1 | 未坐实 | | | 候选「就近取整」：Built_In_AABB 1 572 / 1 590 逐字，反例无一差 ±1（§6 B8）；备选「外扩取整」与原生 BOX 的 y 不符 |
+| `spamap.key0` | 7.1 | 未坐实 | | | 候选「N × 10^8 + 有符号 min，落非负有符号字」：Key0 28 269 / 28 269（§6 B3、B5） |
+| `spamap.short_axis` | 7.1 | 未坐实 | | | 候选「按 0.1 mm 取最短，并列取最后一根」：Key0 28 269 / 28 269，并列 6 236 条全符；并列取轴按需求 4.18 只能以 Core_IDB 坐实 |
+| `spamap.zero_extent` | 7.1 | 未坐实 | | | 候选「交桶规则（落桶 1）」：ams251142 138 条零尺寸、ams7999 零尺寸点全符（Key0 项内） |
+| `spamap.bucket` | 7.1 | 未坐实 | | | 候选「600 / 2 000 / 6 000 / 20 000，界值归上一桶」：Key0 28 269 / 28 269；第四界只知在 (19 800, 21 200] |
+| `spamap.entries_k` | 7.1 | 未坐实 | | | 候选「单条 k = 0」：条目数与 k 3 507 / 3 628（基线 640）、18 404 / 21 257（ams7999）、327 / 327、305 / 305；差的恰是带 k = 1 条目的 121 与 2 853 个元素（§6 B3、B5） |
+| `spamap.flags` | 7.1 | 未坐实 | | | 候选「BOX / CYLI 的 flags = OBST」：1 590 / 1 590；其余 noun 不覆盖，记 `waiting`（§6 B3、B5） |
+| `spamap.coverage` | 7.2 | 未坐实 | | | 候选按普查：43 个 noun 有、51 个无，BRAN / PJOI / SCOJ 不说；Property 7 未写（7.2） |
+| `spamap.recompute.<NOUN>` | 7.3 | | | | B8 线索：ams7999 有几处 BOX / CYLI 条目只在一侧比按现属性算出的多 1.5 mm 或 28–33 mm（如 `24383/78369` minz、`24383/77136` minz），像「改尺寸与位置后条目未重算」；待 7.3 |
+| `spamap.descendants.{move,pos,ori}` | 7.3 | | | | B8 线索：ams7999 EQUI `24383/76459` 下几个 SUBE 的 BOX 条目与按现位姿算出的差 10–273 mm（成对：−1 291 / +2 575、−908 / −2 733 等），像后代未随祖先改动重算；待 7.3 以会话链 / 探针坐实，可作需求 4.17 剔除清单的候选 |
 | `spamap.delete_residue` | 7.3 | | | | |
-| `spamap.record_item.<NOUN>` | 7.4 | | | | |
-| `aabb.ori_form` | 7.5 | | | | |
-| `aabb.compose` | 7.5 | | | | |
-| `aabb.box` | 7.5 | | | | |
-| `aabb.cyli` | 7.5 | | | | |
-| `aabb.degenerate` | 7.5 | | | | |
-| `aabb.arithmetic` | 7.5 | | | | |
+| `spamap.record_item.<NOUN>` | 7.4 | | | | 线索：原生 BOX `24384/24777` 的记录有 `SPAMAP` 属性（类型 14），值 `[299969986]` 即其条目 Key0；ams7999 的 CYLI `24383/71552` 同样带（799891269）（§6 B6、B8） |
+| `aabb.ori_form` | 7.5 | 未坐实 | | | 候选「三个角度（度），R = Rz·Ry·Rx」：Built_In_AABB 1 572 / 1 590；备选 Rz·Rx·Ry 在 ams7999 降到 1 120、基线降到 78 / 79（§6 B8） |
+| `aabb.compose` | 7.5 | 未坐实 | | | 候选「每级位姿都在其 owner 系中复合」：同上 1 572 / 1 590；原生 BOX 的位姿全在 EQUI 上 |
+| `aabb.box` | 7.5 | 未坐实 | | | 候选「以原点为中心的精确外包」：BOX 370 / 384（ams8000 45 / 45、ams7999 261 / 275、TES023 64 / 64） |
+| `aabb.cyli` | 7.5 | 未坐实 | | | 候选「以原点为中心、轴沿自身 z 的精确外包」：CYLI 1 202 / 1 206；备选「自身外包盒转到世界」ams7999 降到 718；两个绕 Z −35° 的 CYLI（`24383/71552`、`71555`）x 向两侧各宽 2.1 mm，原因未明 |
+| `aabb.degenerate` | 7.5 | 未坐实 | | | 候选「尺寸 0 量作 0.5 mm、负取绝对值」：TES023 两个 DIAM 0 / HEIG 0 的 CYLI 逐字；备选「取绝对值」199 / 201；分不清「尺寸 0.5」与「框最小 0.5」 |
+| `aabb.arithmetic` | 7.5 | 未坐实 | | | 候选「全程 f64」：1 572 / 1 590，18 个反例无一差 ±1，暂无单精度迹象（§6 B8） |
 | `alloc.counter_semantics` | 11.1 | | | | |
 | `alloc.index_order` | 11.1 | | | | |
 | `bucket.collision` | 13.1 | | | | |
