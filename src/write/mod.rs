@@ -71,6 +71,8 @@ pub use attr::{set_attribute, AttributeWriteError};
 pub use claim_cow::ClaimCowError;
 pub use index_cow::IndexCowError;
 pub use keyed_cow::KeyedCowError;
+#[doc(hidden)]
+pub use keyed_cow::{build_table, rewrite_table, KeyedKey, KeyedRewrite, TableEdit, TableEditKind};
 use index_cow::{EditKind, LeafEdit};
 use keyed_cow::KeyedEditKind;
 pub use merge::{

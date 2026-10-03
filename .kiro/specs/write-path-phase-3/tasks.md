@@ -217,11 +217,11 @@
     - 已做（里程碑 D 的 D6，`d8fecb6`，其后只改文档）：114 个测试二进制 + Doc-tests，697 / 0 / 30，skip 仍是基线那 7 个；clippy 63、`cargo doc` 25 同基线
 
 - [ ] 8. SPAMAP_Writer 接入 Transaction（需求 5 第 6 条、需求 6–8）
-  - [~] 8.1 把 `src/write/keyed_cow.rs` 泛化为 `rewrite_table::<V>`
+  - [x] 8.1 把 `src/write/keyed_cow.rs` 泛化为 `rewrite_table::<V>`
     - `V = 0` 时写出字节不变，由既有单测与 1.4 的金样守住；`V = 7` 供 SPAMAP，页头其余字按 `spamap.table_header_rest`
     - 另加 `#[doc(hidden)]`、不带规则的建树入口，供 Property 2 调用
     - _Requirements: 7.7, 7.10, 15.3_
-  - [ ]* 8.2 写页树 proptest：`tests/write_stage8_spamap_pages.rs`
+  - [x]* 8.2 写页树 proptest：`tests/write_stage8_spamap_pages.rs`
     - 随机条目序列与合法页长（含逼出多层树的小页长）经建树入口编码后由 `read_spamap_tree` 读回；Corpus 各库的表读出、重编、再读回；编辑集合在内存页上应用一次与两次，对照按 534 / 529 直译的 `BTreeMap` 模型
     - **Property 2: 条目序列往返**
     - **Validates: Requirements 3.1, 3.6**
@@ -586,7 +586,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 写侧能力 | 首个写侧提交 | 父提交 | Evidence_Doc | 读侧解码与 Corpus 测试 | 门问 | 记为完成的提交 |
 |---|---|---|---|---|---|---|
-| SPAMAP 维护 | 8.1（未落地） | 预核于 `d8fecb6` / `6811730`（其后只改文档）；8.1 落地时按它的父提交复核 | 7.1 `docs/evidence/2026-10-03-spamap-encoding.md`、`…-spamap-branch-entries.md`、`…-spamap-flags.md`；7.2 `…-spamap-coverage.md`；7.3 `…-spamap-recompute.md`；7.4 `…-spamap-record-item.md`；7.5 `…-spamap-aabb.md`、`…-spamap-aabb-members.md`——结论都含例程地址与 Corpus 核对，`check_evidence` 全 PASS；第 7 组规则全部坐实（规则坐实状态总表） | 读侧解码：`src/index/spamap.rs`（SPAMAP_Reader）与 `src/spatial/`（codec、aabb、check、state），不在 `src/write/` 下、代码不引用 `src/write/`。以 Corpus 为输入的测试在 `d8fecb6` 的 Build_Checks 中 0 失败、未跳过：`spamap_reader_real`（3.4）、`spamap_codec_real`（5.5、7.2，含 4.20）、`spamap_aabb_real`（6.3）、`spamap_coverage_real`、`spamap_record_item_real`、`spamap_recompute_real`、`spamap_page_headers_real`、`spamap_census_real`；坐实集下各项 agree + waiting = total | Q13 组（第 10 组，未做） | |
+| SPAMAP 维护 | 8.1（里程碑 E 的 E1） | `474ea14`：E0 在其上重跑 SPAMAP 相关 9 个测试二进制，0 失败、无 skip（预核于 `d8fecb6` / `6811730`，其后只改文档） | 7.1 `docs/evidence/2026-10-03-spamap-encoding.md`、`…-spamap-branch-entries.md`、`…-spamap-flags.md`；7.2 `…-spamap-coverage.md`；7.3 `…-spamap-recompute.md`；7.4 `…-spamap-record-item.md`；7.5 `…-spamap-aabb.md`、`…-spamap-aabb-members.md`——结论都含例程地址与 Corpus 核对，`check_evidence` 全 PASS；第 7 组规则全部坐实（规则坐实状态总表） | 读侧解码：`src/index/spamap.rs`（SPAMAP_Reader）与 `src/spatial/`（codec、aabb、check、state），不在 `src/write/` 下、代码不引用 `src/write/`。以 Corpus 为输入的测试在 `d8fecb6` 的 Build_Checks 中 0 失败、未跳过：`spamap_reader_real`（3.4）、`spamap_codec_real`（5.5、7.2，含 4.20）、`spamap_aabb_real`（6.3）、`spamap_coverage_real`、`spamap_record_item_real`、`spamap_recompute_real`、`spamap_page_headers_real`、`spamap_census_real`；坐实集下各项 agree + waiting = total | Q13 组（第 10 组，未做） | |
 | 发号下界 | | | | | | |
 | Open_Fast_Path（字节中性，按需求 2 第 7 条） | | | | | | |
 | staging 优化（字节中性，按需求 2 第 7 条） | | | | | | |

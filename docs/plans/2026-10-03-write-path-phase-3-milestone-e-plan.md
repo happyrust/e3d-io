@@ -85,4 +85,10 @@
 
 ## 6. 执行记录
 
-（按步追加。）
+### E0（2026-10-03 22:5x）
+
+E1 的父提交 `474ea14`（自 D6 的 `d8fecb6` 起只改文档）上重跑 SPAMAP 相关的 9 个测试二进制（`spamap_reader_real`、`spamap_codec_real`、`spamap_aabb_real`、`spamap_coverage_real`、`spamap_record_item_real`、`spamap_recompute_real`、`spamap_page_headers_real`、`spamap_census_real`、`core_rules_registry`），0 失败、无 skip；7.1–7.5 证据与读侧解码见 Spec_Ledger「取证门槛核查」。下游搜索见 §1。门槛满足。
+
+### E1（2026-10-03 23:0x，8.1、8.2）
+
+`src/write/keyed_cow.rs` 按叶值宽 `V` 泛化：`Slot<V>`、`Node<V>`、`decode_table_page::<V>`（叶值宽须为 `V`）、`write_table_page::<V>`（每页头字 4 写 `V`，叶槽键后跟值）、`rewrite_leaf` 带值（重复插入留旧值 529、删不存在的键无事 534）。新入口 `rewrite_table::<V>(root, name_hash, new_page_flags, page_words, edits, read_page, alloc, page_limit)` 与 `TableEdit<V>` / `TableEditKind<V>`；凭空新建的页（新表首叶、分裂长出的根）头字 5 取 `new_page_flags`（SPAMAP 为 1），复制的页沿用原值。`rewrite_keyed_table` 成为 `V = 0`、`new_page_flags = 0` 的薄包装。根分裂改为循环长高：原实现只在分裂的根上加一层，新根放不下全部子页时会在写页时下溢；正常情形（一层放得下）字节不变。`#[doc(hidden)] build_table::<V>` 是不带规则的建树入口。单测加两条（7 字值表的插删与多层分裂、每页头字 4 = 7 / 5 = 1 与新叶的 free 字）；`tests/write_stage8_spamap_pages.rs`：Property 2（随机条目与页长建树后由 SPAMAP_Reader 读回相同）、Property 10（编辑集合应用一次与两次相同，且等于按 534 / 529 直译的 `BTreeMap` 模型）、Corpus 四张表读出重编读回相同（`ams7999_0001` 23 891 条重编为 539 页）。Build_Checks：115 个测试二进制 + Doc-tests 702 / 0 / 30（`V = 0` 的金样比对都过，字节不变），skip 仍 7 个；clippy 63、`cargo doc` 25。
