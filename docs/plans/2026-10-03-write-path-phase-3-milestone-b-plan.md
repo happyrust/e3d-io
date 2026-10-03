@@ -90,4 +90,6 @@ D1 让 BOX、CYLI 之外的几何 noun 由调用方给 World_AABB，但条目还
 
 ## 6. 执行记录
 
-（随做随填）
+- **2026-10-03 14:53 评审**：Plannotator `{"decision":"approved"}`，无批注；用户回「按推荐项开工里程碑 B」。计划提交 `44b3ea5`。
+- **B0（Q1）**：`Slot<T, C>`，`C` 是 `core_rules::candidate` 里的函数类型（codec 用到的九条规则），其余规则 `C = NoCandidate`；`RuleSet::candidates(&CandidatePick)` 只填仍为 `Pending` 的槽。含函数指针的类型去掉 `PartialEq`（比较无意义，且触发 `unpredictable_function_pointer_comparisons`）。`ReadState` 改为先读记录头、属性用到才抽，新增 `record_page`。提交 `59c73b0`。
+- **B1、B2（5.1、5.2）**：`src/spatial/codec.rs`——`SpamapCodec::{encode, key0_of}`，八步按设计次序，遇 `Pending` 记名后接着走、最后不出任何条目（`zero_extent` 只在最短轴 extent 确知为 0 时才查）；`Encoded::{Entries, NeedsUnconfirmed, MissingInput}`、`CodecError::{OutOfRange, Undecodable}`，Key0 越界报该轴可表示的 min 区间。为免规则坐实后 codec 静默失效，加 `Implementation<C>` trait：确认实现与候选同签名调用（现为空枚举的 `match *self {}`）。`src/spatial/candidates.rs`（`#[doc(hidden)]`）：§2 的候选（就近取整 / 外扩取整两个、有符号字、最短轴取最后、零 extent 交桶规则、桶界 600 / 2 000 / 6 000 / 20 000、Key0 落非负有符号字、单条 k = 0、BOX / CYLI flags = OBST、覆盖按普查 43 个有 / 51 个无、BRAN / PJOI / SCOJ 不说），`pick()` 为默认组合。单测 11 条：候选把需求 4.20 的 BOX 编成 `[300008495, 24384, 26484, 0]` / `[8495, 18000, 27500, 11505, 22000, 32500, 2]`；确认集下列出途经的七条 `Pending` 规则、不出条目。

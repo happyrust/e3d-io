@@ -133,12 +133,12 @@
     - _Requirements: 2.6_
 
 - [ ] 5. SPAMAP_Codec 与 Codec_Check（需求 4）
-  - [~] 5.1 实现 `src/spatial/codec.rs`
+  - [x] 5.1 实现 `src/spatial/codec.rs`
     - `SpamapCodec::encode` 按固定次序编码：取整 → 可表示范围 → 最短轴 → 零 extent → 桶 → Key0 → 条目数与 k → Spatial_Flags（经 `SpatialState` 读元素记录）
     - `Encoded`（`Entries { entries, relied_on }`、`NeedsUnconfirmed`、`MissingInput`）、`CodecError::OutOfRange { refno, axis, value_mm, range }`、`key0_of`
     - 用到处于 `Pending` 的规则即收集其规则名、结果为 `NeedsUnconfirmed`，不产出部分条目；Codec 不看 Spatial_Policy
     - _Requirements: 4.2, 4.3, 4.5, 4.6, 4.7, 4.9, 4.12, 4.19_
-  - [~] 5.2 实现候选规则 `src/spatial/candidates.rs`
+  - [x] 5.2 实现候选规则 `src/spatial/candidates.rs`
     - 为 Codec 各规则与 `spamap.coverage` 写候选实现，每个候选在注释中写明所作假设
     - 只经 `RuleSet::candidates(&CandidatePick)` 接入（改 `src/core_rules.rs` 的 `candidates()`），`confirmed()` 不可达
     - _Requirements: 2.6_

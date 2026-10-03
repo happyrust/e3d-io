@@ -8,6 +8,9 @@
 //! Nothing here is in `src/write/`: the corpus checks that gate the first
 //! SPAMAP write run this code before any write-side commit exists.
 
+#[doc(hidden)]
+pub mod candidates;
+pub mod codec;
 pub mod state;
 
 use crate::record::descriptor::DescriptorValue;

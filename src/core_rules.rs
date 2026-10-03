@@ -334,6 +334,36 @@ impl<T, C> Slot<T, C> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoCandidate {}
 
+/// How a confirmed implementation is called: as the same function a
+/// candidate for its rule is, so the codec does not care which it has.
+pub trait Implementation<C> {
+    fn function(&self) -> C;
+}
+
+macro_rules! called_as_candidates {
+    ($($rule:ident => $function:ty;)*) => {
+        $(
+            impl Implementation<$function> for $rule {
+                fn function(&self) -> $function {
+                    match *self {}
+                }
+            }
+        )*
+    };
+}
+
+called_as_candidates! {
+    Rounding => candidate::Rounding;
+    WordSign => candidate::WordSign;
+    ShortAxis => candidate::ShortAxis;
+    ZeroExtent => candidate::ZeroExtent;
+    Bucket => candidate::Bucket;
+    Key0 => candidate::Key0;
+    EntriesK => candidate::EntriesK;
+    Flags => candidate::Flags;
+    Coverage => candidate::Coverage;
+}
+
 /// What a candidate is, per rule the codec consults: a function called where
 /// the confirmed rule would be. Coordinates are 0.1 mm integers unless named
 /// otherwise.
@@ -363,9 +393,10 @@ pub mod candidate {
     /// the candidate covers.
     pub type Bucket = fn(extent: i64) -> Option<u8>;
 
-    /// `spamap.key0`: Key0 from the short axis, the bucket and the axis' min,
-    /// `None` when it cannot be represented.
-    pub type Key0 = fn(axis: Axis, bucket: u8, min: i64) -> Option<u32>;
+    /// `spamap.key0`: Key0 from the short axis, the bucket and the axis' min;
+    /// when it cannot be represented, the mins that could be for this axis
+    /// and bucket.
+    pub type Key0 = fn(axis: Axis, bucket: u8, min: i64) -> Result<u32, (i64, i64)>;
 
     /// `spamap.entries_k`: an element's entries, given its AABB.
     pub type EntriesK = fn(refno: RefNo, state: &dyn SpatialState, aabb: [i64; 6]) -> Result<EntryBoxes, UndecodableAttr>;
