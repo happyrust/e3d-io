@@ -14,6 +14,7 @@
 pub mod corpus;
 pub mod golden;
 pub mod spamap_pages;
+pub mod spamap_session;
 pub mod write_fixture;
 
 use std::path::Path;

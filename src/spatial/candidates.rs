@@ -36,7 +36,7 @@ pub fn pick() -> CandidatePick {
         compose: Some(every_pose_in_its_owners_frame),
         box_aabb: Some(box_about_its_centre),
         cyli_aabb: Some(cylinder_about_its_centre),
-        degenerate: Some(size_as_its_magnitude),
+        degenerate: Some(zero_as_half_a_millimetre),
         arithmetic: Some(double_precision),
     }
 }
@@ -286,8 +286,16 @@ pub fn cylinder_by_its_own_box(frame: &WorldFrame, diam_mm: f64, heig_mm: f64) -
 
 // --- aabb.degenerate ---------------------------------------------------------------
 
+/// A size of zero measures as 0.5 mm, one below zero as its magnitude. The
+/// two CYLI of DIAM 0 and HEIG 0 in TES023 (`17419/184`, `17419/284`) are
+/// stored as boxes 0.5 mm on every axis about their origin; that cannot tell
+/// a size of 0.5 from a least extent of 0.5 laid on the box afterwards.
+pub fn zero_as_half_a_millimetre(size_mm: f64) -> Option<f64> {
+    Some(if size_mm == 0.0 { 0.5 } else { size_mm.abs() })
+}
+
 /// A size below zero measures as its magnitude and zero as zero: a flat box,
-/// a cylinder of no height. Nothing in the corpus rests on it yet.
+/// a cylinder of no height. Misses the two TES023 CYLI above.
 pub fn size_as_its_magnitude(size_mm: f64) -> Option<f64> {
     Some(size_mm.abs())
 }

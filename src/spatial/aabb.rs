@@ -442,7 +442,7 @@ mod tests {
         assert!(matches!(compute(&RuleSet::candidates(&pick), &native_box(), NATIVE_BOX).unwrap(), AabbOutcome::Aabb(_)));
         assert_eq!(
             compute(&RuleSet::candidates(&candidates::pick()), &flat, flat_refno).unwrap(),
-            AabbOutcome::Aabb(WorldAabb::new([-50.0, -100.0, 0.0], [50.0, 100.0, 0.0]).unwrap())
+            AabbOutcome::Aabb(WorldAabb::new([-50.0, -100.0, -0.25], [50.0, 100.0, 0.25]).unwrap())
         );
     }
 

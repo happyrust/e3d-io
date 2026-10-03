@@ -157,7 +157,7 @@
     - **Property 5: Codec 三项核对分开计数**
     - **Validates: Requirements 4.2, 4.3, 4.7, 4.9, 4.10, 4.11, 4.15, 4.16**
 
-- [ ] 6. Built_In_AABB（需求 6 读侧部分）
+- [x] 6. Built_In_AABB（需求 6 读侧部分）
   - [x] 6.1 实现 `src/spatial/aabb.rs`
     - 复合器 `FrameComposer` 与默认 `ChainComposer`：沿 owner 链上溯到 WORL，按 `aabb.compose` / `aabb.ori_form` 复合 POS / ORI，任一为 `Pending` 返回 `NeedsUnconfirmed`
     - `BuiltInAabb::compute` → `AabbOutcome`；`BUILT_IN_NOUNS` 为 BOX、CYLI（D1 的唯一落点）；BOX 用 XLEN / YLEN / ZLEN，CYLI 用 DIAM / HEIG，方法由 `aabb.box` / `aabb.cyli` / `aabb.degenerate` 定；输出毫米 `f64`，取整只在 Codec 里做
@@ -168,7 +168,7 @@
     - `world-frame --db <f> --refno <r>` 打印复合器算出的世界原点与 World_AABB，供 Q13h 与 Probe_Element 预判
     - `spamap-check` 增报 Built_In_AABB 一项（需求 6 第 9 条）的一致数 / 总数与前 100 个反例，供 7.5 的 Corpus 核对
     - _Requirements: 6.9, 10.15_
-  - [~] 6.3 写 Built_In_AABB Corpus 核对：`tests/spamap_aabb_real.rs`
+  - [x] 6.3 写 Built_In_AABB Corpus 核对：`tests/spamap_aabb_real.rs`
     - 经 `ReadState` 算 World_AABB、经 SPAMAP_Codec 编码，与盘上条目逐字比较（条数、4 键字、7 值字）；样本含 BOX `24384/24777`；坐实前用 candidates 跑，结果只作取证数据
     - **Property 8: Built_In_AABB 与盘上逐字相同**
     - **Validates: Requirements 6.9, 6.16**

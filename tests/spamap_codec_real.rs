@@ -14,57 +14,19 @@ mod common;
 use std::collections::HashMap;
 
 use common::corpus::{CORPUS, SPAMAP_BASELINE, SPAMAP_BASELINE_SESSION};
+use common::spamap_session::Session;
 use common::{ATTLIB, DESVIR};
-use e3d_attlib::AttlibData;
 use e3d_io::core_rules::RuleSet;
-use e3d_io::index::{read_spamap, SpamapEntry, SpamapRead};
-use e3d_io::record::template::TemplateProvider;
-use e3d_io::session::{DbView, SessionSelector};
-use e3d_io::spatial::aabb::{BuiltInAabb, ChainComposer};
+use e3d_io::index::SpamapEntry;
+use e3d_io::session::SessionSelector;
 use e3d_io::spatial::candidates;
-use e3d_io::spatial::check::{check, Authors, Checked, Item, Miss};
-use e3d_io::spatial::codec::SpamapCodec;
-use e3d_io::spatial::state::ReadState;
+use e3d_io::spatial::check::{Checked, Item, Miss};
 use e3d_io::RefNo;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::TestRunner;
 
-const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
-
-/// One session's SPAMAP table, its element state and who wrote each page.
-struct Session {
-    sesno: u32,
-    table: Vec<SpamapEntry>,
-    state: ReadState,
-    authors: Authors,
-}
-
-impl Session {
-    /// `None` when the session lists no SPAMAP table.
-    fn open(path: &str, at: SessionSelector) -> Option<Session> {
-        let mut view = DbView::open_at(path, at).unwrap_or_else(|error| panic!("{path}: open: {error}"));
-        let sesno = view.selected_session();
-        let authors = Authors::from_sessions(&view.walk_sessions().expect("walk the sessions"));
-        let table = match read_spamap(&mut view).unwrap_or_else(|error| panic!("{path}: {error}")) {
-            SpamapRead::NoTable { .. } => return None,
-            SpamapRead::Table { table, .. } => table.entries().to_vec(),
-        };
-        let attlib = AttlibData::parse_file(ATTLIB).expect("attlib");
-        let templates = TemplateProvider::open(DESVIR, Some(DESIGN_TEMPLATE_TYPE)).expect("desvir");
-        let state = ReadState::open(path, sesno, attlib, templates).expect("open the element state");
-        Some(Session { sesno, table, state, authors })
-    }
-
-    /// The items over `table` under `rules`, with nothing excluded.
-    fn check(&self, rules: &RuleSet, table: &[SpamapEntry]) -> Checked {
-        let authored = |refno: RefNo| self.authors.e3d_wrote(&self.state, refno);
-        let composer = ChainComposer::new(rules);
-        let built_in = BuiltInAabb::new(rules, &composer);
-        check(table, &self.state, &SpamapCodec::new(rules), &built_in, &authored, &|_| false)
-    }
-}
-
+/// The three codec items; Built_In_AABB is Property 8's.
 fn items(checked: &Checked) -> [(&'static str, &Item); 3] {
     [("Key0", &checked.key0), ("count and k", &checked.entries_k), ("flags", &checked.flags)]
 }
