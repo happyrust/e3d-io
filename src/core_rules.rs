@@ -123,7 +123,6 @@ impl RuleStatus {
 }
 
 const NO_CANDIDATE: &str = "no candidate yet";
-const ENCODING: Option<&str> = Some("docs/evidence/2026-10-03-spamap-encoding.md#结论");
 
 const fn unconfirmed(inputs: &'static str, evidence: Option<&'static str>) -> RuleStatus {
     RuleStatus::Unconfirmed { assumption: NO_CANDIDATE, inputs, evidence }
@@ -193,12 +192,7 @@ pub const RULES: &[Rule] = &[
         id: RuleId::SpamapFlags,
         name: "spamap.flags",
         governs: "the meaning of each Spatial_Flags bit",
-        status: RuleStatus::Unconfirmed {
-            assumption: "bits 1, 2, 4 are three logical flags of maplib/MAPINS; dbboxlib/BOXELE sets bit OBST for \
-                         OBST 1 or 2 when mapboxlib/MPBOX finds a SITE, BLOCK, SSOWLD, HBLWLD or DDEP 1 above",
-            inputs: "every entry",
-            evidence: ENCODING,
-        },
+        status: confirmed("docs/evidence/2026-10-03-spamap-flags.md#spamap.flags"),
     },
     Rule {
         id: RuleId::SpamapCoverage,
@@ -363,7 +357,6 @@ macro_rules! called_as_candidates {
 }
 
 called_as_candidates! {
-    Flags => candidate::Flags;
     OriForm => candidate::OriForm;
     Compose => candidate::Compose;
     BoxAabb => candidate::BoxAabb;
@@ -526,6 +519,21 @@ pub enum EntriesK {
     ByMpbox,
 }
 
+/// `spamap.flags`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Flags {
+    /// [`crate::spatial::rules::flags_by_mpbox`].
+    ByMpbox,
+}
+
+impl Implementation<candidate::Flags> for Flags {
+    fn function(&self) -> candidate::Flags {
+        match self {
+            Flags::ByMpbox => crate::spatial::rules::flags_by_mpbox,
+        }
+    }
+}
+
 /// `spamap.coverage`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Coverage {
@@ -598,8 +606,6 @@ impl Implementation<candidate::Coverage> for Coverage {
 }
 
 implementations! {
-    /// `spamap.flags`.
-    Flags;
     /// `spamap.recompute.<NOUN>`: the recompute table and member-order rows.
     Recompute;
     /// `spamap.descendants.{move,pos,ori}`.
@@ -673,7 +679,7 @@ const CONFIRMED: RuleSet = RuleSet {
     zero_extent: Slot::Confirmed(ZeroExtent::ByBucketRule),
     bucket: Slot::Confirmed(Bucket::Mapkey),
     entries_k: Slot::Confirmed(EntriesK::ByMpbox),
-    flags: Slot::Pending,
+    flags: Slot::Confirmed(Flags::ByMpbox),
     coverage: Slot::Confirmed(Coverage::ByImap),
     recompute: Slot::Pending,
     descendants_move: Slot::Pending,

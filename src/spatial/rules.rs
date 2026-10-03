@@ -135,6 +135,109 @@ pub fn entries_by_mpbox(refno: RefNo, state: &dyn SpatialState, aabb: [i64; 6]) 
     Ok(EntryBoxes::Entries(vec![(0, aabb)]))
 }
 
+// --- spamap.flags ------------------------------------------------------------------
+
+/// The flags of the k = 0 entry `mapboxlib/MPBOX2` gives an element:
+/// `maplib/MAPINS` adds 1, 2, 4 for three logicals, which `mapboxlib/MBXGO`
+/// clears unless `MPBOX` found flags enabled up the owner chain.
+///
+/// - With a `WBOX`, `MPBOX2` sets logical OBST for an `OBST` of 1 to 3.
+/// - Without, `dbboxlib/BOXELE` sets it for an `OBST` of 1 or 2 before it
+///   boxes the element by its box type; for an `IMAP` 5 element `MPBOX2`
+///   then runs `BOXELE` on each `IMAP` 3 member with the same logicals.
+/// - Unsaid where `BOXELE`'s box type passes the logicals on or sets one
+///   (the nouns outside [`FLAGS_BY_OBST_ALONE`]), for a UDET, and in branch
+///   and hanger trees, whose flags `MPBXBR` takes from catalogue geometry
+///   and the tube spec.
+pub fn flags_by_mpbox(refno: RefNo, state: &dyn SpatialState, _k: u32) -> Result<Option<u32>, UndecodableAttr> {
+    let Some(noun) = state.noun(refno) else { return Ok(None) };
+    let owner_records_members = state.owner(refno).and_then(|owner| state.noun(owner)).is_some_and(records_its_members);
+    if records_its_members(noun) || owner_records_members {
+        return Ok(None);
+    }
+    let Some(enabled) = flags_enabled(refno, state)? else { return Ok(None) };
+    if !enabled {
+        return Ok(Some(0));
+    }
+    if state.attr(refno, db1_hash("WBOX"))?.is_some() {
+        return Ok(Some(obst_bit(refno, state, 3)?));
+    }
+    if !noun_in(&OBST_ALONE_SET, FLAGS_BY_OBST_ALONE, noun) {
+        return Ok(None);
+    }
+    let mut flags = obst_bit(refno, state, 2)?;
+    let Some(imap) = soft_imap(refno, noun, state)? else { return Ok(None) };
+    if imap == 5 {
+        let Some(members) = state.members(refno) else { return Ok(None) };
+        for member in members {
+            let Some(member_noun) = state.noun(member) else { continue };
+            match soft_imap(member, member_noun, state)? {
+                Some(3) if noun_in(&OBST_ALONE_SET, FLAGS_BY_OBST_ALONE, member_noun) => flags |= obst_bit(member, state, 2)?,
+                Some(3) | None => return Ok(None),
+                Some(_) => {}
+            }
+        }
+    }
+    Ok(Some(flags))
+}
+
+/// `mapboxlib/MPBOX` up the owner chain from the element itself: enabled at
+/// a `DDEP` of 1 but on [`DDEP_DOES_NOT_ENABLE`], or at one of
+/// [`ENABLE_FLAGS`]; not at the WORL or where an owner cannot be found.
+fn flags_enabled(refno: RefNo, state: &dyn SpatialState) -> Result<Option<bool>, UndecodableAttr> {
+    let mut at = refno;
+    for _ in 0..OWNER_CHAIN_DEPTH {
+        let Some(noun) = state.noun(at) else { return Ok(Some(false)) };
+        let ddep = matches!(
+            state.attr(at, db1_hash("DDEP"))?,
+            Some(DescriptorValue::Int(1)) | Some(DescriptorValue::Word { raw: 1, .. })
+        );
+        if (ddep && !DDEP_DOES_NOT_ENABLE.iter().any(|name| db1_hash(name) == noun))
+            || ENABLE_FLAGS.iter().any(|name| db1_hash(name) == noun)
+        {
+            return Ok(Some(true));
+        }
+        if noun == db1_hash("WORL") {
+            return Ok(Some(false));
+        }
+        let Some(owner) = state.owner(at) else { return Ok(Some(false)) };
+        at = owner;
+    }
+    Ok(None)
+}
+
+/// The logical `GATIN1` of `OBST` sets: bit `OBST − 1` for an `OBST` of 1 to
+/// `highest`.
+fn obst_bit(refno: RefNo, state: &dyn SpatialState, highest: i64) -> Result<u32, UndecodableAttr> {
+    let obst = match state.attr(refno, db1_hash("OBST"))? {
+        Some(DescriptorValue::Int(value)) => i64::from(value),
+        Some(DescriptorValue::Word { raw, .. }) => i64::from(raw as i32),
+        _ => 0,
+    };
+    Ok(if (1..=highest).contains(&obst) { 1 << (obst - 1) } else { 0 })
+}
+
+static OBST_ALONE_SET: OnceLock<Vec<u32>> = OnceLock::new();
+
+/// Owner levels `flags_enabled` climbs before it gives up, against a cycle.
+const OWNER_CHAIN_DEPTH: usize = 64;
+
+/// The nouns at which `MPBOX` enables flags whatever their `DDEP`.
+pub const ENABLE_FLAGS: &[&str] = &["SITE", "BLOCK", "SSOWLD", "HBLWLD"];
+
+/// The nouns whose `DDEP` of 1 does not enable flags.
+pub const DDEP_DOES_NOT_ENABLE: &[&str] = &["TPWL", "APPLDW", "TRNWLD", "FEMWLD"];
+
+/// The nouns of the box types `dbboxlib/BOXELE` computes without touching
+/// the logicals — `DB_Model::getBoxType` 2 to 17 and 20 to 22; types 1, 18,
+/// 19 and 23 hand them on to catalogue geometry or set one.
+pub const FLAGS_BY_OBST_ALONE: &[&str] = &[
+    "CYLI", "NCYL", "BOX", "PVOL", "RPLA", "XCELL", "NBOX", "DISH", "NDIS", "CONE", "NCON", "SNOU", "NSNO", "PYRA",
+    "NPYR", "CTOR", "RTOR", "NCTO", "NRTO", "EXTR", "REVO", "NREV", "NXTR", "LOOP", "PANE", "PLOO", "PALJ", "SLCY",
+    "NSLC", "POHE", "GRDM", "POGO", "DRAW", "BOUN", "POLYHE", "NPOLYH", "POIN", "IPOI", "TPOI", "PAVE", "VERT",
+    "LOAP", "DATU", "POINTR", "SELJ", "SEVE", "PNOD", "SNOD", "CABLE", "POINSP", "CURVE", "PLDATU",
+];
+
 // --- spamap.coverage ---------------------------------------------------------------
 
 /// Whether Core3D gives the element entries: `Some(true)` when
@@ -390,6 +493,12 @@ mod tests {
         fn attr(&self, refno: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr> {
             Ok(self.elements.get(&refno).and_then(|element| element.attrs.get(&hash).cloned()))
         }
+        fn members(&self, refno: RefNo) -> Option<Vec<RefNo>> {
+            let mut members: Vec<RefNo> =
+                self.elements.iter().filter(|(_, element)| element.owner == Some(refno)).map(|(member, _)| *member).collect();
+            members.sort_by_key(|member| (member.word0, member.word1));
+            Some(members)
+        }
     }
 
     const OWNER: RefNo = RefNo { word0: 24_384, word1: 1 };
@@ -463,5 +572,44 @@ mod tests {
         assert!(matches!(entries("BRAN", "ELBO"), EntryBoxes::MissingInput(_)));
         assert!(matches!(entries("HANG", "PCLA"), EntryBoxes::MissingInput(_)));
         assert!(matches!(entries("PIPE", "BRAN"), EntryBoxes::MissingInput(_)));
+    }
+
+    #[test]
+    fn the_flag_nouns_hash_to_what_mpbox_compares() {
+        let sorted = |names: &[&str]| {
+            let mut hashes: Vec<u32> = names.iter().map(|name| db1_hash(name)).collect();
+            hashes.sort_unstable();
+            hashes
+        };
+        assert_eq!(sorted(ENABLE_FLAGS), [644_698, 6_447_602, 64_765_880, 64_768_537]);
+        assert_eq!(sorted(DDEP_DOES_NOT_ENABLE), [784_856, 64_766_688, 64_767_782, 332_930_359]);
+    }
+
+    #[test]
+    fn flags_are_the_obst_bits_once_an_owner_enables_them() {
+        const SITE: RefNo = RefNo { word0: 24_384, word1: 10 };
+        const MEMBER: RefNo = RefNo { word0: 24_384, word1: 3 };
+        let obst = |value: i32| ("OBST", DescriptorValue::Int(value));
+        let under = |site: bool, noun: &str, attrs: &[(&str, DescriptorValue)]| {
+            let zone_owner = site.then_some(SITE);
+            Tree::default()
+                .with(SITE, db1_hash("SITE"), None, &[])
+                .with(OWNER, db1_hash("ZONE"), zone_owner, &[])
+                .with(ELEMENT, db1_hash(noun), Some(OWNER), attrs)
+        };
+        let flags = |tree: &Tree, k| flags_by_mpbox(ELEMENT, tree, k).expect("every attribute decodes");
+        assert_eq!(flags(&under(true, "BOX", &[obst(2)]), 0), Some(2));
+        assert_eq!(flags(&under(false, "BOX", &[obst(2)]), 0), Some(0), "no SITE above it");
+        assert_eq!(flags(&under(true, "BOX", &[obst(3)]), 0), Some(0), "BOXELE sets OBST 1 and 2 alone");
+        let wbox = ("WBOX", DescriptorValue::RealArray(vec![0.0; 6]));
+        assert_eq!(flags(&under(true, "BOX", &[obst(3), wbox]), 0), Some(4));
+        let with_member = under(true, "BOX", &[obst(2)]).with(MEMBER, db1_hash("NBOX"), Some(ELEMENT), &[obst(1)]);
+        assert_eq!(flags(&with_member, 0), Some(3), "an IMAP 3 member's OBST joins in");
+        assert_eq!(flags(&under(true, "PJOI", &[obst(2)]), 0), None, "box type 1 hands the logicals on");
+        assert_eq!(flags(&under(true, "BOX", &[obst(2)]), 1), Some(2), "MPBOX2 writes k = 0 alone; k does not enter");
+        let in_a_branch = Tree::default()
+            .with(OWNER, db1_hash("BRAN"), None, &[])
+            .with(ELEMENT, db1_hash("ELBO"), Some(OWNER), &[]);
+        assert_eq!(flags(&in_a_branch, 0), None);
     }
 }

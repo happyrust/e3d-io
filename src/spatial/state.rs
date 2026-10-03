@@ -8,7 +8,7 @@ use std::rc::Rc;
 use e3d_attlib::{db1_dehash, AttlibData};
 
 use super::{SpatialState, UndecodableAttr};
-use crate::engine::ReadOnlyEngine;
+use crate::engine::{ReadOnlyEngine, ScanTier};
 use crate::error::E3dReaderError;
 use crate::record::descriptor::{AttributeExtractionStatus, DescriptorValue, ElementExtraction};
 use crate::record::template::TemplateProvider;
@@ -32,6 +32,9 @@ pub struct ReadState {
     attlib: AttlibData,
     templates: RefCell<TemplateProvider>,
     elements: RefCell<HashMap<RefNo, Rc<Element>>>,
+    /// Owner to members, from one header scan of the refno index; `None`
+    /// when a record of the scan could not be read.
+    members: OnceCell<Option<HashMap<RefNo, Vec<RefNo>>>>,
 }
 
 enum Element {
@@ -57,6 +60,7 @@ impl ReadState {
             attlib,
             templates: RefCell::new(templates),
             elements: RefCell::default(),
+            members: OnceCell::new(),
         })
     }
 
@@ -147,5 +151,18 @@ impl SpatialState for ReadState {
             (None, AttributeExtractionStatus::NonImplicit) => Ok(None),
             (None, _) => Err(undecodable(row.name.clone())),
         }
+    }
+
+    fn members(&self, refno: RefNo) -> Option<Vec<RefNo>> {
+        let index = self.members.get_or_init(|| {
+            let mut engine = self.engine.borrow_mut();
+            let mut index: HashMap<RefNo, Vec<RefNo>> = HashMap::new();
+            for element in engine.scan_elements(ScanTier::Header).ok()? {
+                let element = element.ok()?;
+                index.entry(element.owner).or_default().push(element.refno);
+            }
+            Some(index)
+        });
+        index.as_ref().map(|index| index.get(&refno).cloned().unwrap_or_default())
     }
 }

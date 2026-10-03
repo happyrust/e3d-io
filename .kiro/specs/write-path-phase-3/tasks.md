@@ -176,7 +176,7 @@
 - [ ] 7. core 取证：编码、覆盖、重算、AABB（需求 4、5、6）
   - 7.1–7.5 各产出一份 Phase_3_Evidence_Doc（`docs/evidence/YYYY-MM-DD-*.md`，按模板），经 `tools/ida/check_evidence.ps1` 机检；每轮首尾跑 `ib.ps1 env`，对本轮用到的地址（至少 5 个，含一个被大量引用的）跑 `check_xrefs.ps1`，结果写入证据
   - 坐实的规则在同一提交里于 `src/core_rules.rs` 改为 Confirmed 并补上实现变体（相应改 `src/spatial/` 中用到它的代码）；未坐实的在证据中写明假设、须用到它的输入类别与 Corpus 反例（2.4），注册表保持 `Unconfirmed`
-  - [~] 7.1 取证编码规则
+  - [x] 7.1 取证编码规则
     - 规则：`spamap.rounding`、`spamap.word_sign`、`spamap.short_axis`、`spamap.zero_extent`、`spamap.bucket`、`spamap.key0`、`spamap.entries_k`、`spamap.flags`；另取证表形 `spamap.table_shape` 与页头其余字 `spamap.table_header_rest`（供 8.1、8.6 写内结点页与建表）
     - 经 IB_Wrapper 读 E3D_Core 例程（编码在 Core3D_IDB 的 `maplib`，表与记录项在 Core_IDB）；用 `spamap-check --rules candidates` 在 Corpus 上核对，一致数 / 总数写入「结论」；最短轴并列的取轴只认 E3D_IDB 出处
     - _Requirements: 2.4, 4.1, 4.4, 4.5, 4.6, 4.8, 4.13, 4.14, 4.17, 4.18, 7.8_
@@ -555,7 +555,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `spamap.zero_extent` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | Core3D `MAPKEY` 无特例，extent 0 落桶 1 |
 | `spamap.bucket` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | Core3D `MAPKEY`：600 / 2 000 / 6 000 / 20 000 / 200 000，界值归上一桶；≥ 200 000 为桶 6（只以出处 ①） |
 | `spamap.entries_k` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-branch-entries.md` | C2 | `MBXGO` 只由 `MPBOX2`（tube 0：一条 k = 0、自身框）与 `MPBXBR` 调；`MPBXBR` 只走 BRAN 与 HNGT noun，从尾到头给成员记 k = 0 与离开它的管子 k = 1、给 BRAN 记头管 k = 1，管框要目录 P 点与管径 → 分支 / 吊架树为 MissingInput（需求 6.15，Codec_Check 记 waiting）。坐实集 Corpus 判定 11 167 / 11 167、基线 986 / 986，waiting 14 350 / 2 642 |
-| `spamap.flags` | 7.1 | 未坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | | `MAPINS` 三个逻辑量按 1 / 2 / 4；`BOXELE` 按 OBST 1–2 置位、`MPBOX` 上溯 SITE 等定是否启用；管件 flags 来自 `MPBXBR`，未读；候选 BOX / CYLI 1 590 / 1 590 |
+| `spamap.flags` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-flags.md` | C2 | `MAPINS` 三个逻辑量按 1 / 2 / 4；`MPBOX` 上溯（DDEP 1、SITE / BLOCK / SSOWLD / HBLWLD 启用，WORL 不启用），不启用全 0；WBOX 时 OBST 1–3，否则 `BOXELE` OBST 1–2，IMAP 5 并入 IMAP 3 成员；box type 1 / 18 / 19 / 23 与分支树不说。坐实集 Corpus 判定 4 783 / 4 783、基线 402 / 402 |
 | `spamap.coverage` | 7.2 | 坐实 | `docs/evidence/2026-10-03-spamap-coverage.md` | C2 | 按元素三态：Core3D `MPBOX` / `MLSADD` 按 noun 的 IMAP（字典字段 847458）1、5 记，7 看 owner 的 IMAP 是否为 2，box type 1（`getBoxType`，SCTN / GENSEC / WLJOIN 除外）须 SPRE 非 0（`GTSTDT` → `MBXSTL` 失败 → `MAPREM`）；BRAN 与 HNGT 四个（`MPBXBR` 未读）、UDET、模板无 SPAMAP 的八个未坐实。Property 7 坐实集 40 556 / 40 556 判定无反例，`waiting` 2 060（BRAN 1 819、HANG 241） |
 | `spamap.recompute.<NOUN>` | 7.3 | | | | B8 线索：ams7999 有几处 BOX / CYLI 条目只在一侧比按现属性算出的多 1.5 mm 或 28–33 mm（如 `24383/78369` minz、`24383/77136` minz），像「改尺寸与位置后条目未重算」；待 7.3 |
 | `spamap.descendants.{move,pos,ori}` | 7.3 | | | | B8 线索：ams7999 EQUI `24383/76459` 下几个 SUBE 的 BOX 条目与按现位姿算出的差 10–273 mm（成对：−1 291 / +2 575、−908 / −2 733 等），像后代未随祖先改动重算；待 7.3 以会话链 / 探针坐实，可作需求 4.17 剔除清单的候选 |

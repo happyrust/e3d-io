@@ -343,6 +343,12 @@ mod tests {
         fn attr(&self, refno: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr> {
             Ok(self.elements.get(&refno).and_then(|element| element.attrs.get(&hash).cloned()))
         }
+        fn members(&self, refno: RefNo) -> Option<Vec<RefNo>> {
+            let mut members: Vec<RefNo> =
+                self.elements.iter().filter(|(_, element)| element.owner == Some(refno)).map(|(member, _)| *member).collect();
+            members.sort_by_key(|member| (member.word0, member.word1));
+            Some(members)
+        }
     }
 
     const WORLD: RefNo = RefNo { word0: 16_192, word1: 0 };

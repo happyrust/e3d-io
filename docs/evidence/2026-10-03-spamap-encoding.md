@@ -99,6 +99,7 @@
 
 ### `spamap.flags`
 
+- 后续：同日在 `docs/evidence/2026-10-03-spamap-flags.md` 坐实（分支树、目录型 box type 不说）。
 - 状态：未坐实
 - 读到的：`MAPINS` n = 52–58：flags = 三个逻辑量按 1、2、4 相加；`MBXGO` @ `0x102FD8C2` n = 12–24：第六参为假时三量清零；`MPBOX` @ `0x102FB475` n = 42–62 定这一参：沿 owner 链上溯，遇 SITE、BLOCK、SSOWLD、HBLWLD，或 DDEP = 1 且 noun 不是 TPWL、APPLDW、TRNWLD、FEMWLD，即为真，到 WORL 为假；`dbboxlib/BOXELE` @ `0x1036A31C` n = 85–88：OBST 为 1 或 2 时置第 OBST 位；`MPBOX2` n = 84–86：元素带 WBOX 时 OBST 为 1–3 都置位。管件的 0 / 2 / 3 / 6 / 7 来自 `MPBXBR`，未读。
 - 所作假设：BOX、CYLI 走 `BOXELE`，flags = OBST（1 或 2）或 0。

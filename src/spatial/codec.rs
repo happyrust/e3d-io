@@ -308,10 +308,15 @@ mod tests {
     }
 
     #[test]
-    fn under_the_confirmed_rules_the_pending_ones_are_named_and_no_entry_comes_out() {
+    fn under_the_confirmed_rules_requirement_4_20s_box_encodes_whole() {
         let (state, aabb) = box_26484();
-        let encoded = SpamapCodec::new(RuleSet::confirmed()).encode(BOX_26484, &state, &aabb).unwrap();
-        assert_eq!(encoded, Encoded::NeedsUnconfirmed(vec![RuleId::SpamapFlags]));
+        let Encoded::Entries { entries, .. } = SpamapCodec::new(RuleSet::confirmed()).encode(BOX_26484, &state, &aabb).unwrap()
+        else {
+            panic!("every rule on the way is confirmed");
+        };
+        assert_eq!(entries.len(), 1);
+        assert_eq!((entries[0].key[0], entries[0].k()), (300_008_495, 0));
+        assert_eq!(entries[0].flags(), 0, "no SITE above it, so MPBOX leaves the flags off");
     }
 
     #[test]
@@ -340,7 +345,7 @@ mod tests {
     #[test]
     fn the_candidates_encode_requirement_4_20s_entry() {
         let (state, aabb) = box_26484();
-        let rules = RuleSet::candidates(&candidates::pick());
+        let rules = RuleSet::candidates_alone(&candidates::pick());
         let Encoded::Entries { entries, relied_on } = SpamapCodec::new(&rules).encode(BOX_26484, &state, &aabb).unwrap()
         else {
             panic!("the candidates cover a BOX");
@@ -360,7 +365,7 @@ mod tests {
     fn one_missing_candidate_withholds_every_entry_and_names_it() {
         let (state, aabb) = box_26484();
         let pick = CandidatePick { flags: None, ..candidates::pick() };
-        let rules = RuleSet::candidates(&pick);
+        let rules = RuleSet::candidates_alone(&pick);
         assert_eq!(
             SpamapCodec::new(&rules).encode(BOX_26484, &state, &aabb).unwrap(),
             Encoded::NeedsUnconfirmed(vec![RuleId::SpamapFlags])

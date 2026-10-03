@@ -116,6 +116,11 @@ pub trait SpatialState {
     /// such attribute or does not exist, an error when it has one that cannot
     /// be decoded.
     fn attr(&self, refno: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr>;
+    /// Every element whose owner the element is, in refno order, or `None`
+    /// when this state cannot list them.
+    fn members(&self, _refno: RefNo) -> Option<Vec<RefNo>> {
+        None
+    }
 }
 
 /// What `spamap.entries_k` makes of one element: its entries as `(k, AABB)` in
