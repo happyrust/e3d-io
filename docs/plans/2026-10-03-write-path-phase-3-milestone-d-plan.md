@@ -1,6 +1,6 @@
 # 计划：e3d-io 写路径 · 第三期 · 里程碑 D（任务第 7 组后半：重算取证、AABB 剔除后坐实、4.20 示例、门槛核查）
 
-状态：**评审通过**（2026-10-03 19:04，Plannotator 门 `approved`，无批注 → Q1–Q5 全按推荐项）
+状态：**已完成**（2026-10-03 22:4x；评审通过于 19:04，Plannotator 门 `approved`，无批注 → Q1–Q5 全按推荐项）
 日期：2026-10-03
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`，HEAD `f5fefe8`（里程碑 C 收尾，领先 `github/write-path` 35 个提交，未推送）
 依据：`.kiro/specs/write-path-phase-3/` 需求 2、需求 4 第 17、20 条、需求 5 第 2–4、8、9 条、需求 6 第 16 条，任务 7.3、7.5（续）、7.6、7.7、7.8；`docs/plans/2026-10-03-write-path-phase-3-milestone-c-plan.md` §6
@@ -151,3 +151,11 @@ C 坐实了编码、覆盖、记录项与 `aabb.degenerate`。剩下的规则都
 ### 规格修订（2026-10-03 22:19–22:4x）
 
 修订稿 `docs/plans/2026-10-03-write-path-phase-3-spec-revision-d.md`，Plannotator 22:35 `approved`（`.agents/tasks/write-path-phase-3-milestone-d/plannotator-result-spec.json`），无批注 → Q1–Q4 全按推荐项，已照稿改入：requirements 术语表「重算属性」「Built_In_AABB」与 Recompute_Set（②④ 加成员次序、⑤ 改为祖先任一重算属性、加 ⑦）、需求 5 第 8 条、需求 6 第 1、2、15 条、需求 7 第 4、6 条、新增第 14 条；design 规则表（`aabb.cone` / `aabb.pyramid` / `aabb.members`）、Built_In_AABB 节（`members`、`BUILT_IN_MEMBER_NOUNS`、`MissingInput`）、SPAMAP_Writer 节与 Property 9 测试手段改按 ①–⑦；tasks 8.4、8.5 与 Ledger「决策」「spamap.descendants」。写侧实现在第 8 组。
+
+### D5（2026-10-03 22:4x，7.7 取证门槛核查，预核）
+
+Spec_Ledger「取证门槛核查」SPAMAP 维护一行填上：7.1–7.5 的九份证据（含普查）`check_evidence` 全 PASS，结论都有例程地址与 Corpus 核对，第 7 组规则全部坐实；读侧解码在 `src/index/spamap.rs` 与 `src/spatial/`，代码不引用 `src/write/`（只有文档注释提到）；以 Corpus 为输入的 SPAMAP 测试 11 个二进制在 D6 的 Build_Checks 中 0 失败、未跳过。8.1 尚未落地，它的父提交到时复核。tasks 7.7 打勾。
+
+### D6（2026-10-03 22:2x–22:4x，7.8 检查点）
+
+`d8fecb6` 上 Build_Checks（`cargo test --no-fail-fast -- --nocapture`，日志 `.agents/tasks/write-path-phase-3-milestone-d/d6-test.log`）：114 个测试二进制 + Doc-tests，697 / 0 / 30（C 末 690 / 0 / 30；D2 加 `spamap_recompute_real` 与一条单测，D3 加三条单测与 `the_member_nouns_have_a_frmc_of_0`，D4 加 4.20 示例），skip 仍是基线那 7 个；clippy 63、`cargo doc` 25 同基线（D3 时跑，其后没改代码）。其后 `6811730` 与本提交只改文档。tasks 7.8 与第 7 组打勾。**里程碑 D 完成**。
