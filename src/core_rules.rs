@@ -16,9 +16,13 @@
 //! in `RuleSet::confirmed`, and the status in `RULES`. A compile-time check
 //! refuses a filled slot whose rule is not confirmed.
 //!
-//! Candidates — assumptions checked against the corpus — come only from
-//! [`RuleSet::candidates`], for Codec_Check and tests; the write side never
-//! names it (`tests/core_rules_registry.rs`).
+//! Candidates — assumptions checked against the corpus — are functions of the
+//! types in [`candidate`], written in `src/spatial/candidates.rs`, and reach a
+//! rule set only through [`RuleSet::candidates`], for Codec_Check and tests.
+//! The write side never names it (`tests/core_rules_registry.rs`).
+
+use crate::spatial::{Axis, EntryBoxes, SpatialState, UndecodableAttr};
+use crate::refno::RefNo;
 
 /// One row of the design's rule table. A family named per noun
 /// (`spamap.recompute.<NOUN>`, `spamap.record_item.<NOUN>`) is one id until
@@ -296,15 +300,17 @@ pub fn rule(id: RuleId) -> &'static Rule {
     RULES.iter().find(|rule| rule.id == id).expect("every rule id has a row in RULES")
 }
 
-/// One rule's implementation in a rule set.
+/// One rule's implementation in a rule set: the confirmed form `T`, a variant
+/// of the rule's implementation type here, or a candidate `C`, a function from
+/// `src/spatial/candidates.rs`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Slot<T> {
+pub enum Slot<T, C = NoCandidate> {
     /// Not confirmed: whoever needs the rule falls back as D7 says.
     Pending,
     /// As the rule's Evidence_Doc states it.
     Confirmed(T),
     /// An assumption under test; only in rule sets from [`RuleSet::candidates`].
-    Candidate(T),
+    Candidate(C),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -314,7 +320,7 @@ pub enum SlotState {
     Candidate,
 }
 
-impl<T> Slot<T> {
+impl<T, C> Slot<T, C> {
     pub const fn state(&self) -> SlotState {
         match self {
             Slot::Pending => SlotState::Pending,
@@ -322,6 +328,55 @@ impl<T> Slot<T> {
             Slot::Candidate(_) => SlotState::Candidate,
         }
     }
+}
+
+/// The candidate type of a rule nothing tests a candidate for yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoCandidate {}
+
+/// What a candidate is, per rule the codec consults: a function called where
+/// the confirmed rule would be. Coordinates are 0.1 mm integers unless named
+/// otherwise.
+pub mod candidate {
+    use super::{Axis, EntryBoxes, RefNo, SpatialState, UndecodableAttr};
+
+    /// `spamap.rounding`: one axis' millimetre range as 0.1 mm integers.
+    pub type Rounding = fn(min_mm: f64, max_mm: f64) -> (i64, i64);
+
+    /// `spamap.word_sign`: how a coordinate becomes a word and back, and the
+    /// coordinates a word can hold.
+    #[derive(Debug, Clone, Copy)]
+    pub struct WordSign {
+        pub encode: fn(i64) -> Option<u32>,
+        pub decode: fn(u32) -> i64,
+        pub range: (i64, i64),
+    }
+
+    /// `spamap.short_axis`: the short axis of a box with these extents.
+    pub type ShortAxis = fn(extents: [i64; 3]) -> Axis;
+
+    /// `spamap.zero_extent`: the bucket of an entry whose short axis has
+    /// extent 0, or `None` to leave it to the bucket rule.
+    pub type ZeroExtent = fn(axis: Axis) -> Option<u8>;
+
+    /// `spamap.bucket`: the bucket of a short-axis extent, `None` beyond what
+    /// the candidate covers.
+    pub type Bucket = fn(extent: i64) -> Option<u8>;
+
+    /// `spamap.key0`: Key0 from the short axis, the bucket and the axis' min,
+    /// `None` when it cannot be represented.
+    pub type Key0 = fn(axis: Axis, bucket: u8, min: i64) -> Option<u32>;
+
+    /// `spamap.entries_k`: an element's entries, given its AABB.
+    pub type EntriesK = fn(refno: RefNo, state: &dyn SpatialState, aabb: [i64; 6]) -> Result<EntryBoxes, UndecodableAttr>;
+
+    /// `spamap.flags`: an entry's Spatial_Flags, `Ok(None)` when the
+    /// candidate does not cover the element.
+    pub type Flags = fn(refno: RefNo, state: &dyn SpatialState, k: u32) -> Result<Option<u32>, UndecodableAttr>;
+
+    /// `spamap.coverage`: whether a noun is a Geometric_Noun, `None` when the
+    /// candidate does not say.
+    pub type Coverage = fn(noun: u32) -> Option<bool>;
 }
 
 macro_rules! implementations {
@@ -390,19 +445,19 @@ implementations! {
 }
 
 /// One implementation slot per rule.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct RuleSet {
     pub(crate) table_shape: Slot<TableShape>,
     pub(crate) table_header_rest: Slot<TableHeaderRest>,
-    pub(crate) word_sign: Slot<WordSign>,
-    pub(crate) rounding: Slot<Rounding>,
-    pub(crate) key0: Slot<Key0>,
-    pub(crate) short_axis: Slot<ShortAxis>,
-    pub(crate) zero_extent: Slot<ZeroExtent>,
-    pub(crate) bucket: Slot<Bucket>,
-    pub(crate) entries_k: Slot<EntriesK>,
-    pub(crate) flags: Slot<Flags>,
-    pub(crate) coverage: Slot<Coverage>,
+    pub(crate) word_sign: Slot<WordSign, candidate::WordSign>,
+    pub(crate) rounding: Slot<Rounding, candidate::Rounding>,
+    pub(crate) key0: Slot<Key0, candidate::Key0>,
+    pub(crate) short_axis: Slot<ShortAxis, candidate::ShortAxis>,
+    pub(crate) zero_extent: Slot<ZeroExtent, candidate::ZeroExtent>,
+    pub(crate) bucket: Slot<Bucket, candidate::Bucket>,
+    pub(crate) entries_k: Slot<EntriesK, candidate::EntriesK>,
+    pub(crate) flags: Slot<Flags, candidate::Flags>,
+    pub(crate) coverage: Slot<Coverage, candidate::Coverage>,
     pub(crate) recompute: Slot<Recompute>,
     pub(crate) descendants_move: Slot<DescendantRecompute>,
     pub(crate) descendants_pos: Slot<DescendantRecompute>,
@@ -481,8 +536,24 @@ impl RuleSet {
     /// for Codec_Check and tests, never for writing.
     #[doc(hidden)]
     pub fn candidates(pick: &CandidatePick) -> RuleSet {
-        let CandidatePick {} = pick;
-        CONFIRMED
+        fn fill<T, C>(slot: &mut Slot<T, C>, candidate: Option<C>) {
+            if let (Slot::Pending, Some(candidate)) = (&*slot, candidate) {
+                *slot = Slot::Candidate(candidate);
+            }
+        }
+        let mut set = CONFIRMED;
+        let CandidatePick { rounding, word_sign, short_axis, zero_extent, bucket, key0, entries_k, flags, coverage } =
+            *pick;
+        fill(&mut set.rounding, rounding);
+        fill(&mut set.word_sign, word_sign);
+        fill(&mut set.short_axis, short_axis);
+        fill(&mut set.zero_extent, zero_extent);
+        fill(&mut set.bucket, bucket);
+        fill(&mut set.key0, key0);
+        fill(&mut set.entries_k, entries_k);
+        fill(&mut set.flags, flags);
+        fill(&mut set.coverage, coverage);
+        set
     }
 
     /// Whether `id`'s slot is pending, confirmed or a candidate in this set.
@@ -519,12 +590,23 @@ impl RuleSet {
     }
 }
 
-/// Which candidate each rule takes in [`RuleSet::candidates`]. Empty until the
-/// candidates are written (`src/spatial/candidates.rs`).
+/// Which candidate each rule takes in [`RuleSet::candidates`]; `None` leaves
+/// the rule as the confirmed set has it. `src/spatial/candidates.rs` has the
+/// candidates and a pick of them.
 #[doc(hidden)]
 #[non_exhaustive]
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CandidatePick {}
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CandidatePick {
+    pub rounding: Option<candidate::Rounding>,
+    pub word_sign: Option<candidate::WordSign>,
+    pub short_axis: Option<candidate::ShortAxis>,
+    pub zero_extent: Option<candidate::ZeroExtent>,
+    pub bucket: Option<candidate::Bucket>,
+    pub key0: Option<candidate::Key0>,
+    pub entries_k: Option<candidate::EntriesK>,
+    pub flags: Option<candidate::Flags>,
+    pub coverage: Option<candidate::Coverage>,
+}
 
 /// Whether a change makes E3D_Core recompute an element's entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -542,7 +624,8 @@ pub fn recompute_row(noun: u32, attr: u32) -> Trigger {
     let _ = (noun, attr);
     match CONFIRMED.recompute {
         Slot::Pending => Trigger::Unconfirmed,
-        Slot::Confirmed(table) | Slot::Candidate(table) => match table {},
+        Slot::Confirmed(table) => match table {},
+        Slot::Candidate(none) => match none {},
     }
 }
 
@@ -552,7 +635,8 @@ pub fn member_order_row(noun: u32) -> Trigger {
     let _ = noun;
     match CONFIRMED.recompute {
         Slot::Pending => Trigger::Unconfirmed,
-        Slot::Confirmed(table) | Slot::Candidate(table) => match table {},
+        Slot::Confirmed(table) => match table {},
+        Slot::Candidate(none) => match none {},
     }
 }
 
@@ -582,7 +666,8 @@ pub fn descendants_included(kind: DescendantKind, depth: u32) -> bool {
     };
     match slot {
         Slot::Pending => false,
-        Slot::Confirmed(rule) | Slot::Candidate(rule) => match rule {},
+        Slot::Confirmed(rule) => match rule {},
+        Slot::Candidate(none) => match none {},
     }
 }
 

@@ -110,6 +110,14 @@ pub trait SpatialState {
     fn attr(&self, refno: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr>;
 }
 
+/// What `spamap.entries_k` makes of one element: its entries as `(k, AABB)` in
+/// 0.1 mm, or the input it would need and cannot have (requirement 6.15).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EntryBoxes {
+    Entries(Vec<(u32, [i64; 6])>),
+    MissingInput(&'static str),
+}
+
 /// An attribute a computation needs and cannot read.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{refno}: attribute {name} ({hash}) cannot be decoded")]

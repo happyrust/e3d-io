@@ -165,7 +165,7 @@ pub fn member_order_row(noun: u32) -> Trigger;
 pub fn descendants_included(kind: DescendantKind, depth: u32) -> bool;  // depth 1 = 成员
 ```
 
-每条规则一个实现槽 `Slot<T> { Pending, Confirmed(T), Candidate(T) }`，`T` 是该规则的实现类型。设计阶段每个实现类型都是空枚举，不预设任何取值，所以槽只能是 `Pending`。某条规则坐实时，在同一提交里按 Evidence_Doc 给它的实现类型加上变体、在 `RuleSet::confirmed()` 里填 `Confirmed`，并把状态改为 `Confirmed`。候选实现放在 `src/spatial/candidates.rs`，只经 `candidates()` 以 `Candidate` 填槽。
+每条规则一个实现槽 `Slot<T, C> { Pending, Confirmed(T), Candidate(C) }`：`T` 是该规则的实现类型，设计阶段都是空枚举、不预设任何取值，所以确认集的槽只能是 `Pending`；某条规则坐实时，在同一提交里按 Evidence_Doc 给 `T` 加上变体、在 `RuleSet::confirmed()` 里填 `Confirmed`，并把状态改为 `Confirmed`。`C` 是该规则的候选函数类型（`core_rules::candidate`，如 `fn(extent: i64) -> Option<u8>`），实现放在 `src/spatial/candidates.rs`，只经 `candidates(&CandidatePick)` 以 `Candidate` 填进仍为 `Pending` 的槽；尚无候选的规则 `C = NoCandidate`（空枚举）。（里程碑 B 计划 §3.1：空的 `T` 造不出值，候选不能与确认同型。）
 
 | 规则名 | 管什么 | 出处需求 |
 |---|---|---|
