@@ -1,0 +1,773 @@
+{
+  "databases": [
+    {
+      "dangling": {
+        "entries": 0,
+        "first": []
+      },
+      "elements": 6639,
+      "key0_mismatch": {
+        "entries": 0,
+        "first": []
+      },
+      "nouns": {
+        "ATTA": {
+          "axis_bucket": {
+            "x1": 4,
+            "x4": 1,
+            "y2": 5,
+            "z1": 348,
+            "z2": 15
+          },
+          "elements": 286,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 199,
+            "2": 87,
+            "3+": 0
+          },
+          "flags": {
+            "0": 144,
+            "2": 229
+          },
+          "k": {
+            "0": 286,
+            "1": 87
+          },
+          "k_combinations": {
+            "0": 199,
+            "0,1": 87
+          }
+        },
+        "BEND": {
+          "axis_bucket": {
+            "x1": 133,
+            "x2": 82,
+            "x3": 5,
+            "y1": 85,
+            "y2": 98,
+            "y3": 4,
+            "z1": 26,
+            "z2": 201,
+            "z3": 1,
+            "z4": 2
+          },
+          "elements": 628,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 619,
+            "2": 9,
+            "3+": 0
+          },
+          "flags": {
+            "0": 69,
+            "2": 9,
+            "3": 558,
+            "6": 1
+          },
+          "k": {
+            "0": 628,
+            "1": 9
+          },
+          "k_combinations": {
+            "0": 619,
+            "0,1": 9
+          }
+        },
+        "BOX": {
+          "axis_bucket": {
+            "x2": 1,
+            "x3": 13,
+            "y3": 8,
+            "z2": 1,
+            "z3": 22
+          },
+          "elements": 45,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 45,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 45
+          },
+          "k": {
+            "0": 45
+          },
+          "k_combinations": {
+            "0": 45
+          }
+        },
+        "BRAN": {
+          "axis_bucket": {
+            "x1": 1,
+            "y1": 1,
+            "z1": 1
+          },
+          "elements": 563,
+          "elements_by_entry_count": {
+            "0": 560,
+            "1": 3,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 3
+          },
+          "k": {
+            "1": 3
+          },
+          "k_combinations": {
+            "1": 3
+          }
+        },
+        "CYLI": {
+          "axis_bucket": {
+            "y1": 2,
+            "z1": 32
+          },
+          "elements": 34,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 34,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 34
+          },
+          "k": {
+            "0": 34
+          },
+          "k_combinations": {
+            "0": 34
+          }
+        },
+        "DBMDAT": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "DBMETA": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "ELBO": {
+          "axis_bucket": {
+            "x1": 13,
+            "x2": 25,
+            "x3": 3,
+            "y1": 11,
+            "y2": 24,
+            "y3": 5,
+            "z1": 62,
+            "z2": 18,
+            "z3": 3
+          },
+          "elements": 161,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 158,
+            "2": 3,
+            "3+": 0
+          },
+          "flags": {
+            "0": 9,
+            "2": 79,
+            "3": 71,
+            "6": 5
+          },
+          "k": {
+            "0": 161,
+            "1": 3
+          },
+          "k_combinations": {
+            "0": 158,
+            "0,1": 3
+          }
+        },
+        "ELCONN": {
+          "axis_bucket": {
+            "x4": 2,
+            "y3": 5,
+            "y4": 1,
+            "z1": 3,
+            "z2": 18,
+            "z3": 5
+          },
+          "elements": 34,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 34,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 34
+          },
+          "k": {
+            "0": 34
+          },
+          "k_combinations": {
+            "0": 34
+          }
+        },
+        "EQUI": {
+          "axis_bucket": {},
+          "elements": 77,
+          "elements_by_entry_count": {
+            "0": 77,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "EXTR": {
+          "axis_bucket": {
+            "x1": 4,
+            "x2": 4,
+            "y1": 64,
+            "z1": 2
+          },
+          "elements": 74,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 74,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 74
+          },
+          "k": {
+            "0": 74
+          },
+          "k_combinations": {
+            "0": 74
+          }
+        },
+        "FITT": {
+          "axis_bucket": {
+            "z1": 22
+          },
+          "elements": 22,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 22,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 22
+          },
+          "k": {
+            "0": 22
+          },
+          "k_combinations": {
+            "0": 22
+          }
+        },
+        "FRMW": {
+          "axis_bucket": {},
+          "elements": 135,
+          "elements_by_entry_count": {
+            "0": 135,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "FTUB": {
+          "axis_bucket": {
+            "x1": 26,
+            "x2": 132,
+            "x3": 27,
+            "y1": 41,
+            "y2": 127,
+            "y3": 16,
+            "y4": 1,
+            "z1": 126,
+            "z2": 1066,
+            "z3": 11,
+            "z4": 3
+          },
+          "elements": 1559,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1542,
+            "2": 17,
+            "3+": 0
+          },
+          "flags": {
+            "0": 106,
+            "2": 194,
+            "3": 1276
+          },
+          "k": {
+            "0": 1559,
+            "1": 17
+          },
+          "k_combinations": {
+            "0": 1542,
+            "0,1": 17
+          }
+        },
+        "HVAC": {
+          "axis_bucket": {},
+          "elements": 2,
+          "elements_by_entry_count": {
+            "0": 2,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "LOOP": {
+          "axis_bucket": {},
+          "elements": 74,
+          "elements_by_entry_count": {
+            "0": 74,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "MNUM": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PANE": {
+          "axis_bucket": {
+            "z5": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 1
+          },
+          "k": {
+            "0": 1
+          },
+          "k_combinations": {
+            "0": 1
+          }
+        },
+        "PAVE": {
+          "axis_bucket": {},
+          "elements": 7,
+          "elements_by_entry_count": {
+            "0": 7,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PIPE": {
+          "axis_bucket": {},
+          "elements": 47,
+          "elements_by_entry_count": {
+            "0": 47,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PJOI": {
+          "axis_bucket": {},
+          "elements": 248,
+          "elements_by_entry_count": {
+            "0": 248,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PLOO": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PNOD": {
+          "axis_bucket": {
+            "z1": 248
+          },
+          "elements": 248,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 248,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 248
+          },
+          "k": {
+            "0": 248
+          },
+          "k_combinations": {
+            "0": 248
+          }
+        },
+        "REDU": {
+          "axis_bucket": {
+            "z1": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 1
+          },
+          "k": {
+            "0": 1
+          },
+          "k_combinations": {
+            "0": 1
+          }
+        },
+        "SBFR": {
+          "axis_bucket": {},
+          "elements": 2,
+          "elements_by_entry_count": {
+            "0": 2,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SCOJ": {
+          "axis_bucket": {},
+          "elements": 389,
+          "elements_by_entry_count": {
+            "0": 389,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SCTN": {
+          "axis_bucket": {
+            "x1": 4,
+            "x2": 6,
+            "y1": 130,
+            "y2": 6,
+            "z1": 380,
+            "z2": 2
+          },
+          "elements": 528,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 528,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 506,
+            "2": 22
+          },
+          "k": {
+            "0": 528
+          },
+          "k_combinations": {
+            "0": 528
+          }
+        },
+        "SITE": {
+          "axis_bucket": {},
+          "elements": 3,
+          "elements_by_entry_count": {
+            "0": 3,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SNOD": {
+          "axis_bucket": {},
+          "elements": 389,
+          "elements_by_entry_count": {
+            "0": 389,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "STRT": {
+          "axis_bucket": {
+            "z4": 2
+          },
+          "elements": 2,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 2,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "3": 2
+          },
+          "k": {
+            "0": 2
+          },
+          "k_combinations": {
+            "0": 2
+          }
+        },
+        "STRU": {
+          "axis_bucket": {},
+          "elements": 135,
+          "elements_by_entry_count": {
+            "0": 135,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SUBJ": {
+          "axis_bucket": {},
+          "elements": 428,
+          "elements_by_entry_count": {
+            "0": 428,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SUBS": {
+          "axis_bucket": {},
+          "elements": 41,
+          "elements_by_entry_count": {
+            "0": 41,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "TEXT": {
+          "axis_bucket": {},
+          "elements": 24,
+          "elements_by_entry_count": {
+            "0": 24,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "VALV": {
+          "axis_bucket": {
+            "y4": 1,
+            "z3": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 0,
+            "2": 1,
+            "3+": 0
+          },
+          "flags": {
+            "6": 1,
+            "7": 1
+          },
+          "k": {
+            "0": 1,
+            "1": 1
+          },
+          "k_combinations": {
+            "0,1": 1
+          }
+        },
+        "VERT": {
+          "axis_bucket": {},
+          "elements": 435,
+          "elements_by_entry_count": {
+            "0": 435,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "WELD": {
+          "axis_bucket": {
+            "y1": 1,
+            "y2": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 0,
+            "2": 1,
+            "3+": 0
+          },
+          "flags": {
+            "0": 1,
+            "6": 1
+          },
+          "k": {
+            "0": 1,
+            "1": 1
+          },
+          "k_combinations": {
+            "0,1": 1
+          }
+        },
+        "WORL": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "ZONE": {
+          "axis_bucket": {},
+          "elements": 10,
+          "elements_by_entry_count": {
+            "0": 10,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        }
+      },
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "sesno": 640,
+      "spamap": {
+        "entries": 3746,
+        "pages": 244,
+        "root_page": 16309
+      },
+      "totals": {
+        "axis_bucket": {
+          "x1": 185,
+          "x2": 250,
+          "x3": 48,
+          "x4": 3,
+          "y1": 335,
+          "y2": 261,
+          "y3": 38,
+          "y4": 3,
+          "z1": 1251,
+          "z2": 1321,
+          "z3": 43,
+          "z4": 7,
+          "z5": 1
+        },
+        "flags": {
+          "0": 1083,
+          "2": 747,
+          "3": 1907,
+          "6": 8,
+          "7": 1
+        },
+        "k": {
+          "0": 3625,
+          "1": 121
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "key0_reading": "key0 = N * 10^8 + min, min the signed 0.1 mm minimum the value stores for one axis, N = 6 * axis (x 0, y 1, z 2) + bucket (1..5); an entry no axis reads that way counts as key0_mismatch (docs/evidence/2026-09-22-e3d-spamap-consequences.md, section 0 item 7)",
+  "not_databases": []
+}

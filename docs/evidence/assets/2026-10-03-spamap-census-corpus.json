@@ -1,0 +1,3078 @@
+{
+  "databases": [
+    {
+      "dangling": {
+        "entries": 0,
+        "first": []
+      },
+      "elements": 948,
+      "key0_mismatch": {
+        "entries": 0,
+        "first": []
+      },
+      "nouns": {
+        "CONSEQ": {
+          "axis_bucket": {},
+          "elements": 14,
+          "elements_by_entry_count": {
+            "0": 14,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "CTBEND": {
+          "axis_bucket": {},
+          "elements": 18,
+          "elements_by_entry_count": {
+            "0": 18,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "CTMTRL": {
+          "axis_bucket": {},
+          "elements": 39,
+          "elements_by_entry_count": {
+            "0": 39,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "CTRAY": {
+          "axis_bucket": {
+            "x3": 23,
+            "y3": 60,
+            "z2": 2,
+            "z3": 43
+          },
+          "elements": 128,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 128,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "3": 128
+          },
+          "k": {
+            "0": 128
+          },
+          "k_combinations": {
+            "0": 128
+          }
+        },
+        "CTRISE": {
+          "axis_bucket": {},
+          "elements": 8,
+          "elements_by_entry_count": {
+            "0": 8,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "CTSTRA": {
+          "axis_bucket": {},
+          "elements": 96,
+          "elements_by_entry_count": {
+            "0": 96,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "CTTEE": {
+          "axis_bucket": {},
+          "elements": 6,
+          "elements_by_entry_count": {
+            "0": 6,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "CWAY": {
+          "axis_bucket": {},
+          "elements": 4,
+          "elements_by_entry_count": {
+            "0": 4,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "CWBRAN": {
+          "axis_bucket": {
+            "x2": 2,
+            "y2": 13,
+            "y3": 4,
+            "z2": 35,
+            "z3": 7
+          },
+          "elements": 61,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 61,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "1": 61
+          },
+          "k": {
+            "0": 61
+          },
+          "k_combinations": {
+            "0": 61
+          }
+        },
+        "HATTA": {
+          "axis_bucket": {},
+          "elements": 61,
+          "elements_by_entry_count": {
+            "0": 61,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "MNUM": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "POINTR": {
+          "axis_bucket": {},
+          "elements": 172,
+          "elements_by_entry_count": {
+            "0": 172,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "RATTA": {
+          "axis_bucket": {},
+          "elements": 16,
+          "elements_by_entry_count": {
+            "0": 16,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "RNODE": {
+          "axis_bucket": {
+            "z1": 138
+          },
+          "elements": 138,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 138,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 138
+          },
+          "k": {
+            "0": 138
+          },
+          "k_combinations": {
+            "0": 138
+          }
+        },
+        "RPATH": {
+          "axis_bucket": {},
+          "elements": 61,
+          "elements_by_entry_count": {
+            "0": 61,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "RTFEAT": {
+          "axis_bucket": {},
+          "elements": 61,
+          "elements_by_entry_count": {
+            "0": 61,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SITE": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "TATTA": {
+          "axis_bucket": {},
+          "elements": 61,
+          "elements_by_entry_count": {
+            "0": 61,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "WORL": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "ZONE": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        }
+      },
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams251142_0001",
+      "sesno": 10,
+      "spamap": {
+        "entries": 327,
+        "pages": 15,
+        "root_page": 112
+      },
+      "totals": {
+        "axis_bucket": {
+          "x2": 2,
+          "x3": 23,
+          "y2": 13,
+          "y3": 64,
+          "z1": 138,
+          "z2": 37,
+          "z3": 50
+        },
+        "flags": {
+          "0": 138,
+          "1": 61,
+          "3": 128
+        },
+        "k": {
+          "0": 327
+        }
+      }
+    },
+    {
+      "dangling": {
+        "entries": 0,
+        "first": []
+      },
+      "elements": 3345855,
+      "key0_mismatch": {
+        "entries": 0,
+        "first": []
+      },
+      "nouns": {
+        "CATA": {
+          "axis_bucket": {},
+          "elements": 12,
+          "elements_by_entry_count": {
+            "0": 12,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "CATE": {
+          "axis_bucket": {},
+          "elements": 89845,
+          "elements_by_entry_count": {
+            "0": 89845,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "DATA": {
+          "axis_bucket": {},
+          "elements": 2507075,
+          "elements_by_entry_count": {
+            "0": 2507075,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "DTSE": {
+          "axis_bucket": {},
+          "elements": 744948,
+          "elements_by_entry_count": {
+            "0": 744948,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "MNUM": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SECT": {
+          "axis_bucket": {},
+          "elements": 2169,
+          "elements_by_entry_count": {
+            "0": 2169,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SPEC": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SPWL": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "TEXT": {
+          "axis_bucket": {},
+          "elements": 1802,
+          "elements_by_entry_count": {
+            "0": 1802,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "WORL": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        }
+      },
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams7351_0001",
+      "sesno": 116,
+      "spamap": "no_table",
+      "totals": {
+        "axis_bucket": {},
+        "flags": {},
+        "k": {}
+      }
+    },
+    {
+      "dangling": {
+        "entries": 0,
+        "first": []
+      },
+      "elements": 34709,
+      "key0_mismatch": {
+        "entries": 0,
+        "first": []
+      },
+      "nouns": {
+        "ATTA": {
+          "axis_bucket": {
+            "x1": 367,
+            "x2": 35,
+            "y1": 569,
+            "y2": 95,
+            "z1": 4052,
+            "z2": 89
+          },
+          "elements": 4560,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 3913,
+            "2": 647,
+            "3+": 0
+          },
+          "flags": {
+            "0": 2535,
+            "2": 2672
+          },
+          "k": {
+            "0": 4560,
+            "1": 647
+          },
+          "k_combinations": {
+            "0": 3913,
+            "0,1": 647
+          }
+        },
+        "BEND": {
+          "axis_bucket": {
+            "x1": 239,
+            "x2": 336,
+            "x3": 29,
+            "y1": 208,
+            "y2": 417,
+            "y3": 33,
+            "z1": 55,
+            "z2": 691,
+            "z3": 71
+          },
+          "elements": 1715,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1351,
+            "2": 364,
+            "3+": 0
+          },
+          "flags": {
+            "0": 86,
+            "2": 194,
+            "3": 1275,
+            "6": 524
+          },
+          "k": {
+            "0": 1715,
+            "1": 364
+          },
+          "k_combinations": {
+            "0": 1351,
+            "0,1": 364
+          }
+        },
+        "BOX": {
+          "axis_bucket": {
+            "x1": 20,
+            "x2": 3,
+            "x3": 5,
+            "x4": 10,
+            "y1": 8,
+            "y2": 17,
+            "y3": 31,
+            "y4": 1,
+            "z1": 22,
+            "z2": 4,
+            "z3": 153,
+            "z4": 1
+          },
+          "elements": 275,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 275,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 275
+          },
+          "k": {
+            "0": 275
+          },
+          "k_combinations": {
+            "0": 275
+          }
+        },
+        "BRAN": {
+          "axis_bucket": {
+            "x1": 1,
+            "x2": 9,
+            "x3": 3,
+            "y1": 55,
+            "y2": 20,
+            "y3": 3,
+            "z1": 30,
+            "z2": 86,
+            "z3": 12
+          },
+          "elements": 1256,
+          "elements_by_entry_count": {
+            "0": 1037,
+            "1": 219,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 138,
+            "6": 81
+          },
+          "k": {
+            "1": 219
+          },
+          "k_combinations": {
+            "1": 219
+          }
+        },
+        "CAP": {
+          "axis_bucket": {
+            "x1": 1,
+            "y1": 29,
+            "y2": 1,
+            "z1": 24,
+            "z2": 6
+          },
+          "elements": 58,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 55,
+            "2": 3,
+            "3+": 0
+          },
+          "flags": {
+            "0": 1,
+            "2": 60
+          },
+          "k": {
+            "0": 58,
+            "1": 3
+          },
+          "k_combinations": {
+            "0": 55,
+            "0,1": 3
+          }
+        },
+        "CONE": {
+          "axis_bucket": {
+            "x2": 8,
+            "y1": 1,
+            "y2": 8,
+            "y3": 1,
+            "y4": 2,
+            "z1": 61,
+            "z2": 9,
+            "z3": 1,
+            "z4": 1
+          },
+          "elements": 92,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 92,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 92
+          },
+          "k": {
+            "0": 92
+          },
+          "k_combinations": {
+            "0": 92
+          }
+        },
+        "COUP": {
+          "axis_bucket": {
+            "x1": 7,
+            "x2": 15,
+            "x3": 1,
+            "y1": 8,
+            "y2": 20,
+            "z1": 11,
+            "z2": 26,
+            "z3": 2
+          },
+          "elements": 50,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 10,
+            "2": 40,
+            "3+": 0
+          },
+          "flags": {
+            "2": 13,
+            "6": 77
+          },
+          "k": {
+            "0": 50,
+            "1": 40
+          },
+          "k_combinations": {
+            "0": 10,
+            "0,1": 40
+          }
+        },
+        "CTOR": {
+          "axis_bucket": {
+            "x1": 6,
+            "x2": 1,
+            "x3": 1,
+            "y1": 3,
+            "y2": 3
+          },
+          "elements": 14,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 14,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 14
+          },
+          "k": {
+            "0": 14
+          },
+          "k_combinations": {
+            "0": 14
+          }
+        },
+        "CYLI": {
+          "axis_bucket": {
+            "x1": 69,
+            "x2": 16,
+            "y1": 135,
+            "y2": 25,
+            "y3": 11,
+            "y5": 1,
+            "z1": 332,
+            "z2": 83,
+            "z3": 353,
+            "z4": 10
+          },
+          "elements": 1035,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1035,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 1035
+          },
+          "k": {
+            "0": 1035
+          },
+          "k_combinations": {
+            "0": 1035
+          }
+        },
+        "DATU": {
+          "axis_bucket": {
+            "z1": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 1
+          },
+          "k": {
+            "0": 1
+          },
+          "k_combinations": {
+            "0": 1
+          }
+        },
+        "DBMDAT": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "DBMETA": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "DISH": {
+          "axis_bucket": {
+            "y2": 4,
+            "z2": 2,
+            "z4": 1
+          },
+          "elements": 7,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 7,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 7
+          },
+          "k": {
+            "0": 7
+          },
+          "k_combinations": {
+            "0": 7
+          }
+        },
+        "ELBO": {
+          "axis_bucket": {
+            "x1": 29,
+            "x2": 203,
+            "x3": 91,
+            "y1": 43,
+            "y2": 375,
+            "y3": 123,
+            "z1": 187,
+            "z2": 751,
+            "z3": 247
+          },
+          "elements": 1221,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 393,
+            "2": 828,
+            "3+": 0
+          },
+          "flags": {
+            "0": 3,
+            "2": 1083,
+            "3": 196,
+            "6": 767
+          },
+          "k": {
+            "0": 1221,
+            "1": 828
+          },
+          "k_combinations": {
+            "0": 393,
+            "0,1": 828
+          }
+        },
+        "EQUI": {
+          "axis_bucket": {},
+          "elements": 90,
+          "elements_by_entry_count": {
+            "0": 90,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "EXTR": {
+          "axis_bucket": {
+            "x1": 18,
+            "x2": 2,
+            "x3": 1,
+            "y1": 39,
+            "y2": 1,
+            "z1": 153
+          },
+          "elements": 214,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 214,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 214
+          },
+          "k": {
+            "0": 214
+          },
+          "k_combinations": {
+            "0": 214
+          }
+        },
+        "FBLI": {
+          "axis_bucket": {
+            "z1": 4
+          },
+          "elements": 4,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 4,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 4
+          },
+          "k": {
+            "0": 4
+          },
+          "k_combinations": {
+            "0": 4
+          }
+        },
+        "FITT": {
+          "axis_bucket": {
+            "z1": 4
+          },
+          "elements": 4,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 4,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 4
+          },
+          "k": {
+            "0": 4
+          },
+          "k_combinations": {
+            "0": 4
+          }
+        },
+        "FLAN": {
+          "axis_bucket": {
+            "x1": 3,
+            "x2": 74,
+            "x3": 3,
+            "y1": 6,
+            "y2": 76,
+            "z1": 21,
+            "z2": 113
+          },
+          "elements": 210,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 124,
+            "2": 86,
+            "3+": 0
+          },
+          "flags": {
+            "2": 287,
+            "6": 9
+          },
+          "k": {
+            "0": 210,
+            "1": 86
+          },
+          "k_combinations": {
+            "0": 124,
+            "0,1": 86
+          }
+        },
+        "FRMW": {
+          "axis_bucket": {},
+          "elements": 1421,
+          "elements_by_entry_count": {
+            "0": 1421,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "FTUB": {
+          "axis_bucket": {
+            "x1": 15,
+            "x2": 184,
+            "x3": 113,
+            "x4": 1,
+            "y1": 37,
+            "y2": 221,
+            "y3": 108,
+            "y4": 19,
+            "z1": 38,
+            "z2": 1798,
+            "z3": 25,
+            "z4": 4
+          },
+          "elements": 2490,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 2417,
+            "2": 73,
+            "3+": 0
+          },
+          "flags": {
+            "0": 119,
+            "2": 177,
+            "3": 2267
+          },
+          "k": {
+            "0": 2490,
+            "1": 73
+          },
+          "k_combinations": {
+            "0": 2417,
+            "0,1": 73
+          }
+        },
+        "GASK": {
+          "axis_bucket": {
+            "z1": 107
+          },
+          "elements": 107,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 107,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 107
+          },
+          "k": {
+            "0": 107
+          },
+          "k_combinations": {
+            "0": 107
+          }
+        },
+        "HANG": {
+          "axis_bucket": {},
+          "elements": 241,
+          "elements_by_entry_count": {
+            "0": 241,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "HELE": {
+          "axis_bucket": {
+            "x1": 7,
+            "x2": 5,
+            "y1": 5,
+            "y2": 18,
+            "y3": 11,
+            "z1": 14,
+            "z2": 8,
+            "z3": 5
+          },
+          "elements": 73,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 73,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 73
+          },
+          "k": {
+            "0": 73
+          },
+          "k_combinations": {
+            "0": 73
+          }
+        },
+        "HROD": {
+          "axis_bucket": {
+            "y1": 14
+          },
+          "elements": 14,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 14,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 14
+          },
+          "k": {
+            "0": 14
+          },
+          "k_combinations": {
+            "0": 14
+          }
+        },
+        "INST": {
+          "axis_bucket": {
+            "x1": 6,
+            "x2": 17,
+            "y1": 11,
+            "z1": 1
+          },
+          "elements": 35,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 35,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 35
+          },
+          "k": {
+            "0": 35
+          },
+          "k_combinations": {
+            "0": 35
+          }
+        },
+        "LNKI": {
+          "axis_bucket": {},
+          "elements": 71,
+          "elements_by_entry_count": {
+            "0": 71,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "LNKS": {
+          "axis_bucket": {},
+          "elements": 71,
+          "elements_by_entry_count": {
+            "0": 71,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "LOOP": {
+          "axis_bucket": {},
+          "elements": 215,
+          "elements_by_entry_count": {
+            "0": 215,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "MNUM": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "NBOX": {
+          "axis_bucket": {},
+          "elements": 17,
+          "elements_by_entry_count": {
+            "0": 17,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "NCON": {
+          "axis_bucket": {},
+          "elements": 2,
+          "elements_by_entry_count": {
+            "0": 2,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "NCYL": {
+          "axis_bucket": {},
+          "elements": 231,
+          "elements_by_entry_count": {
+            "0": 231,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "NOZZ": {
+          "axis_bucket": {
+            "x1": 4,
+            "y1": 1,
+            "y2": 2,
+            "z1": 52
+          },
+          "elements": 59,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 59,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 50,
+            "2": 9
+          },
+          "k": {
+            "0": 59
+          },
+          "k_combinations": {
+            "0": 59
+          }
+        },
+        "NPYR": {
+          "axis_bucket": {},
+          "elements": 18,
+          "elements_by_entry_count": {
+            "0": 18,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "NXTR": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "OLET": {
+          "axis_bucket": {
+            "x1": 1,
+            "x2": 10,
+            "x3": 1,
+            "y1": 86,
+            "y2": 31,
+            "y3": 4,
+            "z1": 14,
+            "z2": 107,
+            "z3": 8
+          },
+          "elements": 136,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 10,
+            "2": 126,
+            "3+": 0
+          },
+          "flags": {
+            "2": 234,
+            "6": 28
+          },
+          "k": {
+            "0": 136,
+            "1": 126
+          },
+          "k_combinations": {
+            "0": 10,
+            "0,1": 126
+          }
+        },
+        "PANE": {
+          "axis_bucket": {
+            "x1": 100,
+            "x2": 20,
+            "y1": 98,
+            "y2": 46,
+            "y3": 6,
+            "z1": 254,
+            "z2": 10,
+            "z3": 7
+          },
+          "elements": 541,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 541,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 541
+          },
+          "k": {
+            "0": 541
+          },
+          "k_combinations": {
+            "0": 541
+          }
+        },
+        "PAVE": {
+          "axis_bucket": {},
+          "elements": 2164,
+          "elements_by_entry_count": {
+            "0": 2164,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PCLA": {
+          "axis_bucket": {
+            "x1": 3,
+            "x2": 10,
+            "x3": 1,
+            "y1": 15,
+            "y2": 7,
+            "z1": 29,
+            "z2": 10,
+            "z3": 2
+          },
+          "elements": 77,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 77,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 15,
+            "2": 62
+          },
+          "k": {
+            "0": 77
+          },
+          "k_combinations": {
+            "0": 77
+          }
+        },
+        "PCOM": {
+          "axis_bucket": {
+            "z3": 6
+          },
+          "elements": 3,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 0,
+            "2": 3,
+            "3+": 0
+          },
+          "flags": {
+            "2": 3,
+            "6": 3
+          },
+          "k": {
+            "0": 3,
+            "1": 3
+          },
+          "k_combinations": {
+            "0,1": 3
+          }
+        },
+        "PFIT": {
+          "axis_bucket": {
+            "y1": 24,
+            "z1": 170
+          },
+          "elements": 194,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 194,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 194
+          },
+          "k": {
+            "0": 194
+          },
+          "k_combinations": {
+            "0": 194
+          }
+        },
+        "PIPE": {
+          "axis_bucket": {},
+          "elements": 518,
+          "elements_by_entry_count": {
+            "0": 518,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PJOI": {
+          "axis_bucket": {
+            "x1": 61,
+            "x2": 82,
+            "y1": 35,
+            "y2": 110,
+            "z1": 1095,
+            "z3": 11
+          },
+          "elements": 1874,
+          "elements_by_entry_count": {
+            "0": 480,
+            "1": 1394,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 1,
+            "2": 1393
+          },
+          "k": {
+            "0": 1394
+          },
+          "k_combinations": {
+            "0": 1394
+          }
+        },
+        "PLOO": {
+          "axis_bucket": {},
+          "elements": 541,
+          "elements_by_entry_count": {
+            "0": 541,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PNOD": {
+          "axis_bucket": {
+            "z1": 1870
+          },
+          "elements": 1870,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1870,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 1870
+          },
+          "k": {
+            "0": 1870
+          },
+          "k_combinations": {
+            "0": 1870
+          }
+        },
+        "PYRA": {
+          "axis_bucket": {
+            "x4": 4,
+            "y1": 1,
+            "y4": 4
+          },
+          "elements": 9,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 9,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 9
+          },
+          "k": {
+            "0": 9
+          },
+          "k_combinations": {
+            "0": 9
+          }
+        },
+        "REDU": {
+          "axis_bucket": {
+            "x1": 11,
+            "x2": 48,
+            "x3": 1,
+            "y1": 46,
+            "y2": 48,
+            "y3": 2,
+            "z1": 44,
+            "z2": 125,
+            "z3": 3
+          },
+          "elements": 203,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 78,
+            "2": 125,
+            "3+": 0
+          },
+          "flags": {
+            "2": 166,
+            "6": 162
+          },
+          "k": {
+            "0": 203,
+            "1": 125
+          },
+          "k_combinations": {
+            "0": 78,
+            "0,1": 125
+          }
+        },
+        "REST": {
+          "axis_bucket": {},
+          "elements": 184,
+          "elements_by_entry_count": {
+            "0": 184,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "RTOR": {
+          "axis_bucket": {
+            "x2": 2,
+            "y1": 2,
+            "y2": 4,
+            "z2": 7
+          },
+          "elements": 15,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 15,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 15
+          },
+          "k": {
+            "0": 15
+          },
+          "k_combinations": {
+            "0": 15
+          }
+        },
+        "SBFR": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SCLA": {
+          "axis_bucket": {
+            "z2": 4
+          },
+          "elements": 4,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 4,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 4
+          },
+          "k": {
+            "0": 4
+          },
+          "k_combinations": {
+            "0": 4
+          }
+        },
+        "SCOJ": {
+          "axis_bucket": {
+            "x2": 61,
+            "y2": 92,
+            "z3": 380
+          },
+          "elements": 922,
+          "elements_by_entry_count": {
+            "0": 389,
+            "1": 533,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 533
+          },
+          "k": {
+            "0": 533
+          },
+          "k_combinations": {
+            "0": 533
+          }
+        },
+        "SCTN": {
+          "axis_bucket": {
+            "x1": 85,
+            "x2": 161,
+            "x3": 27,
+            "y1": 180,
+            "y2": 388,
+            "y3": 91,
+            "z1": 979,
+            "z2": 1355,
+            "z3": 18,
+            "z4": 1
+          },
+          "elements": 3285,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 3285,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 681,
+            "2": 2604
+          },
+          "k": {
+            "0": 3285
+          },
+          "k_combinations": {
+            "0": 3285
+          }
+        },
+        "SITE": {
+          "axis_bucket": {},
+          "elements": 4,
+          "elements_by_entry_count": {
+            "0": 4,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SNOD": {
+          "axis_bucket": {},
+          "elements": 922,
+          "elements_by_entry_count": {
+            "0": 922,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SNOU": {
+          "axis_bucket": {
+            "y2": 3,
+            "z2": 4
+          },
+          "elements": 7,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 7,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 7
+          },
+          "k": {
+            "0": 7
+          },
+          "k_combinations": {
+            "0": 7
+          }
+        },
+        "STRU": {
+          "axis_bucket": {},
+          "elements": 1423,
+          "elements_by_entry_count": {
+            "0": 1423,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SUBE": {
+          "axis_bucket": {},
+          "elements": 28,
+          "elements_by_entry_count": {
+            "0": 28,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SUBJ": {
+          "axis_bucket": {},
+          "elements": 1015,
+          "elements_by_entry_count": {
+            "0": 1015,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SUBS": {
+          "axis_bucket": {},
+          "elements": 3,
+          "elements_by_entry_count": {
+            "0": 3,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "TEE": {
+          "axis_bucket": {
+            "x1": 1,
+            "x2": 42,
+            "x3": 10,
+            "y1": 2,
+            "y2": 54,
+            "y3": 8,
+            "z1": 25,
+            "z2": 104,
+            "z3": 23
+          },
+          "elements": 145,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 21,
+            "2": 124,
+            "3+": 0
+          },
+          "flags": {
+            "2": 140,
+            "3": 1,
+            "6": 128
+          },
+          "k": {
+            "0": 145,
+            "1": 124
+          },
+          "k_combinations": {
+            "0": 21,
+            "0,1": 124
+          }
+        },
+        "VALV": {
+          "axis_bucket": {
+            "x1": 10,
+            "x2": 19,
+            "x3": 34,
+            "x4": 8,
+            "y1": 45,
+            "y2": 51,
+            "y3": 32,
+            "y4": 15,
+            "z1": 16,
+            "z2": 137,
+            "z3": 25
+          },
+          "elements": 244,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 96,
+            "2": 148,
+            "3+": 0
+          },
+          "flags": {
+            "0": 1,
+            "2": 125,
+            "3": 115,
+            "6": 55,
+            "7": 96
+          },
+          "k": {
+            "0": 244,
+            "1": 148
+          },
+          "k_combinations": {
+            "0": 96,
+            "0,1": 148
+          }
+        },
+        "VERT": {
+          "axis_bucket": {},
+          "elements": 2336,
+          "elements_by_entry_count": {
+            "0": 2336,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "VTWA": {
+          "axis_bucket": {
+            "y3": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "7": 1
+          },
+          "k": {
+            "0": 1
+          },
+          "k_combinations": {
+            "0": 1
+          }
+        },
+        "WELD": {
+          "axis_bucket": {
+            "x1": 40,
+            "x2": 18,
+            "x3": 5,
+            "y1": 43,
+            "y2": 26,
+            "y3": 2,
+            "z1": 23,
+            "z2": 43,
+            "z3": 5,
+            "z4": 1
+          },
+          "elements": 139,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 72,
+            "2": 67,
+            "3+": 0
+          },
+          "flags": {
+            "0": 138,
+            "2": 46,
+            "6": 22
+          },
+          "k": {
+            "0": 139,
+            "1": 67
+          },
+          "k_combinations": {
+            "0": 72,
+            "0,1": 67
+          }
+        },
+        "WORL": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "ZONE": {
+          "axis_bucket": {},
+          "elements": 25,
+          "elements_by_entry_count": {
+            "0": 25,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        }
+      },
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams7999_0001",
+      "sesno": 200,
+      "spamap": {
+        "entries": 23891,
+        "pages": 1387,
+        "root_page": 28989
+      },
+      "totals": {
+        "axis_bucket": {
+          "x1": 1104,
+          "x2": 1381,
+          "x3": 326,
+          "x4": 23,
+          "y1": 1749,
+          "y2": 2163,
+          "y3": 467,
+          "y4": 41,
+          "y5": 1,
+          "z1": 9688,
+          "z2": 5572,
+          "z3": 1357,
+          "z4": 19
+        },
+        "flags": {
+          "0": 5608,
+          "2": 12476,
+          "3": 3854,
+          "6": 1856,
+          "7": 97
+        },
+        "k": {
+          "0": 21038,
+          "1": 2853
+        }
+      }
+    },
+    {
+      "dangling": {
+        "entries": 0,
+        "first": []
+      },
+      "elements": 6639,
+      "key0_mismatch": {
+        "entries": 0,
+        "first": []
+      },
+      "nouns": {
+        "ATTA": {
+          "axis_bucket": {
+            "x1": 4,
+            "x4": 1,
+            "y2": 5,
+            "z1": 348,
+            "z2": 15
+          },
+          "elements": 286,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 199,
+            "2": 87,
+            "3+": 0
+          },
+          "flags": {
+            "0": 144,
+            "2": 229
+          },
+          "k": {
+            "0": 286,
+            "1": 87
+          },
+          "k_combinations": {
+            "0": 199,
+            "0,1": 87
+          }
+        },
+        "BEND": {
+          "axis_bucket": {
+            "x1": 133,
+            "x2": 82,
+            "x3": 5,
+            "y1": 85,
+            "y2": 98,
+            "y3": 4,
+            "z1": 26,
+            "z2": 201,
+            "z3": 1,
+            "z4": 2
+          },
+          "elements": 628,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 619,
+            "2": 9,
+            "3+": 0
+          },
+          "flags": {
+            "0": 69,
+            "2": 9,
+            "3": 558,
+            "6": 1
+          },
+          "k": {
+            "0": 628,
+            "1": 9
+          },
+          "k_combinations": {
+            "0": 619,
+            "0,1": 9
+          }
+        },
+        "BOX": {
+          "axis_bucket": {
+            "x2": 1,
+            "x3": 13,
+            "y3": 8,
+            "z2": 1,
+            "z3": 22
+          },
+          "elements": 45,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 45,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 45
+          },
+          "k": {
+            "0": 45
+          },
+          "k_combinations": {
+            "0": 45
+          }
+        },
+        "BRAN": {
+          "axis_bucket": {
+            "x1": 1,
+            "y1": 1,
+            "z1": 1
+          },
+          "elements": 563,
+          "elements_by_entry_count": {
+            "0": 560,
+            "1": 3,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 3
+          },
+          "k": {
+            "1": 3
+          },
+          "k_combinations": {
+            "1": 3
+          }
+        },
+        "CYLI": {
+          "axis_bucket": {
+            "y1": 2,
+            "z1": 32
+          },
+          "elements": 34,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 34,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 34
+          },
+          "k": {
+            "0": 34
+          },
+          "k_combinations": {
+            "0": 34
+          }
+        },
+        "DBMDAT": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "DBMETA": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "ELBO": {
+          "axis_bucket": {
+            "x1": 13,
+            "x2": 25,
+            "x3": 3,
+            "y1": 11,
+            "y2": 24,
+            "y3": 5,
+            "z1": 62,
+            "z2": 18,
+            "z3": 3
+          },
+          "elements": 161,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 158,
+            "2": 3,
+            "3+": 0
+          },
+          "flags": {
+            "0": 9,
+            "2": 79,
+            "3": 71,
+            "6": 5
+          },
+          "k": {
+            "0": 161,
+            "1": 3
+          },
+          "k_combinations": {
+            "0": 158,
+            "0,1": 3
+          }
+        },
+        "ELCONN": {
+          "axis_bucket": {
+            "x4": 2,
+            "y3": 5,
+            "y4": 1,
+            "z1": 3,
+            "z2": 18,
+            "z3": 5
+          },
+          "elements": 34,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 34,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 34
+          },
+          "k": {
+            "0": 34
+          },
+          "k_combinations": {
+            "0": 34
+          }
+        },
+        "EQUI": {
+          "axis_bucket": {},
+          "elements": 77,
+          "elements_by_entry_count": {
+            "0": 77,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "EXTR": {
+          "axis_bucket": {
+            "x1": 4,
+            "x2": 4,
+            "y1": 64,
+            "z1": 2
+          },
+          "elements": 74,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 74,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 74
+          },
+          "k": {
+            "0": 74
+          },
+          "k_combinations": {
+            "0": 74
+          }
+        },
+        "FITT": {
+          "axis_bucket": {
+            "z1": 22
+          },
+          "elements": 22,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 22,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 22
+          },
+          "k": {
+            "0": 22
+          },
+          "k_combinations": {
+            "0": 22
+          }
+        },
+        "FRMW": {
+          "axis_bucket": {},
+          "elements": 135,
+          "elements_by_entry_count": {
+            "0": 135,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "FTUB": {
+          "axis_bucket": {
+            "x1": 26,
+            "x2": 132,
+            "x3": 27,
+            "y1": 41,
+            "y2": 127,
+            "y3": 16,
+            "y4": 1,
+            "z1": 126,
+            "z2": 1066,
+            "z3": 11,
+            "z4": 3
+          },
+          "elements": 1559,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1542,
+            "2": 17,
+            "3+": 0
+          },
+          "flags": {
+            "0": 106,
+            "2": 194,
+            "3": 1276
+          },
+          "k": {
+            "0": 1559,
+            "1": 17
+          },
+          "k_combinations": {
+            "0": 1542,
+            "0,1": 17
+          }
+        },
+        "HVAC": {
+          "axis_bucket": {},
+          "elements": 2,
+          "elements_by_entry_count": {
+            "0": 2,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "LOOP": {
+          "axis_bucket": {},
+          "elements": 74,
+          "elements_by_entry_count": {
+            "0": 74,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "MNUM": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PANE": {
+          "axis_bucket": {
+            "z5": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 1
+          },
+          "k": {
+            "0": 1
+          },
+          "k_combinations": {
+            "0": 1
+          }
+        },
+        "PAVE": {
+          "axis_bucket": {},
+          "elements": 7,
+          "elements_by_entry_count": {
+            "0": 7,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PIPE": {
+          "axis_bucket": {},
+          "elements": 47,
+          "elements_by_entry_count": {
+            "0": 47,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PJOI": {
+          "axis_bucket": {},
+          "elements": 248,
+          "elements_by_entry_count": {
+            "0": 248,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PLOO": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "PNOD": {
+          "axis_bucket": {
+            "z1": 248
+          },
+          "elements": 248,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 248,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 248
+          },
+          "k": {
+            "0": 248
+          },
+          "k_combinations": {
+            "0": 248
+          }
+        },
+        "REDU": {
+          "axis_bucket": {
+            "z1": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 1,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 1
+          },
+          "k": {
+            "0": 1
+          },
+          "k_combinations": {
+            "0": 1
+          }
+        },
+        "SBFR": {
+          "axis_bucket": {},
+          "elements": 2,
+          "elements_by_entry_count": {
+            "0": 2,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SCOJ": {
+          "axis_bucket": {},
+          "elements": 389,
+          "elements_by_entry_count": {
+            "0": 389,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SCTN": {
+          "axis_bucket": {
+            "x1": 4,
+            "x2": 6,
+            "y1": 130,
+            "y2": 6,
+            "z1": 380,
+            "z2": 2
+          },
+          "elements": 528,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 528,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "0": 506,
+            "2": 22
+          },
+          "k": {
+            "0": 528
+          },
+          "k_combinations": {
+            "0": 528
+          }
+        },
+        "SITE": {
+          "axis_bucket": {},
+          "elements": 3,
+          "elements_by_entry_count": {
+            "0": 3,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SNOD": {
+          "axis_bucket": {},
+          "elements": 389,
+          "elements_by_entry_count": {
+            "0": 389,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "STRT": {
+          "axis_bucket": {
+            "z4": 2
+          },
+          "elements": 2,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 2,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "3": 2
+          },
+          "k": {
+            "0": 2
+          },
+          "k_combinations": {
+            "0": 2
+          }
+        },
+        "STRU": {
+          "axis_bucket": {},
+          "elements": 135,
+          "elements_by_entry_count": {
+            "0": 135,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SUBJ": {
+          "axis_bucket": {},
+          "elements": 428,
+          "elements_by_entry_count": {
+            "0": 428,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SUBS": {
+          "axis_bucket": {},
+          "elements": 41,
+          "elements_by_entry_count": {
+            "0": 41,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "TEXT": {
+          "axis_bucket": {},
+          "elements": 24,
+          "elements_by_entry_count": {
+            "0": 24,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "VALV": {
+          "axis_bucket": {
+            "y4": 1,
+            "z3": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 0,
+            "2": 1,
+            "3+": 0
+          },
+          "flags": {
+            "6": 1,
+            "7": 1
+          },
+          "k": {
+            "0": 1,
+            "1": 1
+          },
+          "k_combinations": {
+            "0,1": 1
+          }
+        },
+        "VERT": {
+          "axis_bucket": {},
+          "elements": 435,
+          "elements_by_entry_count": {
+            "0": 435,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "WELD": {
+          "axis_bucket": {
+            "y1": 1,
+            "y2": 1
+          },
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 0,
+            "2": 1,
+            "3+": 0
+          },
+          "flags": {
+            "0": 1,
+            "6": 1
+          },
+          "k": {
+            "0": 1,
+            "1": 1
+          },
+          "k_combinations": {
+            "0,1": 1
+          }
+        },
+        "WORL": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "ZONE": {
+          "axis_bucket": {},
+          "elements": 10,
+          "elements_by_entry_count": {
+            "0": 10,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        }
+      },
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "sesno": 646,
+      "spamap": {
+        "entries": 3746,
+        "pages": 244,
+        "root_page": 16586
+      },
+      "totals": {
+        "axis_bucket": {
+          "x1": 185,
+          "x2": 250,
+          "x3": 48,
+          "x4": 3,
+          "y1": 335,
+          "y2": 261,
+          "y3": 38,
+          "y4": 3,
+          "z1": 1251,
+          "z2": 1321,
+          "z3": 43,
+          "z4": 7,
+          "z5": 1
+        },
+        "flags": {
+          "0": 1083,
+          "2": 747,
+          "3": 1907,
+          "6": 8,
+          "7": 1
+        },
+        "k": {
+          "0": 3625,
+          "1": 121
+        }
+      }
+    },
+    {
+      "dangling": {
+        "entries": 0,
+        "first": []
+      },
+      "elements": 320,
+      "key0_mismatch": {
+        "entries": 0,
+        "first": []
+      },
+      "nouns": {
+        "BOX": {
+          "axis_bucket": {
+            "x1": 4,
+            "x3": 2,
+            "x4": 4,
+            "x5": 8,
+            "y3": 2,
+            "y5": 9,
+            "z1": 4,
+            "z2": 8,
+            "z3": 10,
+            "z4": 9,
+            "z5": 4
+          },
+          "elements": 64,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 64,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 64
+          },
+          "k": {
+            "0": 64
+          },
+          "k_combinations": {
+            "0": 64
+          }
+        },
+        "CONE": {
+          "axis_bucket": {
+            "y4": 4,
+            "y5": 2,
+            "z2": 4,
+            "z4": 10
+          },
+          "elements": 20,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 20,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 20
+          },
+          "k": {
+            "0": 20
+          },
+          "k_combinations": {
+            "0": 20
+          }
+        },
+        "CTOR": {
+          "axis_bucket": {
+            "x4": 2,
+            "z1": 1,
+            "z3": 2,
+            "z5": 4
+          },
+          "elements": 9,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 9,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 9
+          },
+          "k": {
+            "0": 9
+          },
+          "k_combinations": {
+            "0": 9
+          }
+        },
+        "CYLI": {
+          "axis_bucket": {
+            "x2": 2,
+            "x4": 10,
+            "y1": 28,
+            "y2": 6,
+            "y3": 16,
+            "y4": 2,
+            "y5": 6,
+            "z1": 4,
+            "z2": 38,
+            "z3": 12,
+            "z4": 5,
+            "z5": 8
+          },
+          "elements": 137,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 137,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 137
+          },
+          "k": {
+            "0": 137
+          },
+          "k_combinations": {
+            "0": 137
+          }
+        },
+        "DISH": {
+          "axis_bucket": {
+            "x4": 2,
+            "z2": 2,
+            "z3": 4
+          },
+          "elements": 8,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 8,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 8
+          },
+          "k": {
+            "0": 8
+          },
+          "k_combinations": {
+            "0": 8
+          }
+        },
+        "EQUI": {
+          "axis_bucket": {},
+          "elements": 6,
+          "elements_by_entry_count": {
+            "0": 6,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "MNUM": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "NOZZ": {
+          "axis_bucket": {
+            "x3": 4
+          },
+          "elements": 4,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 4,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 4
+          },
+          "k": {
+            "0": 4
+          },
+          "k_combinations": {
+            "0": 4
+          }
+        },
+        "PYRA": {
+          "axis_bucket": {
+            "x5": 18,
+            "y3": 2,
+            "y4": 6,
+            "y5": 4,
+            "z2": 5,
+            "z3": 2,
+            "z4": 8,
+            "z5": 2
+          },
+          "elements": 47,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 47,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 47
+          },
+          "k": {
+            "0": 47
+          },
+          "k_combinations": {
+            "0": 47
+          }
+        },
+        "SITE": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "SLCY": {
+          "axis_bucket": {
+            "x4": 4,
+            "y3": 6,
+            "y4": 2,
+            "z4": 4
+          },
+          "elements": 16,
+          "elements_by_entry_count": {
+            "0": 0,
+            "1": 16,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {
+            "2": 16
+          },
+          "k": {
+            "0": 16
+          },
+          "k_combinations": {
+            "0": 16
+          }
+        },
+        "TMPL": {
+          "axis_bucket": {},
+          "elements": 2,
+          "elements_by_entry_count": {
+            "0": 2,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "WORL": {
+          "axis_bucket": {},
+          "elements": 1,
+          "elements_by_entry_count": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        },
+        "ZONE": {
+          "axis_bucket": {},
+          "elements": 4,
+          "elements_by_entry_count": {
+            "0": 4,
+            "1": 0,
+            "2": 0,
+            "3+": 0
+          },
+          "flags": {},
+          "k": {},
+          "k_combinations": {}
+        }
+      },
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\TEST\\TES000\\TES023",
+      "sesno": 109,
+      "spamap": {
+        "entries": 305,
+        "pages": 13,
+        "root_page": 23
+      },
+      "totals": {
+        "axis_bucket": {
+          "x1": 4,
+          "x2": 2,
+          "x3": 6,
+          "x4": 22,
+          "x5": 26,
+          "y1": 28,
+          "y2": 6,
+          "y3": 26,
+          "y4": 14,
+          "y5": 21,
+          "z1": 9,
+          "z2": 57,
+          "z3": 30,
+          "z4": 36,
+          "z5": 18
+        },
+        "flags": {
+          "2": 305
+        },
+        "k": {
+          "0": 305
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "key0_reading": "key0 = N * 10^8 + min, min the signed 0.1 mm minimum the value stores for one axis, N = 6 * axis (x 0, y 1, z 2) + bucket (1..5); an entry no axis reads that way counts as key0_mismatch (docs/evidence/2026-09-22-e3d-spamap-consequences.md, section 0 item 7)",
+  "not_databases": []
+}

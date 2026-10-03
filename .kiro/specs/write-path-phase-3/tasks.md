@@ -18,7 +18,7 @@
 
 ## Tasks
 
-- [ ] 1. 基线与测试基础设施（先于任何第三期 `src/write/` 改动）
+- [x] 1. 基线与测试基础设施（先于任何第三期 `src/write/` 改动）
   - [x] 1.1 在当前 HEAD 跑 Build_Checks 并记录基线
     - 跑 `cargo test --no-fail-fast`、`cargo clippy --all-targets`、`cargo doc`
     - 把 HEAD、测试二进制数、passed / failed / ignored、clippy 与 `cargo doc` 的 warning 数、报 skip 的测试与所缺样本记入 Spec_Ledger「基线数字」
@@ -37,7 +37,7 @@
     - 剔除的键记入 Spec_Ledger「Golden 剔除键」
     - _Requirements: 15.3_
 
-- [ ] 2. IB_Wrapper 与取证工具（需求 1）
+- [x] 2. IB_Wrapper 与取证工具（需求 1）
   - [x] 2.1 实现 `tools/ida/ib.ps1` 主体（PS 5.1）
     - 用法 `ib.ps1 [--target-idb <path>] [--timeout-s <n>] <ida-bridge 命令与参数…>`：两个选项由包装器消费，其余原样转发；`--target-idb` 缺省为 Core_IDB
     - 安装查找与缺项报告（1.1、1.2），无可用安装退出 90
@@ -73,10 +73,10 @@
     - **Property 25: 一轮取证不改 Core_IDB**
     - **Validates: Requirements 1.5**
     - _Requirements: 1.1, 1.3, 1.4, 1.10, 1.11, 1.12_
-  - [~] 2.6 Checkpoint - 第 2 组：Ensure all tests pass
+  - [x] 2.6 Checkpoint - 第 2 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. SPAMAP_Reader 与 Corpus_Census（需求 3）
+- [x] 3. SPAMAP_Reader 与 Corpus_Census（需求 3）
   - [x] 3.1 实现 `src/index/spamap.rs`
     - 类型 `SpamapEntry`（4 键字 + 7 值字）、`SpamapRead`、`SpamapTable`（`entries()`、`for_refno()`，首次查询时建 refno → 条目下标索引）
     - 页解码走 `src/index/keyed.rs` 的 `decode::<V>`（由 `src/index/reference.rs::decode` 抽出，反向表 `V = 0` 行为与错误不变），不经 `IndexPageView`（见 design）
@@ -108,14 +108,14 @@
     - 真跑 bin，固定几种输入组合（库文件、目录、`--session`、非库文件、出错库），比对运行前后的 SHA-256 与两次输出
     - **Property 4: 普查只读且确定**
     - **Validates: Requirements 3.8**
-  - [~] 3.7 在 Corpus 上跑普查并写 Phase_3_Evidence_Doc「SPAMAP 普查」
+  - [x] 3.7 在 Corpus 上跑普查并写 Phase_3_Evidence_Doc「SPAMAP 普查」
     - 按 `tools/ida/EVIDENCE_TEMPLATE.md` 写 `docs/evidence/YYYY-MM-DD-spamap-census.md`，「复现命令」用仓内 `cargo run --bin e3d-descriptor -- spamap-census …`；经 `tools/ida/check_evidence.ps1` 机检
     - 更正 2026-09-22 取证 §0 第 7 条两组直方图合计不一（N 3 746、flags 3 747，分属会话 640 与 648 的表）的记载
     - _Requirements: 3.7, 3.10, 3.11, 3.12_
-  - [~] 3.8 Checkpoint - 第 3 组：Ensure all tests pass
+  - [x] 3.8 Checkpoint - 第 3 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. 规则注册表与空间值类型
+- [x] 4. 规则注册表与空间值类型
   - [x] 4.1 实现规则注册表 `src/core_rules.rs`
     - `RuleId`（`#[non_exhaustive]`）、`Rule`、`RuleStatus`、`RULES`：按 design 规则表逐条登记，全部为 `Unconfirmed`，不预设任何取值
     - `RuleSet::confirmed()`（Transaction 唯一入口）与 `#[doc(hidden)] RuleSet::candidates(&CandidatePick)`；每类规则一个类型化实现槽枚举，初始只有 `Pending`
