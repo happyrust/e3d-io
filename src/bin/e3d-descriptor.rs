@@ -1686,6 +1686,20 @@ fn census_database(path: &Path, session: Option<u32>) -> Result<Value, String> {
     let counted = |tally: &BTreeMap<u32, u64>| -> BTreeMap<String, u64> {
         tally.iter().map(|(value, count)| (value.to_string(), *count)).collect()
     };
+    // The same three histograms over every entry of the table, dangling ones
+    // included: what the table holds, whatever the index says.
+    let mut totals_axis_bucket: BTreeMap<String, u64> = BTreeMap::new();
+    let mut totals_flags: BTreeMap<u32, u64> = BTreeMap::new();
+    let mut totals_k: BTreeMap<u32, u64> = BTreeMap::new();
+    for entry in entries {
+        let cell = match census_axis_bucket(entry) {
+            Some((axis, bucket)) => format!("{}{bucket}", ["x", "y", "z"][axis]),
+            None => "key0_mismatch".to_owned(),
+        };
+        *totals_axis_bucket.entry(cell).or_default() += 1;
+        *totals_flags.entry(entry.flags()).or_default() += 1;
+        *totals_k.entry(entry.k()).or_default() += 1;
+    }
     let nouns_json: BTreeMap<String, Value> = tallies
         .iter()
         .map(|(noun, tally)| {
@@ -1713,6 +1727,11 @@ fn census_database(path: &Path, session: Option<u32>) -> Result<Value, String> {
         "key0_mismatch": {
             "entries": key0_mismatch.len(),
             "first": key0_mismatch.iter().take(CENSUS_LISTED).map(|entry| entry_words(entry)).collect::<Vec<_>>(),
+        },
+        "totals": {
+            "axis_bucket": totals_axis_bucket,
+            "flags": counted(&totals_flags),
+            "k": counted(&totals_k),
         },
         "nouns": nouns_json,
     }))
