@@ -11,7 +11,9 @@
 
 #![allow(dead_code)]
 
+pub mod corpus;
 pub mod golden;
+pub mod spamap_pages;
 pub mod write_fixture;
 
 use std::path::Path;

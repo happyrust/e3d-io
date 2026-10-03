@@ -41,8 +41,10 @@
 pub mod claim;
 pub mod cursor;
 pub mod diff;
+pub(crate) mod keyed;
 pub mod named;
 pub mod reference;
+pub mod spamap;
 
 use std::cmp::Ordering;
 
@@ -62,6 +64,7 @@ pub use named::{
     encode_name, encode_name_as, name_table_hash, NamedEntry, NamedKey, NamedTable, NamedTableError, NamedWalk,
 };
 pub use reference::{ReferenceEntry, ReferenceTable, ReferenceTableError, ReferenceWalk};
+pub use spamap::{read_spamap, read_spamap_tree, SpamapEntry, SpamapRead, SpamapReadError, SpamapTable, SPAMAP_NAME_HASH};
 
 /// `page_type` of an index page. core.dll checks it in `sub_5B026C0` and fails
 /// with "Page is not a table page".

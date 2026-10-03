@@ -55,29 +55,19 @@
 
 use std::collections::HashSet;
 
+use super::keyed::{self, KeyedPageError};
 use crate::page::cache::PageCache;
 use crate::page::{IoStats, PageId};
 use crate::refno::RefNo;
 use crate::session::DbView;
 
-/// `page_type` of every B+tree page, reference tables included.
-pub const TABLE_PAGE_TYPE: u32 = 5;
+pub use super::keyed::TABLE_PAGE_TYPE;
 
 /// A reference table's key is the target refno followed by the referrer refno.
 pub const REFERENCE_KEY_DWORDS: u32 = 4;
 
 /// A reference table's leaf carries no value; the key is the whole entry.
 pub const REFERENCE_VALUE_DWORDS: u32 = 0;
-
-/// An internal entry is followed by its child's `(pgno, extno)`.
-const CHILD_DWORDS: u32 = 2;
-
-const DWORD: usize = 4;
-const HEADER_DWORDS: usize = 7;
-
-/// Both words of a sentinel key, the same page-local constant the refno index
-/// uses. core.dll matches it as the signed `-2147483647`.
-const SENTINEL_WORD: u32 = 0x8000_0001;
 
 /// One edge: `referrer` points at `target` through the attribute this table is
 /// named after.
@@ -278,93 +268,28 @@ impl Node {
 /// **The only page-to-node step for reference tables**, so the range scan and
 /// the full walk cannot disagree about what a node is.
 fn decode(page: PageId, data: &[u8], name_hash: u32) -> Result<Node, ReferenceTableError> {
-    if data.len() % DWORD != 0 {
-        return Err(ReferenceTableError::PageNotDwordAligned {
-            page,
-            len: data.len(),
-        });
-    }
-    if data.len() < HEADER_DWORDS * DWORD {
-        return Err(ReferenceTableError::PageTooSmall {
-            page,
-            len: data.len(),
-            needed: HEADER_DWORDS * DWORD,
-        });
-    }
-    let word = |index: usize| {
-        u32::from_be_bytes(
-            data[index * DWORD..index * DWORD + DWORD]
-                .try_into()
-                .expect("slice is exactly four bytes"),
-        )
-    };
+    let node = keyed::decode::<{ REFERENCE_VALUE_DWORDS as usize }>(data, name_hash).map_err(|error| match error {
+        KeyedPageError::PageNotDwordAligned { len } => ReferenceTableError::PageNotDwordAligned { page, len },
+        KeyedPageError::PageTooSmall { len, needed } => ReferenceTableError::PageTooSmall { page, len, needed },
+        KeyedPageError::UnexpectedPageType { found } => {
+            ReferenceTableError::UnexpectedPageType { page, found, expected: TABLE_PAGE_TYPE }
+        }
+        KeyedPageError::WrongTable { found } => ReferenceTableError::WrongTable { page, found, expected: name_hash },
+        KeyedPageError::WrongShape { key_dwords, value_dwords, .. } => {
+            ReferenceTableError::NotAReferenceTable { page, name_hash, key_dwords, value_dwords }
+        }
+        KeyedPageError::FreeSpaceOutOfRange { free_dwords, usable_dwords } => {
+            ReferenceTableError::FreeSpaceOutOfRange { page, free_dwords, usable_dwords }
+        }
+        KeyedPageError::FreeSpaceNotEntryAligned { used_dwords, stride_dwords } => {
+            ReferenceTableError::FreeSpaceNotEntryAligned { page, used_dwords, stride_dwords }
+        }
+    })?;
 
-    let page_type = word(0);
-    if page_type != TABLE_PAGE_TYPE {
-        return Err(ReferenceTableError::UnexpectedPageType {
-            page,
-            found: page_type,
-            expected: TABLE_PAGE_TYPE,
-        });
-    }
-    let found = word(1);
-    if found != name_hash {
-        return Err(ReferenceTableError::WrongTable {
-            page,
-            found,
-            expected: name_hash,
-        });
-    }
-
-    let level = word(2);
-    let key_dwords = word(3);
-    let value_dwords = word(4);
-    // The declared value width describes the leaf. An internal entry always
-    // carries `(pgno, extno)` after its key, whatever the leaf holds — the same
-    // asymmetry the refno index has, where the leaf value is a record address
-    // and the internal value is a child address.
-    if key_dwords != REFERENCE_KEY_DWORDS || (level == 0 && value_dwords != REFERENCE_VALUE_DWORDS)
-    {
-        return Err(ReferenceTableError::NotAReferenceTable {
-            page,
-            name_hash,
-            key_dwords,
-            value_dwords,
-        });
-    }
-    let free_dwords = word(6);
-
-    let usable_dwords = data.len() / DWORD - HEADER_DWORDS;
-    if free_dwords as usize > usable_dwords {
-        return Err(ReferenceTableError::FreeSpaceOutOfRange {
-            page,
-            free_dwords,
-            usable_dwords: usable_dwords as u32,
-        });
-    }
-    let stride_dwords = u64::from(key_dwords)
-        + if level == 0 {
-            u64::from(value_dwords)
-        } else {
-            u64::from(CHILD_DWORDS)
-        };
-    let used_dwords = usable_dwords as u64 - u64::from(free_dwords);
-    if used_dwords % stride_dwords != 0 {
-        return Err(ReferenceTableError::FreeSpaceNotEntryAligned {
-            page,
-            used_dwords,
-            stride_dwords,
-        });
-    }
-
-    let count = (used_dwords / stride_dwords) as usize;
-    let mut slots = Vec::with_capacity(count);
+    let mut slots = Vec::with_capacity(node.slots.len());
     let mut previous: Option<ReferenceEntry> = None;
-    for slot in 0..count {
-        let at = HEADER_DWORDS + slot * stride_dwords as usize;
-        let words = [word(at), word(at + 1), word(at + 2), word(at + 3)];
-        let sentinel = words.iter().all(|&w| w == SENTINEL_WORD);
-        let key = (!sentinel).then(|| ReferenceEntry {
+    for slot in node.slots {
+        let key = slot.key.map(|words| ReferenceEntry {
             target: RefNo::new(words[0], words[1]),
             referrer: RefNo::new(words[2], words[3]),
         });
@@ -380,10 +305,9 @@ fn decode(page: PageId, data: &[u8], name_hash: u32) -> Result<Node, ReferenceTa
         if key.is_some() {
             previous = key;
         }
-        let child = (level != 0).then(|| word(at + key_dwords as usize));
-        slots.push(Slot { key, child });
+        slots.push(Slot { key, child: slot.child });
     }
-    Ok(Node { level, slots })
+    Ok(Node { level: node.level, slots })
 }
 
 /// One reference table of one session-pinned view.
@@ -672,6 +596,7 @@ impl Iterator for ReferenceWalk<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::index::keyed::{DWORD, HEADER_DWORDS, SENTINEL_WORD};
 
     const PAGE_BYTES: usize = 2048;
 

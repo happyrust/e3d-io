@@ -118,19 +118,20 @@ flowchart TD
 
 ```rust
 pub const SPAMAP_NAME_HASH: u32 = 230_902_453;
-pub enum SpamapRead { NoTable { sesno: u32 }, Table(SpamapTable) }
-pub struct SpamapTable { pub sesno: u32, pub root: PageId, pub pages: Vec<u32>, /* 条目与 refno 索引 */ }
+pub enum SpamapRead { NoTable { sesno: u32 }, Table { sesno: u32, table: SpamapTable } }
+pub struct SpamapTable { pub root: PageId, pub pages: Vec<u32>, /* 条目与 refno 索引 */ }
 impl SpamapTable {
     pub fn entries(&self) -> &[SpamapEntry];                                      // 键序，不含哨兵
     pub fn for_refno(&self, refno: RefNo) -> impl Iterator<Item = &SpamapEntry>;  // 保持键序
 }
-pub fn read_spamap(view: &mut DbView, at: SessionSelector) -> Result<SpamapRead, SpamapReadError>;
-pub fn read_spamap_tree(root: PageId, page_words: usize,
-    read_page: impl FnMut(u32) -> Result<Vec<u8>, String>) -> Result<SpamapTable, SpamapReadError>;
+pub fn read_spamap(view: &mut DbView) -> Result<SpamapRead, SpamapReadError>;     // 读 view 打开时选定的会话
+pub fn read_spamap_tree(root: PageId,
+    read_page: impl FnMut(PageId) -> Result<Vec<u8>, String>) -> Result<SpamapTable, SpamapReadError>;
 ```
 
-- 从会话页的表目录中找名 hash 为 230902453 的表项；没有就返回 `NoTable { sesno }`，与「有表、0 条」可区分（需求 3 第 9 条）。用 `SessionSelector::Exact` 取不到会话时报错，不改读其他会话；SPAMAP_Baseline 用 `Exact(640)` 取。
-- 遍历：用显式栈按槽序深度优先，中序产出叶条目。每页先用 `IndexPageView` 取页头和槽：它按页头的 `key_dwords` / `value_dwords` 切槽，支持有值页；这里不经 `ReferenceTable`，因为它拒绝值宽不为 0 的页。随后按需求 3 第 2 条的顺序补查 `IndexPageView` 不管的项：空闲字数越界；已用字数不能被步长整除（叶 11 字、内结点 6 字）；子页层号不等于父层号 − 1；内结点没有子页；页被重访（查 `visited` 集合）；相邻非哨兵键（含跨页）不按 4 字无符号严格升序。`IndexPageView` 自身报的错也转成 `SpamapReadError`。所有错误都带页号与出错项。
+- 从会话页的表目录中找名 hash 为 230902453 的表项；没有就返回 `NoTable { sesno }`，与「有表、0 条」可区分（需求 3 第 9 条）。会话在打开 `DbView` 时选定：`DbView::open_at(path, 640)` 取不到会话即报错，不改读其他会话；SPAMAP_Baseline 即这样取。
+- 页解码：`src/index/keyed.rs` 的 `decode::<V>` 按「名 hash + 叶值宽 V」认 4 字键的表页，反向表（`V = 0`）与 SPAMAP（`V = 7`）共用，与写侧 `rewrite_table::<V>` 对称。它查页类型、名 hash、键宽 4、层号 0 的页值宽、空闲字数越界、已用字数按步长（叶 4 + V、内结点 4 + 2）整除，内结点槽取键后的 `(pgno, ext)`，四字全为 `0x80000001` 的槽认作哨兵。**不经 `IndexPageView`**：它要求页头字 1 是 refno 索引表的名 hash（13 387 743），对每一页都会报 `UnexpectedNoun`，且各层一律按 `key_dwords + value_dwords` 切槽（`docs/plans/2026-10-03-write-path-phase-3-milestone-a-plan.md` §2.1）。
+- 遍历：用显式栈按槽序深度优先，叶条目从左到右产出。在页解码之上补查需求 3 第 2 条余下的项：子页层号不等于父层号 − 1；内结点没有子页；页被重访（查 `visited` 集合）；相邻非哨兵叶条目（含跨页）不按 4 字无符号严格升序。所有错误都带页号与出错项。
 - `read_spamap_tree` 只需要一个读页闭包，所以写侧的 plan 和需求 3 第 6 条的往返测试（内存页）都能用它；它不引用 `src/write/`。
 - 按 refno 查：refno 在键的第 2、3 字，而 B+ 树按 Key0 打头的键排序，帮不上忙，只能全表查找。首次查询时对内存中的条目建一张 `refno → 条目下标` 表（O(E)），之后每次查询 O(m)，结果天然保持键序。读整表的代价是 O(P) 页加 O(E)。若需求 5 第 5 条坐实 SPAMAP_Record_Item 含 Key0 与 k，还可按完整键下钻，代价 O(树高)；但 3 746 条这个量级用不着，默认不做。
 

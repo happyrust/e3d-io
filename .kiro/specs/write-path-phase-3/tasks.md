@@ -77,22 +77,23 @@
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 3. SPAMAP_Reader 与 Corpus_Census（需求 3）
-  - [~] 3.1 实现 `src/index/spamap.rs`
+  - [x] 3.1 实现 `src/index/spamap.rs`
     - 类型 `SpamapEntry`（4 键字 + 7 值字）、`SpamapRead`、`SpamapTable`（`entries()`、`for_refno()`，首次查询时建 refno → 条目下标索引）
+    - 页解码走 `src/index/keyed.rs` 的 `decode::<V>`（由 `src/index/reference.rs::decode` 抽出，反向表 `V = 0` 行为与错误不变），不经 `IndexPageView`（见 design）
     - `read_spamap_tree`：自根显式栈遍历，逐项做需求 3 第 2 条的全部校验；出错返回带页号与出错项的 `SpamapReadError`，不返回截短的列表
-    - `read_spamap`：在会话表目录里按名 hash 230902453 找表，找不到返回 `NoTable`；`Exact` 取不到会话即报错，不改读其他会话
+    - `read_spamap`：在会话表目录里按名 hash 230902453 找表，找不到返回 `NoTable`；会话由 `DbView::open_at` 选定，取不到即报错，不改读其他会话
     - 不放在 `src/write/`、不调用它；在 `src/index/` 的模块声明中注册
     - _Requirements: 3.1, 3.2, 3.4, 3.9_
-  - [~] 3.2 写测试专用建树器 `tests/common/spamap_pages.rs`
+  - [x] 3.2 写测试专用建树器 `tests/common/spamap_pages.rs`
     - 由条目序列与页长建内存页树（页类型 5、名 hash 230902453、键宽 4、叶值宽 7），不经 `src/write/`；在 `tests/common/mod.rs` 注册
     - _Requirements: 3.2, 3.4, 3.5_
-  - [ ]* 3.3 写 SPAMAP_Reader proptest：`tests/spamap_reader_props.rs`
+  - [x]* 3.3 写 SPAMAP_Reader proptest：`tests/spamap_reader_props.rs`
     - 随机条目集合按随机页长建树、读回对照；在建树结果上注入需求 3 第 2 条所列的单项篡改
     - **Property 1: 按 refno 查询等于全表过滤**
     - **Validates: Requirements 3.4, 3.5**
     - **Property 3: 畸形页必报错**
     - **Validates: Requirements 3.2**
-  - [ ]* 3.4 写 `tests/spamap_reader_real.rs`
+  - [x]* 3.4 写 `tests/spamap_reader_real.rs`
     - SPAMAP_Baseline（`ams8000_0001` 原件会话 640，按会话号精确选取）读数：244 页 / 3 746 条 / 3 628 个 refno / k = 0 的 3 625 条 / k = 1 的 121 条；不符时改用仓内受控快照，并记入 Spec_Ledger「SPAMAP_Baseline 读数」
     - Corpus 各库最新会话：查每个出现过的 refno 与至少 1 个未出现的 refno；样本缺失经 `common::missing` 报 skip
     - **Property 1: 按 refno 查询等于全表过滤**（Corpus 部分）
@@ -532,12 +533,14 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 项 | 需求 3 第 3 条 | 实读 |
 |---|---|---|
-| 页数 | 244 | |
-| 叶条目 | 3 746 | |
-| 不同 refno | 3 628 | |
-| k = 0 | 3 625 | |
-| k = 1 | 121 | |
-| 改用受控快照（路径与原因） | — | |
+| 页数 | 244 | 244 |
+| 叶条目 | 3 746 | 3 746 |
+| 不同 refno | 3 628 | 3 628 |
+| k = 0 | 3 625 | 3 625 |
+| k = 1 | 121 | 121 |
+| 改用受控快照（路径与原因） | — | 不需要：原件按 `DbView::open_at(…, 640)` 读，五项全符（2026-10-03，`tests/spamap_reader_real.rs`），坐实「640 的表即 09-22 所测那张」 |
+
+各库最新会话（同一测试，2026-10-03）：`ams8000_0001` 会话 646，244 页 / 3 746 条；`ams7999_0001` 会话 200，1 387 页 / 23 891 条 / 21 257 个 refno；`ams7351_0001` 会话 116 **无 SPAMAP 表**；`ams251142_0001` 会话 10，15 页 / 327 条；`TES023` 会话 109，13 页 / 305 条。按 refno 查询与按 refno 稳定排序后的分组逐条相同。
 
 #### 规则坐实状态总表（第 7 组、11.1、13.1）
 
