@@ -41,6 +41,9 @@ fn run() -> Result<(), String> {
     if command == "spamap-census" {
         return spamap_census_command(args);
     }
+    if command == "spamap-check" {
+        return spamap_check_command(args);
+    }
     let mut options = parse_options(args)?;
     apply_schema_pack(&command, &mut options)?;
     if command == "compile-metadata" {
@@ -1737,6 +1740,190 @@ fn census_database(path: &Path, session: Option<u32>) -> Result<Value, String> {
     }))
 }
 
+/// `spamap-check --input FILE_OR_DIR … [--session FILE=N …] (--schema PACK |
+/// --desvir PATH --attlib PATH) [--rules confirmed|candidates] [--exclude
+/// FILE] [--refno W0/W1]` (requirements 4.10, 4.11, 4.15–4.17): per database,
+/// the codec under the chosen rules held against its SPAMAP table in three
+/// items — Key0 from each entry's own words, entry count and k, flags — each
+/// with agree / total, by noun, and its first misses with the rules they
+/// wait on. `--exclude` names elements taken out of the count and flags items,
+/// one `DATABASE<TAB>W0/W1<TAB>evidence` per line. Inputs as `spamap-census`
+/// takes them; a database that cannot be read is listed, and the exit code is
+/// then 1.
+fn spamap_check_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {
+    let mut inputs: Vec<PathBuf> = Vec::new();
+    let mut sessions: BTreeMap<PathBuf, u32> = BTreeMap::new();
+    let mut options: HashMap<String, String> = HashMap::new();
+    while let Some(flag) = args.next() {
+        let value = args.next().ok_or_else(|| format!("missing value for {flag}"))?;
+        match flag.as_str() {
+            "--input" => inputs.push(PathBuf::from(value)),
+            "--session" => {
+                let (file, sesno) =
+                    value.rsplit_once('=').ok_or_else(|| format!("--session takes FILE=N, got {value}"))?;
+                sessions.insert(PathBuf::from(file), sesno.parse().map_err(|e| format!("--session {value}: {e}"))?);
+            }
+            "--schema" | "--desvir" | "--attlib" | "--rules" | "--exclude" | "--refno" => {
+                options.insert(flag.trim_start_matches("--").to_owned(), value);
+            }
+            other => return Err(format!("spamap-check does not take {other}")),
+        }
+    }
+    if inputs.is_empty() {
+        return Err("spamap-check needs at least one --input".into());
+    }
+    let (desvir, attlib) = match (options.get("schema"), options.get("desvir"), options.get("attlib")) {
+        (Some(pack), None, None) => {
+            let pack = SchemaPack::open(pack).map_err(|e| format!("open schema pack: {e}"))?;
+            let desvir = pack.template("DESI").map_err(|e| format!("schema pack template: {e}"))?;
+            let attlib = pack.attlib().map_err(|e| format!("schema pack attlib: {e}"))?;
+            (desvir, attlib)
+        }
+        (None, Some(desvir), Some(attlib)) => (PathBuf::from(desvir), PathBuf::from(attlib)),
+        _ => return Err("spamap-check needs --schema PACK_DIR, or --desvir and --attlib".into()),
+    };
+    let candidates = e3d_io::spatial::candidates::pick();
+    let (rules_name, rules) = match options.get("rules").map(String::as_str).unwrap_or("confirmed") {
+        "confirmed" => ("confirmed", *e3d_io::core_rules::RuleSet::confirmed()),
+        "candidates" => ("candidates", e3d_io::core_rules::RuleSet::candidates(&candidates)),
+        other => return Err(format!("--rules takes confirmed or candidates, got {other}")),
+    };
+    let only = options.get("refno").map(|refno| parse_refno(refno)).transpose()?;
+    let exclusions = match options.get("exclude") {
+        Some(file) => read_exclusions(Path::new(file))?,
+        None => Vec::new(),
+    };
+
+    let mut databases: Vec<PathBuf> = Vec::new();
+    let mut errors: Vec<(String, String)> = Vec::new();
+    for input in &inputs {
+        if !input.is_dir() {
+            databases.push(input.clone());
+            continue;
+        }
+        match fs::read_dir(input) {
+            Ok(listing) => {
+                for path in listing.filter_map(Result::ok).map(|entry| entry.path()).filter(|path| path.is_file()) {
+                    match starts_with_a_database_descriptor(&path) {
+                        Ok(true) => databases.push(path),
+                        Ok(false) => {}
+                        Err(error) => errors.push((display_path(&path), error)),
+                    }
+                }
+            }
+            Err(error) => errors.push((display_path(input), format!("list the directory: {error}"))),
+        }
+    }
+    databases.sort();
+    databases.dedup();
+
+    let mut reports = Vec::new();
+    for path in &databases {
+        let check = SpamapCheck { rules: &rules, desvir: &desvir, attlib: &attlib, exclusions: &exclusions, only };
+        match check.database(path, sessions.get(path).copied()) {
+            Ok(report) => reports.push(report),
+            Err(error) => errors.push((display_path(path), error)),
+        }
+    }
+    errors.sort();
+    let summary = json!({
+        "rules": rules_name,
+        "databases": reports,
+        "errors": errors.iter().map(|(path, error)| json!({ "path": path, "error": error })).collect::<Vec<_>>(),
+    });
+    println!("{}", serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?);
+    if !errors.is_empty() {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+/// One `--exclude` line: the database's file name, the element, the
+/// session-chain evidence that the entry predates a change that does not
+/// recompute it (requirement 4.17).
+fn read_exclusions(file: &Path) -> Result<Vec<(String, RefNo, String)>, String> {
+    let text = fs::read_to_string(file).map_err(|e| format!("read {}: {e}", file.display()))?;
+    let mut exclusions = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut fields = line.splitn(3, '\t');
+        let (Some(database), Some(refno), Some(evidence)) = (fields.next(), fields.next(), fields.next()) else {
+            return Err(format!("{}:{}: expected DATABASE<TAB>W0/W1<TAB>evidence", file.display(), number + 1));
+        };
+        exclusions.push((database.to_owned(), parse_refno(refno)?, evidence.to_owned()));
+    }
+    Ok(exclusions)
+}
+
+/// What one `spamap-check` run holds every database to.
+struct SpamapCheck<'a> {
+    rules: &'a e3d_io::core_rules::RuleSet,
+    desvir: &'a Path,
+    attlib: &'a Path,
+    exclusions: &'a [(String, RefNo, String)],
+    only: Option<RefNo>,
+}
+
+impl SpamapCheck<'_> {
+    fn database(&self, path: &Path, session: Option<u32>) -> Result<Value, String> {
+        use e3d_io::spatial::check::{check, Authors, E3DIO_USER};
+        let at = session.map_or(SessionSelector::Latest, SessionSelector::Exact);
+        let mut view = DbView::open_at(path, at).map_err(|e| format!("open: {e}"))?;
+        let sesno = view.selected_session();
+        let authors = Authors::from_sessions(&view.walk_sessions().map_err(|e| format!("walk the sessions: {e}"))?);
+        let table = match read_spamap(&mut view).map_err(|e| format!("read the SPAMAP: {e}"))? {
+            SpamapRead::NoTable { .. } => return Ok(json!({ "path": display_path(path), "sesno": sesno, "spamap": "no_table" })),
+            SpamapRead::Table { table, .. } => table,
+        };
+        let attlib = AttlibData::parse_file(self.attlib).map_err(|e| format!("attlib: {e}"))?;
+        let templates =
+            TemplateProvider::open(self.desvir, Some(DESIGN_TEMPLATE_TYPE)).map_err(|e| format!("templates: {e}"))?;
+        let state = e3d_io::spatial::state::ReadState::open(path, sesno, attlib, templates)
+            .map_err(|e| format!("open the element state: {e}"))?;
+        let entries: Vec<SpamapEntry> = match self.only {
+            Some(refno) => table.for_refno(refno).copied().collect(),
+            None => table.entries().to_vec(),
+        };
+        let database = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+        let authored = |refno: RefNo| {
+            state
+                .record_page(refno)
+                .and_then(|page| authors.user_of(page))
+                .is_some_and(|user| !user.eq_ignore_ascii_case(E3DIO_USER))
+        };
+        let excluded = |refno: RefNo| self.exclusions.iter().any(|(db, excluded, _)| *db == database && *excluded == refno);
+        let codec = e3d_io::spatial::codec::SpamapCodec::new(self.rules);
+        let checked = check(&entries, &state, &codec, &authored, &excluded);
+        let item = |item: &e3d_io::spatial::check::Item| {
+            json!({
+                "agree": item.agree,
+                "total": item.total,
+                "by_noun": item.by_noun.iter().map(|(noun, (agree, total))| (noun.clone(), json!([agree, total]))).collect::<BTreeMap<_, _>>(),
+                "first": item.misses.iter().map(|miss| json!({
+                    "stored": miss.stored.iter().map(entry_words).collect::<Vec<_>>(),
+                    "codec": miss.codec,
+                    "reasons": miss.reasons,
+                })).collect::<Vec<_>>(),
+            })
+        };
+        Ok(json!({
+            "path": display_path(path),
+            "sesno": sesno,
+            "refno": self.only.map(|refno| refno.to_string()),
+            "entries": entries.len(),
+            "authored_elements": checked.authored_elements,
+            "excluded_elements": checked.excluded_elements,
+            "unreadable_records": state.failures().iter().map(|(refno, why)| json!([refno.to_string(), why])).collect::<Vec<_>>(),
+            "key0": item(&checked.key0),
+            "entries_k": item(&checked.entries_k),
+            "flags": item(&checked.flags),
+        }))
+    }
+}
+
 /// The census's own reading of Key0 ([`CENSUS_KEY0_READING`]), as
 /// `(axis, bucket)`; `None` is a Key0 mismatch. Independent of the codec's
 /// rules, confirmed or not.
@@ -2638,7 +2825,7 @@ fn layout_name(layout: StorageLayout) -> &'static str {
 }
 
 fn usage() -> String {
-    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor spamap --db PATH [--session N] [--refno WORD0/WORD1]\n  e3d-descriptor spamap-census --input FILE_OR_DIR [--input ...] [--session FILE=N ...]\n  e3d-descriptor project-dab-tags --project-root PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
+    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor spamap --db PATH [--session N] [--refno WORD0/WORD1]\n  e3d-descriptor spamap-census --input FILE_OR_DIR [--input ...] [--session FILE=N ...]\n  e3d-descriptor spamap-check --input FILE_OR_DIR [--input ...] [--session FILE=N ...] (--schema PACK_DIR | --desvir PATH --attlib PATH) [--rules confirmed|candidates] [--exclude FILE] [--refno WORD0/WORD1]\n  e3d-descriptor project-dab-tags --project-root PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
         .into()
 }
 

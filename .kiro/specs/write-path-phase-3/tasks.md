@@ -142,7 +142,7 @@
     - 为 Codec 各规则与 `spamap.coverage` 写候选实现，每个候选在注释中写明所作假设
     - 只经 `RuleSet::candidates(&CandidatePick)` 接入（改 `src/core_rules.rs` 的 `candidates()`），`confirmed()` 不可达
     - _Requirements: 2.6_
-  - [~] 5.3 实现 Codec_Check：`e3d-descriptor spamap-check`
+  - [x] 5.3 实现 Codec_Check：`e3d-descriptor spamap-check`
     - 计数逻辑写成 `src/spatial/` 下的纯函数（如 `src/spatial/check.rs`），子命令与测试共用
     - Key0（只用条目自身 6 个值字）、条目数与 k、Spatial_Flags 三项分开报一致数 / 总数，各列前 100 个反例，每个反例附所依的未坐实规则名
     - 参数 `--input …`、`--rules confirmed|candidates`、`--exclude <文件>`（受版本管理的剔除清单，每条附会话链证据出处），另支持 `--refno`（供 Q13g）；E3D_Authored_Element 按元素最新记录所在会话 USER ≠ `e3dio` 判定

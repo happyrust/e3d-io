@@ -40,6 +40,15 @@ pub enum Encoded {
     MissingInput(&'static str),
 }
 
+/// What the entries rule alone makes of one element: see
+/// [`SpamapCodec::entries_of`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EntriesOf {
+    Entries(Vec<(u32, [i64; 6])>),
+    NeedsUnconfirmed(Vec<RuleId>),
+    MissingInput(&'static str),
+}
+
 /// Why an element cannot be encoded at all, whatever the rules.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum CodecError {
@@ -172,6 +181,47 @@ impl<'r> SpamapCodec<'r> {
         }
         entries.sort();
         Ok(Encoded::Entries { entries, relied_on: Walk::sorted(walk.relied_on) })
+    }
+
+    /// The entries rule alone (requirement 4.15): the k and box of each entry
+    /// `refno` gets for `aabb`, without Key0 or flags, so a check of the entry
+    /// count does not fail on another rule.
+    pub fn entries_of(&self, refno: RefNo, state: &dyn SpatialState, aabb: &WorldAabb) -> Result<EntriesOf, CodecError> {
+        let mut walk = Walk::default();
+        let rounded = walk.take(RuleId::SpamapRounding, &self.rules.rounding).map(|round| {
+            let mut words = [0i64; 6];
+            for axis in Axis::ALL {
+                let (min, max) = round(aabb.min_mm()[axis as usize], aabb.max_mm()[axis as usize]);
+                words[axis as usize] = min;
+                words[axis as usize + 3] = max;
+            }
+            words
+        });
+        let entries = walk.take(RuleId::SpamapEntriesK, &self.rules.entries_k);
+        let (Some(words), Some(entries)) = (rounded, entries) else {
+            return Ok(EntriesOf::NeedsUnconfirmed(Walk::sorted(walk.pending)));
+        };
+        Ok(match entries(refno, state, words)? {
+            EntryBoxes::Entries(boxes) => EntriesOf::Entries(boxes),
+            EntryBoxes::MissingInput(input) => EntriesOf::MissingInput(input),
+        })
+    }
+
+    /// The flags rule alone (requirement 4.11): entry `k` of `refno`'s flags,
+    /// or the rules that are pending — a candidate that does not cover the
+    /// element counts as pending.
+    pub fn flags_of(&self, refno: RefNo, state: &dyn SpatialState, k: u32) -> Result<Result<u32, Vec<RuleId>>, UndecodableAttr> {
+        let mut walk = Walk::default();
+        let Some(flags) = walk.take(RuleId::SpamapFlags, &self.rules.flags) else {
+            return Ok(Err(walk.pending));
+        };
+        Ok(flags(refno, state, k)?.ok_or_else(|| vec![RuleId::SpamapFlags]))
+    }
+
+    /// Six stored coordinate words as numbers, by `spamap.word_sign`.
+    pub fn decode_words(&self, words: &[u32; 6]) -> Result<[i64; 6], Vec<RuleId>> {
+        let mut walk = Walk::default();
+        walk.take(RuleId::SpamapWordSign, &self.rules.word_sign).map(|sign| words.map(sign.decode)).ok_or(walk.pending)
     }
 
     /// Key0 from an entry's own six stored coordinate words alone

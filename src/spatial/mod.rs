@@ -10,6 +10,7 @@
 
 #[doc(hidden)]
 pub mod candidates;
+pub mod check;
 pub mod codec;
 pub mod state;
 
