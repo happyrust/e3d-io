@@ -80,4 +80,28 @@ C 坐实了编码、覆盖、记录项与 `aabb.degenerate`。剩下的规则都
 
 ## 6. 执行记录
 
-（开工后按步记录。）
+### D0（2026-10-03 19:1x，IDA 只读；笔记 `.agents/tasks/write-path-phase-3-milestone-d/d0/`）
+
+本轮首条调用前 `ib.ps1 env`：Core_IDB `18D5C155…992C`、Core3D_IDB `03129C29…A712`，IDA 9.2，HEAD `daba8e3`。地址未注明的在 Core3D_IDB。
+
+**入口只有一个**：SPAMAP 队列全局 `dword_10FC1780` 只被 `maplist/MPCNIT`（初始化）、`VDEMPR`（出队）、`MPDEL`、`MLSADD` 与调试转储 `DUMPML` 引用，入队只经 `maplist/MLSADD` @ `0x10220F82`（11 处调用，`check_xrefs` PASS）。11 处全部落在 Core3D 的 `DESDRA_SCPlugs`（core `DB_ElementChangesPlugger` 的订阅者）转来的 `descases` 例程，另有 `descat/ATTABK` 与 `mapupdate/MUPLDE`：
+
+| 改动 | 插件 → 例程 | 入队 |
+|---|---|---|
+| 设属性 | `PostSetAttribute` @ `0x10409A60` n 41 → `descases/VDESPT` @ `0x101F33A9` | n 48–64：`ATAINT(属性, DCHC)`（字段字 @ `0x10B200DC` = 596407，调用 @ `0x101F343B`）不为 0 才 `MLSADD(元素)`（@ `0x101F3528`）。core `ATAINT` @ `0x58DE220` n 12–19 = `DB_Attribute::findAttribute` + `getField`，`DB_Attribute::getField` @ `0x58D1780` n 73–77：596407 取 `DB_Attribute` 第 23 字。core 一侧：`DB_Element::postSetAttribute` @ `0x59453B0` n 62–67 对每次设属性发事件，`DB_ElementChangesPlugger::PostSetAttribute` @ `0x591E5B0` n 20 属性带 `WNOEVT` 时不发给任何订阅者。`PostSetRefAttribute`（`VDESPF` @ `0x101F2A27`）与 `PostSetName`（`VDESNA` @ `0x101F3BF2`）不入队 |
+| 新建 | `PostCreateElement` @ `0x10409710` n 34 → `VDESCR` @ `0x101F1290` | n 20 `MLSADD(新元素)` |
+| 换 owner | `PreIncludeElement` @ `0x10409EB0` n 20 → `VDESI1` @ `0x101F23F4` n 20 `MPDEL`；`PostIncludeElement` @ `0x104097C0` n 59 → `VDESIR` @ `0x101F2755` | n 10 `MLSADD(元素)`，强制标志 1（@ `0x10B20024`） |
+| 成员次序 | `PreReorderElement` @ `0x10409F10` n 14 → `VDESR1` @ `0x101F27F2` n 15 `MPDEL`；`PostReorderElement` @ `0x10409920` n 59 → `VDESRO` @ `0x101F2989` | n 10 `MLSADD(元素)`，强制标志 1（@ `0x10B20068`） |
+| 删除 | `PreDeleteElement` @ `0x10409DD0` n 49 → `VDESDL` @ `0x101F1B24` n 72 → `maplist/MPDEL` @ `0x10220D21` | n 27–30：IMAP 3 / 7 时 `MLSADD(元素)`（即入 owner）；n 31–48：管件 / 吊架件入其 BRAN / HANG；n 53 把本元素移出队列；n 62 `mapboxlib/MAPARF` 只给某元素的计数属性加 1。**本元素的条目不在 Core3D 删** |
+| 复制 | `PostCopyAllElement` → `VDESAC` @ `0x101F1562` n 11；`PostCopyAllElementMembers` → `VDESMC` @ `0x101F14B6` n 9 | `MLSADD(副本)` |
+| 目录 / 批量 | `descat/ATTABK` @ `0x101F0DEE` n 53、85（目录件改动后入引用它的 ATTA 之 owner）；`mapupdate/MUPLDE` @ `0x102F9375` n 40（按 20 张表逐项入队后 `MPRCSS`） | 外部输入，归需求 16.5 |
+
+插件在元素所在库类型为 7（DRAFT）时改走另一组例程（如 `PostSetAttribute` n 23–31），设计库走上表。`MLSADD` n 18–21 跳过 GROU / GPWL / WORL，n 23–25 IMAP 0 不入，n 30–42 IMAP 3 上溯到第一个非 3 的祖先，n 43–57 IMAP 7 且 owner 不为 2 时入 owner，n 58 入队。出队：`maplist/VDEMPR` @ `0x102208C7` n 34–40 对队项跑 `mapboxlib/MPBOX`；`VDEMPR` 只由 `DDES_WriteMngr::clearPending` @ `0x1052F6E0` n 6 调（虚表 `??_7DDES_WriteMngr` @ `0x10B305B8` 第 8 槽，core 一侧调用时机未追，探针以「改动所在会话」验证）。`MPBOX` @ `0x102FB475` n 95–166 从队项起深度优先走整棵子树，IMAP 1 / 5（及 7）记、n 118–119 遇 IMAP 0 不下探。
+
+**推论（D2 要坐实的形状）**
+- 重算表「自身」与 noun 无关：属性 a 改动入队 ⇔ `¬WNOEVT(a) ∧ DCHC(a) ≠ 0`；成员次序改动入队。字典值已在仓内（`schema/e3d31/catalog/noun_attr_fields.json`，或 `e3d_attlib::dict::AttrDict::dchc`）：BOX 的 POS / ORI 为 3，LEVE / OBST / XLEN / YLEN / ZLEN 为 4，NAME / PURP / ORRF / TMRREF / REPCOU 为 0；CYLI 的 DIAM / HEIG 为 4。入队后条目是否变由 `MAPINS` 定（框与 flags 不变则盘上不变，§3.1）。
+- 后代：owner 改 POS / ORI（DCHC 3）→ owner 入队（EQUI、SUBE、ZONE、SITE、STRU、FRMW 等都是 IMAP 2）→ `MPBOX` 重算其下全部层（IMAP 0 结点以下除外）；换 owner 同理（`VDESIR` 入被挪元素 → 整棵子树）。
+- 删除残留：Core3D 不删被删元素的条目，要看 core 的元素删除路径或探针（需求 5 第 4 条）。
+- 对 D3 的影响：E3D 正常改 POS / ORI / 尺寸都会重算，B8 的「祖先改了、后代没重算」只能出自不经 `DESDRA_SCPlugs` 的改动（非设计模块、库级操作或旧版本）；按 Q3，指不出这类改动的反例不能剔除。
+
+`sub_102FE99B`（BRAN / HNGT 增量重记哪些成员）未读：分支 / 吊架树在 C2 已判 MissingInput，写侧按 D7 回退，不影响 D2。xrefs：`0x10220F82` 11、`0x101F33A9` 1、`0x10220D21` 3、`0x10FC1780` 17（Core3D_IDB）、`0x591E5B0` 2、`0x58DE220` 178（Core_IDB），6 / 6 PASS。
