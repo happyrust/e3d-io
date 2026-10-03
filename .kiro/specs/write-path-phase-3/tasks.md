@@ -191,7 +191,7 @@
     - 须 E3D_Session 实测的部分写探针脚本 `tools/e3d/spamap_probe.ps1`：副本每轮从原件重置，会话 USER 为 `e3dio`
     - 结论写入 `spamap.recompute.<NOUN>` 与 `spamap.descendants.{move,pos,ori}`（D7、D8）
     - _Requirements: 2.4, 5.2, 5.3, 5.4, 5.8, 5.9_
-  - [~] 7.4 取证 SPAMAP_Record_Item
+  - [x] 7.4 取证 SPAMAP_Record_Item
     - 逐 Geometric_Noun 坐实 E3D_Core 是否写该项；若写，写明类型码、字数、数据字布局、位置及其与条目键字（Key0、k）的对应关系；逐 noun 给出 Corpus 中带与不带该项的 E3D_Authored_Element 个数
     - 结论写入 `spamap.record_item.<NOUN>`
     - _Requirements: 2.4, 5.5, 5.11_
@@ -560,7 +560,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `spamap.recompute.<NOUN>` | 7.3 | | | | B8 线索：ams7999 有几处 BOX / CYLI 条目只在一侧比按现属性算出的多 1.5 mm 或 28–33 mm（如 `24383/78369` minz、`24383/77136` minz），像「改尺寸与位置后条目未重算」；待 7.3 |
 | `spamap.descendants.{move,pos,ori}` | 7.3 | | | | B8 线索：ams7999 EQUI `24383/76459` 下几个 SUBE 的 BOX 条目与按现位姿算出的差 10–273 mm（成对：−1 291 / +2 575、−908 / −2 733 等），像后代未随祖先改动重算；待 7.3 以会话链 / 探针坐实，可作需求 4.17 剔除清单的候选 |
 | `spamap.delete_residue` | 7.3 | | | | |
-| `spamap.record_item.<NOUN>` | 7.4 | | | | 线索：原生 BOX `24384/24777` 的记录有 `SPAMAP` 属性（类型 14），值 `[299969986]` 即其条目 Key0；ams7999 的 CYLI `24383/71552` 同样带（799891269）（§6 B6、B8） |
+| `spamap.record_item.<NOUN>` | 7.4 | 坐实 | `docs/evidence/2026-10-03-spamap-record-item.md` | C3 | 各 noun 相同：core `sub_5AB91B0` 类型 14 写条目时把 Key0 写进记录 `SPAMAP` 属性第 k 槽，新项整列先填 0x80000001；位置按模板（BOX implicit word 35、存储 2 字）。Corpus 25 517 / 25 517、基线 3 628 / 3 628 带且逐槽相符，46 个 noun 无例外（`tests/spamap_record_item_real.rs`） |
 | `aabb.ori_form` | 7.5 | 未坐实 | | | 候选「三个角度（度），R = Rz·Ry·Rx」：Built_In_AABB 1 572 / 1 590；备选 Rz·Rx·Ry 在 ams7999 降到 1 120、基线降到 78 / 79（§6 B8） |
 | `aabb.compose` | 7.5 | 未坐实 | | | 候选「每级位姿都在其 owner 系中复合」：同上 1 572 / 1 590；原生 BOX 的位姿全在 EQUI 上 |
 | `aabb.box` | 7.5 | 未坐实 | | | 候选「以原点为中心的精确外包」：BOX 370 / 384（ams8000 45 / 45、ams7999 261 / 275、TES023 64 / 64） |

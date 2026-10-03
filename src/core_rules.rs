@@ -235,7 +235,7 @@ pub const RULES: &[Rule] = &[
         id: RuleId::SpamapRecordItem,
         name: "spamap.record_item.<NOUN>",
         governs: "whether E3D_Core writes SPAMAP_Record_Item into the element record, and its layout",
-        status: unconfirmed("every element given or changing entries", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-record-item.md#spamap.record_item.<NOUN>"),
     },
     Rule {
         id: RuleId::AabbOriForm,
@@ -470,6 +470,16 @@ pub enum TableHeaderRest {
     KeyWidthValueWidthOne,
 }
 
+/// `spamap.record_item.<NOUN>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordItem {
+    /// Every noun: the record's type 14 `SPAMAP` attribute holds the Key0 of
+    /// each of the element's entries at index k, 0x80000001 in a slot no
+    /// entry holds — kept with the table by core.dll's type 14 table
+    /// attribute (`sub_5AB91B0`).
+    Key0ByK,
+}
+
 /// `spamap.word_sign`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WordSign {
@@ -612,8 +622,6 @@ implementations! {
     DescendantRecompute;
     /// `spamap.delete_residue`.
     DeleteResidue;
-    /// `spamap.record_item.<NOUN>`.
-    RecordItem;
     /// `aabb.ori_form`.
     OriForm;
     /// `aabb.compose`.
@@ -686,7 +694,7 @@ const CONFIRMED: RuleSet = RuleSet {
     descendants_pos: Slot::Pending,
     descendants_ori: Slot::Pending,
     delete_residue: Slot::Pending,
-    record_item: Slot::Pending,
+    record_item: Slot::Confirmed(RecordItem::Key0ByK),
     ori_form: Slot::Pending,
     compose: Slot::Pending,
     box_aabb: Slot::Pending,
