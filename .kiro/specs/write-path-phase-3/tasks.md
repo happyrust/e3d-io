@@ -164,7 +164,7 @@
     - 所需属性解码不了时返回 `UndecodableAttr { refno, name, hash }`
     - `aabb.*` 的候选实现加入 `src/spatial/candidates.rs`
     - _Requirements: 6.2, 6.8, 6.14_
-  - [~] 6.2 `e3d-descriptor` 加 `world-frame`，并把 Built_In_AABB 一项接入 `spamap-check`
+  - [x] 6.2 `e3d-descriptor` 加 `world-frame`，并把 Built_In_AABB 一项接入 `spamap-check`
     - `world-frame --db <f> --refno <r>` 打印复合器算出的世界原点与 World_AABB，供 Q13h 与 Probe_Element 预判
     - `spamap-check` 增报 Built_In_AABB 一项（需求 6 第 9 条）的一致数 / 总数与前 100 个反例，供 7.5 的 Corpus 核对
     - _Requirements: 6.9, 10.15_

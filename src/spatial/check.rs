@@ -1,11 +1,14 @@
 //! Codec_Check (`.kiro/specs/write-path-phase-3`, requirements 4.10, 4.11,
-//! 4.15, 4.16): the codec held against the entries E3D_Core wrote, in three
-//! items counted apart, so a miss on one is no miss on another.
+//! 4.15, 4.16, 6.9): the codec held against the entries E3D_Core wrote, in
+//! three items counted apart, so a miss on one is no miss on another — and
+//! the built-in AABB held against them whole.
 //!
 //! - Key0: every entry of the table, from its own six coordinate words.
 //! - Entry count and k: every element E3D wrote that has entries, given the
 //!   box of its first entry.
 //! - Spatial_Flags: every entry of an element E3D wrote.
+//! - Built_In_AABB: every BOX or CYLI E3D wrote that has entries, encoded
+//!   from the box the built-in AABB computes, word for word.
 //!
 //! Counting only; `e3d-descriptor spamap-check` and the corpus tests call the
 //! same functions.
@@ -14,7 +17,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use e3d_attlib::db1_dehash;
 
-use super::codec::{EntriesOf, SpamapCodec};
+use super::aabb::{AabbOutcome, BuiltInAabb};
+use super::codec::{Encoded, EntriesOf, SpamapCodec};
 use super::state::ReadState;
 use super::{SpatialState, WorldAabb};
 use crate::core_rules::RuleId;
@@ -45,20 +49,22 @@ pub struct Item {
 pub struct Miss {
     /// What the table holds: the entry, or every entry of the element.
     pub stored: Vec<SpamapEntry>,
-    /// What the codec made of it: a Key0, the k of each entry, or flags;
-    /// empty when it made nothing.
+    /// What the codec made of it: a Key0, the k of each entry, flags, or the
+    /// eleven words of each entry the built-in box encodes to; empty when it
+    /// made nothing.
     pub codec: Vec<u32>,
     /// Why it made nothing: the pending rules by name, or the input it
     /// lacked. Empty when it made something else.
     pub reasons: Vec<String>,
 }
 
-/// The three items of one table.
+/// The items of one table.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Checked {
     pub key0: Item,
     pub entries_k: Item,
     pub flags: Item,
+    pub built_in_aabb: Item,
     /// Elements E3D wrote that have entries, and of them how many the
     /// exclusion list took out of the count and flags items.
     pub authored_elements: u64,
@@ -137,14 +143,15 @@ impl Authors {
 /// The USER e3d-io's own sessions carry; anything else counts as E3D's.
 pub const E3DIO_USER: &str = "e3dio";
 
-/// Run the three items over `table`, the entries of one session in key
-/// order. `authored` says whether E3D wrote an element (its latest record is
-/// in a session whose USER is not [`E3DIO_USER`]); `excluded` is the
-/// exclusion list of requirement 4.17.
+/// Run the items over `table`, the entries of one session in key order.
+/// `authored` says whether E3D wrote an element (its latest record is in a
+/// session whose USER is not [`E3DIO_USER`]); `excluded` is the exclusion
+/// list of requirement 4.17.
 pub fn check(
     table: &[SpamapEntry],
     state: &dyn SpatialState,
     codec: &SpamapCodec<'_>,
+    built_in: &BuiltInAabb<'_>,
     authored: &dyn Fn(RefNo) -> bool,
     excluded: &dyn Fn(RefNo) -> bool,
 ) -> Checked {
@@ -189,6 +196,14 @@ pub fn check(
         stored_k.sort_unstable();
         let made = codec_ks(codec, *refno, state, &stored[0]).map(|ks| (ks == stored_k, ks));
         checked.entries_k.count(Some(&noun), made, || stored.clone());
+        if let Some(made) = built_in_entries(codec, built_in, *refno, state) {
+            let made = made.map(|entries| {
+                let mut stored = stored.clone();
+                stored.sort_unstable();
+                (entries == stored, entries.iter().flat_map(|entry| entry.key.into_iter().chain(entry.value)).collect())
+            });
+            checked.built_in_aabb.count(Some(&noun), made, || stored.clone());
+        }
         counted.insert(*refno, noun);
     }
 
@@ -221,6 +236,30 @@ fn codec_ks(codec: &SpamapCodec<'_>, refno: RefNo, state: &dyn SpatialState, fir
         Ok(EntriesOf::MissingInput(input)) => Err(Unmade::Other(format!("missing input: {input}"))),
         Err(error) => Err(Unmade::Other(error.to_string())),
     }
+}
+
+/// The entries, in key order, the codec encodes from the box the built-in
+/// AABB computes for `refno`, or why there are none; `None` when the noun
+/// is not built in.
+fn built_in_entries(
+    codec: &SpamapCodec<'_>,
+    built_in: &BuiltInAabb<'_>,
+    refno: RefNo,
+    state: &dyn SpatialState,
+) -> Option<Result<Vec<SpamapEntry>, Unmade>> {
+    let aabb = match built_in.compute(state, refno) {
+        Ok(AabbOutcome::Aabb(aabb)) => aabb,
+        Ok(AabbOutcome::NotBuiltIn) => return None,
+        Ok(AabbOutcome::NeedsUnconfirmed(pending)) => return Some(Err(Unmade::Pending(pending))),
+        Ok(AabbOutcome::NoWorld) => return Some(Err(Unmade::Other("the owner chain does not reach a WORL".to_owned()))),
+        Err(undecodable) => return Some(Err(Unmade::Other(undecodable.to_string()))),
+    };
+    Some(match codec.encode(refno, state, &aabb) {
+        Ok(Encoded::Entries { entries, .. }) => Ok(entries),
+        Ok(Encoded::NeedsUnconfirmed(pending)) => Err(Unmade::Pending(pending)),
+        Ok(Encoded::MissingInput(input)) => Err(Unmade::Other(format!("missing input: {input}"))),
+        Err(error) => Err(Unmade::Other(error.to_string())),
+    })
 }
 
 fn names(ids: &[RuleId]) -> Vec<String> {

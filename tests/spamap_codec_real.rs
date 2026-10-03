@@ -20,6 +20,7 @@ use e3d_io::core_rules::RuleSet;
 use e3d_io::index::{read_spamap, SpamapEntry, SpamapRead};
 use e3d_io::record::template::TemplateProvider;
 use e3d_io::session::{DbView, SessionSelector};
+use e3d_io::spatial::aabb::{BuiltInAabb, ChainComposer};
 use e3d_io::spatial::candidates;
 use e3d_io::spatial::check::{check, Authors, Checked, Item, Miss};
 use e3d_io::spatial::codec::SpamapCodec;
@@ -55,10 +56,12 @@ impl Session {
         Some(Session { sesno, table, state, authors })
     }
 
-    /// The three items over `table` under `rules`, with nothing excluded.
+    /// The items over `table` under `rules`, with nothing excluded.
     fn check(&self, rules: &RuleSet, table: &[SpamapEntry]) -> Checked {
         let authored = |refno: RefNo| self.authors.e3d_wrote(&self.state, refno);
-        check(table, &self.state, &SpamapCodec::new(rules), &authored, &|_| false)
+        let composer = ChainComposer::new(rules);
+        let built_in = BuiltInAabb::new(rules, &composer);
+        check(table, &self.state, &SpamapCodec::new(rules), &built_in, &authored, &|_| false)
     }
 }
 

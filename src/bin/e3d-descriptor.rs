@@ -86,6 +86,11 @@ fn run() -> Result<(), String> {
         );
         return Ok(());
     }
+    if command == "world-frame" {
+        let summary = world_frame_command(&options)?;
+        println!("{}", serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?);
+        return Ok(());
+    }
     if command == "diff" {
         let summary = diff_command(&options)?;
         println!(
@@ -1742,11 +1747,13 @@ fn census_database(path: &Path, session: Option<u32>) -> Result<Value, String> {
 
 /// `spamap-check --input FILE_OR_DIR … [--session FILE=N …] (--schema PACK |
 /// --desvir PATH --attlib PATH) [--rules confirmed|candidates] [--exclude
-/// FILE] [--refno W0/W1]` (requirements 4.10, 4.11, 4.15–4.17): per database,
-/// the codec under the chosen rules held against its SPAMAP table in three
-/// items — Key0 from each entry's own words, entry count and k, flags — each
-/// with agree / total, how many misses wait on a pending rule, by noun, and
-/// its first misses with the rules they wait on. `--exclude` names elements taken out of the count and flags items,
+/// FILE] [--refno W0/W1]` (requirements 4.10, 4.11, 4.15–4.17, 6.9): per
+/// database, the codec under the chosen rules held against its SPAMAP table
+/// in three items — Key0 from each entry's own words, entry count and k,
+/// flags — and the entries of each BOX and CYLI encoded from the built-in
+/// AABB held against the stored ones whole; each with agree / total, how many
+/// misses wait on a pending rule, by noun, and its first misses with the
+/// rules they wait on. `--exclude` names elements taken out of the count and flags items,
 /// one `DATABASE<TAB>W0/W1<TAB>evidence` per line. Inputs as `spamap-census`
 /// takes them; a database that cannot be read is listed, and the exit code is
 /// then 1.
@@ -1891,7 +1898,9 @@ impl SpamapCheck<'_> {
         let authored = |refno: RefNo| authors.e3d_wrote(&state, refno);
         let excluded = |refno: RefNo| self.exclusions.iter().any(|(db, excluded, _)| *db == database && *excluded == refno);
         let codec = e3d_io::spatial::codec::SpamapCodec::new(self.rules);
-        let checked = check(&entries, &state, &codec, &authored, &excluded);
+        let composer = e3d_io::spatial::aabb::ChainComposer::new(self.rules);
+        let built_in = e3d_io::spatial::aabb::BuiltInAabb::new(self.rules, &composer);
+        let checked = check(&entries, &state, &codec, &built_in, &authored, &excluded);
         let item = |item: &e3d_io::spatial::check::Item| {
             json!({
                 "agree": item.agree,
@@ -1916,8 +1925,88 @@ impl SpamapCheck<'_> {
             "key0": item(&checked.key0),
             "entries_k": item(&checked.entries_k),
             "flags": item(&checked.flags),
+            "built_in_aabb": item(&checked.built_in_aabb),
         }))
     }
+}
+
+/// `world-frame --db PATH --refno W0/W1 [--session N] (--schema PACK |
+/// --desvir PATH --attlib PATH) [--rules confirmed|candidates]` (gate
+/// question Q13h, Probe_Element): what the built-in AABB makes of one
+/// element under the chosen rules, the confirmed ones unless told — its owner
+/// chain with each link's POS and ORI as stored, the world frame composed
+/// from them, the World_AABB, and the entries the codec encodes that box to.
+fn world_frame_command(options: &HashMap<String, String>) -> Result<Value, String> {
+    use e3d_io::spatial::aabb::{AabbOutcome, BuiltInAabb, ChainComposer, FrameComposer, FrameOutcome};
+    use e3d_io::spatial::codec::{Encoded, SpamapCodec};
+    use e3d_io::spatial::SpatialState;
+
+    let db = required(options, "db")?;
+    let refno = parse_refno(required(options, "refno")?)?;
+    let at = match options.get("session") {
+        Some(sesno) => SessionSelector::Exact(sesno.parse().map_err(|e| format!("invalid --session {sesno}: {e}"))?),
+        None => SessionSelector::Latest,
+    };
+    let (Some(desvir), Some(attlib)) = (options.get("desvir"), options.get("attlib")) else {
+        return Err("world-frame needs --schema PACK_DIR, or --desvir and --attlib".into());
+    };
+    let candidates = e3d_io::spatial::candidates::pick();
+    let (rules_name, rules) = match options.get("rules").map(String::as_str).unwrap_or("confirmed") {
+        "confirmed" => ("confirmed", *e3d_io::core_rules::RuleSet::confirmed()),
+        "candidates" => ("candidates", e3d_io::core_rules::RuleSet::candidates(&candidates)),
+        other => return Err(format!("--rules takes confirmed or candidates, got {other}")),
+    };
+    let attlib = AttlibData::parse_file(attlib).map_err(|e| format!("attlib: {e}"))?;
+    let templates = TemplateProvider::open(desvir, Some(DESIGN_TEMPLATE_TYPE)).map_err(|e| format!("templates: {e}"))?;
+    let state = e3d_io::spatial::state::ReadState::open(db, at, attlib, templates)
+        .map_err(|e| format!("open database {db}: {e}"))?;
+    let pending = |ids: &[e3d_io::core_rules::RuleId]| {
+        json!({ "needs_unconfirmed": ids.iter().map(|id| id.name()).collect::<Vec<_>>() })
+    };
+
+    let mut chain = Vec::new();
+    let mut link = Some(refno);
+    while let Some(at) = link.filter(|_| chain.len() < 64) {
+        let attr = |name: &str| match state.attr(at, db1_hash(name)) {
+            Ok(Some(value)) => value_json(&value),
+            Ok(None) => Value::Null,
+            Err(undecodable) => json!({ "undecodable": undecodable.to_string() }),
+        };
+        let noun = state.noun(at).map(|noun| db1_dehash(noun).unwrap_or_else(|| format!("#{noun}")));
+        chain.push(json!({ "refno": at.to_string(), "noun": noun, "pos": attr("POS"), "ori": attr("ORI") }));
+        link = state.owner(at);
+    }
+
+    let composer = ChainComposer::new(&rules);
+    let frame = match composer.world_frame(&state, refno).map_err(|e| e.to_string())? {
+        FrameOutcome::Frame(frame) => json!({ "origin_mm": frame.origin_mm, "rotation": frame.rotation }),
+        FrameOutcome::NeedsUnconfirmed(ids) => pending(&ids),
+        FrameOutcome::NoWorld => json!("no_world"),
+    };
+    let (aabb, encoded) = match BuiltInAabb::new(&rules, &composer).compute(&state, refno).map_err(|e| e.to_string())? {
+        AabbOutcome::Aabb(aabb) => {
+            let encoded = match SpamapCodec::new(&rules).encode(refno, &state, &aabb) {
+                Ok(Encoded::Entries { entries, .. }) => json!(entries.iter().map(entry_words).collect::<Vec<_>>()),
+                Ok(Encoded::NeedsUnconfirmed(ids)) => pending(&ids),
+                Ok(Encoded::MissingInput(input)) => json!({ "missing_input": input }),
+                Err(error) => json!({ "error": error.to_string() }),
+            };
+            (json!({ "min_mm": aabb.min_mm(), "max_mm": aabb.max_mm() }), encoded)
+        }
+        AabbOutcome::NeedsUnconfirmed(ids) => (pending(&ids), Value::Null),
+        AabbOutcome::NotBuiltIn => (json!("not_built_in"), Value::Null),
+        AabbOutcome::NoWorld => (json!("no_world"), Value::Null),
+    };
+    Ok(json!({
+        "db": db,
+        "sesno": state.sesno(),
+        "refno": refno.to_string(),
+        "rules": rules_name,
+        "chain": chain,
+        "frame": frame,
+        "aabb": aabb,
+        "entries": encoded,
+    }))
 }
 
 /// The census's own reading of Key0 ([`CENSUS_KEY0_READING`]), as
@@ -2821,7 +2910,7 @@ fn layout_name(layout: StorageLayout) -> &'static str {
 }
 
 fn usage() -> String {
-    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor spamap --db PATH [--session N] [--refno WORD0/WORD1]\n  e3d-descriptor spamap-census --input FILE_OR_DIR [--input ...] [--session FILE=N ...]\n  e3d-descriptor spamap-check --input FILE_OR_DIR [--input ...] [--session FILE=N ...] (--schema PACK_DIR | --desvir PATH --attlib PATH) [--rules confirmed|candidates] [--exclude FILE] [--refno WORD0/WORD1]\n  e3d-descriptor project-dab-tags --project-root PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
+    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor spamap --db PATH [--session N] [--refno WORD0/WORD1]\n  e3d-descriptor spamap-census --input FILE_OR_DIR [--input ...] [--session FILE=N ...]\n  e3d-descriptor spamap-check --input FILE_OR_DIR [--input ...] [--session FILE=N ...] (--schema PACK_DIR | --desvir PATH --attlib PATH) [--rules confirmed|candidates] [--exclude FILE] [--refno WORD0/WORD1]\n  e3d-descriptor world-frame --db PATH --refno WORD0/WORD1 [--session N] (--schema PACK_DIR | --desvir PATH --attlib PATH) [--rules confirmed|candidates]\n  e3d-descriptor project-dab-tags --project-root PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
         .into()
 }
 
