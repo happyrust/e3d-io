@@ -1,6 +1,6 @@
 # 计划：e3d-io 写路径 · 第三期 · 里程碑 B（任务第 5–6 组：SPAMAP_Codec 与 Built_In_AABB）
 
-状态：**评审通过**（2026-10-03，Plannotator 门 `approved`，无批注 → Q1–Q5 全按推荐项）→ 里程碑 B 进行中（见 §6）
+状态：**评审通过**（2026-10-03，Plannotator 门 `approved`，无批注 → Q1–Q5 全按推荐项）→ **里程碑 B 已完成**（2026-10-03，B0–B9，见 §6）
 日期：2026-10-03
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`，HEAD `14239d3`（里程碑 A 收尾，领先 `github/write-path` 14 个提交，未推送）
 依据：`.kiro/specs/write-path-phase-3/` 的需求 / 设计 / 任务（下称「需求」「设计」「任务」）；`docs/evidence/2026-10-03-spamap-census.md`（下称「普查」）
