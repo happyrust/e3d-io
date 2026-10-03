@@ -187,12 +187,7 @@ pub const RULES: &[Rule] = &[
         id: RuleId::SpamapEntriesK,
         name: "spamap.entries_k",
         governs: "how many entries an element has, what k means, where a k >= 1 entry's value words come from",
-        status: RuleStatus::Unconfirmed {
-            assumption: "an element Core3D maps through mapboxlib/MPBOX2 has one entry, k = 0, with its own box; \
-                         k = 1 is the tube entry mapboxlib/MPBXBR gives branch members and the BRAN",
-            inputs: "every element with an entry; k = 1 on branch members and BRAN",
-            evidence: ENCODING,
-        },
+        status: confirmed("docs/evidence/2026-10-03-spamap-branch-entries.md#spamap.entries_k"),
     },
     Rule {
         id: RuleId::SpamapFlags,
@@ -368,7 +363,6 @@ macro_rules! called_as_candidates {
 }
 
 called_as_candidates! {
-    EntriesK => candidate::EntriesK;
     Flags => candidate::Flags;
     OriForm => candidate::OriForm;
     Compose => candidate::Compose;
@@ -525,6 +519,13 @@ pub enum Bucket {
     Mapkey,
 }
 
+/// `spamap.entries_k`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntriesK {
+    /// [`crate::spatial::rules::entries_by_mpbox`].
+    ByMpbox,
+}
+
 /// `spamap.coverage`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Coverage {
@@ -580,6 +581,14 @@ impl Implementation<candidate::Bucket> for Bucket {
     }
 }
 
+impl Implementation<candidate::EntriesK> for EntriesK {
+    fn function(&self) -> candidate::EntriesK {
+        match self {
+            EntriesK::ByMpbox => crate::spatial::rules::entries_by_mpbox,
+        }
+    }
+}
+
 impl Implementation<candidate::Coverage> for Coverage {
     fn function(&self) -> candidate::Coverage {
         match self {
@@ -589,8 +598,6 @@ impl Implementation<candidate::Coverage> for Coverage {
 }
 
 implementations! {
-    /// `spamap.entries_k`.
-    EntriesK;
     /// `spamap.flags`.
     Flags;
     /// `spamap.recompute.<NOUN>`: the recompute table and member-order rows.
@@ -665,7 +672,7 @@ const CONFIRMED: RuleSet = RuleSet {
     short_axis: Slot::Confirmed(ShortAxis::LastOfTies),
     zero_extent: Slot::Confirmed(ZeroExtent::ByBucketRule),
     bucket: Slot::Confirmed(Bucket::Mapkey),
-    entries_k: Slot::Pending,
+    entries_k: Slot::Confirmed(EntriesK::ByMpbox),
     flags: Slot::Pending,
     coverage: Slot::Confirmed(Coverage::ByImap),
     recompute: Slot::Pending,

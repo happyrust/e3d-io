@@ -90,6 +90,7 @@
 
 ### `spamap.entries_k`
 
+- 后续：同日在 `docs/evidence/2026-10-03-spamap-branch-entries.md` 读完 `MPBXBR` 后坐实（分支与吊架树上为 MissingInput）。
 - 状态：未坐实
 - 读到的：k = `MAPINS` 下标 − 1，下标 n = 81–84 在 tube 为真时取 2，否则取 1；`sub_5AB91B0` n = 269 存 `下标 − 1`。`mapboxlib/MPBOX2` @ `0x102FBD62` n = 93 以常量 tube = 0（Core3D_IDB @ `0x10B2FDCC`）调 `mapboxlib/MBXGO` @ `0x102FD8C2`，经它记的元素只有 k = 0 一条，框就是元素自己的框。k = 1 只来自 `mapboxlib/MPBXBR` @ `0x102FC293`：`mapboxlib/MPBOX` @ `0x102FB475` 在 noun 为 BRAN 或 `HTCOMP` 为真时改走它，且不再向下走。Corpus 的 k = 1 条目只在 BRAN（只有 k = 1）与管件上（ATTA、BEND、CAP、COUP、ELBO、FLAN、FTUB、OLET、PCOM、REDU、TEE、VALV、WELD，普查 JSON）。
 - 所作假设：经 `MPBOX2` 记的元素一条 k = 0、用自身的框；`MPBXBR` 下的元素另有 tube 条目。

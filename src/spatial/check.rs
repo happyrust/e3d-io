@@ -37,9 +37,10 @@ pub const LISTED: usize = 100;
 pub struct Item {
     pub agree: u64,
     pub total: u64,
-    /// Of the misses, those for want of a pending rule: under the confirmed
-    /// rules D7's fallback, not a counterexample. `agree + waiting = total`
-    /// is the item's whole criterion once its rules are confirmed.
+    /// Of the misses, those for want of a pending rule or of an input e3d-io
+    /// cannot have (requirement 6.15): under the confirmed rules D7's
+    /// fallback, not a counterexample. `agree + waiting = total` is the
+    /// item's whole criterion once its rules are confirmed.
     pub waiting: u64,
     /// The first [`LISTED`] misses, in key order.
     pub misses: Vec<Miss>,
@@ -78,6 +79,8 @@ pub struct Checked {
 enum Unmade {
     /// It waits on these pending rules.
     Pending(Vec<RuleId>),
+    /// A confirmed rule needs this input, which e3d-io cannot have.
+    Missing(&'static str),
     /// Something no rule would change.
     Other(String),
 }
@@ -91,13 +94,14 @@ impl Item {
         if agreed {
             self.agree += 1;
         } else {
-            if matches!(made, Err(Unmade::Pending(_))) {
+            if matches!(made, Err(Unmade::Pending(_) | Unmade::Missing(_))) {
                 self.waiting += 1;
             }
             if self.misses.len() < LISTED {
                 let (codec, reasons) = match made {
                     Ok((_, made)) => (made, Vec::new()),
                     Err(Unmade::Pending(pending)) => (Vec::new(), names(&pending)),
+                    Err(Unmade::Missing(input)) => (Vec::new(), vec![format!("missing input: {input}")]),
                     Err(Unmade::Other(why)) => (Vec::new(), vec![why]),
                 };
                 self.misses.push(Miss { stored: stored(), codec, reasons });
@@ -275,7 +279,7 @@ fn codec_ks(codec: &SpamapCodec<'_>, refno: RefNo, state: &dyn SpatialState, fir
             Ok(ks)
         }
         Ok(EntriesOf::NeedsUnconfirmed(pending)) => Err(Unmade::Pending(pending)),
-        Ok(EntriesOf::MissingInput(input)) => Err(Unmade::Other(format!("missing input: {input}"))),
+        Ok(EntriesOf::MissingInput(input)) => Err(Unmade::Missing(input)),
         Err(error) => Err(Unmade::Other(error.to_string())),
     }
 }
@@ -299,7 +303,7 @@ fn built_in_entries(
     Some(match codec.encode(refno, state, &aabb) {
         Ok(Encoded::Entries { entries, .. }) => Ok(entries),
         Ok(Encoded::NeedsUnconfirmed(pending)) => Err(Unmade::Pending(pending)),
-        Ok(Encoded::MissingInput(input)) => Err(Unmade::Other(format!("missing input: {input}"))),
+        Ok(Encoded::MissingInput(input)) => Err(Unmade::Missing(input)),
         Err(error) => Err(Unmade::Other(error.to_string())),
     })
 }

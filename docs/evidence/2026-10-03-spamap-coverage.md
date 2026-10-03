@@ -7,6 +7,7 @@
 > 按 `.kiro/specs/write-path-phase-3/requirements.md` 需求 1 第 7–9 条与需求 5 第 1、7、10 条写；交稿前跑
 > `powershell -NoProfile -File tools/ida/check_evidence.ps1 docs/evidence/2026-10-03-spamap-coverage.md`。
 > 出处 ① 按 `e67b1c0` 认 E3D_IDB：走树、入队、取框在 Core3D_IDB，noun 字段与软类型在 Core_IDB。
+> 后续：`MPBXBR` 已在 `docs/evidence/2026-10-03-spamap-branch-entries.md` 读完——BRAN 与 `HNGT` noun 的成员一律为是，它们自身仍不说，理由改为头管要目录几何。
 
 ## 环境
 

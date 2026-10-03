@@ -110,7 +110,8 @@ fn key0_in_unsigned_word(axis: Axis, bucket: u8, min: i64) -> Result<u32, (i64, 
     u32::try_from(base + min).map_err(|_| (-base, i64::from(u32::MAX) - base))
 }
 
-static ENTRIES_K: [Named<candidate::EntriesK>; 3] = [
+static ENTRIES_K: [Named<candidate::EntriesK>; 4] = [
+    Named { name: "rules::entries_by_mpbox", function: rules::entries_by_mpbox },
     Named { name: "one_entry", function: candidates::one_entry },
     Named { name: "second_entry", function: second_entry },
     Named { name: "needs_more", function: needs_more },

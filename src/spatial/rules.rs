@@ -7,14 +7,15 @@
 //! `maplib/MAPINS`, `MAPKEY` and `MAPKY2`, core.dll's table code;
 //! `docs/evidence/2026-10-03-spamap-coverage.md` — Core3D.dll's
 //! `mapboxlib/MPBOX`, `maplist/MLSADD`, `dbboxlib/BOXELE` and the `IMAP` of
-//! the noun dictionary.
+//! the noun dictionary; `docs/evidence/2026-10-03-spamap-branch-entries.md`
+//! — Core3D.dll's `mapboxlib/MPBXBR` and the callers of `MBXGO`.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use e3d_attlib::db1_hash;
 
-use super::{Axis, SpatialState, UndecodableAttr};
+use super::{Axis, EntryBoxes, SpatialState, UndecodableAttr};
 use crate::core_rules::candidate;
 use crate::record::descriptor::DescriptorValue;
 use crate::refno::RefNo;
@@ -108,6 +109,32 @@ pub fn key0_by_mapky2(axis: Axis, bucket: u8, min: i64) -> Result<u32, (i64, i64
     }
 }
 
+// --- spamap.entries_k --------------------------------------------------------------
+
+/// Whether `mapboxlib/MPBOX` hands an element of the noun to
+/// `mapboxlib/MPBXBR` — BRAN, and the nouns whose `HNGT` is set
+/// (`HTCOMP`) — which records each of its members and the tube leaving it,
+/// and the element itself by its head tube alone.
+pub fn records_its_members(noun: u32) -> bool {
+    noun == db1_hash("BRAN") || noun_in(&HNGT_SET, HNGT, noun)
+}
+
+/// The entries Core3D gives an element: one, k = 0, with its own box, from
+/// `mapboxlib/MPBOX2` — `MBXGO`'s one other caller, `mapboxlib/MPBXBR`,
+/// maps only the elements [`records_its_members`] names and their members.
+/// There a member's k = 1 entry is the tube leaving it, and the element's
+/// own entry its head tube, both boxed from catalogue P-points and the tube
+/// spec's bore, which e3d-io does not read: missing input (requirement 6.15).
+pub fn entries_by_mpbox(refno: RefNo, state: &dyn SpatialState, aabb: [i64; 6]) -> Result<EntryBoxes, UndecodableAttr> {
+    if state.noun(refno).is_some_and(records_its_members) {
+        return Ok(EntryBoxes::MissingInput("the head tube, boxed by MPBXBR from catalogue P-points and the tube spec"));
+    }
+    if state.owner(refno).and_then(|owner| state.noun(owner)).is_some_and(records_its_members) {
+        return Ok(EntryBoxes::MissingInput("the tube leaving it, boxed by MPBXBR from catalogue P-points and the tube spec"));
+    }
+    Ok(EntryBoxes::Entries(vec![(0, aabb)]))
+}
+
 // --- spamap.coverage ---------------------------------------------------------------
 
 /// Whether Core3D gives the element entries: `Some(true)` when
@@ -120,8 +147,10 @@ pub fn key0_by_mapky2(axis: Axis, bucket: u8, min: i64) -> Result<u32, (i64, i64
 ///   merges it into the owner otherwise, 0, 2, 3 — and a noun the dictionary
 ///   lacks, which `ATNINT` reads as 0 — never record it (`MPBOX`, and
 ///   `maplist/MLSADD`, which queues a changed element for it).
-/// - BRAN and the nouns whose `HNGT` is set (`HTCOMP`) go to
-///   `mapboxlib/MPBXBR` instead, which is not read: unsaid.
+/// - BRAN and the nouns whose `HNGT` is set go to `mapboxlib/MPBXBR`
+///   instead, which gives them an entry only for a head tube of at least
+///   1 mm between catalogue P-points: unsaid. Their members it records
+///   whatever their `IMAP`.
 /// - An element whose noun is a UDET, or whose `UDTYPE` names one, takes the
 ///   UDET's `IMAP` from the project's dictionary: unsaid.
 /// - `maplib/MAPINS` writes only where `BTSELE(SPAMAP)` passes, and
@@ -133,10 +162,13 @@ pub fn key0_by_mapky2(axis: Axis, bucket: u8, min: i64) -> Result<u32, (i64, i64
 ///   World_AABB's to say.
 pub fn coverage_by_imap(refno: RefNo, state: &dyn SpatialState) -> Result<Option<bool>, UndecodableAttr> {
     let Some(noun) = state.noun(refno) else { return Ok(None) };
-    let Some(imap) = soft_imap(refno, noun, state)? else { return Ok(None) };
-    if noun == db1_hash("BRAN") || noun_in(&HNGT_SET, HNGT, noun) || noun_in(&NO_SPAMAP_SET, NO_SPAMAP_IN_TEMPLATE, noun) {
+    if records_its_members(noun) || noun_in(&NO_SPAMAP_SET, NO_SPAMAP_IN_TEMPLATE, noun) {
         return Ok(None);
     }
+    if state.owner(refno).and_then(|owner| state.noun(owner)).is_some_and(records_its_members) {
+        return Ok(Some(true));
+    }
+    let Some(imap) = soft_imap(refno, noun, state)? else { return Ok(None) };
     let recorded = match imap {
         1 | 5 => true,
         7 => {
@@ -408,5 +440,28 @@ mod tests {
         assert_eq!(covered("SCOJ", &[spre(24_384, 100)]), Some(true));
         assert_eq!(covered("SCTN", &[]), Some(true), "MBXSTL boxes it by its ends");
         assert_eq!(covered("COFI", &[spre(24_384, 100)]), Some(false), "IMAP 3");
+    }
+
+    #[test]
+    fn mpbxbr_records_the_members_of_bran_and_hngt_nouns_whatever_their_imap() {
+        assert_eq!(covered_under(db1_hash("BRAN"), db1_hash("ELBO"), &[]), Some(true));
+        assert_eq!(covered_under(db1_hash("HANG"), db1_hash("TEXT"), &[]), Some(true));
+        assert_eq!(covered_under(db1_hash("BRAN"), db1_hash("TUBI"), &[]), None, "no SPAMAP in its template");
+    }
+
+    #[test]
+    fn one_k_0_entry_but_in_branch_and_hanger_trees() {
+        let aabb = [1, 2, 3, 4, 5, 6];
+        let entries = |owner: &str, noun: &str| {
+            let tree = Tree::default()
+                .with(OWNER, db1_hash(owner), None, &[])
+                .with(ELEMENT, db1_hash(noun), Some(OWNER), &[]);
+            entries_by_mpbox(ELEMENT, &tree, aabb).expect("reads no attribute")
+        };
+        assert_eq!(entries("EQUI", "BOX"), EntryBoxes::Entries(vec![(0, aabb)]));
+        assert_eq!(entries("SBFR", "SCTN"), EntryBoxes::Entries(vec![(0, aabb)]));
+        assert!(matches!(entries("BRAN", "ELBO"), EntryBoxes::MissingInput(_)));
+        assert!(matches!(entries("HANG", "PCLA"), EntryBoxes::MissingInput(_)));
+        assert!(matches!(entries("PIPE", "BRAN"), EntryBoxes::MissingInput(_)));
     }
 }

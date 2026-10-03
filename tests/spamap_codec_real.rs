@@ -33,9 +33,11 @@ fn items(checked: &Checked) -> [(&'static str, &Item); 3] {
     [("Key0", &checked.key0), ("count and k", &checked.entries_k), ("flags", &checked.flags)]
 }
 
-/// Whether a listed miss waits on pending rules alone.
+/// Whether a listed miss waits on pending rules, or on an input e3d-io cannot
+/// have, alone.
 fn waits(miss: &Miss) -> bool {
-    !miss.reasons.is_empty() && miss.reasons.iter().all(|reason| reason.starts_with("unconfirmed:"))
+    !miss.reasons.is_empty()
+        && miss.reasons.iter().all(|reason| reason.starts_with("unconfirmed:") || reason.starts_with("missing input:"))
 }
 
 /// An item's agree, total, waiting and `(agree, total)` by noun.

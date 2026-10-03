@@ -311,7 +311,7 @@ mod tests {
     fn under_the_confirmed_rules_the_pending_ones_are_named_and_no_entry_comes_out() {
         let (state, aabb) = box_26484();
         let encoded = SpamapCodec::new(RuleSet::confirmed()).encode(BOX_26484, &state, &aabb).unwrap();
-        assert_eq!(encoded, Encoded::NeedsUnconfirmed(vec![RuleId::SpamapEntriesK, RuleId::SpamapFlags]));
+        assert_eq!(encoded, Encoded::NeedsUnconfirmed(vec![RuleId::SpamapFlags]));
     }
 
     #[test]
