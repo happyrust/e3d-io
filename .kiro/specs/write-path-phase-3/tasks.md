@@ -19,7 +19,7 @@
 ## Tasks
 
 - [ ] 1. 基线与测试基础设施（先于任何第三期 `src/write/` 改动）
-  - [~] 1.1 在当前 HEAD 跑 Build_Checks 并记录基线
+  - [x] 1.1 在当前 HEAD 跑 Build_Checks 并记录基线
     - 跑 `cargo test --no-fail-fast`、`cargo clippy --all-targets`、`cargo doc`
     - 把 HEAD、测试二进制数、passed / failed / ignored、clippy 与 `cargo doc` 的 warning 数、报 skip 的测试与所缺样本记入 Spec_Ledger「基线数字」
     - _Requirements: 15.1, 15.2, 15.6, 15.8_
@@ -509,12 +509,12 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 项 | 值 |
 |---|---|
-| HEAD | |
-| 测试二进制数 | |
-| passed / failed / ignored | |
-| clippy warning 数 | |
-| `cargo doc` warning 数 | |
-| 报 skip 的测试与所缺样本 | |
+| HEAD | `3e16423`（= `c61b097` + 启动时未提交改动；测量后由编排者单独提交，构建内容与测量时相同）；测于 2026-10-01，`CARGO_TARGET_DIR=target-phase3` |
+| 测试二进制数 | 101 个（`Running` 行：lib 单测 1 + bin 单测 2 + `tests/*.rs` 98），另 Doc-tests 1 个 |
+| passed / failed / ignored | 626 / 1 / 30。唯一失败 `tests/hunk_resolve_real.rs::e3ds_own_int_array_hunk_resolves_to_its_5709_ints`（第 50 行，期望页 16456、实得 16600）为既有失败（样本漂移）：`ams8000_0001` 原件于 2026-09-28 被 E3D 追加会话 641–646，DBMVAL 链起页随之改变；在干净的 `c61b097` 上同样失败。验收口径：相对基线不新增失败 |
+| clippy warning 数 | 63（去重；cargo 各目标汇总 85，其中 lib test 报 22 个重复），0 error |
+| `cargo doc` warning 数 | 25（全在 lib doc：private / broken intra-doc link），0 error |
+| 报 skip 的测试与所缺样本 | 共 7 个测试：`element_version_census::how_often_is_the_answered_copy_not_the_richest`、`sampled_elements_resolve::every_sampled_element_resolves_to_itself_in_the_shape_recorded` 缺 `evidence/20260826-tty-sampling/sample.tsv`；`live_tree_sample_resolves::{both_storage_layouts_are_covered, every_sampled_element_resolves_to_itself_in_the_shape_recorded}` 缺 `evidence/2026-08-30-tty-sampling/sample.tsv`；`live_tree_sample_resolves::the_sample_covers_every_bucket_the_old_list_did_that_a_live_tree_can_witness` 两份 `sample.tsv` 都缺；`refno_dbno_corpus::every_installed_corpus_key_decodes_to_its_descriptor_dbno`、`world_refno_corpus::every_installed_database_keeps_its_world_where_the_descriptor_says` 缺环境变量 `E3D_CORPUS_ROOTS`。无测试经 `common::missing` 报装机样本缺失。详见 `docs/evidence/2026-10-01-write-path-phase-3-baseline.md` |
 
 #### IB_Wrapper 实机冒烟（2.5）
 

@@ -23,6 +23,11 @@ schema/*/metadata/
 tools/e3d/*.dll
 __pycache__/
 
+# Agent scratch for a task in progress (raw cargo logs, parse scripts) and
+# Kiro's per-task execution record; what is worth keeping goes to docs/.
+/.agents/tasks/
+.kiro/specs/*/tasks.meta.json
+
 # repowise's local index: caches, a vector store (LanceDB) and a wiki DB
 # rebuilt from the tree and git history on `repowise init`/`update`. May also
 # hold an LLM provider key in `.env` if one was ever saved (`--save-key`).
