@@ -23,7 +23,7 @@
     - 跑 `cargo test --no-fail-fast`、`cargo clippy --all-targets`、`cargo doc`
     - 把 HEAD、测试二进制数、passed / failed / ignored、clippy 与 `cargo doc` 的 warning 数、报 skip 的测试与所缺样本记入 Spec_Ledger「基线数字」
     - _Requirements: 15.1, 15.2, 15.6, 15.8_
-  - [~] 1.2 加 `proptest` dev-dependency
+  - [x] 1.2 加 `proptest` dev-dependency
     - 查当时 crates.io 上 `proptest` 的最新稳定版，在 `Cargo.toml` 的 `[dev-dependencies]` 以 `=x.y.z` 精确钉死，同步 `Cargo.lock`
     - proptest 的失败种子目录 `proptest-regressions/` 纳入版本管理，不写进 `.gitignore`
     - _Requirements: 2.5, 15.1_
