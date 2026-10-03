@@ -158,7 +158,7 @@
     - **Validates: Requirements 4.2, 4.3, 4.7, 4.9, 4.10, 4.11, 4.15, 4.16**
 
 - [ ] 6. Built_In_AABB（需求 6 读侧部分）
-  - [~] 6.1 实现 `src/spatial/aabb.rs`
+  - [x] 6.1 实现 `src/spatial/aabb.rs`
     - 复合器 `FrameComposer` 与默认 `ChainComposer`：沿 owner 链上溯到 WORL，按 `aabb.compose` / `aabb.ori_form` 复合 POS / ORI，任一为 `Pending` 返回 `NeedsUnconfirmed`
     - `BuiltInAabb::compute` → `AabbOutcome`；`BUILT_IN_NOUNS` 为 BOX、CYLI（D1 的唯一落点）；BOX 用 XLEN / YLEN / ZLEN，CYLI 用 DIAM / HEIG，方法由 `aabb.box` / `aabb.cyli` / `aabb.degenerate` 定；输出毫米 `f64`，取整只在 Codec 里做
     - 所需属性解码不了时返回 `UndecodableAttr { refno, name, hash }`

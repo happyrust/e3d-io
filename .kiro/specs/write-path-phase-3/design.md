@@ -217,7 +217,9 @@ pub trait SpatialState {                          // 一份元素状态的只读
     fn owner(&self, r: RefNo) -> Option<RefNo>;
     fn attr(&self, r: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr>; // 读写两侧共用的解码值
 }
-pub struct WorldFrame { pub rotation: [[f64; 3]; 3], pub origin_mm: [f64; 3] }
+pub struct WorldFrame { pub rotation: [[f64; 3]; 3], pub origin_mm: [f64; 3] }  // rotation 的列 = 自身三轴在世界系中
+pub struct Link { pub refno: RefNo, pub noun: u32, pub pos_mm: Option<[f64; 3]>, pub rotation: Option<[[f64; 3]; 3]> }
+pub enum FrameOutcome { Frame(WorldFrame), NeedsUnconfirmed(Vec<RuleId>), NoWorld }  // NoWorld：owner 链到不了 WORL
 pub trait FrameComposer {                         // 可替换：ORI 存储形与复合顺序待取证
     fn world_frame(&self, s: &dyn SpatialState, r: RefNo) -> Result<FrameOutcome, UndecodableAttr>;
 }
@@ -226,8 +228,10 @@ pub struct BuiltInAabb<'r> { rules: &'r RuleSet, composer: &'r dyn FrameComposer
 impl BuiltInAabb<'_> {
     pub fn compute(&self, s: &dyn SpatialState, r: RefNo) -> Result<AabbOutcome, UndecodableAttr>;
 }
-pub enum AabbOutcome { Aabb(WorldAabb), NeedsUnconfirmed(Vec<RuleId>), NotBuiltIn }
+pub enum AabbOutcome { Aabb(WorldAabb), NeedsUnconfirmed(Vec<RuleId>), NotBuiltIn, NoWorld }
 ```
+
+（里程碑 B 计划 §6 B6：`aabb.*` 六条规则同 codec 规则一样有候选函数类型——`OriForm`、`Compose(&[Link])`、`BoxAabb`、`CyliAabb`、`Degenerate`、`Arithmetic`；所需属性〔自身尺寸、链上每一级的 POS / ORI〕在问任何规则之前全部读完，解码不了即 `UndecodableAttr`，与规则状态无关；`aabb.degenerate` 只在某个尺寸 ≤ 0 时才查。）
 
 - `SpatialState` 有两份实现：读侧的 `ReadState`（`src/spatial/state.rs`，按会话读记录，供 Codec_Check、Q13g 与需求 6 第 9 条用）和写侧的 `EndState`。同一套 Codec / AABB 代码先在语料上核对，再用于写侧。
 - 默认复合器 `ChainComposer`：沿 owner 链上溯到 WORL，对 `aabb.compose` 列出的 noun 取 POS / ORI 复合；ORI 按 `aabb.ori_form` 解码。两条规则任一为 `Pending` 时，返回 `NeedsUnconfirmed`。

@@ -18,8 +18,8 @@
 //! The codec does not look at Spatial_Policy and does not decide what a
 //! pending rule means for a batch; its caller does.
 
-use super::{Axis, EntryBoxes, SpatialState, UndecodableAttr, WorldAabb};
-use crate::core_rules::{Implementation, RuleId, RuleSet, Slot};
+use super::{Axis, EntryBoxes, SpatialState, UndecodableAttr, Walk, WorldAabb};
+use crate::core_rules::{RuleId, RuleSet};
 use crate::index::SpamapEntry;
 use crate::refno::RefNo;
 
@@ -56,45 +56,6 @@ pub enum CodecError {
     OutOfRange { refno: RefNo, axis: Axis, value_mm: f64, range: (i64, i64) },
     #[error(transparent)]
     Undecodable(#[from] UndecodableAttr),
-}
-
-/// The rules one encoding consulted: those pending, and those a candidate
-/// answered for.
-#[derive(Default)]
-struct Walk {
-    pending: Vec<RuleId>,
-    relied_on: Vec<RuleId>,
-}
-
-impl Walk {
-    fn take<T: Implementation<C>, C: Copy>(&mut self, id: RuleId, slot: &Slot<T, C>) -> Option<C> {
-        match slot {
-            Slot::Pending => {
-                if !self.pending.contains(&id) {
-                    self.pending.push(id);
-                }
-                None
-            }
-            Slot::Confirmed(confirmed) => Some(confirmed.function()),
-            Slot::Candidate(candidate) => {
-                if !self.relied_on.contains(&id) {
-                    self.relied_on.push(id);
-                }
-                Some(*candidate)
-            }
-        }
-    }
-
-    fn need(&mut self, id: RuleId) {
-        if !self.pending.contains(&id) {
-            self.pending.push(id);
-        }
-    }
-
-    fn sorted(mut ids: Vec<RuleId>) -> Vec<RuleId> {
-        ids.sort();
-        ids
-    }
 }
 
 /// Key0 could not be represented: the mins that could be.

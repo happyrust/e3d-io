@@ -362,13 +362,21 @@ called_as_candidates! {
     EntriesK => candidate::EntriesK;
     Flags => candidate::Flags;
     Coverage => candidate::Coverage;
+    OriForm => candidate::OriForm;
+    Compose => candidate::Compose;
+    BoxAabb => candidate::BoxAabb;
+    CyliAabb => candidate::CyliAabb;
+    Degenerate => candidate::Degenerate;
+    Arithmetic => candidate::Arithmetic;
 }
 
-/// What a candidate is, per rule the codec consults: a function called where
-/// the confirmed rule would be. Coordinates are 0.1 mm integers unless named
-/// otherwise.
+/// What a candidate is, per rule the codec or the built-in AABB consults: a
+/// function called where the confirmed rule would be. Coordinates are 0.1 mm
+/// integers unless named otherwise.
 pub mod candidate {
     use super::{Axis, EntryBoxes, RefNo, SpatialState, UndecodableAttr};
+    use crate::record::descriptor::DescriptorValue;
+    use crate::spatial::aabb::{Link, WorldFrame};
 
     /// `spamap.rounding`: one axis' millimetre range as 0.1 mm integers.
     pub type Rounding = fn(min_mm: f64, max_mm: f64) -> (i64, i64);
@@ -408,6 +416,31 @@ pub mod candidate {
     /// `spamap.coverage`: whether a noun is a Geometric_Noun, `None` when the
     /// candidate does not say.
     pub type Coverage = fn(noun: u32) -> Option<bool>;
+
+    /// `aabb.ori_form`: the rotation a stored ORI stands for — the matrix
+    /// whose columns are the element's axes in its owner's — or `None` for a
+    /// value the candidate does not read.
+    pub type OriForm = fn(ori: &DescriptorValue) -> Option<[[f64; 3]; 3]>;
+
+    /// `aabb.compose`: the world frame of the first link of an owner chain
+    /// (the element, then each owner up to the one the world owns), or `None`
+    /// when the candidate does not say for some link.
+    pub type Compose = fn(chain: &[Link]) -> Option<WorldFrame>;
+
+    /// `aabb.box`: a BOX's world box, `[minx, miny, minz, maxx, maxy, maxz]`
+    /// in mm, from its frame and XLEN, YLEN, ZLEN.
+    pub type BoxAabb = fn(frame: &WorldFrame, size_mm: [f64; 3]) -> [f64; 6];
+
+    /// `aabb.cyli`: a CYLI's world box in mm from its frame, DIAM and HEIG.
+    pub type CyliAabb = fn(frame: &WorldFrame, diam_mm: f64, heig_mm: f64) -> [f64; 6];
+
+    /// `aabb.degenerate`: the size measured for a stored size of zero or
+    /// below, or `None` when the candidate does not say.
+    pub type Degenerate = fn(size_mm: f64) -> Option<f64>;
+
+    /// `aabb.arithmetic`: how a value of the computation is held — as it is
+    /// for double precision, through `f32` for single.
+    pub type Arithmetic = fn(value: f64) -> f64;
 }
 
 macro_rules! implementations {
@@ -495,12 +528,12 @@ pub struct RuleSet {
     pub(crate) descendants_ori: Slot<DescendantRecompute>,
     pub(crate) delete_residue: Slot<DeleteResidue>,
     pub(crate) record_item: Slot<RecordItem>,
-    pub(crate) ori_form: Slot<OriForm>,
-    pub(crate) compose: Slot<Compose>,
-    pub(crate) box_aabb: Slot<BoxAabb>,
-    pub(crate) cyli_aabb: Slot<CyliAabb>,
-    pub(crate) degenerate: Slot<Degenerate>,
-    pub(crate) arithmetic: Slot<Arithmetic>,
+    pub(crate) ori_form: Slot<OriForm, candidate::OriForm>,
+    pub(crate) compose: Slot<Compose, candidate::Compose>,
+    pub(crate) box_aabb: Slot<BoxAabb, candidate::BoxAabb>,
+    pub(crate) cyli_aabb: Slot<CyliAabb, candidate::CyliAabb>,
+    pub(crate) degenerate: Slot<Degenerate, candidate::Degenerate>,
+    pub(crate) arithmetic: Slot<Arithmetic, candidate::Arithmetic>,
     pub(crate) counter_semantics: Slot<CounterSemantics>,
     pub(crate) index_order: Slot<IndexOrder>,
     pub(crate) bucket_collision: Slot<BucketCollision>,
@@ -573,8 +606,23 @@ impl RuleSet {
             }
         }
         let mut set = CONFIRMED;
-        let CandidatePick { rounding, word_sign, short_axis, zero_extent, bucket, key0, entries_k, flags, coverage } =
-            *pick;
+        let CandidatePick {
+            rounding,
+            word_sign,
+            short_axis,
+            zero_extent,
+            bucket,
+            key0,
+            entries_k,
+            flags,
+            coverage,
+            ori_form,
+            compose,
+            box_aabb,
+            cyli_aabb,
+            degenerate,
+            arithmetic,
+        } = *pick;
         fill(&mut set.rounding, rounding);
         fill(&mut set.word_sign, word_sign);
         fill(&mut set.short_axis, short_axis);
@@ -584,6 +632,12 @@ impl RuleSet {
         fill(&mut set.entries_k, entries_k);
         fill(&mut set.flags, flags);
         fill(&mut set.coverage, coverage);
+        fill(&mut set.ori_form, ori_form);
+        fill(&mut set.compose, compose);
+        fill(&mut set.box_aabb, box_aabb);
+        fill(&mut set.cyli_aabb, cyli_aabb);
+        fill(&mut set.degenerate, degenerate);
+        fill(&mut set.arithmetic, arithmetic);
         set
     }
 
@@ -637,6 +691,12 @@ pub struct CandidatePick {
     pub entries_k: Option<candidate::EntriesK>,
     pub flags: Option<candidate::Flags>,
     pub coverage: Option<candidate::Coverage>,
+    pub ori_form: Option<candidate::OriForm>,
+    pub compose: Option<candidate::Compose>,
+    pub box_aabb: Option<candidate::BoxAabb>,
+    pub cyli_aabb: Option<candidate::CyliAabb>,
+    pub degenerate: Option<candidate::Degenerate>,
+    pub arithmetic: Option<candidate::Arithmetic>,
 }
 
 /// Whether a change makes E3D_Core recompute an element's entries.

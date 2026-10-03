@@ -8,12 +8,14 @@
 //! Nothing here is in `src/write/`: the corpus checks that gate the first
 //! SPAMAP write run this code before any write-side commit exists.
 
+pub mod aabb;
 #[doc(hidden)]
 pub mod candidates;
 pub mod check;
 pub mod codec;
 pub mod state;
 
+use crate::core_rules::{Implementation, RuleId, Slot};
 use crate::record::descriptor::DescriptorValue;
 use crate::refno::RefNo;
 
@@ -129,4 +131,44 @@ pub struct UndecodableAttr {
     pub refno: RefNo,
     pub name: String,
     pub hash: u32,
+}
+
+/// The rules one computation consulted: those pending, and those a candidate
+/// answered for, each once.
+#[derive(Default)]
+pub(crate) struct Walk {
+    pub(crate) pending: Vec<RuleId>,
+    pub(crate) relied_on: Vec<RuleId>,
+}
+
+impl Walk {
+    /// The rule's function, or `None` with the rule noted as pending.
+    pub(crate) fn take<T: Implementation<C>, C: Copy>(&mut self, id: RuleId, slot: &Slot<T, C>) -> Option<C> {
+        match slot {
+            Slot::Pending => {
+                self.need(id);
+                None
+            }
+            Slot::Confirmed(confirmed) => Some(confirmed.function()),
+            Slot::Candidate(candidate) => {
+                if !self.relied_on.contains(&id) {
+                    self.relied_on.push(id);
+                }
+                Some(*candidate)
+            }
+        }
+    }
+
+    /// Note `id` as pending: a candidate that does not cover the case counts
+    /// as no rule.
+    pub(crate) fn need(&mut self, id: RuleId) {
+        if !self.pending.contains(&id) {
+            self.pending.push(id);
+        }
+    }
+
+    pub(crate) fn sorted(mut ids: Vec<RuleId>) -> Vec<RuleId> {
+        ids.sort();
+        ids
+    }
 }

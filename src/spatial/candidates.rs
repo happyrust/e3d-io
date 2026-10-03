@@ -1,18 +1,20 @@
-//! Candidate rules for the SPAMAP codec (`.kiro/specs/write-path-phase-3`,
-//! task 5.2): assumptions about E3D_Core, each with what it rests on, for
-//! Codec_Check to hold against the corpus. They reach a rule set only through
-//! `RuleSet::candidates`; nothing that writes a database names this module.
+//! Candidate rules for the SPAMAP codec and the built-in AABB
+//! (`.kiro/specs/write-path-phase-3`, tasks 5.2 and 6.1): assumptions about
+//! E3D_Core, each with what it rests on, for Codec_Check to hold against the
+//! corpus. They reach a rule set only through `RuleSet::candidates`; nothing
+//! that writes a database names this module.
 //!
 //! What they rest on: the SPAMAP census
-//! (`docs/evidence/2026-10-03-spamap-census.md`) and the 28 269 entries of
-//! the four corpus databases with a table
-//! (`docs/plans/2026-10-03-write-path-phase-3-milestone-b-plan.md` §2).
+//! (`docs/evidence/2026-10-03-spamap-census.md`), the 28 269 entries of the
+//! four corpus databases with a table, and the native BOX `24384/24777`
+//! (`docs/plans/2026-10-03-write-path-phase-3-milestone-b-plan.md` §2, §6).
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use e3d_attlib::db1_hash;
 
+use super::aabb::{multiply, Link, WorldFrame, IDENTITY};
 use super::{Axis, EntryBoxes, SpatialState, UndecodableAttr};
 use crate::core_rules::{candidate, CandidatePick};
 use crate::record::descriptor::DescriptorValue;
@@ -30,6 +32,12 @@ pub fn pick() -> CandidatePick {
         entries_k: Some(one_entry),
         flags: Some(flags_from_obst),
         coverage: Some(coverage_seen_in_corpus),
+        ori_form: Some(ori_degrees_x_then_y_then_z),
+        compose: Some(every_pose_in_its_owners_frame),
+        box_aabb: Some(box_about_its_centre),
+        cyli_aabb: Some(cylinder_about_its_centre),
+        degenerate: Some(size_as_its_magnitude),
+        arithmetic: Some(double_precision),
     }
 }
 
@@ -175,6 +183,123 @@ const NOT_GEOMETRIC_IN_CORPUS: &[&str] = &[
     "SPEC", "SPWL", "STRU", "SUBE", "SUBJ", "SUBS", "TATTA", "TEXT", "TMPL", "VERT", "WORL", "ZONE",
 ];
 
+// --- aabb.ori_form -----------------------------------------------------------------
+
+/// Three angles in degrees about x, y and z, turned in that order about the
+/// owner's fixed axes: R = Rz · Ry · Rx. The native BOX's EQUI `24384/24776`
+/// stores `[180, 0, −175]` for "Y is N 5 W and Z is D" (2026-09-22 evidence
+/// §1 step 3), which this reads exactly; with the middle angle 0 it cannot
+/// tell where y turns.
+pub fn ori_degrees_x_then_y_then_z(ori: &DescriptorValue) -> Option<[[f64; 3]; 3]> {
+    let [x, y, z] = three_angles(ori)?;
+    Some(multiply(&about_z(z), &multiply(&about_y(y), &about_x(x))))
+}
+
+/// The same angles with y turned first: R = Rz · Rx · Ry. Reads that EQUI
+/// the same; differs wherever the middle angle is not 0.
+pub fn ori_degrees_y_then_x_then_z(ori: &DescriptorValue) -> Option<[[f64; 3]; 3]> {
+    let [x, y, z] = three_angles(ori)?;
+    Some(multiply(&about_z(z), &multiply(&about_x(x), &about_y(y))))
+}
+
+fn three_angles(ori: &DescriptorValue) -> Option<[f64; 3]> {
+    match ori {
+        DescriptorValue::RealArray(degrees) if degrees.len() == 3 => Some([degrees[0], degrees[1], degrees[2]]),
+        _ => None,
+    }
+}
+
+fn about_x(degrees: f64) -> [[f64; 3]; 3] {
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    [[1.0, 0.0, 0.0], [0.0, cos, -sin], [0.0, sin, cos]]
+}
+
+fn about_y(degrees: f64) -> [[f64; 3]; 3] {
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    [[cos, 0.0, sin], [0.0, 1.0, 0.0], [-sin, 0.0, cos]]
+}
+
+fn about_z(degrees: f64) -> [[f64; 3]; 3] {
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    [[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]]
+}
+
+// --- aabb.compose ------------------------------------------------------------------
+
+/// Every link's pose counts, each in its owner's frame: the world frame is
+/// the top link's pose, the next link's within it, and so on down to the
+/// element's own. A link without POS sits on its owner's origin, one without
+/// ORI on its owner's axes. The native BOX's own POS and ORI are 0, its pose
+/// is its EQUI's, and its ZONE and SITE sit on the origin (milestone B plan
+/// §2).
+pub fn every_pose_in_its_owners_frame(chain: &[Link]) -> Option<WorldFrame> {
+    Some(chain.iter().rev().fold(WorldFrame::WORLD, |frame, link| {
+        frame.then(link.pos_mm.unwrap_or([0.0; 3]), link.rotation.unwrap_or(IDENTITY))
+    }))
+}
+
+// --- aabb.box ----------------------------------------------------------------------
+
+/// A BOX centred on its origin, bounded exactly: per world axis, the sum of
+/// each half-length times how far its own axis leans into that world axis.
+/// With round-to-nearest it gives the native BOX's entry word for word.
+pub fn box_about_its_centre(frame: &WorldFrame, size_mm: [f64; 3]) -> [f64; 6] {
+    bound_own_box(frame, size_mm.map(|size| size.abs() / 2.0))
+}
+
+/// The world bound of the box of these half-lengths along the frame's own
+/// axes, centred on its origin.
+fn bound_own_box(frame: &WorldFrame, half_mm: [f64; 3]) -> [f64; 6] {
+    let mut aabb = [0.0; 6];
+    for axis in 0..3 {
+        let reach: f64 = (0..3).map(|own| frame.rotation[axis][own].abs() * half_mm[own]).sum();
+        aabb[axis] = frame.origin_mm[axis] - reach;
+        aabb[axis + 3] = frame.origin_mm[axis] + reach;
+    }
+    aabb
+}
+
+// --- aabb.cyli ---------------------------------------------------------------------
+
+/// A CYLI centred on its origin with its axis along its own z, bounded
+/// exactly: per world axis, half the height times the axis' lean into it,
+/// plus the radius times the reach of an end disc, √(1 − lean²).
+pub fn cylinder_about_its_centre(frame: &WorldFrame, diam_mm: f64, heig_mm: f64) -> [f64; 6] {
+    let (radius, half_height) = (diam_mm.abs() / 2.0, heig_mm.abs() / 2.0);
+    let mut aabb = [0.0; 6];
+    for axis in 0..3 {
+        let lean = frame.rotation[axis][2];
+        let reach = lean.abs() * half_height + radius * (1.0 - lean * lean).max(0.0).sqrt();
+        aabb[axis] = frame.origin_mm[axis] - reach;
+        aabb[axis + 3] = frame.origin_mm[axis] + reach;
+    }
+    aabb
+}
+
+/// The same cylinder bounded by its own box `[±r, ±r, ±h/2]` turned into the
+/// world: as tight as the exact bound while no world axis has two of its own
+/// axes leaning into it, looser otherwise.
+pub fn cylinder_by_its_own_box(frame: &WorldFrame, diam_mm: f64, heig_mm: f64) -> [f64; 6] {
+    let radius = diam_mm.abs() / 2.0;
+    bound_own_box(frame, [radius, radius, heig_mm.abs() / 2.0])
+}
+
+// --- aabb.degenerate ---------------------------------------------------------------
+
+/// A size below zero measures as its magnitude and zero as zero: a flat box,
+/// a cylinder of no height. Nothing in the corpus rests on it yet.
+pub fn size_as_its_magnitude(size_mm: f64) -> Option<f64> {
+    Some(size_mm.abs())
+}
+
+// --- aabb.arithmetic ---------------------------------------------------------------
+
+/// Every value held as an `f64` (milestone B plan Q4: double precision
+/// first, Property 8's misses decide).
+pub fn double_precision(value: f64) -> f64 {
+    value
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,6 +335,25 @@ mod tests {
         assert_eq!(round_outward(849.5, 1150.5), (8_495, 11_505));
         assert_eq!(round_outward(1800.1, 2200.1), (18_001, 22_001));
         assert_eq!(round_outward(-0.04, 0.04), (-1, 1));
+    }
+
+    /// "Y is N 5 W and Z is D": x points W 5 S, y N 5 W, z down.
+    #[test]
+    fn the_native_boxs_equi_orientation_reads_as_its_tty_line() {
+        let (sin, cos) = 5f64.to_radians().sin_cos();
+        let expected = [[-cos, -sin, 0.0], [-sin, cos, 0.0], [0.0, 0.0, -1.0]];
+        let ori = DescriptorValue::RealArray(vec![180.0, 0.0, -175.0]);
+        for read in [ori_degrees_x_then_y_then_z, ori_degrees_y_then_x_then_z] {
+            let rotation = read(&ori).expect("three angles");
+            for (row, expected) in rotation.iter().zip(&expected) {
+                for (cell, expected) in row.iter().zip(expected) {
+                    assert!((cell - expected).abs() < 1e-12, "{rotation:?}");
+                }
+            }
+        }
+        let tilted = DescriptorValue::RealArray(vec![30.0, 20.0, 10.0]);
+        assert_ne!(ori_degrees_x_then_y_then_z(&tilted), ori_degrees_y_then_x_then_z(&tilted));
+        assert_eq!(ori_degrees_x_then_y_then_z(&DescriptorValue::Real(1.0)), None);
     }
 
     #[test]
