@@ -99,12 +99,12 @@
     - **Property 1: 按 refno 查询等于全表过滤**（Corpus 部分）
     - **Validates: Requirements 3.4, 3.5**
     - _Requirements: 3.3, 3.5_
-  - [~] 3.5 `e3d-descriptor` 加子命令 `spamap` 与 `spamap-census`（`src/bin/e3d-descriptor.rs`）
+  - [x] 3.5 `e3d-descriptor` 加子命令 `spamap` 与 `spamap-census`（`src/bin/e3d-descriptor.rs`）
     - `spamap --db <f> [--session <n>] [--refno <w0/w1>]`：JSON 输出会话号、根页号、页数与条目
     - `spamap-census --input <文件或目录>… [--session <文件>=<n>]…`：输出需求 3 第 7、10、11、12 条各项，另报「按元素的 k 组合」计数；以 `ReadOnlyEngine` / `DbView` 只读打开
     - 输出确定：输入按路径排序、统计一律用 `BTreeMap`、不写时间戳；首部不可解析的文件列为「非库文件」；某库出错时列出路径与错误后继续，全部结束后以非零退出码退出
     - _Requirements: 3.7, 3.8, 3.10, 3.11, 3.12_
-  - [ ]* 3.6 写普查集成测试 `tests/spamap_census_real.rs`
+  - [x]* 3.6 写普查集成测试 `tests/spamap_census_real.rs`
     - 真跑 bin，固定几种输入组合（库文件、目录、`--session`、非库文件、出错库），比对运行前后的 SHA-256 与两次输出
     - **Property 4: 普查只读且确定**
     - **Validates: Requirements 3.8**

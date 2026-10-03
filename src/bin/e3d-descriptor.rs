@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use e3d_attlib::{db1_dehash, db1_hash, lookup_system_name, AttlibData};
 use e3d_io::attlib_metadata::AttributeMetadataCatalog;
+use e3d_io::engine::ScanTier;
+use e3d_io::index::{read_spamap, SpamapEntry, SpamapRead};
 use e3d_io::noun_catalog::{NounCatalog, ReconciledSource};
 use e3d_io::record::descriptor::{AttributeExtractionStatus, DescriptorValue, ElementExtraction};
 use e3d_io::record::element::ParsedElement;
@@ -36,6 +38,9 @@ fn main() {
 fn run() -> Result<(), String> {
     let mut args = env::args().skip(1);
     let command = args.next().ok_or_else(usage)?;
+    if command == "spamap-census" {
+        return spamap_census_command(args);
+    }
     let mut options = parse_options(args)?;
     apply_schema_pack(&command, &mut options)?;
     if command == "compile-metadata" {
@@ -64,6 +69,14 @@ fn run() -> Result<(), String> {
     }
     if command == "sessions" {
         let summary = sessions_command(&options)?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    if command == "spamap" {
+        let summary = spamap_command(&options)?;
         println!(
             "{}",
             serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
@@ -1457,6 +1470,270 @@ fn session_json(session: &e3d_io::session::SessionPage) -> Value {
     })
 }
 
+/// `spamap --db PATH [--session N] [--refno WORD0/WORD1]`: one session's SPAMAP
+/// table — its root, how many pages hang off it, and every entry or one
+/// refno's, each as the eleven words stored.
+fn spamap_command(options: &HashMap<String, String>) -> Result<Value, String> {
+    let db = required(options, "db")?;
+    let at = match options.get("session") {
+        Some(sesno) => SessionSelector::Exact(sesno.parse().map_err(|e| format!("invalid --session {sesno}: {e}"))?),
+        None => SessionSelector::Latest,
+    };
+    let refno = options.get("refno").map(|refno| parse_refno(refno)).transpose()?;
+    let mut view = DbView::open_at(db, at).map_err(|e| format!("open database {db}: {e}"))?;
+    match read_spamap(&mut view).map_err(|e| format!("read the SPAMAP of {db}: {e}"))? {
+        SpamapRead::NoTable { sesno } => Ok(json!({ "db": db, "sesno": sesno, "spamap": "no_table" })),
+        SpamapRead::Table { sesno, table } => {
+            let entries: Vec<Value> = match refno {
+                Some(refno) => table.for_refno(refno).map(entry_words).collect(),
+                None => table.entries().iter().map(entry_words).collect(),
+            };
+            Ok(json!({
+                "db": db,
+                "sesno": sesno,
+                "root_page": table.root.page,
+                "pages": table.pages.len(),
+                "entries_in_table": table.entries().len(),
+                "refno": refno.map(|refno| refno.to_string()),
+                "entries": entries,
+            }))
+        }
+    }
+}
+
+/// An entry as stored: four key words, then seven value words, unsigned.
+fn entry_words(entry: &SpamapEntry) -> Value {
+    json!(entry.key.iter().chain(&entry.value).copied().collect::<Vec<u32>>())
+}
+
+/// What the census says about how it reads Key0; printed with every census so
+/// the histograms carry their own definition.
+const CENSUS_KEY0_READING: &str = "key0 = N * 10^8 + min, min the signed 0.1 mm minimum the value stores for one axis, \
+     N = 6 * axis (x 0, y 1, z 2) + bucket (1..5); an entry no axis reads that way counts as key0_mismatch \
+     (docs/evidence/2026-09-22-e3d-spamap-consequences.md, section 0 item 7)";
+
+/// How many entries of the first kind a census lists in full.
+const CENSUS_LISTED: usize = 100;
+
+/// `spamap-census --input FILE_OR_DIR [--input …] [--session FILE=N …]`
+/// (requirement 3.7–3.12): per database, the SPAMAP table's size and, per noun
+/// of the session's refno index, how many entries its elements have and what
+/// those entries say.
+///
+/// Read only. The same inputs at the same sessions print the same bytes:
+/// inputs sorted, every tally a `BTreeMap`, no clock. A file in an input
+/// directory whose first page is no database descriptor is listed as not a
+/// database; a database that cannot be read is listed with its error, the
+/// census goes on, and the exit code is then 1.
+fn spamap_census_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {
+    let mut inputs: Vec<PathBuf> = Vec::new();
+    let mut sessions: BTreeMap<PathBuf, u32> = BTreeMap::new();
+    while let Some(flag) = args.next() {
+        let value = args.next().ok_or_else(|| format!("missing value for {flag}"))?;
+        match flag.as_str() {
+            "--input" => inputs.push(PathBuf::from(value)),
+            "--session" => {
+                let (file, sesno) =
+                    value.rsplit_once('=').ok_or_else(|| format!("--session takes FILE=N, got {value}"))?;
+                let sesno = sesno.parse().map_err(|e| format!("--session {value}: {e}"))?;
+                sessions.insert(PathBuf::from(file), sesno);
+            }
+            other => return Err(format!("spamap-census takes --input and --session, got {other}")),
+        }
+    }
+    if inputs.is_empty() {
+        return Err("spamap-census needs at least one --input".into());
+    }
+
+    let mut databases: Vec<PathBuf> = Vec::new();
+    let mut not_databases: Vec<String> = Vec::new();
+    let mut errors: Vec<(String, String)> = Vec::new();
+    for input in &inputs {
+        if !input.is_dir() {
+            databases.push(input.clone());
+            continue;
+        }
+        let listing = match fs::read_dir(input) {
+            Ok(listing) => listing,
+            Err(error) => {
+                errors.push((display_path(input), format!("list the directory: {error}")));
+                continue;
+            }
+        };
+        for entry in listing {
+            let path = match entry {
+                Ok(entry) => entry.path(),
+                Err(error) => {
+                    errors.push((display_path(input), format!("list the directory: {error}")));
+                    continue;
+                }
+            };
+            if !path.is_file() {
+                continue;
+            }
+            match starts_with_a_database_descriptor(&path) {
+                Ok(true) => databases.push(path),
+                Ok(false) => not_databases.push(display_path(&path)),
+                Err(error) => errors.push((display_path(&path), error)),
+            }
+        }
+    }
+    databases.sort();
+    databases.dedup();
+    not_databases.sort();
+    if let Some(stray) = sessions.keys().find(|file| !databases.contains(file)) {
+        return Err(format!("--session names {}, which is not a database among the inputs", stray.display()));
+    }
+
+    let mut reports = Vec::new();
+    for path in &databases {
+        match census_database(path, sessions.get(path).copied()) {
+            Ok(report) => reports.push(report),
+            Err(error) => errors.push((display_path(path), error)),
+        }
+    }
+    errors.sort();
+    let summary = json!({
+        "key0_reading": CENSUS_KEY0_READING,
+        "databases": reports,
+        "not_databases": not_databases,
+        "errors": errors.iter().map(|(path, error)| json!({ "path": path, "error": error })).collect::<Vec<_>>(),
+    });
+    println!("{}", serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?);
+    if !errors.is_empty() {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+/// Whether `path` opens with a page 0 that parses as a database descriptor.
+fn starts_with_a_database_descriptor(path: &Path) -> Result<bool, String> {
+    use std::io::Read;
+    let mut head = Vec::new();
+    fs::File::open(path)
+        .and_then(|file| file.take(4096).read_to_end(&mut head))
+        .map_err(|e| format!("read the first page: {e}"))?;
+    Ok(e3d_io::DbDescriptor::parse(&head).is_ok())
+}
+
+/// One database's census, at `session` or the newest.
+fn census_database(path: &Path, session: Option<u32>) -> Result<Value, String> {
+    let at = session.map_or(SessionSelector::Latest, SessionSelector::Exact);
+    let mut view = DbView::open_at(path, at).map_err(|e| format!("open: {e}"))?;
+    let sesno = view.selected_session();
+    let spamap = read_spamap(&mut view).map_err(|e| format!("read the SPAMAP: {e}"))?;
+    let mut engine = ReadOnlyEngine::open_at(path, sesno).map_err(|e| format!("open the engine: {e}"))?;
+    let mut nouns: HashMap<RefNo, u32> = HashMap::new();
+    for element in engine.scan_elements(ScanTier::Header).map_err(|e| format!("walk the refno index: {e}"))? {
+        let element = element.map_err(|e| format!("read an element record: {e}"))?;
+        nouns.insert(element.refno, element.noun_hash);
+    }
+
+    let (table, entries): (Value, &[SpamapEntry]) = match &spamap {
+        SpamapRead::NoTable { .. } => (json!("no_table"), &[]),
+        SpamapRead::Table { table, .. } => (
+            json!({ "root_page": table.root.page, "pages": table.pages.len(), "entries": table.entries().len() }),
+            table.entries(),
+        ),
+    };
+    let mut owned: HashMap<RefNo, Vec<&SpamapEntry>> = HashMap::new();
+    let mut dangling: Vec<&SpamapEntry> = Vec::new();
+    let mut key0_mismatch: Vec<&SpamapEntry> = Vec::new();
+    for entry in entries {
+        if !nouns.contains_key(&entry.refno()) {
+            dangling.push(entry);
+            continue;
+        }
+        if census_axis_bucket(entry).is_none() {
+            key0_mismatch.push(entry);
+        }
+        owned.entry(entry.refno()).or_default().push(entry);
+    }
+
+    #[derive(Default)]
+    struct NounTally {
+        elements: u64,
+        by_entry_count: [u64; 4],
+        axis_bucket: BTreeMap<String, u64>,
+        flags: BTreeMap<u32, u64>,
+        k: BTreeMap<u32, u64>,
+        k_combinations: BTreeMap<String, u64>,
+    }
+    let mut tallies: BTreeMap<String, NounTally> = BTreeMap::new();
+    for (refno, &noun) in &nouns {
+        let tally = tallies.entry(db1_dehash(noun).unwrap_or_else(|| format!("#{noun}"))).or_default();
+        tally.elements += 1;
+        let mine = owned.get(refno).map_or(&[][..], Vec::as_slice);
+        tally.by_entry_count[mine.len().min(3)] += 1;
+        if mine.is_empty() {
+            continue;
+        }
+        let mut ks: Vec<u32> = mine.iter().map(|entry| entry.k()).collect();
+        ks.sort_unstable();
+        let combination = ks.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
+        *tally.k_combinations.entry(combination).or_default() += 1;
+        for entry in mine {
+            let cell = match census_axis_bucket(entry) {
+                Some((axis, bucket)) => format!("{}{bucket}", ["x", "y", "z"][axis]),
+                None => "key0_mismatch".to_owned(),
+            };
+            *tally.axis_bucket.entry(cell).or_default() += 1;
+            *tally.flags.entry(entry.flags()).or_default() += 1;
+            *tally.k.entry(entry.k()).or_default() += 1;
+        }
+    }
+
+    let counted = |tally: &BTreeMap<u32, u64>| -> BTreeMap<String, u64> {
+        tally.iter().map(|(value, count)| (value.to_string(), *count)).collect()
+    };
+    let nouns_json: BTreeMap<String, Value> = tallies
+        .iter()
+        .map(|(noun, tally)| {
+            let [none, one, two, more] = tally.by_entry_count;
+            let report = json!({
+                "elements": tally.elements,
+                "elements_by_entry_count": { "0": none, "1": one, "2": two, "3+": more },
+                "axis_bucket": tally.axis_bucket,
+                "flags": counted(&tally.flags),
+                "k": counted(&tally.k),
+                "k_combinations": tally.k_combinations,
+            });
+            (noun.clone(), report)
+        })
+        .collect();
+    Ok(json!({
+        "path": display_path(path),
+        "sesno": sesno,
+        "spamap": table,
+        "elements": nouns.len(),
+        "dangling": {
+            "entries": dangling.len(),
+            "first": dangling.iter().take(CENSUS_LISTED).map(|entry| entry_words(entry)).collect::<Vec<_>>(),
+        },
+        "key0_mismatch": {
+            "entries": key0_mismatch.len(),
+            "first": key0_mismatch.iter().take(CENSUS_LISTED).map(|entry| entry_words(entry)).collect::<Vec<_>>(),
+        },
+        "nouns": nouns_json,
+    }))
+}
+
+/// The census's own reading of Key0 ([`CENSUS_KEY0_READING`]), as
+/// `(axis, bucket)`; `None` is a Key0 mismatch. Independent of the codec's
+/// rules, confirmed or not.
+fn census_axis_bucket(entry: &SpamapEntry) -> Option<(usize, i64)> {
+    const STEP: i64 = 100_000_000;
+    let key0 = i64::from(entry.key0());
+    (0..3).find_map(|axis| {
+        let rest = key0 - i64::from(entry.value[axis] as i32);
+        if rest < 0 || rest % STEP != 0 {
+            return None;
+        }
+        let n = rest / STEP;
+        (n / 6 == axis as i64 && (1..=5).contains(&(n % 6))).then_some((axis, n % 6))
+    })
+}
+
 /// `diff --db PATH --from N [--to N] [--at-or-before on] [--steps on]
 /// [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type T]]`.
 ///
@@ -2342,7 +2619,7 @@ fn layout_name(layout: StorageLayout) -> &'static str {
 }
 
 fn usage() -> String {
-    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor project-dab-tags --project-root PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
+    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor spamap --db PATH [--session N] [--refno WORD0/WORD1]\n  e3d-descriptor spamap-census --input FILE_OR_DIR [--input ...] [--session FILE=N ...]\n  e3d-descriptor project-dab-tags --project-root PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
         .into()
 }
 
