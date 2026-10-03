@@ -32,7 +32,7 @@
     - 样本快照：`tools/golden/snapshot.ps1` 把写测试用的样本钉到 `D:\e3dio-fixtures\phase3`（附 `MANIFEST.tsv`），`DbCopy::of` 优先取快照；金样每条另存源样本 SHA-256，源哈希不符单独报「样本漂移」
     - `tools/golden/record.ps1`：连跑两遍写测试，剔除两遍不同的键，打印剔除项与原因，供记入 Spec_Ledger「Golden 剔除键」
     - _Requirements: 2.7, 12.8, 15.3_
-  - [~] 1.4 在当前 HEAD 录 `tests/golden/off_compat.json`
+  - [x] 1.4 在当前 HEAD 录 `tests/golden/off_compat.json`
     - 用 `tools/golden/record.ps1` 覆盖 `tests/write_stage6_*.rs` 的批次（固定 `SessionRequest.clock`），作为 Property 16 的参照，在任何第三期 `src/write/` 改动之前入库
     - 剔除的键记入 Spec_Ledger「Golden 剔除键」
     - _Requirements: 15.3_
@@ -583,7 +583,10 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 金样文件 | 录制提交 | 剔除的键 | 原因 | 重录 / 删去记录 |
 |---|---|---|---|---|
-| | | | | |
+| `tests/golden/off_compat.json`（1.4；`write_stage6_{transaction,merge,set_by_name,spread,cli}`，留 17 条） | `d040f18` | `write_stage6_cli::` 下 5 条：`a_base_behind_the_newest_session_merges_and_reports_the_reminting#0`、`a_dry_run_makes_every_check_and_leaves_the_file_byte_identical#0`、`a_name_bound_earlier_in_the_file_resolves_before_the_commit#0`、`a_refused_instruction_names_itself_and_writes_nothing#0`、`an_instruction_file_is_applied_as_one_session_through_the_facade#0` | 两遍不同：`e3d-write` 提交用 `clock: None`（`src/bin/e3d-write.rs:711`），会话页带当时时间；五条都有一次真提交（dry run 与拒写两条也先做了一次） | — |
+| 同上 | `d040f18` | `write_stage6_spread::spread_inserts_read_back_across_many_owners#0` | 两遍不同：`SessionClock::now`（`tests/write_stage6_spread.rs:91`） | — |
+
+样本（备注）：17 条全部取自快照 `D:\e3dio-fixtures\phase3\ams8000_0001`，34 037 760 字节，SHA-256 `3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023`，即装机原件 2026-09-30 17:05:57 那一版（会话至 646）。
 
 #### 测试适配清单（8.10、11.8）
 

@@ -38,7 +38,7 @@ $manifest = @(& (Join-Path $PSScriptRoot 'snapshot.ps1'))
 $work = Join-Path ([IO.Path]::GetTempPath()) ('e3dio-golden-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $work | Out-Null
 
-$runs = @()
+$records = @()
 for ($i = 1; $i -le $Runs; $i++) {
     $file = Join-Path $work "run$i.jsonl"
     $env:E3DIO_GOLDEN_RECORD = $file
@@ -60,18 +60,18 @@ for ($i = 1; $i -le $Runs; $i++) {
             if ($made.ContainsKey($entry.key)) { $twice[$entry.key] = $true } else { $made[$entry.key] = $entry }
         }
     }
-    $runs += , @{ made = $made; twice = $twice }
+    $records += , @{ made = $made; twice = $twice }
 }
 
 $keys = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
-foreach ($run in $runs) { foreach ($key in $run.made.Keys) { [void]$keys.Add($key) } }
+foreach ($run in $records) { foreach ($key in $run.made.Keys) { [void]$keys.Add($key) } }
 
 $kept = New-Object 'System.Collections.Generic.List[object]'
 $dropped = New-Object 'System.Collections.Generic.List[string]'
 foreach ($key in $keys) {
     $why = $null
     $first = $null
-    foreach ($run in $runs) {
+    foreach ($run in $records) {
         if ($run.twice.ContainsKey($key)) { $why = 'made twice in one run'; break }
         if (-not $run.made.ContainsKey($key)) { $why = 'not made in every run'; break }
         $entry = $run.made[$key]
