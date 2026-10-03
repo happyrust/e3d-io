@@ -51,6 +51,9 @@ pub enum RuleId {
     AabbCompose,
     AabbBox,
     AabbCyli,
+    AabbCone,
+    AabbPyramid,
+    AabbMembers,
     AabbDegenerate,
     AabbArithmetic,
     AllocCounterSemantics,
@@ -60,7 +63,7 @@ pub enum RuleId {
 }
 
 impl RuleId {
-    pub const ALL: [RuleId; 27] = [
+    pub const ALL: [RuleId; 30] = [
         RuleId::SpamapTableShape,
         RuleId::SpamapTableHeaderRest,
         RuleId::SpamapWordSign,
@@ -82,6 +85,9 @@ impl RuleId {
         RuleId::AabbCompose,
         RuleId::AabbBox,
         RuleId::AabbCyli,
+        RuleId::AabbCone,
+        RuleId::AabbPyramid,
+        RuleId::AabbMembers,
         RuleId::AabbDegenerate,
         RuleId::AabbArithmetic,
         RuleId::AllocCounterSemantics,
@@ -241,25 +247,43 @@ pub const RULES: &[Rule] = &[
         id: RuleId::AabbOriForm,
         name: "aabb.ori_form",
         governs: "how ORI is stored",
-        status: unconfirmed("a built-in AABB with a rotated element or owner", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-aabb-members.md#aabb.ori_form"),
     },
     Rule {
         id: RuleId::AabbCompose,
         name: "aabb.compose",
         governs: "the order poses compose in, and which owner nouns take part",
-        status: unconfirmed("every built-in AABB", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-aabb-members.md#aabb.compose"),
     },
     Rule {
         id: RuleId::AabbBox,
         name: "aabb.box",
-        governs: "how a BOX's bounding box follows from XLEN / YLEN / ZLEN",
-        status: unconfirmed("every BOX", None),
+        governs: "how a BOX's or an NBOX's bounding box follows from XLEN / YLEN / ZLEN",
+        status: confirmed("docs/evidence/2026-10-03-spamap-aabb-members.md#aabb.box"),
     },
     Rule {
         id: RuleId::AabbCyli,
         name: "aabb.cyli",
-        governs: "how a CYLI's bounding box follows from DIAM / HEIG",
-        status: unconfirmed("every CYLI", None),
+        governs: "how a CYLI's or an NCYL's bounding box follows from DIAM / HEIG",
+        status: confirmed("docs/evidence/2026-10-03-spamap-aabb-members.md#aabb.cyli"),
+    },
+    Rule {
+        id: RuleId::AabbCone,
+        name: "aabb.cone",
+        governs: "how an NCON's bounding box follows from HEIG / DTOP / DBOT",
+        status: confirmed("docs/evidence/2026-10-03-spamap-aabb-members.md#aabb.cone"),
+    },
+    Rule {
+        id: RuleId::AabbPyramid,
+        name: "aabb.pyramid",
+        governs: "how an NPYR's bounding box follows from XTOP / YTOP / XBOT / YBOT / HEIG / XOFF / YOFF",
+        status: confirmed("docs/evidence/2026-10-03-spamap-aabb-members.md#aabb.pyramid"),
+    },
+    Rule {
+        id: RuleId::AabbMembers,
+        name: "aabb.members",
+        governs: "which members' boxes an element's box takes in, and in which frame",
+        status: confirmed("docs/evidence/2026-10-03-spamap-aabb-members.md#aabb.members"),
     },
     Rule {
         id: RuleId::AabbDegenerate,
@@ -271,7 +295,7 @@ pub const RULES: &[Rule] = &[
         id: RuleId::AabbArithmetic,
         name: "aabb.arithmetic",
         governs: "the precision of the arithmetic, and the criterion used where it cannot be reproduced exactly",
-        status: unconfirmed("every built-in AABB", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-aabb-members.md#aabb.arithmetic"),
     },
     Rule {
         id: RuleId::AllocCounterSemantics,
@@ -344,26 +368,6 @@ pub trait Implementation<C> {
     fn function(&self) -> C;
 }
 
-macro_rules! called_as_candidates {
-    ($($rule:ident => $function:ty;)*) => {
-        $(
-            impl Implementation<$function> for $rule {
-                fn function(&self) -> $function {
-                    match *self {}
-                }
-            }
-        )*
-    };
-}
-
-called_as_candidates! {
-    OriForm => candidate::OriForm;
-    Compose => candidate::Compose;
-    BoxAabb => candidate::BoxAabb;
-    CyliAabb => candidate::CyliAabb;
-    Arithmetic => candidate::Arithmetic;
-}
-
 /// What a candidate is, per rule the codec or the built-in AABB consults: a
 /// function called where the confirmed rule would be. Coordinates are 0.1 mm
 /// integers unless named otherwise.
@@ -428,6 +432,19 @@ pub mod candidate {
 
     /// `aabb.cyli`: a CYLI's world box in mm from its frame, DIAM and HEIG.
     pub type CyliAabb = fn(frame: &WorldFrame, diam_mm: f64, heig_mm: f64) -> [f64; 6];
+
+    /// `aabb.cone`: an NCON's world box in mm from its frame, HEIG, DTOP and
+    /// DBOT.
+    pub type ConeAabb = fn(frame: &WorldFrame, heig_mm: f64, dtop_mm: f64, dbot_mm: f64) -> [f64; 6];
+
+    /// `aabb.pyramid`: an NPYR's world box in mm from its frame, XTOP and
+    /// YTOP, XBOT and YBOT, HEIG, and XOFF and YOFF.
+    pub type PyramidAabb =
+        fn(frame: &WorldFrame, top_mm: [f64; 2], bottom_mm: [f64; 2], heig_mm: f64, offset_mm: [f64; 2]) -> [f64; 6];
+
+    /// `aabb.members`: whether an element whose noun has `IMAP` `owner_imap`
+    /// takes into its box the box of a member whose noun has `member_imap`.
+    pub type Members = fn(owner_imap: u8, member_imap: u8) -> bool;
 
     /// `aabb.degenerate`: the size measured for a stored size below 0.5 mm,
     /// or `None` when the candidate does not say.
@@ -656,17 +673,127 @@ pub enum DeleteResidue {
     NoneLeft,
 }
 
+/// `aabb.ori_form`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OriForm {
+    /// [`crate::spatial::rules::ori_by_gtori1`].
+    Gtori1,
+}
+
+impl Implementation<candidate::OriForm> for OriForm {
+    fn function(&self) -> candidate::OriForm {
+        match self {
+            OriForm::Gtori1 => crate::spatial::rules::ori_by_gtori1,
+        }
+    }
+}
+
+/// `aabb.compose`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Compose {
+    /// [`crate::spatial::rules::every_pose_from_the_element_up`].
+    FromTheElementUp,
+}
+
+impl Implementation<candidate::Compose> for Compose {
+    fn function(&self) -> candidate::Compose {
+        match self {
+            Compose::FromTheElementUp => crate::spatial::rules::every_pose_from_the_element_up,
+        }
+    }
+}
+
+/// `aabb.box`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BoxAabb {
+    /// [`crate::spatial::rules::box_by_mbxbox`].
+    Mbxbox,
+}
+
+impl Implementation<candidate::BoxAabb> for BoxAabb {
+    fn function(&self) -> candidate::BoxAabb {
+        match self {
+            BoxAabb::Mbxbox => crate::spatial::rules::box_by_mbxbox,
+        }
+    }
+}
+
+/// `aabb.cyli`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CyliAabb {
+    /// [`crate::spatial::rules::cylinder_by_end_circles`].
+    EndCircles,
+}
+
+impl Implementation<candidate::CyliAabb> for CyliAabb {
+    fn function(&self) -> candidate::CyliAabb {
+        match self {
+            CyliAabb::EndCircles => crate::spatial::rules::cylinder_by_end_circles,
+        }
+    }
+}
+
+/// `aabb.cone`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConeAabb {
+    /// [`crate::spatial::rules::cone_by_end_circles`].
+    EndCircles,
+}
+
+impl Implementation<candidate::ConeAabb> for ConeAabb {
+    fn function(&self) -> candidate::ConeAabb {
+        match self {
+            ConeAabb::EndCircles => crate::spatial::rules::cone_by_end_circles,
+        }
+    }
+}
+
+/// `aabb.pyramid`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PyramidAabb {
+    /// [`crate::spatial::rules::pyramid_by_corners`].
+    Corners,
+}
+
+impl Implementation<candidate::PyramidAabb> for PyramidAabb {
+    fn function(&self) -> candidate::PyramidAabb {
+        match self {
+            PyramidAabb::Corners => crate::spatial::rules::pyramid_by_corners,
+        }
+    }
+}
+
+/// `aabb.members`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Members {
+    /// [`crate::spatial::rules::imap_3_into_imap_5`].
+    Imap3IntoImap5,
+}
+
+impl Implementation<candidate::Members> for Members {
+    fn function(&self) -> candidate::Members {
+        match self {
+            Members::Imap3IntoImap5 => crate::spatial::rules::imap_3_into_imap_5,
+        }
+    }
+}
+
+/// `aabb.arithmetic`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Arithmetic {
+    /// [`crate::spatial::rules::double_precision`].
+    Double,
+}
+
+impl Implementation<candidate::Arithmetic> for Arithmetic {
+    fn function(&self) -> candidate::Arithmetic {
+        match self {
+            Arithmetic::Double => crate::spatial::rules::double_precision,
+        }
+    }
+}
+
 implementations! {
-    /// `aabb.ori_form`.
-    OriForm;
-    /// `aabb.compose`.
-    Compose;
-    /// `aabb.box`.
-    BoxAabb;
-    /// `aabb.cyli`.
-    CyliAabb;
-    /// `aabb.arithmetic`.
-    Arithmetic;
     /// `alloc.counter_semantics`.
     CounterSemantics;
     /// `alloc.index_order`.
@@ -701,6 +828,9 @@ pub struct RuleSet {
     pub(crate) compose: Slot<Compose, candidate::Compose>,
     pub(crate) box_aabb: Slot<BoxAabb, candidate::BoxAabb>,
     pub(crate) cyli_aabb: Slot<CyliAabb, candidate::CyliAabb>,
+    pub(crate) cone_aabb: Slot<ConeAabb, candidate::ConeAabb>,
+    pub(crate) pyramid_aabb: Slot<PyramidAabb, candidate::PyramidAabb>,
+    pub(crate) members: Slot<Members, candidate::Members>,
     pub(crate) degenerate: Slot<Degenerate, candidate::Degenerate>,
     pub(crate) arithmetic: Slot<Arithmetic, candidate::Arithmetic>,
     pub(crate) counter_semantics: Slot<CounterSemantics>,
@@ -728,12 +858,15 @@ const CONFIRMED: RuleSet = RuleSet {
     descendants_ori: Slot::Confirmed(DescendantRecompute::WholeSubtree),
     delete_residue: Slot::Confirmed(DeleteResidue::NoneLeft),
     record_item: Slot::Confirmed(RecordItem::Key0ByK),
-    ori_form: Slot::Pending,
-    compose: Slot::Pending,
-    box_aabb: Slot::Pending,
-    cyli_aabb: Slot::Pending,
+    ori_form: Slot::Confirmed(OriForm::Gtori1),
+    compose: Slot::Confirmed(Compose::FromTheElementUp),
+    box_aabb: Slot::Confirmed(BoxAabb::Mbxbox),
+    cyli_aabb: Slot::Confirmed(CyliAabb::EndCircles),
+    cone_aabb: Slot::Confirmed(ConeAabb::EndCircles),
+    pyramid_aabb: Slot::Confirmed(PyramidAabb::Corners),
+    members: Slot::Confirmed(Members::Imap3IntoImap5),
     degenerate: Slot::Confirmed(Degenerate::BelowHalf),
-    arithmetic: Slot::Pending,
+    arithmetic: Slot::Confirmed(Arithmetic::Double),
     counter_semantics: Slot::Pending,
     index_order: Slot::Pending,
     bucket_collision: Slot::Pending,
@@ -764,6 +897,9 @@ const NOTHING_CONFIRMED: RuleSet = RuleSet {
     compose: Slot::Pending,
     box_aabb: Slot::Pending,
     cyli_aabb: Slot::Pending,
+    cone_aabb: Slot::Pending,
+    pyramid_aabb: Slot::Pending,
+    members: Slot::Pending,
     degenerate: Slot::Pending,
     arithmetic: Slot::Pending,
     counter_semantics: Slot::Pending,
@@ -830,6 +966,9 @@ impl RuleSet {
             compose,
             box_aabb,
             cyli_aabb,
+            cone_aabb,
+            pyramid_aabb,
+            members,
             degenerate,
             arithmetic,
         } = *pick;
@@ -846,6 +985,9 @@ impl RuleSet {
         fill(&mut set.compose, compose);
         fill(&mut set.box_aabb, box_aabb);
         fill(&mut set.cyli_aabb, cyli_aabb);
+        fill(&mut set.cone_aabb, cone_aabb);
+        fill(&mut set.pyramid_aabb, pyramid_aabb);
+        fill(&mut set.members, members);
         fill(&mut set.degenerate, degenerate);
         fill(&mut set.arithmetic, arithmetic);
         set
@@ -875,6 +1017,9 @@ impl RuleSet {
             RuleId::AabbCompose => self.compose.state(),
             RuleId::AabbBox => self.box_aabb.state(),
             RuleId::AabbCyli => self.cyli_aabb.state(),
+            RuleId::AabbCone => self.cone_aabb.state(),
+            RuleId::AabbPyramid => self.pyramid_aabb.state(),
+            RuleId::AabbMembers => self.members.state(),
             RuleId::AabbDegenerate => self.degenerate.state(),
             RuleId::AabbArithmetic => self.arithmetic.state(),
             RuleId::AllocCounterSemantics => self.counter_semantics.state(),
@@ -905,6 +1050,9 @@ pub struct CandidatePick {
     pub compose: Option<candidate::Compose>,
     pub box_aabb: Option<candidate::BoxAabb>,
     pub cyli_aabb: Option<candidate::CyliAabb>,
+    pub cone_aabb: Option<candidate::ConeAabb>,
+    pub pyramid_aabb: Option<candidate::PyramidAabb>,
+    pub members: Option<candidate::Members>,
     pub degenerate: Option<candidate::Degenerate>,
     pub arithmetic: Option<candidate::Arithmetic>,
 }

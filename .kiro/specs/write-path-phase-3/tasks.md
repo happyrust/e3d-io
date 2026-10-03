@@ -196,9 +196,10 @@
     - 逐 Geometric_Noun 坐实 E3D_Core 是否写该项；若写，写明类型码、字数、数据字布局、位置及其与条目键字（Key0、k）的对应关系；逐 noun 给出 Corpus 中带与不带该项的 E3D_Authored_Element 个数
     - 结论写入 `spamap.record_item.<NOUN>`
     - _Requirements: 2.4, 5.5, 5.11_
-  - [~] 7.5 取证 AABB 规则
+  - [x] 7.5 取证 AABB 规则
     - 规则：`aabb.ori_form`、`aabb.compose`、`aabb.box`、`aabb.cyli`、`aabb.degenerate`、`aabb.arithmetic`；Corpus 核对用 `spamap-check` 的 Built_In_AABB 一项与 `world-frame`
     - 坐实的变体补进 `src/spatial/aabb.rs`；不能逐字复现时，按需求 6 第 16 条把改用的判据记入 Spec_Ledger「规则坐实状态总表」`aabb.arithmetic` 行
+    - 已做（里程碑 C 的 C4、D 的 D3）：`docs/evidence/2026-10-03-spamap-aabb.md`、`docs/evidence/2026-10-03-spamap-aabb-members.md`；C4 留下的 18 个反例由新增的 `aabb.members`（IMAP 5 元素并入 IMAP 3 成员的框）解释，另增 `aabb.cone`、`aabb.pyramid`，九条全部坐实，Built_In_AABB 1 590 / 1 590 逐字，未剔除、未放宽
     - _Requirements: 2.4, 6.1, 6.16_
   - [ ]* 7.6 写示例测试 4.20 与 6.17
     - 4.20：在 `tests/spamap_codec_real.rs` 中以 BOX `24384/26484` 在 E3D 为其写出条目那一会话的状态为输入（经 `ReadState`），断言 SPAMAP_Codec 恰得需求 4 第 20 条的那一条条目
@@ -563,12 +564,15 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `spamap.descendants.{move,pos,ori}` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 换 owner（`VDESIR`）与 POS / ORI 改动（`VDESPT`，DCHC 3）入队该元素，`MPBOX` 走整棵子树，各层都重算，不在 IMAP 0、BRAN、HNGT 之下继续（`rules::mpbox_walks_below`）。E3D_Session：move 4 / 4、POS 7 / 7、ORI 6 / 6（第 1、2 层，有无条目两种）。另见证据「规格外的发现」：owner 的 NUMB 等其他重算属性、容器 REORDER 同样整树重算，需求 7 第 4 条未收；用户定补进规格（D 收尾改 spec / design，走 Plannotator） |
 | `spamap.delete_residue` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 不留残留：删除那一会话中被删元素与其各层后代的条目都已删去（出处 ②，4 / 4；Core3D 删除路径只动队列，删键之处未读）。需求 5 第 9 条：删无条目 BOX、删其 owner 都能 `SAVEWORK`，无错误号 |
 | `spamap.record_item.<NOUN>` | 7.4 | 坐实 | `docs/evidence/2026-10-03-spamap-record-item.md` | C3 | 各 noun 相同：core `sub_5AB91B0` 类型 14 写条目时把 Key0 写进记录 `SPAMAP` 属性第 k 槽，新项整列先填 0x80000001；位置按模板（BOX implicit word 35、存储 2 字）。Corpus 25 517 / 25 517、基线 3 628 / 3 628 带且逐槽相符，46 个 noun 无例外（`tests/spamap_record_item_real.rs`） |
-| `aabb.ori_form` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① core `GTORI1`：R = Rz·Ry·Rx，`SINCOS` 在 0 / ±90 / ±180（`LREQ` 容差 0.0001）给精确值，其余 sin / cos(角 / 57.29577951308232)；候选改为同式 `ori_by_gtori1`，Built_In_AABB 仍 1 572 / 1 590；18 个反例待 D（7.3、需求 4.17）剔除 |
-| `aabb.compose` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① Core3D `WSTRAM`：从元素往上 `CONCAT(T_级, 已累积)` 到 WORL；候选改为 `every_pose_from_the_element_up`；同上待 D |
-| `aabb.box` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① core `MBXBOX`：中心 ± Σ\|R·半长\|（= 候选）；BOX 370 / 384，反例待 D |
-| `aabb.cyli` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① core `MBXSNO` → 两端圆 `MBXCIR` r·√(1 − z_i²) 求并；候选改为 `cylinder_by_end_circles`；CYLI 1 202 / 1 206，`24383/71552`、`71555` 的 2.1 mm 仍在反例里，待 D |
-| `aabb.degenerate` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | C4 | ① Core3D `BOXELE`：HEIG / DIAM、XLEN / YLEN / ZLEN 小于 0.5 一律取 0.5（含负、0）；`aabb.rs` 改为对 < 0.5 的尺寸查此规则；TES023 两个零尺寸 CYLI 2 / 2；Corpus 分不出与旧候选，只以 ① 坐实 |
-| `aabb.arithmetic` | 7.5 | 未坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | | ① 上列例程全 double，未见单精度；18 个反例无一差 ±1；待 D |
+| `aabb.ori_form` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① core `GTORI1`：R = Rz·Ry·Rx，`SINCOS` 在 0 / ±90 / ±180（`LREQ` 容差 0.0001）给精确值，其余 sin / cos(角 / 57.29577951308232)（C4 读）；FRMC 为 0 的 noun 经 `GTDORI` 同到 `GTORI1`；`rules::ori_by_gtori1`；Built_In_AABB 1 590 / 1 590 |
+| `aabb.compose` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① Core3D `WSTRAM`：从元素往上 `CONCAT(T_级, 已累积)` 到 WORL（C4 读）；成员一级为 `MPBOX2` 的 `CONCAT(元素变换, 成员位姿)`；`rules::every_pose_from_the_element_up`，成员系 `WorldFrame::then` |
+| `aabb.box` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① `BOXELE` box type 3（BOX、NBOX）→ core `MBXBOX`：中心 ± Σ\|R·半长\|；`rules::box_by_mbxbox`；BOX 384 / 384 |
+| `aabb.cyli` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① box type 2（CYLI、NCYL）→ `MBXSNO`(HEIG, 0, 0, DIAM, DIAM) → 两端圆 `MBXCIR` r·√(1 − z_i²) 求并；`rules::cylinder_by_end_circles`；CYLI 1 206 / 1 206（`71552`、`71555` 的 2.1 mm 来自 NBOX 成员） |
+| `aabb.cone` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① box type 5（CONE、NCON）：HEIG < 0.5 取 0.5、DTOP / DBOT < 0 取 0，`MBXSNO`(HEIG, 0, 0, DTOP, DBOT)，DTOP 在 +HEIG / 2 一端；`rules::cone_by_end_circles`；适用 1 个 NCON（`24383/77138`） |
+| `aabb.pyramid` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① box type 7（PYRA、NPYR）：只 HEIG < 0.5 取 0.5，core `MBXPYR` 八角（顶 XOFF / 2 ± XTOP / 2、底 −XOFF / 2 ± XBOT / 2，y 同理）经 `MBXPOI`（`TRAVEC`）取框；`rules::pyramid_by_corners`；适用 18 个 NPYR（9 个 BOX）全对 |
+| `aabb.members` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① Core3D `MPBOX2` n 37–79：IMAP 5 的元素对每个 IMAP 3 成员（FRMC 为 0 → `GETRAM` + `CONCAT`）跑 `BOXELE`，按轴并入元素框；② `tools/e3d/spamap_probes/d3/`：改 LEVE 后 18 个条目不变，各加大 100 mm 后改写、成员伸出的几侧照旧。`rules::imap_3_into_imap_5`；成员只算 NBOX / NCYL / NCON / NPYR，其余 noun → MissingInput（D7）。C4 的 18 个反例全由此解释，未剔除 |
+| `aabb.degenerate` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | C4 | ① Core3D `BOXELE`：HEIG / DIAM、XLEN / YLEN / ZLEN 小于 0.5 一律取 0.5（含负、0）；`aabb.rs` 改为对 < 0.5 的尺寸查此规则；TES023 两个零尺寸 CYLI 2 / 2；Corpus 分不出与旧候选，只以 ① 坐实。成员同：NBOX、NCYL 各尺寸与 NCON、NPYR 的 HEIG（D3） |
+| `aabb.arithmetic` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① 上列例程全 double（含 `MBXPYR`、`MBXPOI`、`TRAVEC`、`MVMULT`）；`rules::double_precision`；1 590 / 1 590 逐字，需求 6 第 16 条的放宽判据不需要 |
 | `alloc.counter_semantics` | 11.1 | | | | |
 | `alloc.index_order` | 11.1 | | | | |
 | `bucket.collision` | 13.1 | | | | |

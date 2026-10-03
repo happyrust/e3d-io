@@ -4,13 +4,13 @@
 //! the codec, held against the stored entries word for word. The native BOX
 //! `24384/24777` is among them.
 //!
-//! Until the `aabb.*` and codec rules are confirmed, what the candidates make
-//! of the Corpus is evidence data for task 7.5: the agreement under the
-//! default pick and under each alternative candidate, and every miss with how
-//! far each word is off. What is judged now is that under the confirmed rules
-//! every such element waits on a pending rule (D7) — the whole criterion once
-//! the rules are confirmed, relaxed only by a tolerance requirement 6.16 has
-//! the Spec_Ledger record.
+//! The `aabb.*` rules are confirmed
+//! (`docs/evidence/2026-10-03-spamap-aabb-members.md`): under them every
+//! such element agrees word for word or waits on an input e3d-io cannot have
+//! (requirement 6.15) — the whole criterion, with no tolerance for
+//! requirement 6.16 to record. Beside it the test prints what each
+//! alternative candidate, standing in for its confirmed rule, makes of the
+//! Corpus, and every miss with how far each word is off.
 
 mod common;
 
@@ -19,14 +19,15 @@ use std::collections::{BTreeMap, HashMap};
 use common::corpus::{CORPUS, SPAMAP_BASELINE, SPAMAP_BASELINE_SESSION};
 use common::spamap_session::Session;
 use common::{ATTLIB, DESVIR};
-use e3d_attlib::db1_dehash;
+use e3d_attlib::{db1_dehash, db1_hash};
 use e3d_io::core_rules::{CandidatePick, RuleSet};
 use e3d_io::index::SpamapEntry;
 use e3d_io::session::SessionSelector;
-use e3d_io::spatial::aabb::{AabbOutcome, BuiltInAabb, ChainComposer};
-use e3d_io::spatial::candidates;
+use e3d_io::spatial::aabb::{AabbOutcome, BuiltInAabb, ChainComposer, BUILT_IN_MEMBER_NOUNS};
 use e3d_io::spatial::codec::{Encoded, SpamapCodec};
+use e3d_io::spatial::noun_fields::NounFields;
 use e3d_io::spatial::SpatialState;
+use e3d_io::spatial::{candidates, rules};
 use e3d_io::RefNo;
 
 const NATIVE_BOX: RefNo = RefNo { word0: 24_384, word1: 24_777 };
@@ -126,10 +127,35 @@ fn kind(element: &Element) -> &'static str {
     }
 }
 
+/// The confirmed rules as a pick, with `change` made: for
+/// `RuleSet::candidates_alone`, one alternative standing in for its rule.
 fn alternative(change: impl FnOnce(&mut CandidatePick)) -> CandidatePick {
     let mut pick = candidates::pick();
+    pick.rounding = Some(rules::round_half_away_from_zero);
+    pick.word_sign = Some(rules::SIGNED_WORDS);
+    pick.short_axis = Some(rules::least_axis_last_of_ties);
+    pick.zero_extent = Some(rules::leave_zero_extent_to_the_bucket);
+    pick.bucket = Some(rules::bucket_by_mapkey);
+    pick.key0 = Some(rules::key0_by_mapky2);
+    pick.entries_k = Some(rules::entries_by_mpbox);
+    pick.flags = Some(rules::flags_by_mpbox);
+    pick.coverage = Some(rules::coverage_by_imap);
     change(&mut pick);
     pick
+}
+
+/// `aabb.members` takes a member's pose from `GETRAM` only for a noun whose
+/// FRMC (`IFCOMP`) is 0, as every member noun the built-in AABB boxes has.
+#[test]
+fn the_member_nouns_have_a_frmc_of_0() {
+    if common::missing(&[ATTLIB]) {
+        return;
+    }
+    let fields = NounFields::parse_file(ATTLIB).expect("attlib.dat");
+    for noun in BUILT_IN_MEMBER_NOUNS {
+        let frmc = fields.field(db1_hash(noun), db1_hash("FRMC")).map(|value| value.word());
+        assert_eq!(frmc, Some(0), "{noun}");
+    }
 }
 
 // Feature: write-path-phase-3, Property 8: Built_In_AABB 与盘上逐字相同
@@ -138,8 +164,9 @@ fn every_built_in_element_is_held_against_its_stored_entries() {
     if common::missing(&[DESVIR, ATTLIB]) || common::missing(CORPUS) {
         return;
     }
-    let default = RuleSet::candidates(&candidates::pick());
+    let confirmed_rules = RuleSet::confirmed();
     let alternatives = [
+        ("members not taken in", alternative(|pick| pick.members = Some(|_, _| false))),
         ("ORI turned y, x, then z", alternative(|pick| pick.ori_form = Some(candidates::ori_degrees_y_then_x_then_z))),
         ("CYLI by its own box", alternative(|pick| pick.cyli_aabb = Some(candidates::cylinder_by_its_own_box))),
         ("sizes as their magnitude", alternative(|pick| pick.degenerate = Some(candidates::size_as_its_magnitude))),
@@ -152,17 +179,19 @@ fn every_built_in_element_is_held_against_its_stored_entries() {
             eprintln!("{path}: no SPAMAP table");
             continue;
         };
-        let elements = built_in_elements(&session, &default);
-        let confirmed = session.check(RuleSet::confirmed(), &session.table).built_in_aabb;
+        let elements = built_in_elements(&session, confirmed_rules);
+        let confirmed = session.check(confirmed_rules, &session.table).built_in_aabb;
         assert_eq!(confirmed.total, elements.len() as u64, "{path}: Codec_Check counts every BOX and CYLI E3D wrote");
         assert_eq!(
             confirmed.agree + confirmed.waiting,
             confirmed.total,
-            "{path} session {}: under the confirmed rules a built-in box waits on pending rules only",
-            session.sesno
+            "{path} session {}: under the confirmed rules a built-in box agrees word for word or waits on an input \
+             e3d-io cannot have: {:?}",
+            session.sesno,
+            confirmed.misses
         );
         let agree = elements.iter().filter(|element| element.agrees()).count();
-        assert_eq!(session.check(&default, &session.table).built_in_aabb.agree, agree as u64, "{path}: Codec_Check and this walk");
+        assert_eq!(confirmed.agree, agree as u64, "{path}: Codec_Check and this walk");
         if (path, session.sesno) == (SPAMAP_BASELINE, SPAMAP_BASELINE_SESSION) {
             native_box = elements.iter().find(|element| element.refno == NATIVE_BOX).map(|element| element.agrees());
         }
@@ -179,12 +208,13 @@ fn every_built_in_element_is_held_against_its_stored_entries() {
             }
         }
         eprintln!(
-            "{path} session {}: candidates {agree} / {} ({by_noun:?}); misses {kinds:?}",
+            "{path} session {}: confirmed {agree} / {} ({by_noun:?}); misses {kinds:?}",
             session.sesno,
             elements.len()
         );
         for (name, pick) in &alternatives {
-            let agree = built_in_elements(&session, &RuleSet::candidates(pick)).iter().filter(|element| element.agrees()).count();
+            let agree =
+                built_in_elements(&session, &RuleSet::candidates_alone(pick)).iter().filter(|element| element.agrees()).count();
             eprintln!("    with {name}: {agree} / {}", elements.len());
         }
         for element in elements.iter().filter(|element| !element.agrees()) {
@@ -192,5 +222,5 @@ fn every_built_in_element_is_held_against_its_stored_entries() {
         }
     }
     let native_box = native_box.expect("the native BOX 24384/24777 is one of the baseline's built-in elements");
-    eprintln!("native BOX 24384/24777 under the candidates: {}", if native_box { "word for word" } else { "a miss" });
+    assert!(native_box, "the native BOX 24384/24777 under the confirmed rules, word for word");
 }

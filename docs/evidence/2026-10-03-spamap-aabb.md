@@ -91,6 +91,8 @@
 
 里程碑 B 的 B8 已把多数判为「元素或祖先改过、条目没有重算」（`76689`–`76714` 在 EQUI `24383/76459` 下）。剔除须 D 的 7.3 坐实 `spamap.descendants.*` 与 `spamap.recompute.*` 后，按需求 4 第 17 条逐个对照会话链：条目最后一次写在哪个会话、此后元素或祖先改过什么。本文未逐个走会话链。
 
+> 更正（2026-10-03，里程碑 D 的 D3）：这 18 个不是过期条目，B8 的判断不成立。每个元素都有 IMAP 3 成员（负实体 NBOX、NCYL、NCON、NPYR），Core3D 的 `MPBOX2` 把成员的框并进元素框，本文的候选没有算；补上 `aabb.members`、`aabb.cone`、`aabb.pyramid` 后 18 个全部逐字相符，没有剔除任何元素，上面五条随之坐实。见 `docs/evidence/2026-10-03-spamap-aabb-members.md`。
+
 ## 复现命令
 
 ```powershell

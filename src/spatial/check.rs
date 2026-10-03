@@ -297,6 +297,7 @@ fn built_in_entries(
         Ok(AabbOutcome::Aabb(aabb)) => aabb,
         Ok(AabbOutcome::NotBuiltIn) => return None,
         Ok(AabbOutcome::NeedsUnconfirmed(pending)) => return Some(Err(Unmade::Pending(pending))),
+        Ok(AabbOutcome::MissingInput(input)) => return Some(Err(Unmade::Missing(input))),
         Ok(AabbOutcome::NoWorld) => return Some(Err(Unmade::Other("the owner chain does not reach a WORL".to_owned()))),
         Err(undecodable) => return Some(Err(Unmade::Other(undecodable.to_string()))),
     };

@@ -1,15 +1,18 @@
 //! Built_In_AABB (`.kiro/specs/write-path-phase-3/design.md`, Built_In_AABB;
 //! requirements 6.1, 6.2, 6.8): the World_AABB e3d-io computes for an element
 //! itself — a BOX from XLEN / YLEN / ZLEN, a CYLI from DIAM / HEIG (D1) — from
-//! its own attributes and the poses up its owner chain.
+//! its own attributes and the poses up its owner chain, with the boxes of its
+//! `IMAP` 3 members (the negative solids under it) taken in.
 //!
 //! As in the codec, every step that depends on E3D_Core is a rule of
 //! [`crate::core_rules`]: how ORI is stored (`aabb.ori_form`), how poses
 //! compose and which owners take part (`aabb.compose`), how each noun's box
-//! follows from its sizes (`aabb.box`, `aabb.cyli`), sizes below 0.5 mm
-//! (`aabb.degenerate`, consulted only when a size is), and the precision
-//! (`aabb.arithmetic`). A pending rule is noted and the walk goes on; then no
-//! box comes out.
+//! follows from its sizes (`aabb.box`, `aabb.cyli`, and for members
+//! `aabb.cone`, `aabb.pyramid`), which members' boxes count
+//! (`aabb.members`, consulted only for an element with members), sizes below
+//! 0.5 mm (`aabb.degenerate`, consulted only when a size is), and the
+//! precision (`aabb.arithmetic`). A pending rule is noted and the walk goes
+//! on; then no box comes out.
 //!
 //! Every attribute the computation needs, the owners' included, is read
 //! before any rule is asked, so one that cannot be decoded is reported
@@ -19,6 +22,7 @@
 
 use e3d_attlib::db1_hash;
 
+use super::rules::soft_imap;
 use super::{SpatialState, UndecodableAttr, Walk, WorldAabb};
 use crate::core_rules::{candidate, RuleId, RuleSet};
 use crate::record::descriptor::DescriptorValue;
@@ -28,6 +32,11 @@ use crate::refno::RefNo;
 /// the caller gives one. The one statement of D1: its alternative A empties
 /// the list, alternative B adds to it.
 pub const BUILT_IN_NOUNS: &[&str] = &["BOX", "CYLI"];
+
+/// The members whose boxes the built-in AABB can take into their owner's:
+/// `dbboxlib/BOXELE`'s box types 3, 2, 5 and 7. An element with a member
+/// `aabb.members` takes in of any other noun has no built-in box.
+pub const BUILT_IN_MEMBER_NOUNS: &[&str] = &["NBOX", "NCYL", "NCON", "NPYR"];
 
 /// No rotation.
 pub const IDENTITY: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
@@ -179,31 +188,68 @@ pub enum AabbOutcome {
     /// Every pending rule the box needs, its frame's among them, in
     /// [`RuleId`] order.
     NeedsUnconfirmed(Vec<RuleId>),
+    /// An input e3d-io cannot have (requirement 6.15): the box of a member of
+    /// a noun outside [`BUILT_IN_MEMBER_NOUNS`], the `IMAP` a UDET gives, or
+    /// members the state cannot list.
+    MissingInput(&'static str),
     /// Not of a noun in [`BUILT_IN_NOUNS`], or no such element.
     NotBuiltIn,
     /// The owner chain does not reach a WORL.
     NoWorld,
 }
 
-/// The World_AABB of a BOX or CYLI from its sizes and its world frame.
+/// The World_AABB of a BOX or CYLI from its sizes, its world frame and the
+/// members `aabb.members` takes in.
 #[derive(Clone, Copy)]
 pub struct BuiltInAabb<'r> {
     rules: &'r RuleSet,
     composer: &'r dyn FrameComposer,
 }
 
-/// A built-in noun's sizes as stored, in mm.
+/// A solid's sizes as stored, in mm.
 #[derive(Clone, Copy)]
 enum Solid {
     Box([f64; 3]),
     Cylinder { diam: f64, heig: f64 },
+    Cone { heig: f64, dtop: f64, dbot: f64 },
+    Pyramid { top: [f64; 2], bottom: [f64; 2], heig: f64, offset: [f64; 2] },
 }
 
-/// How a solid's box follows from its sizes.
-enum Method {
-    Box(candidate::BoxAabb),
-    Cylinder(candidate::CyliAabb),
+/// A member of the element, as `aabb.members` and its box need it: its
+/// noun's `IMAP`, and for a noun in [`BUILT_IN_MEMBER_NOUNS`] its solid and
+/// its pose in the element's frame.
+struct Member {
+    imap: u8,
+    solid: Option<Solid>,
+    pos_mm: Option<[f64; 3]>,
+    ori: Option<DescriptorValue>,
 }
+
+/// How a solid's box follows from its sizes, measured as `BOXELE` measures
+/// them.
+enum Method {
+    Box(candidate::BoxAabb, [f64; 3]),
+    Cylinder(candidate::CyliAabb, f64, f64),
+    Cone(candidate::ConeAabb, f64, f64, f64),
+    Pyramid(candidate::PyramidAabb, [f64; 2], [f64; 2], f64, [f64; 2]),
+}
+
+impl Method {
+    fn bound(&self, frame: &WorldFrame, held: candidate::Arithmetic) -> [f64; 6] {
+        match *self {
+            Method::Box(rule, size) => rule(frame, size.map(held)),
+            Method::Cylinder(rule, diam, heig) => rule(frame, held(diam), held(heig)),
+            Method::Cone(rule, heig, dtop, dbot) => rule(frame, held(heig), held(dtop), held(dbot)),
+            Method::Pyramid(rule, top, bottom, heig, offset) => {
+                rule(frame, top.map(held), bottom.map(held), held(heig), offset.map(held))
+            }
+        }
+    }
+}
+
+const UNLISTED_MEMBERS: &str = "the element's members";
+const UDET_IMAP: &str = "the IMAP a UDET gives the element or one of its members";
+const UNBUILT_MEMBER: &str = "the box of a member of a noun the built-in AABB does not compute";
 
 impl<'r> BuiltInAabb<'r> {
     pub fn new(rules: &'r RuleSet, composer: &'r dyn FrameComposer) -> Self {
@@ -221,56 +267,158 @@ impl<'r> BuiltInAabb<'r> {
         } else {
             return Ok(AabbOutcome::NotBuiltIn);
         };
+        let (imap, members) = match members(state, refno, noun)? {
+            Ok(read) => read,
+            Err(missing) => return Ok(AabbOutcome::MissingInput(missing)),
+        };
+        let mut walk = Walk::default();
         let frame = match self.composer.world_frame(state, refno)? {
             FrameOutcome::Frame(frame) => Some(frame),
             FrameOutcome::NeedsUnconfirmed(pending) => {
-                let mut walk = Walk::default();
                 pending.into_iter().for_each(|id| walk.need(id));
-                return Ok(self.own_rules(solid, None, walk));
+                None
             }
             FrameOutcome::NoWorld => return Ok(AabbOutcome::NoWorld),
         };
-        Ok(self.own_rules(solid, frame, Walk::default()))
-    }
 
-    /// The rules of the box itself on top of whatever `walk` holds; the box
-    /// when nothing is pending and the frame is known.
-    fn own_rules(&self, solid: Solid, frame: Option<WorldFrame>, mut walk: Walk) -> AabbOutcome {
         let rules = self.rules;
         let held = walk.take(RuleId::AabbArithmetic, &rules.arithmetic);
-        let mut sizes = match solid {
-            Solid::Box(size) => size.to_vec(),
-            Solid::Cylinder { diam, heig } => vec![diam, heig],
-        };
-        if sizes.iter().any(|&size| size < DEGENERATE_BELOW_MM) {
-            if let Some(degenerate) = walk.take(RuleId::AabbDegenerate, &rules.degenerate) {
-                for size in sizes.iter_mut().filter(|size| **size < DEGENERATE_BELOW_MM) {
-                    match degenerate(*size) {
-                        Some(measured) => *size = measured,
-                        None => walk.need(RuleId::AabbDegenerate),
-                    }
+        let own = self.method(solid, &mut walk);
+        let mut taken_in = Vec::new();
+        let takes_in = if members.is_empty() { None } else { walk.take(RuleId::AabbMembers, &rules.members) };
+        if let Some(takes_in) = takes_in {
+            for member in members.into_iter().filter(|member| takes_in(imap, member.imap)) {
+                let Some(solid) = member.solid else { return Ok(AabbOutcome::MissingInput(UNBUILT_MEMBER)) };
+                let rotation = match &member.ori {
+                    None => Some(IDENTITY),
+                    Some(ori) => walk.take(RuleId::AabbOriForm, &rules.ori_form).and_then(|form| {
+                        let rotation = form(ori);
+                        if rotation.is_none() {
+                            walk.need(RuleId::AabbOriForm);
+                        }
+                        rotation
+                    }),
+                };
+                if let (Some(method), Some(rotation)) = (self.method(solid, &mut walk), rotation) {
+                    taken_in.push((method, member.pos_mm.unwrap_or([0.0; 3]), rotation));
                 }
             }
         }
-        let method = match solid {
-            Solid::Box(_) => walk.take(RuleId::AabbBox, &rules.box_aabb).map(Method::Box),
-            Solid::Cylinder { .. } => walk.take(RuleId::AabbCyli, &rules.cyli_aabb).map(Method::Cylinder),
+        let (Some(frame), Some(held), Some(own), true) = (frame, held, own, walk.pending.is_empty()) else {
+            return Ok(AabbOutcome::NeedsUnconfirmed(Walk::sorted(walk.pending)));
         };
-        let (Some(frame), Some(held), Some(method), true) = (frame, held, method, walk.pending.is_empty()) else {
-            return AabbOutcome::NeedsUnconfirmed(Walk::sorted(walk.pending));
-        };
-        let size: Vec<f64> = sizes.into_iter().map(held).collect();
-        let aabb_mm = match method {
-            Method::Box(rule) => rule(&frame, [size[0], size[1], size[2]]),
-            Method::Cylinder(rule) => rule(&frame, size[0], size[1]),
-        };
-        AabbOutcome::Aabb(WorldAabb::from_mm(aabb_mm.map(held)).expect("finite poses and sizes bound a box"))
+
+        let mut aabb_mm = own.bound(&frame, held);
+        for (method, pos_mm, rotation) in taken_in {
+            let member_frame = frame.then(pos_mm.map(held), rotation.map(|row| row.map(held)));
+            let member_mm = method.bound(&member_frame, held);
+            for axis in 0..3 {
+                if member_mm[axis] < aabb_mm[axis] {
+                    aabb_mm[axis] = member_mm[axis];
+                }
+                if member_mm[axis + 3] > aabb_mm[axis + 3] {
+                    aabb_mm[axis + 3] = member_mm[axis + 3];
+                }
+            }
+        }
+        Ok(AabbOutcome::Aabb(WorldAabb::from_mm(aabb_mm.map(held)).expect("finite poses and sizes bound a box")))
+    }
+
+    /// The rule that boxes `solid` and its sizes as `BOXELE` measures them:
+    /// every size of a BOX, NBOX, CYLI or NCYL and the HEIG of an NCON or
+    /// NPYR through `aabb.degenerate` when below 0.5 mm. `None` with the
+    /// pending rules noted in `walk`.
+    fn method(&self, solid: Solid, walk: &mut Walk) -> Option<Method> {
+        let rules = self.rules;
+        match solid {
+            Solid::Box(size) => {
+                let size = size.map(|size| measured(size, rules, walk));
+                let rule = walk.take(RuleId::AabbBox, &rules.box_aabb);
+                Some(Method::Box(rule?, [size[0]?, size[1]?, size[2]?]))
+            }
+            Solid::Cylinder { diam, heig } => {
+                let (diam, heig) = (measured(diam, rules, walk), measured(heig, rules, walk));
+                let rule = walk.take(RuleId::AabbCyli, &rules.cyli_aabb);
+                Some(Method::Cylinder(rule?, diam?, heig?))
+            }
+            Solid::Cone { heig, dtop, dbot } => {
+                let heig = measured(heig, rules, walk);
+                let rule = walk.take(RuleId::AabbCone, &rules.cone_aabb);
+                Some(Method::Cone(rule?, heig?, dtop, dbot))
+            }
+            Solid::Pyramid { top, bottom, heig, offset } => {
+                let heig = measured(heig, rules, walk);
+                let rule = walk.take(RuleId::AabbPyramid, &rules.pyramid_aabb);
+                Some(Method::Pyramid(rule?, top, bottom, heig?, offset))
+            }
+        }
     }
 }
 
-/// The size below which Core3D's `dbboxlib/BOXELE` measures a BOX or CYLI by
+/// The size below which Core3D's `dbboxlib/BOXELE` measures a size by
 /// `aabb.degenerate` rather than as stored.
 const DEGENERATE_BELOW_MM: f64 = 0.5;
+
+/// A size as `BOXELE` measures it: as stored from 0.5 mm up, by
+/// `aabb.degenerate` below; `None` with the rule noted when it is pending.
+fn measured(size_mm: f64, rules: &RuleSet, walk: &mut Walk) -> Option<f64> {
+    if size_mm >= DEGENERATE_BELOW_MM {
+        return Some(size_mm);
+    }
+    let measured = walk.take(RuleId::AabbDegenerate, &rules.degenerate).and_then(|degenerate| degenerate(size_mm));
+    if measured.is_none() {
+        walk.need(RuleId::AabbDegenerate);
+    }
+    measured
+}
+
+/// An element's `IMAP` and its members, or the input the state cannot give.
+type Members = Result<(u8, Vec<Member>), &'static str>;
+
+/// The element's `IMAP` and its members, each with what `aabb.members` and
+/// its box need, every attribute read. An element without members needs no
+/// `IMAP` (0).
+fn members(state: &dyn SpatialState, refno: RefNo, noun: u32) -> Result<Members, UndecodableAttr> {
+    let Some(listed) = state.members(refno) else { return Ok(Err(UNLISTED_MEMBERS)) };
+    if listed.is_empty() {
+        return Ok(Ok((0, Vec::new())));
+    }
+    let Some(imap) = soft_imap(refno, noun, state)? else { return Ok(Err(UDET_IMAP)) };
+    let mut members = Vec::with_capacity(listed.len());
+    for member in listed {
+        let Some(member_noun) = state.noun(member) else { continue };
+        let Some(member_imap) = soft_imap(member, member_noun, state)? else { return Ok(Err(UDET_IMAP)) };
+        let solid = member_solid(state, member, member_noun)?;
+        let (pos_mm, ori) = match solid {
+            Some(_) => (position(state, member)?, orientation(state, member)?),
+            None => (None, None),
+        };
+        members.push(Member { imap: member_imap, solid, pos_mm, ori });
+    }
+    Ok(Ok((imap, members)))
+}
+
+/// A member's sizes as stored, for a noun in [`BUILT_IN_MEMBER_NOUNS`].
+fn member_solid(state: &dyn SpatialState, member: RefNo, noun: u32) -> Result<Option<Solid>, UndecodableAttr> {
+    let is = |name: &str| noun == db1_hash(name) && BUILT_IN_MEMBER_NOUNS.contains(&name);
+    let size = |name: &str| length(state, member, name);
+    Ok(Some(if is("NBOX") {
+        Solid::Box([size("XLEN")?, size("YLEN")?, size("ZLEN")?])
+    } else if is("NCYL") {
+        Solid::Cylinder { diam: size("DIAM")?, heig: size("HEIG")? }
+    } else if is("NCON") {
+        Solid::Cone { heig: size("HEIG")?, dtop: size("DTOP")?, dbot: size("DBOT")? }
+    } else if is("NPYR") {
+        Solid::Pyramid {
+            top: [size("XTOP")?, size("YTOP")?],
+            bottom: [size("XBOT")?, size("YBOT")?],
+            heig: size("HEIG")?,
+            offset: [size("XOFF")?, size("YOFF")?],
+        }
+    } else {
+        return Ok(None);
+    }))
+}
 
 /// A length attribute in mm: present, a real, finite.
 fn length(state: &dyn SpatialState, refno: RefNo, name: &str) -> Result<f64, UndecodableAttr> {
@@ -430,7 +578,7 @@ mod tests {
     #[test]
     fn with_nothing_confirmed_every_rule_on_the_way_is_named() {
         assert_eq!(
-            compute(RuleSet::confirmed(), &native_box(), NATIVE_BOX).unwrap(),
+            compute(&RuleSet::candidates_alone(&CandidatePick::default()), &native_box(), NATIVE_BOX).unwrap(),
             AabbOutcome::NeedsUnconfirmed(vec![
                 RuleId::AabbOriForm,
                 RuleId::AabbCompose,
@@ -490,7 +638,7 @@ mod tests {
         };
         let bound = |tree: &Tree, cyli_aabb: crate::core_rules::candidate::CyliAabb| {
             let pick = CandidatePick { cyli_aabb: Some(cyli_aabb), ..candidates::pick() };
-            match compute(&RuleSet::candidates(&pick), tree, cyli).unwrap() {
+            match compute(&RuleSet::candidates_alone(&pick), tree, cyli).unwrap() {
                 AabbOutcome::Aabb(aabb) => aabb.max_mm(),
                 other => panic!("{other:?}"),
             }
@@ -505,5 +653,56 @@ mod tests {
         let own_box = bound(&leaning, candidates::cylinder_by_its_own_box);
         assert!((exact[0] - 270.32).abs() < 0.01 && (own_box[0] - 298.73).abs() < 0.01, "{exact:?} {own_box:?}");
         assert!((exact[2] - own_box[2]).abs() < 1e-9, "z: one own axis does not lean into it");
+    }
+
+    /// A member of `noun` under `owner`, at `pos` on its owner's axes.
+    fn member(tree: Tree, refno: RefNo, noun: &str, owner: RefNo, pos: [f64; 3], sizes: &[(&str, f64)]) -> Tree {
+        let mut attrs = vec![("POS", reals(pos)), ("ORI", reals([0.0; 3]))];
+        attrs.extend(sizes.iter().map(|&(name, mm)| (name, DescriptorValue::Real(mm))));
+        tree.with(refno, noun, Some(owner), &attrs)
+    }
+
+    /// `24383/78369` of ams7999_0001 in small: a 105 × 35 × 108 BOX whose
+    /// NBOX, 3 mm down and 105 high, reaches 1.5 mm below it.
+    #[test]
+    fn an_imap_3_member_reaches_out_of_its_owners_box() {
+        let bx = RefNo::new(24_384, 50_000);
+        let tree = a_box(owners([0.0; 3], [0.0; 3]), bx, [0.0; 3], [105.0, 35.0, 108.0]);
+        let tree = member(tree, RefNo::new(24_384, 50_001), "NBOX", bx, [0.0, 0.0, -3.0], &[("XLEN", 101.0), ("YLEN", 35.0), ("ZLEN", 105.0)]);
+        assert_eq!(
+            compute(RuleSet::confirmed(), &tree, bx).unwrap(),
+            AabbOutcome::Aabb(WorldAabb::new([-52.5, -17.5, -55.5], [52.5, 17.5, 54.0]).unwrap())
+        );
+    }
+
+    #[test]
+    fn cylinders_cones_and_pyramids_count_and_other_members_leave_no_box() {
+        let bx = RefNo::new(24_384, 50_000);
+        let with = |noun: &str, sizes: &[(&str, f64)]| {
+            let tree = a_box(owners([0.0; 3], [0.0; 3]), bx, [0.0; 3], [10.0, 10.0, 10.0]);
+            member(tree, RefNo::new(24_384, 50_001), noun, bx, [0.0, 0.0, 10.0], sizes)
+        };
+        let boxed = |min: [f64; 3], max: [f64; 3]| AabbOutcome::Aabb(WorldAabb::new(min, max).unwrap());
+        let rules = RuleSet::confirmed();
+        // DIAM 20, HEIG 4, centred 10 up.
+        let ncyl = with("NCYL", &[("DIAM", 20.0), ("HEIG", 4.0)]);
+        assert_eq!(compute(rules, &ncyl, bx).unwrap(), boxed([-10.0, -10.0, -5.0], [10.0, 10.0, 12.0]));
+        // DTOP 30 at the top end, DBOT 2 at the bottom.
+        let ncon = with("NCON", &[("HEIG", 4.0), ("DTOP", 30.0), ("DBOT", 2.0)]);
+        assert_eq!(compute(rules, &ncon, bx).unwrap(), boxed([-15.0, -15.0, -5.0], [15.0, 15.0, 12.0]));
+        // The top face 2 × 2 half an XOFF of 8 one way, the bottom 4 × 6 the other.
+        let sizes = [("XTOP", 2.0), ("YTOP", 2.0), ("XBOT", 4.0), ("YBOT", 6.0), ("HEIG", 4.0), ("XOFF", 8.0), ("YOFF", 0.0)];
+        assert_eq!(compute(rules, &with("NPYR", &sizes), bx).unwrap(), boxed([-6.0, -5.0, -5.0], [5.0, 5.0, 12.0]));
+        assert_eq!(compute(rules, &with("NSNO", &[("HEIG", 4.0)]), bx).unwrap(), AabbOutcome::MissingInput(UNBUILT_MEMBER));
+    }
+
+    #[test]
+    fn the_members_rule_is_asked_only_for_an_element_with_members() {
+        let rules = RuleSet::candidates_alone(&CandidatePick { members: None, ..candidates::pick() });
+        assert!(matches!(compute(&rules, &native_box(), NATIVE_BOX).unwrap(), AabbOutcome::Aabb(_)));
+        let bx = RefNo::new(24_384, 50_000);
+        let tree = a_box(owners([0.0; 3], [0.0; 3]), bx, [0.0; 3], [10.0; 3]);
+        let tree = member(tree, RefNo::new(24_384, 50_001), "NBOX", bx, [0.0; 3], &[("XLEN", 1.0), ("YLEN", 1.0), ("ZLEN", 1.0)]);
+        assert_eq!(compute(&rules, &tree, bx).unwrap(), AabbOutcome::NeedsUnconfirmed(vec![RuleId::AabbMembers]));
     }
 }

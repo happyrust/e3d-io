@@ -8,13 +8,17 @@
 //! `docs/evidence/2026-10-03-spamap-coverage.md` — Core3D.dll's
 //! `mapboxlib/MPBOX`, `maplist/MLSADD`, `dbboxlib/BOXELE` and the `IMAP` of
 //! the noun dictionary; `docs/evidence/2026-10-03-spamap-branch-entries.md`
-//! — Core3D.dll's `mapboxlib/MPBXBR` and the callers of `MBXGO`.
+//! — Core3D.dll's `mapboxlib/MPBXBR` and the callers of `MBXGO`;
+//! `docs/evidence/2026-10-03-spamap-aabb.md` and
+//! `docs/evidence/2026-10-03-spamap-aabb-members.md` — the boxes
+//! `mapboxlib/MPBOX2` and `dbboxlib/BOXELE` give an element.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use e3d_attlib::db1_hash;
 
+use super::aabb::{multiply, Link, WorldFrame, IDENTITY};
 use super::{Axis, EntryBoxes, SpatialState, UndecodableAttr};
 use crate::core_rules::candidate;
 use crate::record::descriptor::DescriptorValue;
@@ -246,6 +250,176 @@ pub fn degenerate_below_half(size_mm: f64) -> Option<f64> {
     Some(if size_mm < 0.5 { 0.5 } else { size_mm })
 }
 
+// --- aabb.ori_form -----------------------------------------------------------------
+
+/// Core's `mathlib/GTORI1`, which `desdblib/GETORI` and `getattlib/GTDORI`
+/// both hand ORI to: R = Rz · Ry · Rx, each turn's sine and cosine from
+/// `mathlib/SINCOS`, which gives 0, ±90 and ±180 degrees exact values and
+/// divides any other angle by 57.29577951308232.
+pub fn ori_by_gtori1(ori: &DescriptorValue) -> Option<[[f64; 3]; 3]> {
+    let DescriptorValue::RealArray(degrees) = ori else { return None };
+    let [x, y, z] = <[f64; 3]>::try_from(degrees.as_slice()).ok()?;
+    let (sx, cx) = sincos(x);
+    let (sy, cy) = sincos(y);
+    let (sz, cz) = sincos(z);
+    let about_x = [[1.0, 0.0, 0.0], [0.0, cx, -sx], [0.0, sx, cx]];
+    let about_y = [[cy, 0.0, sy], [0.0, 1.0, 0.0], [-sy, 0.0, cy]];
+    let about_z = [[cz, -sz, 0.0], [sz, cz, 0.0], [0.0, 0.0, 1.0]];
+    Some(multiply(&about_z, &multiply(&about_y, &about_x)))
+}
+
+/// `mathlib/SINCOS`: `(sin, cos)` of an angle in degrees, exact where
+/// `LREQ` (tolerance 0.0001) finds it 0, ±90 or ±180.
+pub fn sincos(degrees: f64) -> (f64, f64) {
+    let near = |a: f64, b: f64| (a - b).abs() < 0.0001f64.max(0.00001 * (a.abs() + b.abs()));
+    if near(degrees, 0.0) {
+        (0.0, 1.0)
+    } else if near(degrees.abs(), 90.0) {
+        (if degrees < 0.0 { -1.0 } else { 1.0 }, 0.0)
+    } else if near(degrees.abs(), 180.0) {
+        (0.0, -1.0)
+    } else {
+        let radians = degrees / 57.29577951308232;
+        (radians.sin(), radians.cos())
+    }
+}
+
+// --- aabb.compose ------------------------------------------------------------------
+
+/// Core3D's `desdblib/WSTRAM`: from the element up to the WORL, each level's
+/// pose (`desdblib/GETRAM`: ORI and POS, a missing one leaving the owner's
+/// axes or origin) put in front of what is gathered so far,
+/// `T_owner ∘ (… ∘ T_element)`, with core's `mathlib/CONCAT` arithmetic.
+pub fn every_pose_from_the_element_up(chain: &[Link]) -> Option<WorldFrame> {
+    Some(chain.iter().fold(WorldFrame::WORLD, |gathered, link| {
+        let (rotation, origin) = (link.rotation.unwrap_or(IDENTITY), link.pos_mm.unwrap_or([0.0; 3]));
+        let mut frame = WorldFrame { rotation: multiply(&rotation, &gathered.rotation), origin_mm: [0.0; 3] };
+        for (axis, row) in rotation.iter().enumerate() {
+            let turned = row[0] * gathered.origin_mm[0] + row[1] * gathered.origin_mm[1] + row[2] * gathered.origin_mm[2];
+            frame.origin_mm[axis] = turned + origin[axis];
+        }
+        frame
+    }))
+}
+
+// --- aabb.box ----------------------------------------------------------------------
+
+/// Core's `boxlib/MBXBOX`, `BOXELE`'s box type 3 (BOX and NBOX): centred on
+/// the frame's origin, per world axis the sum of each half-length times how
+/// far its own axis leans into that world axis.
+pub fn box_by_mbxbox(frame: &WorldFrame, size_mm: [f64; 3]) -> [f64; 6] {
+    let half_mm = size_mm.map(|size| size.abs() / 2.0);
+    let mut aabb = [0.0; 6];
+    for axis in 0..3 {
+        let reach: f64 = (0..3).map(|own| frame.rotation[axis][own].abs() * half_mm[own]).sum();
+        aabb[axis] = frame.origin_mm[axis] - reach;
+        aabb[axis + 3] = frame.origin_mm[axis] + reach;
+    }
+    aabb
+}
+
+// --- aabb.cyli, aabb.cone ----------------------------------------------------------
+
+/// `BOXELE`'s box type 2 (CYLI and NCYL): core's `boxlib/MBXSNO` with no
+/// offset and DIAM at both ends.
+pub fn cylinder_by_end_circles(frame: &WorldFrame, diam_mm: f64, heig_mm: f64) -> [f64; 6] {
+    snout_by_end_circles(frame, heig_mm, [0.0, 0.0], diam_mm, diam_mm)
+}
+
+/// `BOXELE`'s box type 5 (CONE and NCON): a DTOP or DBOT below 0 as 0, then
+/// `MBXSNO` with no offset, DTOP at the top end and DBOT at the bottom.
+pub fn cone_by_end_circles(frame: &WorldFrame, heig_mm: f64, dtop_mm: f64, dbot_mm: f64) -> [f64; 6] {
+    let at_least_0 = |diam_mm: f64| if diam_mm < 0.0 { 0.0 } else { diam_mm };
+    snout_by_end_circles(frame, heig_mm, [0.0, 0.0], at_least_0(dtop_mm), at_least_0(dbot_mm))
+}
+
+/// Core's `boxlib/MBXSNO`: the top disc's centre placed by `CONCAT` at
+/// `(xoff, yoff, h) / 2` in the frame, the bottom one's at its negation, each
+/// bounded by `MBXCIR` at `r·√(1 − z_i²)` per world axis, the bottom disc
+/// joined to the top one.
+fn snout_by_end_circles(frame: &WorldFrame, heig_mm: f64, offset_mm: [f64; 2], top_mm: f64, bottom_mm: f64) -> [f64; 6] {
+    let half = [offset_mm[0] * 0.5, offset_mm[1] * 0.5, heig_mm * 0.5];
+    let ends = [(half, top_mm * 0.5), (half.map(|value| -value), bottom_mm * 0.5)];
+    let mut aabb = [0.0; 6];
+    for (end, (centre_own, radius)) in ends.into_iter().enumerate() {
+        for axis in 0..3 {
+            let row = frame.rotation[axis];
+            let centre = row[0] * centre_own[0] + row[1] * centre_own[1] + row[2] * centre_own[2] + frame.origin_mm[axis];
+            let square = 1.0 - row[2] * row[2];
+            let reach = if square >= 0.0 { radius * square.sqrt() } else { 0.0 };
+            let (low, high) = (centre - reach, centre + reach);
+            if end == 0 {
+                (aabb[axis], aabb[axis + 3]) = (low, high);
+            } else {
+                if low < aabb[axis] {
+                    aabb[axis] = low;
+                }
+                if high > aabb[axis + 3] {
+                    aabb[axis + 3] = high;
+                }
+            }
+        }
+    }
+    aabb
+}
+
+// --- aabb.pyramid ------------------------------------------------------------------
+
+/// Core's `boxlib/MBXPYR`, `BOXELE`'s box type 7 (PYRA and NPYR): the top
+/// face's four corners at `z = h/2`, `xoff/2 ± xtop/2`, `yoff/2 ± ytop/2`, the
+/// bottom face's at `z = −h/2`, `−xoff/2 ± xbot/2`, `−yoff/2 ± ybot/2`, in
+/// `MBXPYR`'s order, each through `MBXPOI` (`TRAVEC`: `MVMULT`, then the
+/// origin) and the box of the eight.
+pub fn pyramid_by_corners(frame: &WorldFrame, top_mm: [f64; 2], bottom_mm: [f64; 2], heig_mm: f64, offset_mm: [f64; 2]) -> [f64; 6] {
+    let [xt, yt] = top_mm.map(|size| size * 0.5);
+    let [xb, yb] = bottom_mm.map(|size| size * 0.5);
+    let [xo, yo] = offset_mm.map(|offset| offset * 0.5);
+    let h = heig_mm * 0.5;
+    let corners = [
+        [xt + xo, yt + yo, h],
+        [xo - xt, yt + yo, h],
+        [xo - xt, yo - yt, h],
+        [xt + xo, yo - yt, h],
+        [xb - xo, yb - yo, -h],
+        [-xb - xo, yb - yo, -h],
+        [-xb - xo, -yb - yo, -h],
+        [xb - xo, -yb - yo, -h],
+    ];
+    let first = frame.point(corners[0]);
+    let mut aabb = [first[0], first[1], first[2], first[0], first[1], first[2]];
+    for corner in &corners[1..] {
+        let point = frame.point(*corner);
+        for axis in 0..3 {
+            if point[axis] < aabb[axis] {
+                aabb[axis] = point[axis];
+            }
+            if point[axis] > aabb[axis + 3] {
+                aabb[axis + 3] = point[axis];
+            }
+        }
+    }
+    aabb
+}
+
+// --- aabb.members ------------------------------------------------------------------
+
+/// Core3D's `mapboxlib/MPBOX2` n 37–79: an element whose noun's `IMAP` is 5
+/// takes into its box the box `BOXELE` gives each member whose `IMAP` is 3,
+/// in the element's frame followed by the member's own pose (`GETRAM` and
+/// `CONCAT`: the member nouns' FRMC is 0), axis by axis the lower min and
+/// the higher max.
+pub fn imap_3_into_imap_5(owner_imap: u8, member_imap: u8) -> bool {
+    owner_imap == 5 && member_imap == 3
+}
+
+// --- aabb.arithmetic ---------------------------------------------------------------
+
+/// Every value held as an `f64`, as the Fortran of Core3D's `dbboxlib` and
+/// core's `boxlib` and `mathlib` holds it (`DOUBLE PRECISION` throughout).
+pub fn double_precision(value: f64) -> f64 {
+    value
+}
+
 // --- spamap.coverage ---------------------------------------------------------------
 
 /// Whether Core3D gives the element entries: `Some(true)` when
@@ -300,7 +474,7 @@ pub fn coverage_by_imap(refno: RefNo, state: &dyn SpatialState) -> Result<Option
 
 /// The `IMAP` `UDSOFT` and `ATNINT` read for the element, or `None` when its
 /// soft type is a UDET.
-fn soft_imap(refno: RefNo, noun: u32, state: &dyn SpatialState) -> Result<Option<u8>, UndecodableAttr> {
+pub(crate) fn soft_imap(refno: RefNo, noun: u32, state: &dyn SpatialState) -> Result<Option<u8>, UndecodableAttr> {
     if noun > LAST_SYSTEM_NOUN {
         return Ok(None);
     }

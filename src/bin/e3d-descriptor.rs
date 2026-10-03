@@ -2006,6 +2006,7 @@ fn world_frame_command(options: &HashMap<String, String>) -> Result<Value, Strin
             (json!({ "min_mm": aabb.min_mm(), "max_mm": aabb.max_mm() }), encoded)
         }
         AabbOutcome::NeedsUnconfirmed(ids) => (pending(&ids), Value::Null),
+        AabbOutcome::MissingInput(input) => (json!({ "missing_input": input }), Value::Null),
         AabbOutcome::NotBuiltIn => (json!("not_built_in"), Value::Null),
         AabbOutcome::NoWorld => (json!("no_world"), Value::Null),
     };
