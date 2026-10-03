@@ -546,16 +546,16 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 规则名 | 取证任务 | 状态 | Evidence_Doc | 提交 | 备注 |
 |---|---|---|---|---|---|
-| `spamap.table_shape` | 7.1 | | | | |
-| `spamap.table_header_rest` | 7.1 | | | | |
-| `spamap.word_sign` | 7.1 | 未坐实 | | | 候选「有符号 32 位字」：Key0 28 269 / 28 269（`spamap-check --rules candidates`，里程碑 B 计划 §6 B3、B5） |
-| `spamap.rounding` | 7.1 | 未坐实 | | | 候选「就近取整」：Built_In_AABB 1 572 / 1 590 逐字，反例无一差 ±1（§6 B8）；备选「外扩取整」与原生 BOX 的 y 不符 |
-| `spamap.key0` | 7.1 | 未坐实 | | | 候选「N × 10^8 + 有符号 min，落非负有符号字」：Key0 28 269 / 28 269（§6 B3、B5） |
-| `spamap.short_axis` | 7.1 | 未坐实 | | | 候选「按 0.1 mm 取最短，并列取最后一根」：Key0 28 269 / 28 269，并列 6 236 条全符；并列取轴按需求 4.18 只能以 E3D_IDB 坐实 |
-| `spamap.zero_extent` | 7.1 | 未坐实 | | | 候选「交桶规则（落桶 1）」：ams251142 138 条零尺寸、ams7999 零尺寸点全符（Key0 项内） |
-| `spamap.bucket` | 7.1 | 未坐实 | | | 候选「600 / 2 000 / 6 000 / 20 000，界值归上一桶」：Key0 28 269 / 28 269；第四界只知在 (19 800, 21 200] |
-| `spamap.entries_k` | 7.1 | 未坐实 | | | 候选「单条 k = 0」：条目数与 k 3 507 / 3 628（基线 640）、18 404 / 21 257（ams7999）、327 / 327、305 / 305；差的恰是带 k = 1 条目的 121 与 2 853 个元素（§6 B3、B5） |
-| `spamap.flags` | 7.1 | 未坐实 | | | 候选「BOX / CYLI 的 flags = OBST」：1 590 / 1 590；其余 noun 不覆盖，记 `waiting`（§6 B3、B5） |
+| `spamap.table_shape` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | core `sub_5AB91B0` 键 [Key0, refno, refno, 下标 − 1]、值 7 字；Corpus 1 903 页按此解码（`tests/spamap_page_headers_real.rs`） |
+| `spamap.table_header_rest` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | core `sub_5AFF6D0` 新根页头 [5, hash, 0, 4, 7, 1, 页字数 − 7]；1 903 页（53 内结点）第 3–5 字全为 4、7、1，内结点只以出处 ② |
+| `spamap.word_sign` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | 有符号 32 位；Key0 ∈ [5×10^7, 1.85×10^9]（Core3D `MAPKY2`）；core `sub_5B00F10` 有符号比键，SPAMAP 键字全 < 2^31；值域 ±999 999 999（datum 为 0） |
+| `spamap.rounding` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | Core3D `MAPINS`：`f_ldnint_val`（Fortran DNINT，半数远离零）于 10 × (坐标 − datum × 10^8)；最短轴与桶按取整后判定 |
+| `spamap.key0` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | Core3D `MAPKEY` / `MAPKY2`：min % 5×10^7 再夹 ±5×10^7，+ 10^8 × (6 × 轴 + 桶)；坐实集 Key0 28 269 / 28 269、基线 3 746 / 3 746 |
+| `spamap.short_axis` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | Core3D `MAPKEY`：并列取后一根（z、y、x），最短 extent ≥ 20 m 改取 x（只以出处 ①） |
+| `spamap.zero_extent` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | Core3D `MAPKEY` 无特例，extent 0 落桶 1 |
+| `spamap.bucket` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | C1 | Core3D `MAPKEY`：600 / 2 000 / 6 000 / 20 000 / 200 000，界值归上一桶；≥ 200 000 为桶 6（只以出处 ①） |
+| `spamap.entries_k` | 7.1 | 未坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | | k = `MAPINS` 下标 − 1（tube 为 2）；`MPBOX2` 路径一条 k = 0、用自身框；k = 1 只来自 `MPBXBR`（BRAN 与管件），tube 框（`MGTUBE`）未读；候选「单条 k = 0」3 507 / 3 628、18 404 / 21 257 |
+| `spamap.flags` | 7.1 | 未坐实 | `docs/evidence/2026-10-03-spamap-encoding.md` | | `MAPINS` 三个逻辑量按 1 / 2 / 4；`BOXELE` 按 OBST 1–2 置位、`MPBOX` 上溯 SITE 等定是否启用；管件 flags 来自 `MPBXBR`，未读；候选 BOX / CYLI 1 590 / 1 590 |
 | `spamap.coverage` | 7.2 | 未坐实 | | | 候选按普查：43 个 noun 有、51 个无，BRAN / PJOI / SCOJ 不说；Property 7 未写（7.2） |
 | `spamap.recompute.<NOUN>` | 7.3 | | | | B8 线索：ams7999 有几处 BOX / CYLI 条目只在一侧比按现属性算出的多 1.5 mm 或 28–33 mm（如 `24383/78369` minz、`24383/77136` minz），像「改尺寸与位置后条目未重算」；待 7.3 |
 | `spamap.descendants.{move,pos,ori}` | 7.3 | | | | B8 线索：ams7999 EQUI `24383/76459` 下几个 SUBE 的 BOX 条目与按现位姿算出的差 10–273 mm（成对：−1 291 / +2 575、−908 / −2 733 等），像后代未随祖先改动重算；待 7.3 以会话链 / 探针坐实，可作需求 4.17 剔除清单的候选 |

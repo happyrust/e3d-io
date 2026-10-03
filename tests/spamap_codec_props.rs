@@ -6,7 +6,9 @@
 //!
 //! The expectation is worked out here, step by step in the design's order
 //! (`.kiro/specs/write-path-phase-3/design.md`, SPAMAP_Codec), from the same
-//! candidate functions — not from the codec's own bookkeeping.
+//! candidate functions — not from the codec's own bookkeeping. Every rule is
+//! drawn, confirmed ones too (`RuleSet::candidates_alone`), and the confirmed
+//! functions of `src/spatial/rules.rs` are among the draws.
 
 use std::collections::BTreeSet;
 
@@ -14,7 +16,7 @@ use e3d_attlib::db1_hash;
 use e3d_io::core_rules::{candidate, CandidatePick, RuleId, RuleSet};
 use e3d_io::index::SpamapEntry;
 use e3d_io::record::descriptor::DescriptorValue;
-use e3d_io::spatial::candidates;
+use e3d_io::spatial::{candidates, rules};
 use e3d_io::spatial::codec::{CodecError, Encoded, SpamapCodec};
 use e3d_io::spatial::{Axis, EntryBoxes, SpatialState, UndecodableAttr, WorldAabb};
 use e3d_io::RefNo;
@@ -38,17 +40,19 @@ impl<F> std::fmt::Debug for Named<F> {
 // a flags rule that stop short, a second entry with a box of its own, an
 // input nothing has.
 
-static ROUNDING: [Named<candidate::Rounding>; 2] = [
+static ROUNDING: [Named<candidate::Rounding>; 3] = [
     Named { name: "round_to_nearest", function: candidates::round_to_nearest },
     Named { name: "round_outward", function: candidates::round_outward },
+    Named { name: "rules::round_half_away_from_zero", function: rules::round_half_away_from_zero },
 ];
 
-static WORD_SIGN: [Named<candidate::WordSign>; 2] = [
+static WORD_SIGN: [Named<candidate::WordSign>; 3] = [
     Named { name: "SIGNED_WORDS", function: candidates::SIGNED_WORDS },
     Named {
         name: "unsigned_words",
         function: candidate::WordSign { encode: encode_unsigned, decode: decode_unsigned, range: (0, u32::MAX as i64) },
     },
+    Named { name: "rules::SIGNED_WORDS", function: rules::SIGNED_WORDS },
 ];
 
 fn encode_unsigned(value: i64) -> Option<u32> {
@@ -59,9 +63,10 @@ fn decode_unsigned(word: u32) -> i64 {
     i64::from(word)
 }
 
-static SHORT_AXIS: [Named<candidate::ShortAxis>; 2] = [
+static SHORT_AXIS: [Named<candidate::ShortAxis>; 3] = [
     Named { name: "last_shortest_axis", function: candidates::last_shortest_axis },
     Named { name: "first_shortest_axis", function: first_shortest_axis },
+    Named { name: "rules::least_axis_last_of_ties", function: rules::least_axis_last_of_ties },
 ];
 
 fn first_shortest_axis(extents: [i64; 3]) -> Axis {
@@ -69,18 +74,20 @@ fn first_shortest_axis(extents: [i64; 3]) -> Axis {
     Axis::ALL[extents.iter().position(|&extent| extent == least).expect("the least is among them")]
 }
 
-static ZERO_EXTENT: [Named<candidate::ZeroExtent>; 2] = [
+static ZERO_EXTENT: [Named<candidate::ZeroExtent>; 3] = [
     Named { name: "zero_extent_by_bucket_rule", function: candidates::zero_extent_by_bucket_rule },
     Named { name: "flat_in_bucket_1", function: flat_in_bucket_1 },
+    Named { name: "rules::leave_zero_extent_to_the_bucket", function: rules::leave_zero_extent_to_the_bucket },
 ];
 
 fn flat_in_bucket_1(_axis: Axis) -> Option<u8> {
     Some(1)
 }
 
-static BUCKET: [Named<candidate::Bucket>; 2] = [
+static BUCKET: [Named<candidate::Bucket>; 3] = [
     Named { name: "bucket_by_extent", function: candidates::bucket_by_extent },
     Named { name: "buckets_below_20_m", function: buckets_below_20_m },
+    Named { name: "rules::bucket_by_mapkey", function: rules::bucket_by_mapkey },
 ];
 
 /// The corpus' boundaries, and nothing said from 20 m up.
@@ -92,9 +99,10 @@ fn buckets_below_20_m(extent: i64) -> Option<u8> {
     }
 }
 
-static KEY0: [Named<candidate::Key0>; 2] = [
+static KEY0: [Named<candidate::Key0>; 3] = [
     Named { name: "key0_in_signed_word", function: candidates::key0_in_signed_word },
     Named { name: "key0_in_unsigned_word", function: key0_in_unsigned_word },
+    Named { name: "rules::key0_by_mapky2", function: rules::key0_by_mapky2 },
 ];
 
 fn key0_in_unsigned_word(axis: Axis, bucket: u8, min: i64) -> Result<u32, (i64, i64)> {
@@ -164,7 +172,7 @@ impl Pick {
         pick.key0 = self.key0.map(|rule| rule.function);
         pick.entries_k = self.entries_k.map(|rule| rule.function);
         pick.flags = self.flags.map(|rule| rule.function);
-        RuleSet::candidates(&pick)
+        RuleSet::candidates_alone(&pick)
     }
 }
 
@@ -190,7 +198,7 @@ fn picks() -> impl Strategy<Value = Pick> {
         (
             choose(any_of(&ROUNDING), whole),
             // Unsigned words refuse every box with a coordinate below zero.
-            choose(prop_oneof![3 => Just(&WORD_SIGN[0]), 1 => Just(&WORD_SIGN[1])], whole),
+            choose(prop_oneof![2 => Just(&WORD_SIGN[0]), 1 => Just(&WORD_SIGN[1]), 2 => Just(&WORD_SIGN[2])], whole),
             choose(any_of(&SHORT_AXIS), whole),
             choose(any_of(&ZERO_EXTENT), whole),
             choose(any_of(&BUCKET), whole),
@@ -272,7 +280,9 @@ fn edge_mm() -> impl Strategy<Value = f64> {
     });
     let word_edge = prop::sample::select(vec![
         i64::from(i32::MIN) as f64 / 10.0,
+        -(rules::WITHIN_DATUM as f64) / 10.0,
         0.0,
+        rules::WITHIN_DATUM as f64 / 10.0,
         i64::from(i32::MAX) as f64 / 10.0,
         i64::from(u32::MAX) as f64 / 10.0,
     ]);

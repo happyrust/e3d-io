@@ -13,6 +13,7 @@ pub mod aabb;
 pub mod candidates;
 pub mod check;
 pub mod codec;
+pub mod rules;
 pub mod state;
 
 use crate::core_rules::{Implementation, RuleId, Slot};

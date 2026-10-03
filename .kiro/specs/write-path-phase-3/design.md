@@ -36,7 +36,7 @@ flowchart TD
 | `tools/ida/`：`ib.ps1`、`xrefs_to.py`、`queries/`、`EVIDENCE_TEMPLATE.md`、`check_evidence.ps1` | IB_Wrapper、IB_Xref_Helper、受版本管理的查询文件、证据模板与机检 | 用 PS 5.1，与 `tools/e3d/*.ps1` 一致；需求 1 第 7 条要求查询文件放在 `tools/ida/` |
 | `src/index/spamap.rs` | SPAMAP_Reader | 读侧：不放在 `src/write/`，也不调用它（需求 2 第 2 条） |
 | `src/core_rules.rs` | 规则注册表 | 读侧工具与写侧共用，必须早于首个写侧提交存在 |
-| `src/spatial/`：`mod.rs`、`state.rs`、`codec.rs`、`aabb.rs`、`candidates.rs` | 值类型、`SpatialState`、SPAMAP_Codec、Built_In_AABB、候选规则 | 都是纯函数。门槛要求的 Corpus 核对就是跑它们，所以必须能先于首个写侧提交落地，不能放在 `src/write/` |
+| `src/spatial/`：`mod.rs`、`state.rs`、`codec.rs`、`aabb.rs`、`rules.rs`、`candidates.rs` | 值类型、`SpatialState`、SPAMAP_Codec、Built_In_AABB、坐实的规则实现、候选规则 | 都是纯函数。门槛要求的 Corpus 核对就是跑它们，所以必须能先于首个写侧提交落地，不能放在 `src/write/` |
 | `src/write/spamap/`：`mod.rs`、`end_state.rs`、`plan.rs`；`src/write/keyed_cow.rs` | SPAMAP_Writer；CoW 按叶值宽泛化 | 写侧 |
 | `src/write/alloc.rs` | 发号，从 `transaction.rs` 抽出 | Open_Fast_Path 与发号下界集中在一处 |
 | `src/write/bucket.rs` | 页 1 写侧 | 只在需求 13 第 3 条的条件成立时创建 |
@@ -165,7 +165,7 @@ pub fn member_order_row(noun: u32) -> Trigger;
 pub fn descendants_included(kind: DescendantKind, depth: u32) -> bool;  // depth 1 = 成员
 ```
 
-每条规则一个实现槽 `Slot<T, C> { Pending, Confirmed(T), Candidate(C) }`：`T` 是该规则的实现类型，设计阶段都是空枚举、不预设任何取值，所以确认集的槽只能是 `Pending`；某条规则坐实时，在同一提交里按 Evidence_Doc 给 `T` 加上变体、在 `RuleSet::confirmed()` 里填 `Confirmed`，并把状态改为 `Confirmed`。`C` 是该规则的候选函数类型（`core_rules::candidate`，如 `fn(extent: i64) -> Option<u8>`），实现放在 `src/spatial/candidates.rs`，只经 `candidates(&CandidatePick)` 以 `Candidate` 填进仍为 `Pending` 的槽；尚无候选的规则 `C = NoCandidate`（空枚举）。（里程碑 B 计划 §3.1：空的 `T` 造不出值，候选不能与确认同型。）
+每条规则一个实现槽 `Slot<T, C> { Pending, Confirmed(T), Candidate(C) }`：`T` 是该规则的实现类型，设计阶段都是空枚举、不预设任何取值，所以确认集的槽只能是 `Pending`；某条规则坐实时，在同一提交里按 Evidence_Doc 给 `T` 加上变体、在 `RuleSet::confirmed()` 里填 `Confirmed`，并把状态改为 `Confirmed`。`C` 是该规则的候选函数类型（`core_rules::candidate`，如 `fn(extent: i64) -> Option<u8>`），实现放在 `src/spatial/candidates.rs`，只经 `candidates(&CandidatePick)` 以 `Candidate` 填进仍为 `Pending` 的槽；尚无候选的规则 `C = NoCandidate`（空枚举）。（里程碑 B 计划 §3.1：空的 `T` 造不出值，候选不能与确认同型。）坐实规则的实现放在 `src/spatial/rules.rs`（不隐藏），`T` 的变体经 `Implementation` 返回其中的函数，与候选同签名（里程碑 C 计划 Q4）。另有 `#[doc(hidden)]` 的 `candidates_alone(&CandidatePick)`：只填所选候选、其余一律 `Pending`（确认的也不例外），供要把每条规则都随机抽取的 Property 6 用，写侧不用。
 
 | 规则名 | 管什么 | 出处需求 |
 |---|---|---|

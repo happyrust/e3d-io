@@ -271,7 +271,7 @@ mod tests {
     use e3d_attlib::db1_hash;
 
     use super::*;
-    use crate::core_rules::CandidatePick;
+    use crate::core_rules::{CandidatePick, Slot};
     use crate::record::descriptor::DescriptorValue;
     use crate::spatial::candidates;
 
@@ -308,9 +308,17 @@ mod tests {
     }
 
     #[test]
-    fn with_nothing_confirmed_every_rule_on_the_way_is_named_and_no_entry_comes_out() {
+    fn under_the_confirmed_rules_the_pending_ones_are_named_and_no_entry_comes_out() {
         let (state, aabb) = box_26484();
         let encoded = SpamapCodec::new(RuleSet::confirmed()).encode(BOX_26484, &state, &aabb).unwrap();
+        assert_eq!(encoded, Encoded::NeedsUnconfirmed(vec![RuleId::SpamapEntriesK, RuleId::SpamapFlags]));
+    }
+
+    #[test]
+    fn with_nothing_confirmed_every_rule_on_the_way_is_named() {
+        let (state, aabb) = box_26484();
+        let rules = RuleSet::candidates_alone(&CandidatePick::default());
+        let encoded = SpamapCodec::new(&rules).encode(BOX_26484, &state, &aabb).unwrap();
         assert_eq!(
             encoded,
             Encoded::NeedsUnconfirmed(vec![
@@ -363,8 +371,8 @@ mod tests {
     fn a_flat_short_axis_consults_the_zero_extent_rule() {
         let (state, _) = box_26484();
         let flat = WorldAabb::new([849.5, 1800.0, 2750.0], [849.5, 2200.0, 3250.0]).unwrap();
-        let pick = CandidatePick { zero_extent: None, ..candidates::pick() };
-        let rules = RuleSet::candidates(&pick);
+        let mut rules = RuleSet::candidates(&candidates::pick());
+        rules.zero_extent = Slot::Pending;
         assert_eq!(
             SpamapCodec::new(&rules).encode(BOX_26484, &state, &flat).unwrap(),
             Encoded::NeedsUnconfirmed(vec![RuleId::SpamapZeroExtent])
@@ -377,8 +385,8 @@ mod tests {
     fn a_pending_zero_extent_rule_leaves_a_flat_boxs_key0_unknown() {
         let (state, _) = box_26484();
         let flat = WorldAabb::new([-20_000_000.0, 1800.0, 2750.0], [-20_000_000.0, 2200.0, 3250.0]).unwrap();
-        let pick = CandidatePick { zero_extent: None, ..candidates::pick() };
-        let rules = RuleSet::candidates(&pick);
+        let mut rules = RuleSet::candidates(&candidates::pick());
+        rules.zero_extent = Slot::Pending;
         assert_eq!(
             SpamapCodec::new(&rules).encode(BOX_26484, &state, &flat).unwrap(),
             Encoded::NeedsUnconfirmed(vec![RuleId::SpamapZeroExtent])
@@ -399,8 +407,10 @@ mod tests {
         let rules = RuleSet::candidates(&candidates::pick());
         let words = [4_294_937_282, 76_966, 11_250, 4_294_940_885, 83_113, 16_750];
         assert_eq!(SpamapCodec::new(&rules).key0_of(&words), Ok(Some(299_969_986)));
+        assert_eq!(SpamapCodec::new(RuleSet::confirmed()).key0_of(&words), Ok(Some(299_969_986)));
+        let alone = RuleSet::candidates_alone(&CandidatePick::default());
         assert_eq!(
-            SpamapCodec::new(RuleSet::confirmed()).key0_of(&words),
+            SpamapCodec::new(&alone).key0_of(&words),
             Err(vec![RuleId::SpamapWordSign, RuleId::SpamapShortAxis, RuleId::SpamapBucket, RuleId::SpamapKey0]
                 .into_iter()
                 .collect::<std::collections::BTreeSet<_>>()

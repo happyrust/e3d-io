@@ -124,9 +124,14 @@ impl RuleStatus {
 
 const NO_CANDIDATE: &str = "no candidate yet";
 const T3: Option<&str> = Some("docs/evidence/2026-09-22-e3d-spamap-consequences.md#0. 结论");
+const ENCODING: Option<&str> = Some("docs/evidence/2026-10-03-spamap-encoding.md#结论");
 
 const fn unconfirmed(inputs: &'static str, evidence: Option<&'static str>) -> RuleStatus {
     RuleStatus::Unconfirmed { assumption: NO_CANDIDATE, inputs, evidence }
+}
+
+const fn confirmed(evidence: &'static str) -> RuleStatus {
+    RuleStatus::Confirmed { evidence }
 }
 
 /// Every rule, in the design's order.
@@ -135,61 +140,71 @@ pub const RULES: &[Rule] = &[
         id: RuleId::SpamapTableShape,
         name: "spamap.table_shape",
         governs: "page type, name hash, key width 4, leaf value width 7 and internal slots of a SPAMAP page",
-        status: unconfirmed("every SPAMAP page written", T3),
+        status: confirmed("docs/evidence/2026-10-03-spamap-encoding.md#spamap.table_shape"),
     },
     Rule {
         id: RuleId::SpamapTableHeaderRest,
         name: "spamap.table_header_rest",
         governs: "the other header words of a new table's pages and of internal pages",
-        status: unconfirmed("a batch that creates the table or splits a page", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-encoding.md#spamap.table_header_rest"),
     },
     Rule {
         id: RuleId::SpamapWordSign,
         name: "spamap.word_sign",
         governs: "whether key and value words are signed, how keys compare, Key0's width and overflow",
-        status: unconfirmed("coordinates below zero, Key0 at or above 2^31", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-encoding.md#spamap.word_sign"),
     },
     Rule {
         id: RuleId::SpamapRounding,
         name: "spamap.rounding",
         governs: "how min and max round when millimetres become 0.1 mm",
-        status: unconfirmed("a World_AABB off the 0.1 mm grid", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-encoding.md#spamap.rounding"),
     },
     Rule {
         id: RuleId::SpamapKey0,
         name: "spamap.key0",
         governs: "Key0 = N * 10^8 + the short axis' min, N = 6 * axis order + bucket",
-        status: unconfirmed("every entry", T3),
+        status: confirmed("docs/evidence/2026-10-03-spamap-encoding.md#spamap.key0"),
     },
     Rule {
         id: RuleId::SpamapShortAxis,
         name: "spamap.short_axis",
         governs: "whether the short axis is judged in mm or 0.1 mm, and which axis a tie takes",
-        status: unconfirmed("every entry; ties decide on boxes with two equal shortest extents", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-encoding.md#spamap.short_axis"),
     },
     Rule {
         id: RuleId::SpamapZeroExtent,
         name: "spamap.zero_extent",
         governs: "a short axis of extent 0",
-        status: unconfirmed("flat elements", None),
+        status: confirmed("docs/evidence/2026-10-03-spamap-encoding.md#spamap.zero_extent"),
     },
     Rule {
         id: RuleId::SpamapBucket,
         name: "spamap.bucket",
         governs: "how buckets divide, which side a boundary falls on, values beyond the corpus' range",
-        status: unconfirmed("every entry", T3),
+        status: confirmed("docs/evidence/2026-10-03-spamap-encoding.md#spamap.bucket"),
     },
     Rule {
         id: RuleId::SpamapEntriesK,
         name: "spamap.entries_k",
         governs: "how many entries an element has, what k means, where a k >= 1 entry's value words come from",
-        status: unconfirmed("every element with an entry; k >= 1 on elements across buckets", None),
+        status: RuleStatus::Unconfirmed {
+            assumption: "an element Core3D maps through mapboxlib/MPBOX2 has one entry, k = 0, with its own box; \
+                         k = 1 is the tube entry mapboxlib/MPBXBR gives branch members and the BRAN",
+            inputs: "every element with an entry; k = 1 on branch members and BRAN",
+            evidence: ENCODING,
+        },
     },
     Rule {
         id: RuleId::SpamapFlags,
         name: "spamap.flags",
         governs: "the meaning of each Spatial_Flags bit",
-        status: unconfirmed("every entry", T3),
+        status: RuleStatus::Unconfirmed {
+            assumption: "bits 1, 2, 4 are three logical flags of maplib/MAPINS; dbboxlib/BOXELE sets bit OBST for \
+                         OBST 1 or 2 when mapboxlib/MPBOX finds a SITE, BLOCK, SSOWLD, HBLWLD or DDEP 1 above",
+            inputs: "every entry",
+            evidence: ENCODING,
+        },
     },
     Rule {
         id: RuleId::SpamapCoverage,
@@ -353,12 +368,6 @@ macro_rules! called_as_candidates {
 }
 
 called_as_candidates! {
-    Rounding => candidate::Rounding;
-    WordSign => candidate::WordSign;
-    ShortAxis => candidate::ShortAxis;
-    ZeroExtent => candidate::ZeroExtent;
-    Bucket => candidate::Bucket;
-    Key0 => candidate::Key0;
     EntriesK => candidate::EntriesK;
     Flags => candidate::Flags;
     Coverage => candidate::Coverage;
@@ -455,23 +464,116 @@ macro_rules! implementations {
     };
 }
 
+/// `spamap.table_shape`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableShape {
+    /// Page type 5, name hash 230902453, level, a 4-word key
+    /// `[Key0, refno word0, refno word1, k]` and a 7-word leaf value; an
+    /// internal slot is a key and the child's `(pgno, extno)`. core.dll's
+    /// type 14 table attribute (`sub_5AB91B0`) through its generic table code.
+    KeyedTable,
+}
+
+/// `spamap.table_header_rest`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableHeaderRest {
+    /// Words 3 to 5 of every page, leaf or internal: key width 4, value width
+    /// 7, and 1; word 6 the free words, page words − 7 on a new root
+    /// (core.dll `sub_5AFF6D0`).
+    KeyWidthValueWidthOne,
+}
+
+/// `spamap.word_sign`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WordSign {
+    /// [`crate::spatial::rules::SIGNED_WORDS`].
+    SignedWithinDatum,
+}
+
+/// `spamap.rounding`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rounding {
+    /// [`crate::spatial::rules::round_half_away_from_zero`].
+    HalfAwayFromZero,
+}
+
+/// `spamap.key0`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Key0 {
+    /// [`crate::spatial::rules::key0_by_mapky2`].
+    Mapky2,
+}
+
+/// `spamap.short_axis`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShortAxis {
+    /// [`crate::spatial::rules::least_axis_last_of_ties`].
+    LastOfTies,
+}
+
+/// `spamap.zero_extent`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ZeroExtent {
+    /// [`crate::spatial::rules::leave_zero_extent_to_the_bucket`].
+    ByBucketRule,
+}
+
+/// `spamap.bucket`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bucket {
+    /// [`crate::spatial::rules::bucket_by_mapkey`].
+    Mapkey,
+}
+
+impl Implementation<candidate::WordSign> for WordSign {
+    fn function(&self) -> candidate::WordSign {
+        match self {
+            WordSign::SignedWithinDatum => crate::spatial::rules::SIGNED_WORDS,
+        }
+    }
+}
+
+impl Implementation<candidate::Rounding> for Rounding {
+    fn function(&self) -> candidate::Rounding {
+        match self {
+            Rounding::HalfAwayFromZero => crate::spatial::rules::round_half_away_from_zero,
+        }
+    }
+}
+
+impl Implementation<candidate::Key0> for Key0 {
+    fn function(&self) -> candidate::Key0 {
+        match self {
+            Key0::Mapky2 => crate::spatial::rules::key0_by_mapky2,
+        }
+    }
+}
+
+impl Implementation<candidate::ShortAxis> for ShortAxis {
+    fn function(&self) -> candidate::ShortAxis {
+        match self {
+            ShortAxis::LastOfTies => crate::spatial::rules::least_axis_last_of_ties,
+        }
+    }
+}
+
+impl Implementation<candidate::ZeroExtent> for ZeroExtent {
+    fn function(&self) -> candidate::ZeroExtent {
+        match self {
+            ZeroExtent::ByBucketRule => crate::spatial::rules::leave_zero_extent_to_the_bucket,
+        }
+    }
+}
+
+impl Implementation<candidate::Bucket> for Bucket {
+    fn function(&self) -> candidate::Bucket {
+        match self {
+            Bucket::Mapkey => crate::spatial::rules::bucket_by_mapkey,
+        }
+    }
+}
+
 implementations! {
-    /// `spamap.table_shape`.
-    TableShape;
-    /// `spamap.table_header_rest`.
-    TableHeaderRest;
-    /// `spamap.word_sign`.
-    WordSign;
-    /// `spamap.rounding`.
-    Rounding;
-    /// `spamap.key0`.
-    Key0;
-    /// `spamap.short_axis`.
-    ShortAxis;
-    /// `spamap.zero_extent`.
-    ZeroExtent;
-    /// `spamap.bucket`.
-    Bucket;
     /// `spamap.entries_k`.
     EntriesK;
     /// `spamap.flags`.
@@ -540,8 +642,40 @@ pub struct RuleSet {
     pub(crate) bucket_persist: Slot<BucketPersist>,
 }
 
-/// What the evidence has confirmed. No rule is confirmed yet.
+/// What the evidence has confirmed.
 const CONFIRMED: RuleSet = RuleSet {
+    table_shape: Slot::Confirmed(TableShape::KeyedTable),
+    table_header_rest: Slot::Confirmed(TableHeaderRest::KeyWidthValueWidthOne),
+    word_sign: Slot::Confirmed(WordSign::SignedWithinDatum),
+    rounding: Slot::Confirmed(Rounding::HalfAwayFromZero),
+    key0: Slot::Confirmed(Key0::Mapky2),
+    short_axis: Slot::Confirmed(ShortAxis::LastOfTies),
+    zero_extent: Slot::Confirmed(ZeroExtent::ByBucketRule),
+    bucket: Slot::Confirmed(Bucket::Mapkey),
+    entries_k: Slot::Pending,
+    flags: Slot::Pending,
+    coverage: Slot::Pending,
+    recompute: Slot::Pending,
+    descendants_move: Slot::Pending,
+    descendants_pos: Slot::Pending,
+    descendants_ori: Slot::Pending,
+    delete_residue: Slot::Pending,
+    record_item: Slot::Pending,
+    ori_form: Slot::Pending,
+    compose: Slot::Pending,
+    box_aabb: Slot::Pending,
+    cyli_aabb: Slot::Pending,
+    degenerate: Slot::Pending,
+    arithmetic: Slot::Pending,
+    counter_semantics: Slot::Pending,
+    index_order: Slot::Pending,
+    bucket_collision: Slot::Pending,
+    bucket_persist: Slot::Pending,
+};
+
+static CONFIRMED_SET: RuleSet = CONFIRMED;
+
+const NOTHING_CONFIRMED: RuleSet = RuleSet {
     table_shape: Slot::Pending,
     table_header_rest: Slot::Pending,
     word_sign: Slot::Pending,
@@ -571,8 +705,6 @@ const CONFIRMED: RuleSet = RuleSet {
     bucket_persist: Slot::Pending,
 };
 
-static CONFIRMED_SET: RuleSet = CONFIRMED;
-
 // A slot filled in the confirmed set belongs to a rule RULES calls confirmed,
 // and the confirmed set holds no candidate.
 const _: () = {
@@ -600,12 +732,23 @@ impl RuleSet {
     /// for Codec_Check and tests, never for writing.
     #[doc(hidden)]
     pub fn candidates(pick: &CandidatePick) -> RuleSet {
+        Self::fill(CONFIRMED, pick)
+    }
+
+    /// The picked candidates alone, every other slot pending, confirmed ones
+    /// included — for a test that draws every rule (Property 6), never for
+    /// writing.
+    #[doc(hidden)]
+    pub fn candidates_alone(pick: &CandidatePick) -> RuleSet {
+        Self::fill(NOTHING_CONFIRMED, pick)
+    }
+
+    fn fill(mut set: RuleSet, pick: &CandidatePick) -> RuleSet {
         fn fill<T, C>(slot: &mut Slot<T, C>, candidate: Option<C>) {
             if let (Slot::Pending, Some(candidate)) = (&*slot, candidate) {
                 *slot = Slot::Candidate(candidate);
             }
         }
-        let mut set = CONFIRMED;
         let CandidatePick {
             rounding,
             word_sign,
@@ -775,15 +918,24 @@ mod tests {
     }
 
     #[test]
-    fn nothing_is_confirmed_before_its_evidence() {
+    fn the_confirmed_set_fills_exactly_the_rules_confirmed_by_evidence() {
         for id in RuleId::ALL {
-            assert_eq!(RuleSet::confirmed().state(id), SlotState::Pending, "{}", id.name());
-            assert!(!rule(id).status.is_confirmed(), "{}", id.name());
+            let filled = RuleSet::confirmed().state(id) == SlotState::Confirmed;
+            assert_eq!(filled, rule(id).status.is_confirmed(), "{}", id.name());
+            assert_ne!(RuleSet::confirmed().state(id), SlotState::Candidate, "{}", id.name());
         }
         assert_eq!(recompute_row(0, 0), Trigger::Unconfirmed);
         assert_eq!(member_order_row(0), Trigger::Unconfirmed);
         for kind in [DescendantKind::Move, DescendantKind::Pos, DescendantKind::Ori] {
             assert!(!descendants_included(kind, 1));
+        }
+    }
+
+    #[test]
+    fn candidates_alone_leave_every_unpicked_slot_pending() {
+        let alone = RuleSet::candidates_alone(&CandidatePick::default());
+        for id in RuleId::ALL {
+            assert_eq!(alone.state(id), SlotState::Pending, "{}", id.name());
         }
     }
 }
