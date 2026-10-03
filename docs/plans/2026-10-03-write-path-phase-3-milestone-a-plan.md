@@ -1,6 +1,6 @@
 # 计划：e3d-io 写路径 · 第三期 · 设计复核与里程碑 A（任务第 1–4 组）
 
-状态：**评审通过**（2026-10-03，Plannotator 门 `approved`，无批注 → Q1–Q6 全按推荐项）→ A0、A1 与 Q5 的顺手修已做，待提交
+状态：**评审通过**（2026-10-03，Plannotator 门 `approved`，无批注 → Q1–Q6 全按推荐项）→ 里程碑 A 进行中（A0、A1、A2 已落地，见 §5）
 日期：2026-10-03
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`，HEAD `3e16423`（领先 `github/write-path` 1 个提交）；工作树：`tasks.md` 有 1.1 的未提交改动，`.agents/`、`.kiro/skills/`、`.kiro/specs/e3d-studio-m1/`、`tasks.meta.json` 未跟踪
 依据：`.kiro/specs/write-path-phase-3/` 的 `requirements.md` / `design.md` / `tasks.md`（下称「需求」「设计」「任务」）；1.1 基线快照 `.agents/tasks/write-path-phase-3-milestone-a/baseline.md`
@@ -132,3 +132,5 @@ Spec_Ledger「基线数字」写「详见 `.agents/tasks/write-path-phase-3-mile
 - **A0（1.1 收尾，Q3）**：基线快照存为 `docs/evidence/2026-10-01-write-path-phase-3-baseline.md`（原始日志留本机）；Spec_Ledger「基线数字」改指它；`.gitignore` 加 `/.agents/tasks/` 与 `.kiro/specs/*/tasks.meta.json`。
 - **Q5 顺手修**：`tests/hunk_resolve_real.rs` 改用 `ReadOnlyEngine::open_at(AMS8000, 640)`，单跑通过。
 - **A1（1.2）**：`[dev-dependencies] proptest = "=1.11.0"`（crates.io 当日最新稳定版，MSRV 1.85；本机 rustc 1.100.0-nightly）；`Cargo.lock` 只新增 proptest 及其依赖，既有包版本不变。全套 `cargo test --no-fail-fast`：101 个测试二进制 + 1 个 Doc-tests，**627 / 0 / 30**，55 s——相对基线 626 / 1 / 30 只多出 Q5 修好的那一条。
+- **提交**：用户回「提交，后续步骤自动提交」→ 里程碑 A 余下各步改按 Q4 备选 B（自动提交、结束统一回报）。`e5729ae` 计划、`0a76cc8` 1.1 收尾、`1b9d1b5` `hunk_resolve_real`、`b2c675d` 1.2。
+- **A2（1.3，Q2）**：`tests/common/golden.rs`（键 = 测试 crate + 线程名 + 线程内序号；`DbCopy::of` 的调用点只进报错信息——**偏离设计**：8.10、11.8 会在被守的测试里加行，按行号成键会让编辑点以下的金样静默失配，design 与 tasks 1.3 已同步改）；`DbCopy` 加 `Drop` 与 `#[track_caller]`，源取 `copy_source`（快照优先）；金样另存源 SHA，漂移与字节不符分开报；只在录制或金样有该键时才求哈希。`tools/golden/snapshot.ps1` 已钉 `D:\e3dio-fixtures\phase3`（ams8000_0001 34 037 760 字节 `3CAB5D7D…E023`、ams5100_0001、ams251142_0001、TES023，见 `MANIFEST.tsv`）；`tools/golden/record.ps1`。自检 `tests/golden_fixture.rs` 3 条（键形、一字节之差与样本漂移分开报、只读 `*.json`），`--test-threads=1` 下线程名照样是测试名。全套 102 个测试二进制 **630 / 0 / 30**，37 s；clippy 63 warning / 0 error，与基线相同。

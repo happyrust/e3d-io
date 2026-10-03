@@ -11,6 +11,7 @@
 
 #![allow(dead_code)]
 
+pub mod golden;
 pub mod write_fixture;
 
 use std::path::Path;

@@ -3,14 +3,39 @@
 //! touch (`docs/plans/2026-09-20-dabacon-write-plan.md` §2 阶段 0, §3).
 //!
 //! The copy lives in a `tempfile::TempDir`, so it goes with the test whether
-//! the test passes or not. The installed samples are never written to.
+//! the test passes or not. The installed samples are never written to. When a
+//! copy is dropped its final file goes to [`golden`](super::golden).
 
 #![allow(dead_code)]
 
 use std::fs;
+use std::panic::Location;
 use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
+
+use super::golden;
+
+/// Where [`DbCopy::of`] takes a sample from when this directory holds it: a
+/// copy pinned by `tools/golden/snapshot.ps1`. E3D keeps saving onto the
+/// installed samples, and a golden hash only means something on the bytes it
+/// was recorded on. A sample the directory lacks is copied from where it is
+/// installed.
+pub const SNAPSHOT_DIR: &str = r"D:\e3dio-fixtures\phase3";
+
+/// Names another snapshot directory than [`SNAPSHOT_DIR`].
+pub const SNAPSHOT_ENV: &str = "E3DIO_WRITE_FIXTURES";
+
+/// The file `DbCopy::of(source)` copies.
+pub fn copy_source(source: &str) -> PathBuf {
+    let dir = std::env::var_os(SNAPSHOT_ENV).map(PathBuf::from).unwrap_or_else(|| PathBuf::from(SNAPSHOT_DIR));
+    let pinned = dir.join(Path::new(source).file_name().expect("sample has a file name"));
+    if pinned.is_file() {
+        pinned
+    } else {
+        PathBuf::from(source)
+    }
+}
 
 /// The main write fixture: the E3D 3.1 Marine sample design database. Its
 /// session number and page count are read at test time, never hard-coded —
@@ -40,30 +65,56 @@ pub struct DbCopy {
     pub path: PathBuf,
     /// The bytes as they were before any write, for the assertions below.
     pub original: Vec<u8>,
+    /// The file the copy was taken from: the pinned snapshot, or the sample.
+    pub source: PathBuf,
+    key: String,
+    made_at: &'static Location<'static>,
 }
 
 impl DbCopy {
+    #[track_caller]
     pub fn of(source: &str) -> DbCopy {
+        let made_at = Location::caller();
+        let key = golden::next_key();
+        let source = copy_source(source);
         let dir = tempfile::Builder::new()
             .prefix("e3d-io-write-")
             .tempdir()
             .expect("temp dir");
-        let name = Path::new(source)
+        let name = source
             .file_name()
             .expect("sample has a file name")
             .to_owned();
         let path = dir.path().join(name);
-        fs::copy(source, &path).expect("copy the sample database");
+        fs::copy(&source, &path).expect("copy the sample database");
         let original = fs::read(&path).expect("read the copy back");
         DbCopy {
             _dir: dir,
             path,
             original,
+            source,
+            key,
+            made_at,
         }
     }
 
     pub fn current_bytes(&self) -> Vec<u8> {
         fs::read(&self.path).expect("read the written copy")
+    }
+}
+
+impl Drop for DbCopy {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            return;
+        }
+        golden::finish(golden::Finished {
+            key: &self.key,
+            source: &self.source,
+            original: &self.original,
+            path: &self.path,
+            made_at: self.made_at,
+        });
     }
 }
 

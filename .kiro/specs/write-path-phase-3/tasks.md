@@ -27,8 +27,9 @@
     - 查当时 crates.io 上 `proptest` 的最新稳定版，在 `Cargo.toml` 的 `[dev-dependencies]` 以 `=x.y.z` 精确钉死，同步 `Cargo.lock`
     - proptest 的失败种子目录 `proptest-regressions/` 纳入版本管理，不写进 `.gitignore`
     - _Requirements: 2.5, 15.1_
-  - [~] 1.3 建 Golden 基础设施
-    - `tests/common/golden.rs`：`DbCopy`（`tests/common/write_fixture.rs`）的 `Drop` 对最终文件求 SHA-256；键 = 测试二进制 + 线程名 + `#[track_caller]` 记下的 `DbCopy::of` 调用点 + 线程内序号；金样中有该键即比对，不符则测试失败（线程已在 panic 时跳过）；在 `tests/common/mod.rs` 注册
+  - [x] 1.3 建 Golden 基础设施
+    - `tests/common/golden.rs`：`DbCopy`（`tests/common/write_fixture.rs`）的 `Drop` 对最终文件求 SHA-256；键 = 测试 crate + 线程名 + 线程内序号（`#[track_caller]` 记下的 `DbCopy::of` 调用点只进报错信息，见 design）；金样中有该键即比对，不符则测试失败（线程已在 panic 时跳过）；在 `tests/common/mod.rs` 注册
+    - 样本快照：`tools/golden/snapshot.ps1` 把写测试用的样本钉到 `D:\e3dio-fixtures\phase3`（附 `MANIFEST.tsv`），`DbCopy::of` 优先取快照；金样每条另存源样本 SHA-256，源哈希不符单独报「样本漂移」
     - `tools/golden/record.ps1`：连跑两遍写测试，剔除两遍不同的键，打印剔除项与原因，供记入 Spec_Ledger「Golden 剔除键」
     - _Requirements: 2.7, 12.8, 15.3_
   - [~] 1.4 在当前 HEAD 录 `tests/golden/off_compat.json`
