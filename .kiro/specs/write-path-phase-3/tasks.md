@@ -230,13 +230,13 @@
     - 建 `src/write/spamap/mod.rs`，在 `src/write/mod.rs` 注册
     - _Requirements: 7.13, 8.1, 8.6, 8.8_
   - [~] 8.4 实现 `SpatialStage::plan`：`src/write/spamap/plan.rs`
-    - Recompute_Set 按定义 ①–⑥ 求，只按本批结束状态；后代是否纳入只经 `core_rules::descendants_included`
+    - Recompute_Set 按定义 ①–⑦ 求，只按本批结束状态；后代是否纳入只经 `core_rules::descendants_included`；⑤ 的祖先重算属性按 `recompute_row`（扩到祖先 noun），成员次序按 `member_order_row`，⑦ 取 IMAP 3 元素的第一个 IMAP 不为 3 的祖先
     - 逐元素判存在、从 WORL 可达、属于 Geometric_Noun；可用 World_AABB 依次取调用方值 → Built_In_AABB → 无；经 SPAMAP_Codec 得 Target_Entries
     - 仅 Recompute_Set 非空时读上一会话表（全遍历并校验）得旧条目；编辑集 = 删 旧(RS) + 插 Target(RS)，并判定净编辑是否为空
     - 汇总 `MissingAabb`（refno、`given_as`、`类别:规则名`）：「要求」下拒写整批，「跳过」下列入 `skipped`；`UndecodableAttr`、`OutOfRange`、`MalformedTable` 在「要求」「跳过」下都拒写；给在 Recompute_Set 之外元素上的值列入 `unused_aabb`
-    - _Requirements: 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.13, 6.14, 6.15, 7.1, 7.2, 7.3, 7.4, 7.5, 7.11, 7.12, 7.13_
+    - _Requirements: 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.13, 6.14, 6.15, 7.1, 7.2, 7.3, 7.4, 7.5, 7.11, 7.12, 7.13, 7.14_
   - [ ]* 8.5 写 plan 模块内 proptest（`src/write/spamap/plan.rs` 的 `#[cfg(test)]`）
-    - 合成的 `SpatialState` 加替身编码器，对照按 Recompute_Set 定义 ①–⑥ 直译的参考实现
+    - 合成的 `SpatialState` 加替身编码器，对照按 Recompute_Set 定义 ①–⑦ 直译的参考实现；生成器含成员次序、祖先非几何重算属性、IMAP 3 成员三类改动
     - **Property 9: Recompute_Set 模型**（① 模块内层）
     - **Validates: Requirements 6.2, 6.3, 6.4, 6.13, 7.1, 7.2, 7.3, 7.4, 7.5, 7.9, 7.11, 8.2, 8.8**
   - [~] 8.6 实现 staging 挂点
@@ -485,6 +485,8 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | D7 | 未坐实规则在默认构建中不执行，按 D7 回退表处理 | `RuleSet::confirmed()` / `Pending` 槽、const 断言、`tests/core_rules_registry.rs` |
 | D8 | 与 E3D_Core 一致，只重算坐实会重算的后代 | `core_rules::descendants_included` |
 
+规格修订（2026-10-03，里程碑 D 收尾，`docs/plans/2026-10-03-write-path-phase-3-spec-revision-d.md`，Plannotator 22:35 `approved`、无批注 → Q1–Q4 全按推荐项）：Built_In_AABB 并入 IMAP 3 成员的框，成员清单 NBOX、NCYL、NCON、NPYR（需求 6 第 1、2、15 条，术语表）；重算属性与 noun 无关，Recompute_Set ②④ 加成员次序、⑤ 改为祖先任一重算属性、加 ⑦（IMAP 3 元素的改动记在第一个 IMAP 不为 3 的祖先上），需求 5 第 8 条、需求 7 第 4、6 条，新增需求 7 第 14 条。D1 不变（`BUILT_IN_NOUNS` 仍为 BOX、CYLI，成员清单另列）。
+
 ### 本期不做与触发条件
 
 每项触发条件按需求 16 第 9 条写成「谁 · 在哪里 · 看到什么」。
@@ -561,7 +563,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `spamap.flags` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-flags.md` | C2 | `MAPINS` 三个逻辑量按 1 / 2 / 4；`MPBOX` 上溯（DDEP 1、SITE / BLOCK / SSOWLD / HBLWLD 启用，WORL 不启用），不启用全 0；WBOX 时 OBST 1–3，否则 `BOXELE` OBST 1–2，IMAP 5 并入 IMAP 3 成员；box type 1 / 18 / 19 / 23 与分支树不说。坐实集 Corpus 判定 4 783 / 4 783、基线 402 / 402 |
 | `spamap.coverage` | 7.2 | 坐实 | `docs/evidence/2026-10-03-spamap-coverage.md` | C2 | 按元素三态：Core3D `MPBOX` / `MLSADD` 按 noun 的 IMAP（字典字段 847458）1、5 记，7 看 owner 的 IMAP 是否为 2，box type 1（`getBoxType`，SCTN / GENSEC / WLJOIN 除外）须 SPRE 非 0（`GTSTDT` → `MBXSTL` 失败 → `MAPREM`）；BRAN 与 HNGT 四个（`MPBXBR` 未读）、UDET、模板无 SPAMAP 的八个未坐实。Property 7 坐实集 40 556 / 40 556 判定无反例，`waiting` 2 060（BRAN 1 819、HANG 241） |
 | `spamap.recompute.<NOUN>` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 与 noun 无关：Core3D `VDESPT` 对字典 `DCHC` 非 0 的属性入队，core `PostSetAttribute` 不为 `WNOEVT` 属性发事件；`VDESRO` 入队被挪的成员。300 个 Geometric_Noun 模板 722 个属性中 176 个触发（`rules::RECOMPUTING`，`tests/spamap_recompute_real.rs` 逐 noun 打印并与 `attlib.dat` 核对）。E3D_Session 以 e3d-io 写的无条目元素区分触发与否：32 / 32（BOX 10、CYLI 8、CONE / DISH / PYRA 6、成员次序 8）。B8 那几处反例按此本应重算，归 D3 走会话链 |
-| `spamap.descendants.{move,pos,ori}` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 换 owner（`VDESIR`）与 POS / ORI 改动（`VDESPT`，DCHC 3）入队该元素，`MPBOX` 走整棵子树，各层都重算，不在 IMAP 0、BRAN、HNGT 之下继续（`rules::mpbox_walks_below`）。E3D_Session：move 4 / 4、POS 7 / 7、ORI 6 / 6（第 1、2 层，有无条目两种）。另见证据「规格外的发现」：owner 的 NUMB 等其他重算属性、容器 REORDER 同样整树重算，需求 7 第 4 条未收；用户定补进规格（D 收尾改 spec / design，走 Plannotator） |
+| `spamap.descendants.{move,pos,ori}` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 换 owner（`VDESIR`）与 POS / ORI 改动（`VDESPT`，DCHC 3）入队该元素，`MPBOX` 走整棵子树，各层都重算，不在 IMAP 0、BRAN、HNGT 之下继续（`rules::mpbox_walks_below`）。E3D_Session：move 4 / 4、POS 7 / 7、ORI 6 / 6（第 1、2 层，有无条目两种）。另见证据「规格外的发现」：owner 的 NUMB 等其他重算属性、容器 REORDER 同样整树重算——已由 2026-10-03 规格修订收进 Recompute_Set ②④⑤ 与需求 7 第 4 条（Plannotator 通过） |
 | `spamap.delete_residue` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 不留残留：删除那一会话中被删元素与其各层后代的条目都已删去（出处 ②，4 / 4；Core3D 删除路径只动队列，删键之处未读）。需求 5 第 9 条：删无条目 BOX、删其 owner 都能 `SAVEWORK`，无错误号 |
 | `spamap.record_item.<NOUN>` | 7.4 | 坐实 | `docs/evidence/2026-10-03-spamap-record-item.md` | C3 | 各 noun 相同：core `sub_5AB91B0` 类型 14 写条目时把 Key0 写进记录 `SPAMAP` 属性第 k 槽，新项整列先填 0x80000001；位置按模板（BOX implicit word 35、存储 2 字）。Corpus 25 517 / 25 517、基线 3 628 / 3 628 带且逐槽相符，46 个 noun 无例外（`tests/spamap_record_item_real.rs`） |
 | `aabb.ori_form` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① core `GTORI1`：R = Rz·Ry·Rx，`SINCOS` 在 0 / ±90 / ±180（`LREQ` 容差 0.0001）给精确值，其余 sin / cos(角 / 57.29577951308232)（C4 读）；FRMC 为 0 的 noun 经 `GTDORI` 同到 `GTORI1`；`rules::ori_by_gtori1`；Built_In_AABB 1 590 / 1 590 |

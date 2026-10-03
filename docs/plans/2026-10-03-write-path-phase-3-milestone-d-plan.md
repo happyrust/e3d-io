@@ -147,3 +147,7 @@ C 坐实了编码、覆盖、记录项与 `aabb.degenerate`。剩下的规则都
 ### D4（2026-10-03 22:1x，7.6 的 4.20）
 
 重跑 D1 自检 `selfcheck_e3dio_box_xlen.pml`（PASS：e3d-io 会话 647 插 BOX `24384/26484`，E3D 会话 648 改 XLEN 300 → 301，条目 appeared，整表 3 628 → 3 629），把副本 `ams8000_0001` 钉为 `D:\e3dio-fixtures\phase3\spamap-4-20\ams8000_0001`（SHA-256 `F2BB27BD…33B2`，`MANIFEST.tsv` 记来历）。`tests/common/corpus.rs` 加 `SPAMAP_4_20` / `_SESSION` / `_SHA256`；`tests/spamap_codec_real.rs` 加 `requirement_4_20s_box_encodes_to_exactly_its_entry`：核夹具 SHA-256，经 `ReadState` 读会话 648，坐实集下 World_AABB 为 [849.5, 1800, 2750]–[1150.5, 2200, 3250]，codec 恰得 `[300008495, 24384, 26484, 0]` / `[8495, 18000, 27500, 11505, 22000, 32500, 2]`，与盘上所存相同；0 失败、未跳过。需求 4 第 20 条要求的「其余属性」记在 `docs/evidence/2026-10-03-spamap-aabb-members.md` 的「需求 4 第 20 条的输入」一节。tasks 7.6 记 4.20 已做，6.17 仍待 8.7。
+
+### 规格修订（2026-10-03 22:19–22:4x）
+
+修订稿 `docs/plans/2026-10-03-write-path-phase-3-spec-revision-d.md`，Plannotator 22:35 `approved`（`.agents/tasks/write-path-phase-3-milestone-d/plannotator-result-spec.json`），无批注 → Q1–Q4 全按推荐项，已照稿改入：requirements 术语表「重算属性」「Built_In_AABB」与 Recompute_Set（②④ 加成员次序、⑤ 改为祖先任一重算属性、加 ⑦）、需求 5 第 8 条、需求 6 第 1、2、15 条、需求 7 第 4、6 条、新增第 14 条；design 规则表（`aabb.cone` / `aabb.pyramid` / `aabb.members`）、Built_In_AABB 节（`members`、`BUILT_IN_MEMBER_NOUNS`、`MissingInput`）、SPAMAP_Writer 节与 Property 9 测试手段改按 ①–⑦；tasks 8.4、8.5 与 Ledger「决策」「spamap.descendants」。写侧实现在第 8 组。

@@ -92,8 +92,8 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 - **Spatial_Flags**：SPAMAP_Entry 值的第 7 字。
 - **Geometric_Noun**：E3D_Core 为其元素维护 SPAMAP_Entry 的 noun 集合。
 - **SPAMAP_Recompute**：E3D_Core 删去一个元素的全部旧 SPAMAP_Entry、并按改动后状态登记新条目。以 E3D_Session 实测时，用 SPAMAP_Reader 比较改动前的最新会话与改动后 `SAVEWORK` 所得会话中该元素的条目：条目改变、或原无条目的元素出现条目，判为发生；改动使 World_AABB 改变而条目逐字不变、或原无条目的元素仍无条目，判为未发生；其余观测不作结论。
-- **重算属性**：需求 5 第 2 条重算表「自身」一类中取值「触发」的属性；取值「未坐实」的行按 D7 处理。
-- **Built_In_AABB**：e3d-io 自行计算 World_AABB 的 noun 集合（D1 推荐默认：BOX、CYLI）。
+- **重算属性**：需求 5 第 2 条重算表「自身」一类中取值「触发」的属性；取值「未坐实」的行按 D7 处理。E3D_Core 按属性字典判定、与 noun 无关（`spamap.recompute`：DCHC 不为 0 且不带 WNOEVT），所以对不属 Geometric_Noun 的祖先（EQUI、SUBE、ZONE 等）同样适用。
+- **Built_In_AABB**：e3d-io 自行计算 World_AABB 的 noun 集合（D1 推荐默认：BOX、CYLI）。所算的 World_AABB 含该元素 IMAP 3 成员的框（`aabb.members`），成员只算 Built_In_AABB 成员清单中的 noun（NBOX、NCYL、NCON、NPYR）；有清单外的 IMAP 3 成员时没有自算值（需求 6 第 15 条）。
 - **Spatial_Policy**：Transaction 对「Geometric_Noun 元素无 World_AABB」的处理：「要求」（默认，拒写整批）、「跳过」（该元素不写条目并报告）、「关闭」（整批不维护 SPAMAP，= 0.4.0 行为）。
 - **SPAMAP_Reader**：读侧的 SPAMAP 表读取器。
 - **SPAMAP_Codec**：由元素与 World_AABB 得出 SPAMAP_Entry 集合（键、值、条目数、k）的编码。
@@ -107,7 +107,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 - **上一会话**：新会话直接写在其上的会话：非合并提交时即 Transaction 的 base 会话；合并提交时为 Merge_Latest。
 - **本批结束状态**：本批全部写入按调用顺序应用于上一会话之后——合并提交时即 Merged_State——各元素的存在与否、属性值与 owner。
 - **从 WORL 可达**：在本批结束状态下由该元素沿 owner 链逐级上溯，每一级的 refno 都在新会话索引中，且止于 WORL。
-- **Recompute_Set**：一个批次中 SPAMAP_Writer 须重定条目的元素集合，在本批结束状态上求，插入元素按最终写入的 refno 计。Spatial_Policy 为「关闭」时为空集；否则为下列元素之并：① 本批插入的每个 Geometric_Noun 元素；② 上一会话已有、至少一个重算属性在本批结束状态的值与上一会话不同的每个 Geometric_Noun 元素；③ 上一会话已有、本批结束状态的 owner 与上一会话不同的每个 Geometric_Noun 元素；④ 上一会话已有、owner 在本批结束状态与上一会话不同的元素，其本批结束状态下的 Geometric_Noun 后代中需求 5 第 3 条坐实 E3D_Core 会随之重算的每一个；⑤ 上一会话已有、POS 或 ORI 在本批结束状态与上一会话不同的元素，其本批结束状态下的 Geometric_Noun 后代中需求 5 第 8 条坐实 E3D_Core 会随之重算的每一个（④⑤ 含合并时 Merge_Latest 此间挂到其下的元素，不含此间删去或移走的）；⑥ 本批删除的每个元素（不论 noun，含 Transaction 随之删除的后代），以及本批结束状态下 owner 链经过这些元素的每个元素。
+- **Recompute_Set**：一个批次中 SPAMAP_Writer 须重定条目的元素集合，在本批结束状态上求，插入元素按最终写入的 refno 计。Spatial_Policy 为「关闭」时为空集；否则为下列元素之并：① 本批插入的每个 Geometric_Noun 元素；② 上一会话已有、至少一个重算属性在本批结束状态的值与上一会话不同，或在 owner 成员表中的次序在本批改变的每个 Geometric_Noun 元素；③ 上一会话已有、本批结束状态的 owner 与上一会话不同的每个 Geometric_Noun 元素；④ 上一会话已有、owner 在本批结束状态与上一会话不同，或在 owner 成员表中的次序在本批改变的元素，其本批结束状态下的 Geometric_Noun 后代中需求 5 第 3 条坐实 E3D_Core 会随之重算的每一个；⑤ 上一会话已有、至少一个重算属性（不论 noun；POS、ORI 在内）在本批结束状态与上一会话不同的元素，其本批结束状态下的 Geometric_Noun 后代中需求 5 第 8 条坐实 E3D_Core 会随之重算的每一个（④⑤ 含合并时 Merge_Latest 此间挂到其下的元素，不含此间删去或移走的）；⑥ 本批删除的每个元素（不论 noun，含 Transaction 随之删除的后代），以及本批结束状态下 owner 链经过这些元素的每个元素；⑦ 本批插入、删除、换了 owner、改了成员次序或至少一个重算属性的每个 IMAP 3 元素，其第一个 IMAP 不为 3 的祖先（插入与改动按本批结束状态，删除与换出按上一会话），该祖先属 Geometric_Noun 时（E3D_Core 的 `MLSADD` 与 `MPDEL` 把 IMAP 3 元素的改动记在这个祖先上，其框按 `aabb.members` 并入成员）。
 - **Target_Entries**：Recompute_Set 中一个元素在新会话 SPAMAP 表中应有的条目：该元素在本批结束状态存在、从 WORL 可达、noun 属于 Geometric_Noun 且有 World_AABB（需求 6）时，为 SPAMAP_Codec 由其本批结束状态与该 World_AABB 算出的全部条目（条数与 k 按需求 4）；否则为空。
 - **Write_CLI**：`e3d-write apply` 批量指令 CLI。
 - **TTY_Gate**：`tools/e3d/write_gate.ps1`（真 E3D 3.1 Design TTY，现 Q0 + 28 问）。
@@ -235,7 +235,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 5. THE Evidence_Doc SHALL 逐 Geometric_Noun 坐实：E3D_Core 登记或重算该 noun 元素的条目时，是否在其记录中写入 SPAMAP_Record_Item。若写入，还须写明该项的类型码、字数、数据字布局、位置（implicit 区的 word offset，或 explicit 流中的次序），以及其数据字与该元素各条目键字（Key0、k）的对应关系。
 6. IF Evidence_Doc 坐实 E3D_Core 为某 Geometric_Noun 的元素写入 SPAMAP_Record_Item，THEN THE SPAMAP_Writer SHALL 在登记或重算该 noun 元素条目的同一会话中写入其 SPAMAP_Record_Item，且所写的项与 E3D_Core 对同一元素状态写出的项逐字相同（核对集：Corpus 中全部带该项的 E3D_Authored_Element，0 反例）。
 7. FOR ALL Corpus 中的 E3D_Authored_Element，「该元素在所在库最新会话的 SPAMAP 表中有至少 1 条 SPAMAP_Entry」SHALL 当且仅当「该元素满足第 1 条坐实的判定条件」（对账性质；由仓内命令逐元素核对，每个 Corpus 库 0 反例；`ams8000_0001` 中 EQUI / ZONE / SITE / GROU / FIXING 的元素无一满足该条件）。
-8. THE Evidence_Doc SHALL 坐实：E3D_Core 改变一个元素的 POS 或 ORI 时，是否在该改动所在会话中对该元素的 Geometric_Noun 后代做 SPAMAP_Recompute。须按改动的属性（POS、ORI）与层（直接成员、第 2 层及更深的后代）分别写明。
+8. THE Evidence_Doc SHALL 坐实：E3D_Core 改变一个元素的 POS、ORI 或其他重算属性时，是否在该改动所在会话中对该元素的 Geometric_Noun 后代做 SPAMAP_Recompute。须按改动的属性（POS、ORI，其他重算属性至少一例）与层（直接成员、第 2 层及更深的后代）分别写明。
 9. THE Evidence_Doc SHALL 坐实：E3D_Session 删除一个没有 SPAMAP_Entry 的 Geometric_Noun 元素时，该删除能否不报错地经 `SAVEWORK` 提交；报错时记下 E3D 给出的错误号。被测元素如 0.4.0 写出的 BOX，直接删除它与删除它的 owner 各测一次。
 10. THE Evidence_Doc SHALL（承第 1 条）按第 1 条坐实的判定条件，对 Corpus 各库所用 noun 模板中的全部 noun 列出 Geometric_Noun 清单，并逐 noun 注明 Corpus 中该 noun 的 E3D_Authored_Element 个数。个数为 0 的 noun 标「无语料实例」，其归属只能以 E3D_IDB 坐实。
 11. THE Evidence_Doc SHALL（承第 5 条）逐 Geometric_Noun 给出 Corpus 中该 noun 有条目的 E3D_Authored_Element 里带与不带 SPAMAP_Record_Item 的个数。
@@ -246,8 +246,8 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 
 #### Acceptance Criteria
 
-1. THE Evidence_Doc SHALL 坐实 E3D_Core 由 POS / ORI 沿 owner 链复合世界系变换的方法（ORI 的存储形、复合顺序，以及 owner 链上哪些 noun 的 POS / ORI 参与复合，如 ZONE、EQUI、SUBE），每个 Built_In_AABB noun 由自身属性得出包围盒的方法（解析解、局部外包盒变换或离散面），以及尺寸属性为 0 或负时 E3D_Core 的处理。
-2. WHERE 元素的 noun 属于 Built_In_AABB（D1），THE Transaction SHALL 由该元素在本批结束状态中的属性与 owner 链，按第 1 条坐实的方法算出 World_AABB，无需调用方输入。
+1. THE Evidence_Doc SHALL 坐实 E3D_Core 由 POS / ORI 沿 owner 链复合世界系变换的方法（ORI 的存储形、复合顺序，以及 owner 链上哪些 noun 的 POS / ORI 参与复合，如 ZONE、EQUI、SUBE），每个 Built_In_AABB noun 由自身属性得出包围盒的方法（解析解、局部外包盒变换或离散面），E3D_Core 并入元素框的成员（哪些 IMAP、在什么坐标系）及 Built_In_AABB 成员清单中每个 noun 的包围盒方法，以及尺寸属性为 0 或负时 E3D_Core 的处理。
+2. WHERE 元素的 noun 属于 Built_In_AABB（D1），THE Transaction SHALL 由该元素及其 IMAP 3 成员在本批结束状态中的属性与 owner 链，按第 1 条坐实的方法算出 World_AABB，无需调用方输入。
 3. THE Transaction SHALL 接受调用方为任一 Geometric_Noun 元素给出的 World_AABB（世界系毫米 `[minx, miny, minz, maxx, maxy, maxz]`）。
 4. WHEN 调用方为一个 Built_In_AABB 元素给出 World_AABB，THE Transaction SHALL 使用调用方给出的值、不用第 2 条的自算值（该值在 Merge_Commit 中失效时按需求 8 第 6 条）。
 5. IF Spatial_Policy 为「要求」，且 Recompute_Set 中有在本批结束状态存在、从 WORL 可达、noun 属于 Geometric_Noun 而没有可用 World_AABB 的元素，THEN THE Transaction SHALL 拒绝整批提交，文件逐字节不变，错误中逐个列出这些元素的 refno（插入元素按调用方所给 refno，Merge_Commit 中重铸的另附新号）及原因：没有调用方给值且 noun 不属于 Built_In_AABB；调用方给值按需求 8 第 6 条失效；须用到未坐实规则（第 14 条，附规则名）；条目须用到无法取得的输入（第 15 条）（D3；相对 0.4.0 是行为变化，见需求 14 第 4 条）。
@@ -260,7 +260,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 12. IF 调用方为 noun 不属于 Geometric_Noun 的元素给出 World_AABB，THEN THE Transaction SHALL 在该次调用返回错误（指明 refno 与 noun），草稿不变。
 13. WHEN 调用方为一个元素给出了 World_AABB，而该元素不属于 Recompute_Set，或在本批结束状态不存在、从 WORL 不可达，THE Transaction SHALL 在提交报告中把该 refno 列为「未使用的 World_AABB」，且不因此改动该元素的条目。
 14. WHERE 构建为发布提交的默认构建，IF 确定一个元素的 SPAMAP_Entry 须用到 Evidence_Doc 标为「未坐实」的规则（第 2 条自算所依的规则，如尺寸为 0 或负的 BOX、某种 ORI 存储形、owner 链中某类 noun 的位姿；或 SPAMAP_Codec 按需求 4 第 19 条标明的规则），THEN THE Transaction SHALL 视该元素没有可用 World_AABB（需求 2 第 6 条、D7），第 5、6 条为它列出的原因附该规则名。
-15. IF 按需求 4 第 7 条，一个元素的条目须用到既非调用方给出、也不能由第 2 条自算的输入（如 k ≥ 1 条目的值字来源；调用方每元素只给一个 World_AABB），THEN THE Transaction SHALL 视该元素没有可用 World_AABB，第 5、6 条为它列出的原因注明所缺的输入。
+15. IF 按需求 4 第 7 条，一个元素的条目须用到既非调用方给出、也不能由第 2 条自算的输入（如 k ≥ 1 条目的值字来源；调用方每元素只给一个 World_AABB；Built_In_AABB 元素有 noun 在成员清单之外的 IMAP 3 成员时，该成员的框），THEN THE Transaction SHALL 视该元素没有可用 World_AABB，第 5、6 条为它列出的原因注明所缺的输入。
 16. IF Evidence_Doc 以 E3D_IDB 坐实 E3D_Core 计算 World_AABB 的算术使第 9 条的逐字相同不可复现（如单精度浮点累积误差），THEN THE Spec_Ledger SHALL 记录第 9 条改用的判据（涉及的值字及每字容差，以 0.1 mm 计）与其 Evidence_Doc 出处，第 9 条按该判据核对。
 17. WHEN 本批插入一个 `Q POS WRT /*` 为 E 1000 N 2000 U 3000、世界朝向为缺省（Y is N and Z is U）的 301 × 400 × 500 BOX 且调用方未为它给出 World_AABB，THE Transaction SHALL 为它算出 World_AABB x ∈ [849.5, 1150.5]、y ∈ [1800, 2200]、z ∈ [2750, 3250] mm（即需求 4 第 20 条条目值的前 6 字）。
 
@@ -273,9 +273,9 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 1. WHERE Spatial_Policy 为「要求」或「跳过」，WHEN Transaction 提交的批次插入一个 Geometric_Noun 元素，THE SPAMAP_Writer SHALL 使新会话 SPAMAP 表中键 refno 为该元素的条目恰为它的 Target_Entries（有 World_AABB 且从 WORL 可达时，即 SPAMAP_Codec 为它算出的全部条目，条数与 k 按需求 4）。
 2. WHERE Spatial_Policy 为「要求」或「跳过」，WHEN Transaction 提交的批次使一个上一会话已有的 Geometric_Noun 元素至少一个重算属性（需求 5 第 2 条为该 noun 列出的属性全集）在本批结束状态的值与上一会话不同，THE SPAMAP_Writer SHALL 使新会话表中键 refno 为该元素的条目恰为它的 Target_Entries：旧条目不论条数与 k 一律不留，新旧条目键相同而值不同时存新值，上一会话表中该元素本无条目（如 0.4.0 写的 BOX）时照样登记。
 3. WHERE Spatial_Policy 为「要求」或「跳过」，WHEN Transaction 提交的批次使一个上一会话已有的元素在本批结束状态的 owner 与上一会话不同（`move_to`），THE SPAMAP_Writer SHALL 使该元素（noun 属于 Geometric_Noun 时）以及需求 5 第 3 条坐实 E3D_Core 在 owner 改变时会重算的它的每个 Geometric_Noun 后代，在新会话表中的条目恰为各自的 Target_Entries。
-4. WHERE Spatial_Policy 为「要求」或「跳过」，WHEN Transaction 提交的批次使一个上一会话已有的元素的 POS 或 ORI 在本批结束状态的值与上一会话不同，THE SPAMAP_Writer SHALL 使需求 5 第 8 条坐实 E3D_Core 在祖先 POS / ORI 改变时会重算的它的每个 Geometric_Noun 后代，在新会话表中的条目恰为各自的 Target_Entries（该元素自身的条目按第 2 条）。
+4. WHERE Spatial_Policy 为「要求」或「跳过」，WHEN Transaction 提交的批次使一个上一会话已有的元素至少一个重算属性（不论 noun；POS、ORI 在内）在本批结束状态的值与上一会话不同，或使它在 owner 成员表中的次序改变（`reorder`），THE SPAMAP_Writer SHALL 使需求 5 第 3、8 条坐实 E3D_Core 会随之重算的它的每个 Geometric_Noun 后代，在新会话表中的条目恰为各自的 Target_Entries（该元素自身的条目按第 2 条）。
 5. WHERE Spatial_Policy 为「要求」或「跳过」，WHEN Transaction 提交的批次删除了元素，THE SPAMAP_Writer SHALL 使新会话表中不留键 refno 为下列元素的任何条目：本批删除的每个元素（不论 noun，含 Transaction 随之删除的后代）；本批结束状态下 owner 链经过被删元素的每个元素（如被删 ZONE 下的 BOX）。
-6. WHEN Transaction 提交一个 SPAMAP 净编辑为空的批次（即按第 9 条得出的新表与上一会话的表逐条相同，包括：Spatial_Policy 为「关闭」；Recompute_Set 为空，如一批只含 `reorder`、引用表增删、既不在需求 5 第 2 条属性全集内也不是 POS / ORI 的属性改动；Recompute_Set 中每个元素的 Target_Entries 与其旧条目逐字相同），THE SPAMAP_Writer SHALL 使新会话表目录中的 SPAMAP 项与上一会话相同（有无、根页号与 ext 均同），且本会话追加的页中没有页头为页类型 5、名 hash 230902453 的页。
+6. WHEN Transaction 提交一个 SPAMAP 净编辑为空的批次（即按第 9 条得出的新表与上一会话的表逐条相同，包括：Spatial_Policy 为「关闭」；Recompute_Set 为空，如一批只含引用表增删、不是任何元素重算属性的属性改动；Recompute_Set 中每个元素的 Target_Entries 与其旧条目逐字相同），THE SPAMAP_Writer SHALL 使新会话表目录中的 SPAMAP 项与上一会话相同（有无、根页号与 ext 均同），且本会话追加的页中没有页头为页类型 5、名 hash 230902453 的页。
 7. WHEN Transaction 提交一个 SPAMAP 净编辑非空的批次，THE SPAMAP_Writer SHALL 以写时复制方式写新会话的 SPAMAP 表：上一会话 SPAMAP 表的每一页逐字节不变；新会话 SPAMAP 表中不属于上一会话 SPAMAP 表的每一页，页号都大于上一会话最后一页的页号；`stage` 之后、写 page 0 之前（`StagedSession` 既未 commit 也未 rollback），SPAMAP_Reader 读文件最新会话所得仍是上一会话的 SPAMAP 表（page 0 的 `LSPGNO` 仍是唯一提交点）。
 8. IF 上一会话的表目录没有 SPAMAP，而本批 Recompute_Set 的 Target_Entries 合计至少一条，THEN THE SPAMAP_Writer SHALL 按 E3D_Core 建表的页形（页类型 5、名 hash 230902453、键宽 4、叶值宽 7，其余页头字按 Evidence_Doc 所记）新建 SPAMAP 表，并在新会话表目录中新增一项名 hash 为 230902453、指向该表根页的表项（表目录已无空位时按第 12 条）。
 9. FOR ALL 经 Transaction 成功提交的批次（insert / update / set / rename / move_to / reorder / 引用表增删 / delete 的任意组合，含同一元素多次写入、删除非几何祖先、上一会话缺条目的元素；Spatial_Policy 取三种之一），SPAMAP_Reader 按键序读回的新会话 SPAMAP 条目序列 SHALL 等于「上一会话表中键 refno 不属于 Recompute_Set 的条目」与「Recompute_Set 中各元素的 Target_Entries」之并按同一键序排列的结果（模型对照性质）。
@@ -283,6 +283,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 11. WHERE Spatial_Policy 为「跳过」，IF Recompute_Set 中一个在本批结束状态存在且从 WORL 可达的 Geometric_Noun 元素没有 World_AABB，THEN THE SPAMAP_Writer SHALL 删去键 refno 为该元素的全部旧条目，且不为它登记条目（D3）。
 12. IF 本批 Recompute_Set 非空，且出现下列任一情形：SPAMAP_Writer 为本批读取的上一会话 SPAMAP 页（至少含根页）被 SPAMAP_Reader 判为不合规（需求 3）；SPAMAP_Codec 因坐标越界拒绝 Recompute_Set 中的一个元素（需求 4）；按第 8 条建表时会话页表目录已无空位，THEN THE Transaction SHALL 拒绝整批提交且文件逐字节不变，错误中指明所遇情形及涉及的页号、refno 或表目录的表数与容量（Spatial_Policy 为「跳过」时亦然）。
 13. WHEN Transaction 提交的批次对同一元素有多次写入（多次 update / set、多次 move_to、update 或 move_to 之后 delete），THE SPAMAP_Writer SHALL 写出与「对该元素只作一次、直达其本批结束状态的写入」逐条相同的新会话 SPAMAP 表，表中不含由中间状态算出的条目。
+14. WHERE Spatial_Policy 为「要求」或「跳过」，WHEN Transaction 提交的批次插入、删除、改动、挪动或重排一个 IMAP 3 元素，THE SPAMAP_Writer SHALL 使 Recompute_Set ⑦ 所指的祖先在新会话表中的条目恰为它的 Target_Entries。
 
 ### Requirement 8: 合并与重铸下的 SPAMAP
 

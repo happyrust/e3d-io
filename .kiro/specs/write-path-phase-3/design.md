@@ -53,7 +53,7 @@ flowchart TD
   A["Transaction::stage：resolve_members；合并时 remint_taken_refnos"] --> B["原语 stage 的 crate 私有入口，带 SpatialStage"]
   B --> C["记录 · 成员 · 索引 · NAME · claim · TYPEX · 反向表编辑定稿<br/>合并时在三方合并之后"]
   C --> D["EndState = 上一会话 ⊕ 定稿记录<br/>即本批结束状态；合并时即 Merged_State"]
-  D --> E["Recompute_Set：定义中的 ①–⑥"]
+  D --> E["Recompute_Set：定义中的 ①–⑦"]
   E --> F["逐元素：存在且从 WORL 可达？属于 Geometric_Noun？<br/>可用 World_AABB：调用方值 → Built_In_AABB → 无"]
   F --> G["SPAMAP_Codec → Target_Entries<br/>缺值按 Spatial_Policy 处理；越界 / 属性解码失败直接拒写"]
   G --> H["读上一会话 SPAMAP：全遍历并校验，得旧条目<br/>编辑集 = 删 旧(RS) + 插 Target(RS)"]
@@ -185,7 +185,10 @@ pub fn descendants_included(kind: DescendantKind, depth: u32) -> bool;  // depth
 | `spamap.delete_residue` | 删除后后代条目是否残留（写侧按需求 7 第 5 条一律删去） | 需求 5 第 4 条 |
 | `spamap.record_item.<NOUN>` | 是否写 SPAMAP_Record_Item，以及它的布局 | 需求 5 第 5、6 条 |
 | `aabb.ori_form`、`aabb.compose` | ORI 的存储形；复合顺序与参与复合的 owner noun | 需求 6 第 1 条 |
-| `aabb.box`、`aabb.cyli`、`aabb.degenerate` | 由自身属性得包围盒的方法；尺寸为 0 或负时的处理 | 需求 6 第 1 条 |
+| `aabb.box`、`aabb.cyli` | BOX 与 NBOX、CYLI 与 NCYL 由自身属性得包围盒的方法 | 需求 6 第 1 条 |
+| `aabb.cone`、`aabb.pyramid` | 成员 NCON、NPYR 由自身属性得包围盒的方法 | 需求 6 第 1 条 |
+| `aabb.members` | IMAP 5 元素并入哪些成员的框（IMAP 3），成员框在什么坐标系里算 | 需求 6 第 1、2 条 |
+| `aabb.degenerate` | 尺寸小于 0.5 mm（含 0 与负）时的处理 | 需求 6 第 1 条 |
 | `aabb.arithmetic` | 算术精度；不能逐字复现时改用的判据 | 需求 6 第 9、16 条 |
 | `alloc.counter_semantics` | Counter_Semantics | 需求 11 第 7、8 条 |
 | `alloc.index_order` | 索引键是否按 (word0, word1) 排列，以及比较方式 | 需求 11 第 10 条 |
@@ -216,6 +219,7 @@ pub trait SpatialState {                          // 一份元素状态的只读
     fn noun(&self, r: RefNo) -> Option<u32>;
     fn owner(&self, r: RefNo) -> Option<RefNo>;
     fn attr(&self, r: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr>; // 读写两侧共用的解码值
+    fn members(&self, r: RefNo) -> Option<Vec<RefNo>>;   // 缺省 None；`aabb.members` 与 flags 要列成员
 }
 pub struct WorldFrame { pub rotation: [[f64; 3]; 3], pub origin_mm: [f64; 3] }  // rotation 的列 = 自身三轴在世界系中
 pub struct Link { pub refno: RefNo, pub noun: u32, pub pos_mm: Option<[f64; 3]>, pub rotation: Option<[[f64; 3]; 3]> }
@@ -224,18 +228,21 @@ pub trait FrameComposer {                         // 可替换：ORI 存储形�
     fn world_frame(&self, s: &dyn SpatialState, r: RefNo) -> Result<FrameOutcome, UndecodableAttr>;
 }
 pub const BUILT_IN_NOUNS: &[&str] = &["BOX", "CYLI"];  // D1；备选 A 置空，备选 B 在此扩充
+pub const BUILT_IN_MEMBER_NOUNS: &[&str] = &["NBOX", "NCYL", "NCON", "NPYR"];  // 并入框的 IMAP 3 成员；不算 D1 的扩充
 pub struct BuiltInAabb<'r> { rules: &'r RuleSet, composer: &'r dyn FrameComposer }
 impl BuiltInAabb<'_> {
     pub fn compute(&self, s: &dyn SpatialState, r: RefNo) -> Result<AabbOutcome, UndecodableAttr>;
 }
-pub enum AabbOutcome { Aabb(WorldAabb), NeedsUnconfirmed(Vec<RuleId>), NotBuiltIn, NoWorld }
+pub enum AabbOutcome { Aabb(WorldAabb), NeedsUnconfirmed(Vec<RuleId>), MissingInput(&'static str), NotBuiltIn, NoWorld }
+// MissingInput：清单外的 IMAP 3 成员、UDET 的 IMAP、列不出成员（需求 6 第 15 条）
 ```
 
-（里程碑 B 计划 §6 B6：`aabb.*` 六条规则同 codec 规则一样有候选函数类型——`OriForm`、`Compose(&[Link])`、`BoxAabb`、`CyliAabb`、`Degenerate`、`Arithmetic`；所需属性〔自身尺寸、链上每一级的 POS / ORI〕在问任何规则之前全部读完，解码不了即 `UndecodableAttr`，与规则状态无关；`aabb.degenerate` 只在某个尺寸 ≤ 0 时才查。）
+（里程碑 B 计划 §6 B6：`aabb.*` 六条规则同 codec 规则一样有候选函数类型——`OriForm`、`Compose(&[Link])`、`BoxAabb`、`CyliAabb`、`Degenerate`、`Arithmetic`；所需属性〔自身尺寸、链上每一级的 POS / ORI，以及成员的尺寸与 POS / ORI〕在问任何规则之前全部读完，解码不了即 `UndecodableAttr`，与规则状态无关；`aabb.degenerate` 只在某个尺寸小于 0.5 mm 时才查。里程碑 D 的 D3 加了 `aabb.cone`、`aabb.pyramid`、`aabb.members` 三条，九条全部坐实。）
 
 - `SpatialState` 有两份实现：读侧的 `ReadState`（`src/spatial/state.rs`，按会话读记录，供 Codec_Check、Q13g 与需求 6 第 9 条用）和写侧的 `EndState`。同一套 Codec / AABB 代码先在语料上核对，再用于写侧。
 - 默认复合器 `ChainComposer`：沿 owner 链上溯到 WORL，对 `aabb.compose` 列出的 noun 取 POS / ORI 复合；ORI 按 `aabb.ori_form` 解码。两条规则任一为 `Pending` 时，返回 `NeedsUnconfirmed`。
-- BOX 用 XLEN / YLEN / ZLEN，CYLI 用 DIAM / HEIG。用解析解、局部外包盒变换还是离散面，由 `aabb.box` / `aabb.cyli` 定；尺寸为 0 或负时走 `aabb.degenerate`。
+- BOX 用 XLEN / YLEN / ZLEN，CYLI 用 DIAM / HEIG。用解析解、局部外包盒变换还是离散面，由 `aabb.box` / `aabb.cyli` 定；尺寸小于 0.5 mm 时走 `aabb.degenerate`（2026-10-03 坐实，`docs/evidence/2026-10-03-spamap-aabb.md`）。
+- 成员（2026-10-03 坐实，`docs/evidence/2026-10-03-spamap-aabb-members.md`）：元素有成员时查 `aabb.members`——IMAP 5 的元素（BOX、CYLI）把每个 IMAP 3 成员的框按轴并进自己的框，成员系为元素的世界系接成员自身的 POS / ORI（Core3D `MPBOX2`）。成员框按 `BUILT_IN_MEMBER_NOUNS` 计：NBOX 走 `aabb.box`、NCYL 走 `aabb.cyli`、NCON 走 `aabb.cone`、NPYR 走 `aabb.pyramid`；有清单外的 IMAP 3 成员时返回 `MissingInput`，plan 视该元素没有可用 World_AABB（D7）。
 - 输出为毫米 `f64`，取整只在 Codec 里做。若 `aabb.arithmetic` 坐实 E3D 用单精度，复合器也按单精度计算以复现；不能逐字复现时，按需求 6 第 16 条改用容差判据。
 - 调用方给的值优先（需求 6 第 4 条）；Merge_Commit 中这个值是否失效由 plan 判定，失效后回到自算。所需属性解码不了时返回 `UndecodableAttr { refno, name, hash }`，plan 据此拒写整批（需求 6 第 8 条，「跳过」下亦然）。
 
@@ -254,7 +261,7 @@ impl SpatialStage {
 ```
 
 - `EndState`（`end_state.rs`）：上一会话与本批定稿记录叠加而成的视图，实现 `SpatialState`。另外提供：`previous()`，即上一会话的视图；`in_new_index(r)`；`members(r)`，对被删元素返回其上一会话的成员再按本批 move 调整后的集合，用来找 owner 链经过被删元素的那些元素；`reachable_from_worl(r)`；`theirs_changed(r)`，只在合并时有意义。
-- Recompute_Set：按定义 ①–⑥ 求。候选只来自本批触及的 refno（插入、写属性、move、删除及其连带的元素）和它们在 EndState 下的后代。「改了」指 EndState 与上一会话的值不同：能解码的比解码后的值，不能解码的比存储字。重算属性取 `recompute_row` 为 `Triggers` 或 `Unconfirmed` 的属性；④⑤ 只收 `descendants_included` 为真的那些层。
+- Recompute_Set：按定义 ①–⑦ 求。候选只来自本批触及的 refno（插入、写属性、move、reorder、删除及其连带的元素）、它们在 EndState 下的后代，以及 IMAP 3 元素的第一个 IMAP 不为 3 的祖先（⑦）。「改了」指 EndState 与上一会话的值不同：能解码的比解码后的值，不能解码的比存储字。重算属性取 `recompute_row` 为 `Triggers` 或 `Unconfirmed` 的属性；⑤ 的祖先可以是任意 noun，`recompute_row` 在 8.4 扩到 Recompute_Set 走到的祖先 noun（现只覆盖 Geometric_Noun 模板）；成员次序按 `member_order_row`；④⑤ 只收 `descendants_included` 为真的那些层。
 - 可用 World_AABB 依次取：`given` 中的值（经重铸映射改挂到写入号；合并中 `theirs_changed` 命中需求 8 第 6 条的任一项即失效），`BUILT_IN_NOUNS` 自算，都没有则为无。
 - Codec 编码之后，`NeedsUnconfirmed`、`MissingInput` 与「无值」统一成 `MissingAabb { refno, given_as, reasons }`。「要求」下只要出现一个，就返回 `SpatialError::MissingAabb(列表)`；「跳过」下该元素的 Target_Entries 为空，并记入报告。
 - 旧条目：只有 Recompute_Set 非空时才读上一会话的表。用 `read_spamap_tree` 全遍历并校验，不合规即 `MalformedTable`；再用 `for_refno` 取出旧条目。Recompute_Set 为空时不读表，所以坏表不会挡住无关的批次。
@@ -497,7 +504,7 @@ Write_CLI 的 JSON 增量：`insert`、`set`、`move` 指令可以带 `"aabb": [
 
 **Validates: Requirements 6.2, 6.3, 6.4, 6.13, 7.1, 7.2, 7.3, 7.4, 7.5, 7.9, 7.11, 8.2, 8.8**
 
-测试手段：分两层。① `src/write/spamap/plan.rs` 模块内 proptest：合成的 `SpatialState` 加替身编码器，对照按 Recompute_Set 定义 ①–⑥ 直译的参考实现。② 库副本 proptest（16 例），放在 `tests/write_stage8_spamap_model.rs`，只用读侧读回（需求 2 第 5 条）。
+测试手段：分两层。① `src/write/spamap/plan.rs` 模块内 proptest：合成的 `SpatialState` 加替身编码器，对照按 Recompute_Set 定义 ①–⑦ 直译的参考实现（生成器含成员次序、祖先非几何重算属性、IMAP 3 成员三类改动）。② 库副本 proptest（16 例），放在 `tests/write_stage8_spamap_model.rs`，只用读侧读回（需求 2 第 5 条）。
 
 ### Property 10: 编辑集合幂等
 
