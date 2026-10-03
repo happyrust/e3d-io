@@ -14,14 +14,18 @@ mod common;
 
 use std::collections::HashMap;
 
-use common::corpus::{CORPUS, SPAMAP_BASELINE, SPAMAP_BASELINE_SESSION};
+use common::corpus::{
+    CORPUS, SPAMAP_4_20, SPAMAP_4_20_SESSION, SPAMAP_4_20_SHA256, SPAMAP_BASELINE, SPAMAP_BASELINE_SESSION,
+};
 use common::spamap_session::Session;
 use common::{ATTLIB, DESVIR};
 use e3d_attlib::{db1_dehash, db1_hash};
 use e3d_io::core_rules::RuleSet;
 use e3d_io::index::SpamapEntry;
 use e3d_io::session::SessionSelector;
+use e3d_io::spatial::aabb::{AabbOutcome, BuiltInAabb, ChainComposer};
 use e3d_io::spatial::check::{Checked, Item, Miss};
+use e3d_io::spatial::codec::{Encoded, SpamapCodec};
 use e3d_io::spatial::{candidates, rules};
 use e3d_io::RefNo;
 use proptest::prelude::*;
@@ -229,4 +233,34 @@ fn every_element_e3d_wrote_has_entries_exactly_when_coverage_says_so() {
             waiting.join(", ")
         );
     }
+}
+
+/// Requirement 4.20: the BOX `24384/26484` e3d-io wrote, as the session E3D
+/// wrote its entry in has it (301 × 400 × 500 at E 1000 N 2000 U 3000 under a
+/// ZONE and SITE on the origin), gives under the confirmed rules exactly the
+/// entry the requirement names — the one E3D stored.
+#[test]
+fn requirement_4_20s_box_encodes_to_exactly_its_entry() {
+    if common::missing(&[SPAMAP_4_20, DESVIR, ATTLIB]) {
+        return;
+    }
+    let bytes = std::fs::read(SPAMAP_4_20).expect("read the pinned database");
+    assert_eq!(common::golden::sha256_hex(&bytes), SPAMAP_4_20_SHA256, "{SPAMAP_4_20} is not the database pinned");
+    let session = Session::open(SPAMAP_4_20, SessionSelector::Exact(SPAMAP_4_20_SESSION)).expect("a SPAMAP table");
+    let refno = RefNo::new(24_384, 26_484);
+    let rules = RuleSet::confirmed();
+    let composer = ChainComposer::new(rules);
+    let aabb = match BuiltInAabb::new(rules, &composer).compute(&session.state, refno) {
+        Ok(AabbOutcome::Aabb(aabb)) => aabb,
+        other => panic!("no built-in box: {other:?}"),
+    };
+    assert_eq!((aabb.min_mm(), aabb.max_mm()), ([849.5, 1800.0, 2750.0], [1150.5, 2200.0, 3250.0]));
+    let entries = match SpamapCodec::new(rules).encode(refno, &session.state, &aabb) {
+        Ok(Encoded::Entries { entries, .. }) => entries,
+        other => panic!("no entries: {other:?}"),
+    };
+    let entry = SpamapEntry { key: [300_008_495, 24_384, 26_484, 0], value: [8_495, 18_000, 27_500, 11_505, 22_000, 32_500, 2] };
+    assert_eq!(entries, [entry]);
+    let stored: Vec<SpamapEntry> = session.table.iter().filter(|stored| stored.refno() == refno).copied().collect();
+    assert_eq!(stored, [entry], "E3D's entry in session {SPAMAP_4_20_SESSION}");
 }

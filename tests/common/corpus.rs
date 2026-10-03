@@ -24,3 +24,11 @@ pub const CORPUS: &[&str] = &[AMS8000, AMS7999, AMS7351, AMS251142, TES023];
 /// saved onto the file since do not move it.
 pub const SPAMAP_BASELINE: &str = AMS8000;
 pub const SPAMAP_BASELINE_SESSION: u32 = 640;
+
+/// Requirement 4.20's input: `ams8000_0001` after
+/// `tools/e3d/spamap_probes/selfcheck_e3dio_box_xlen.pml` — e3d-io inserts
+/// the BOX `24384/26484` in session 647, E3D sets its XLEN to 301 and
+/// SAVEWORKs session 648 — pinned with its SHA-256 (`MANIFEST.tsv` beside it).
+pub const SPAMAP_4_20: &str = r"D:\e3dio-fixtures\phase3\spamap-4-20\ams8000_0001";
+pub const SPAMAP_4_20_SESSION: u32 = 648;
+pub const SPAMAP_4_20_SHA256: &str = "F2BB27BDCCD9C2EDDCA0B928F5D0BBF64C01521CE1F6DC8BC9E62858D27A33B2";

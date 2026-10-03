@@ -89,6 +89,19 @@ E3D 本身也这样算（出处 ②，复现命令第 29、30 条，门用副本
 - 实现：`rules::double_precision`。
 - Corpus 核对：1 590 / 1 590 逐字相符，需求 6 第 16 条的放宽判据不需要。
 
+## 需求 4 第 20 条的输入
+
+`tools/e3d/spamap_probes/selfcheck_e3dio_box_xlen.pml`（复现命令第 35 条）在门用副本的 `ams8000_0001`（原件 SHA-256 `3CAB5D7D…E023`）上：e3d-io 会话 647 按 `tools/e3d/write_gate_ops/10_box.json` 插 BOX `24384/26484`，E3D 会话 648 把它的 XLEN 由 300 改为 301 并 SAVEWORK，给它登记了条目。该库钉在 `D:\e3dio-fixtures\phase3\spamap-4-20\ams8000_0001`（SHA-256 `F2BB27BDCCD9C2EDDCA0B928F5D0BBF64C01521CE1F6DC8BC9E62858D27A33B2`，旁有 `MANIFEST.tsv`）。会话 648 中：
+
+| 项 | 值 |
+|---|---|
+| BOX `24384/26484` | POS (1000, 2000, 3000)，ORI (0, 0, 0)，XLEN 301、YLEN 400、ZLEN 500，OBST 2，LEVE (0, 10)，没有成员 |
+| owner 链 | ZONE `24384/47`、SITE `24384/46`，POS 与 ORI 都是 0；WORL `16192/0` |
+| World_AABB | x [849.5, 1150.5]、y [1800, 2200]、z [2750, 3250] mm |
+| 条目（E3D 所存，坐实集所得） | 键 `[300008495, 24384, 26484, 0]`，值 `[8495, 18000, 27500, 11505, 22000, 32500, 2]`（flags 2：SITE 启用、OBST 2）；记录项 SPAMAP `[300008495]` |
+
+`tests/spamap_codec_real.rs` 的 `requirement_4_20s_box_encodes_to_exactly_its_entry`（复现命令第 36 条）先核夹具的 SHA-256，再经 `ReadState` 读会话 648：坐实集下 Built_In_AABB 与 codec 恰得这一条，与盘上所存相同。
+
 ## 复现命令
 
 ```powershell
@@ -126,6 +139,8 @@ cargo test --release --test spamap_aabb_real -- --nocapture --test-threads 1
 cargo run --release --bin e3d-descriptor -- spamap-check --input D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001 --schema schema/e3d31 --rules confirmed
 cargo run --release --bin e3d-descriptor -- spamap-check --input D:\e3dio-gate\AvevaMarineSample\ams000\ams7999_0001 --session D:\e3dio-gate\AvevaMarineSample\ams000\ams7999_0001=201 --schema schema/e3d31 --rules confirmed
 cargo test --release --test spamap_aabb_real the_member_nouns_have_a_frmc_of_0
+powershell -NoProfile -File tools/e3d/spamap_probe.ps1 tools/e3d/spamap_probes/selfcheck_e3dio_box_xlen.pml
+cargo test --release --test spamap_codec_real requirement_4_20s_box_encodes_to_exactly_its_entry
 powershell -NoProfile -File tools/ida/ib.ps1 --target-idb D:\ida_scratch\plant3\Core3D.dll.i64 env
 powershell -NoProfile -File tools/ida/ib.ps1 env
 ```
