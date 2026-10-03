@@ -8,8 +8,9 @@
 
   - The four sections (environment, conclusions, reproduction commands,
     counterexamples) are there, under the template's Chinese headings.
-  - Environment: a 40-hex HEAD; two or more 64-hex SHA-256 values on
-    SHA-256 lines, the first equal to the last.
+  - Environment: a 40-hex HEAD; 64-hex values on SHA-256 lines, grouped by
+    IDB (lines naming Core3D_IDB are Core3D_IDB's, the rest Core_IDB's): each
+    group has two or more, the first equal to the last.
   - Reproduction commands, every line in their code blocks: starts with
     tools/ida/ib.ps1, a script in the repository by relative path, or cargo
     (after an optional "powershell ... -File"); names no temporary directory,
@@ -72,13 +73,24 @@ if ($bodies.ContainsKey('environment')) {
     if (-not ($environment | Where-Object { $_ -match 'HEAD' -and $_ -match '\b[0-9a-fA-F]{40}\b' })) {
         $failures.Add('environment: no HEAD line with a 40-hex commit')
     }
-    $hashes = @($environment | Where-Object { $_ -match 'SHA-256' } | ForEach-Object {
-            [regex]::Matches($_, '\b[0-9a-fA-F]{64}\b') | ForEach-Object { $_.Value.ToUpperInvariant() }
-        })
-    if ($hashes.Count -lt 2) {
-        $failures.Add("environment: $($hashes.Count) SHA-256 value(s); the first and the last call of the round each record one")
-    } elseif ($hashes[0] -ne $hashes[-1]) {
-        $failures.Add("environment: the IDB changed during the round ($($hashes[0]) -> $($hashes[-1]))")
+    $groups = [ordered]@{}
+    foreach ($line in @($environment | Where-Object { $_ -match 'SHA-256' })) {
+        $idb = $(if ($line -match 'Core3D_IDB') { 'Core3D_IDB' } else { 'Core_IDB' })
+        foreach ($match in [regex]::Matches($line, '\b[0-9a-fA-F]{64}\b')) {
+            if (-not $groups.Contains($idb)) { $groups[$idb] = New-Object System.Collections.Generic.List[string] }
+            $groups[$idb].Add($match.Value.ToUpperInvariant())
+        }
+    }
+    if ($groups.Count -eq 0) {
+        $failures.Add('environment: 0 SHA-256 value(s); the first and the last call of the round each record one')
+    }
+    foreach ($idb in $groups.Keys) {
+        $hashes = $groups[$idb]
+        if ($hashes.Count -lt 2) {
+            $failures.Add("environment: $($hashes.Count) SHA-256 value(s) for $idb; the first and the last call of the round each record one")
+        } elseif ($hashes[0] -ne $hashes[$hashes.Count - 1]) {
+            $failures.Add("environment: $idb changed during the round ($($hashes[0]) -> $($hashes[$hashes.Count - 1]))")
+        }
     }
 }
 

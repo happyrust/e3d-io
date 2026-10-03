@@ -12,12 +12,16 @@
   - 92: the bridge address answers nothing; the address and the commands that
     bring the target IDB online are printed, and for a missing target IDB the
     start-idalib command is not (requirement 1.4).
-  - 91: each call that could save Core_IDB is refused, and nothing connects
-    to the configured bridge address meanwhile (requirement 1.5).
+  - 91: each call that could save an E3D_IDB (Core_IDB, Core3D_IDB) or the
+    target IDB is refused, and nothing connects to the configured bridge
+    address meanwhile (requirement 1.5).
   - 93 / 94 / forwarding, against a stand-in ida_bridge with a canned list:
     no instance, two instances, one held by another session, the holder
     itself, reset and supervisor stop resolved (requirements 1.3, 1.10). Two
     live instances on one IDB cannot be had: IDA locks an open database.
+  - tools/ida/check_evidence.ps1 groups SHA-256 lines by IDB: a round that
+    read both E3D_IDBs passes when each keeps its hash, and fails naming
+    Core3D_IDB when only that one changed (requirement 1.9).
   Prints PASS or FAIL per check; exit 0 when all pass.
 #>
 $ErrorActionPreference = 'Continue'
@@ -104,6 +108,8 @@ try {
         @{ Name = '--save'; Args = @('exec-idb', '--idb', 'D:\ida_scratch\plant3\core.dll.i64', '--sql', 'SELECT 1', '--save') },
         @{ Name = 'supervisor save'; Args = @('supervisor', 'save', 'idalib-1') },
         @{ Name = '--out-idb onto Core_IDB, other case and slashes'; Args = @('supervisor', 'start-idalib', '--input', 'core.dll', '--out-idb', 'd:/IDA_SCRATCH/plant3/CORE.DLL.i64') },
+        @{ Name = '--out-idb onto Core3D_IDB'; Args = @('supervisor', 'start-idalib', '--input', 'Core3D.dll', '--out-idb', 'D:/ida_scratch/plant3/core3d.dll.I64') },
+        @{ Name = '--out-idb onto the target IDB'; Args = @('--target-idb', 'D:\elsewhere\Some.i64', 'supervisor', 'start-idalib', '--input', 'some.dll', '--out-idb', 'd:/ELSEWHERE/some.i64') },
         @{ Name = '-c calling idb.save'; Args = @('exec', 'idalib-1', '-c', 'idb.save()') },
         @{ Name = '-f calling save_database'; Args = @('exec', 'idalib-1', '-f', $saver) },
         @{ Name = 'supervisor stop of a UI instance'; Args = @('supervisor', 'stop', 'idaui-12') },
@@ -190,6 +196,39 @@ try {
         $run.Code -eq 91 -and $run.Output.Contains('idaui-51 is a UI instance')
     ) $run.Output
     $bridge.Stop()
+
+    # --- check_evidence.ps1: SHA-256 lines grouped by IDB --------------------------
+    $checker = Join-Path $PSScriptRoot 'check_evidence.ps1'
+    $core = 'A' * 64
+    $core3d = 'B' * 64
+    function New-Doc([string]$Core3dLast) {
+        # The four headings from code points: this file is read in the ANSI code page.
+        $heading = { param([int[]]$Points) '## ' + (-join ($Points | ForEach-Object { [char]$_ })) }
+        $doc = Join-Path $scratch ('evidence-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.md')
+        $lines = @(
+            (& $heading @(0x73AF, 0x5883)),
+            "| Core_IDB SHA-256 | ``$core`` |",
+            "| Core3D_IDB SHA-256 | ``$core3d`` |",
+            "| HEAD | ``$('c' * 40)`` |",
+            "| Core3D_IDB SHA-256 | ``$Core3dLast`` |",
+            "| Core_IDB SHA-256 | ``$core`` |",
+            (& $heading @(0x7ED3, 0x8BBA)),
+            '- MAPKEY @ `0x1039277C`',
+            (& $heading @(0x590D, 0x73B0, 0x547D, 0x4EE4)),
+            '```powershell',
+            'powershell -NoProfile -File tools/ida/ib.ps1 env',
+            '```',
+            (& $heading @(0x53CD, 0x4F8B))
+        )
+        [IO.File]::WriteAllLines($doc, $lines, (New-Object System.Text.UTF8Encoding $false))
+        return $doc
+    }
+    $run = Invoke-Ib $checker @(New-Doc $core3d)
+    Check 'check_evidence passes when each E3D_IDB keeps its hash' ($run.Code -eq 0 -and $run.Output.StartsWith('PASS')) $run.Output
+    $run = Invoke-Ib $checker @(New-Doc ('D' * 64))
+    Check 'check_evidence names Core3D_IDB when only it changed' (
+        $run.Code -eq 1 -and $run.Output.Contains('Core3D_IDB changed during the round') -and -not $run.Output.Contains('Core_IDB changed')
+    ) $run.Output
 } finally {
     if ($savedHome) { $env:IDA_BRIDGE_HOME = $savedHome } else { Remove-Item Env:\IDA_BRIDGE_HOME -ErrorAction SilentlyContinue }
     if ($savedHost) { $env:IDA_BRIDGE_HOST = $savedHost } else { Remove-Item Env:\IDA_BRIDGE_HOST -ErrorAction SilentlyContinue }

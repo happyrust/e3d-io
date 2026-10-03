@@ -42,7 +42,7 @@
     - 用法 `ib.ps1 [--target-idb <path>] [--timeout-s <n>] <ida-bridge 命令与参数…>`：两个选项由包装器消费，其余原样转发；`--target-idb` 缺省为 Core_IDB
     - 安装查找与缺项报告（1.1、1.2），无可用安装退出 90
     - 子进程 `PYTHONPATH` 放入所选安装的 `src` 并自检能导入；不改 `.pth`、PATH 等用户配置
-    - 拒存盘（1.5）：带 `--save`、`supervisor save`、`--out-idb` 指向 Core_IDB、载荷含 `idb.save` / `save_database` 的调用退出 91，且不向桥发任何请求
+    - 拒存盘（1.5）：带 `--save`、`supervisor save`、`--out-idb` 指向任一 E3D_IDB 或 Target_IDB（2026-10-03 C0 后由只认 Core_IDB 扩成）、载荷含 `idb.save` / `save_database` 的调用退出 91，且不向桥发任何请求
     - 连桥（1.4）：桥不可达退出 92
     - 按 Target_IDB 解析实例（1.3、1.10）：无实例打开 Target_IDB 或该文件不存在退出 93，多个实例或被占用退出 94
     - 其余情形沿用被转发命令的退出码（1.11）
@@ -51,17 +51,17 @@
     - 实现时核对并在脚本注释中写明：`list` 输出格式与占用字段、CLI 入口模块、`supervisor stop` 是否存盘
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.10, 1.11, 1.12_
   - [x] 2.2 加 `ib.ps1 env`、`ib.ps1 xrefs` 与 IB_Xref_Helper
-    - `env` 打印 Core_IDB 的 SHA-256（`Get-FileHash`）、IDA 版本（实例内 `ida_kernwin.get_kernel_version()`）与 `git rev-parse HEAD`
+    - `env` 打印 Target_IDB（缺省 Core_IDB）的 SHA-256（`Get-FileHash`）、IDA 版本（实例内 `ida_kernwin.get_kernel_version()`）与 `git rev-parse HEAD`
     - `tools/ida/xrefs_to.py`：包装器以 `-c "XREF_TARGET=0x…"` 注入目标、以 `-f` 运行；用 `ida_xref.xrefblk_t` 的 `first_to` / `next_to` 枚举代码与数据引用并排除顺序流（`XREF_FAR` 还是 `XREF_NOFLOW` 按所装 SDK 核对）；取到 `BADADDR` 或满 100 000 条即停；输出按源地址排序的 JSON（`from`、`kind`、`type`、`func`），截断时带 `truncated: true`
     - `tools/ida/queries/xrefs_to.sql` 取 `xrefs` 表中同一 `to_ea`、去掉 flow 类的 `from_ea`；`tools/ida/check_xrefs.ps1 <地址>` 比较两个集合
     - _Requirements: 1.5, 1.6, 1.9_
   - [x] 2.3 建证据模板与机检
     - `tools/ida/EVIDENCE_TEMPLATE.md` 分「环境」「结论」「复现命令」「反例」四节；「结论」逐条写规则名、坐实与否、例程起始地址、`pseudocode.n` 行号或指令地址、Corpus 核对（库、命令、一致数 / 总数），未坐实的另写假设、输入类别与反例
-    - `tools/ida/check_evidence.ps1 <doc>`：「复现命令」只以 `tools/ida/ib.ps1`、仓内相对路径脚本与 `cargo` 为入口；不含临时目录、`idalib-\d+` / `idaui-\d+` 与 IDA_Bridge 安装目录；所引 `tools/ida/` 文件受版本管理（`git ls-files --error-unmatch`）；地址十六进制、哈希 64 位、HEAD 40 位；比对「环境」节首尾两次 SHA-256
+    - `tools/ida/check_evidence.ps1 <doc>`：「复现命令」只以 `tools/ida/ib.ps1`、仓内相对路径脚本与 `cargo` 为入口；不含临时目录、`idalib-\d+` / `idaui-\d+` 与 IDA_Bridge 安装目录；所引 `tools/ida/` 文件受版本管理（`git ls-files --error-unmatch`）；地址十六进制、哈希 64 位、HEAD 40 位；比对「环境」节首尾两次 SHA-256（C0 后按 IDB 分组：含 `Core3D_IDB` 的行一组、其余一组，每组首末相同）
     - _Requirements: 1.7, 1.8, 1.9_
   - [x]* 2.4 写 `tools/ida/selftest.ps1` 离线自检
     - 用假安装目录与不可达的桥地址，覆盖 1.2 的缺项报告、1.4 的桥不可达分支（92）、1.5 的拒存盘（91，且不发请求）
-    - **Property 25: 一轮取证不改 Core_IDB**（离线部分）
+    - **Property 25: 一轮取证不改 E3D_IDB**（离线部分）
     - **Validates: Requirements 1.5**
     - _Requirements: 1.2, 1.4, 1.5_
   - [x]* 2.5 IB_Wrapper 实机冒烟
@@ -70,7 +70,7 @@
     - 结果记入 Spec_Ledger「IB_Wrapper 实机冒烟」
     - **Property 24: IB_Xref_Helper 与 SQL 一致**
     - **Validates: Requirements 1.6**
-    - **Property 25: 一轮取证不改 Core_IDB**
+    - **Property 25: 一轮取证不改 E3D_IDB**
     - **Validates: Requirements 1.5**
     - _Requirements: 1.1, 1.3, 1.4, 1.10, 1.11, 1.12_
   - [x] 2.6 Checkpoint - 第 2 组：Ensure all tests pass
@@ -178,7 +178,7 @@
   - 坐实的规则在同一提交里于 `src/core_rules.rs` 改为 Confirmed 并补上实现变体（相应改 `src/spatial/` 中用到它的代码）；未坐实的在证据中写明假设、须用到它的输入类别与 Corpus 反例（2.4），注册表保持 `Unconfirmed`
   - [~] 7.1 取证编码规则
     - 规则：`spamap.rounding`、`spamap.word_sign`、`spamap.short_axis`、`spamap.zero_extent`、`spamap.bucket`、`spamap.key0`、`spamap.entries_k`、`spamap.flags`；另取证表形 `spamap.table_shape` 与页头其余字 `spamap.table_header_rest`（供 8.1、8.6 写内结点页与建表）
-    - 经 IB_Wrapper 读 core 例程；用 `spamap-check --rules candidates` 在 Corpus 上核对，一致数 / 总数写入「结论」；最短轴并列的取轴只认 Core_IDB 出处
+    - 经 IB_Wrapper 读 E3D_Core 例程（编码在 Core3D_IDB 的 `maplib`，表与记录项在 Core_IDB）；用 `spamap-check --rules candidates` 在 Corpus 上核对，一致数 / 总数写入「结论」；最短轴并列的取轴只认 E3D_IDB 出处
     - _Requirements: 2.4, 4.1, 4.4, 4.5, 4.6, 4.8, 4.13, 4.14, 4.17, 4.18, 7.8_
   - [~] 7.2 取证覆盖判定 `spamap.coverage` 与 Geometric_Noun 清单，并写 Property 7 Corpus 测试
     - 证据写明被检查的每个因素（noun 及 noun 之外的因素）与逐 noun 的三态结论
@@ -551,7 +551,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `spamap.word_sign` | 7.1 | 未坐实 | | | 候选「有符号 32 位字」：Key0 28 269 / 28 269（`spamap-check --rules candidates`，里程碑 B 计划 §6 B3、B5） |
 | `spamap.rounding` | 7.1 | 未坐实 | | | 候选「就近取整」：Built_In_AABB 1 572 / 1 590 逐字，反例无一差 ±1（§6 B8）；备选「外扩取整」与原生 BOX 的 y 不符 |
 | `spamap.key0` | 7.1 | 未坐实 | | | 候选「N × 10^8 + 有符号 min，落非负有符号字」：Key0 28 269 / 28 269（§6 B3、B5） |
-| `spamap.short_axis` | 7.1 | 未坐实 | | | 候选「按 0.1 mm 取最短，并列取最后一根」：Key0 28 269 / 28 269，并列 6 236 条全符；并列取轴按需求 4.18 只能以 Core_IDB 坐实 |
+| `spamap.short_axis` | 7.1 | 未坐实 | | | 候选「按 0.1 mm 取最短，并列取最后一根」：Key0 28 269 / 28 269，并列 6 236 条全符；并列取轴按需求 4.18 只能以 E3D_IDB 坐实 |
 | `spamap.zero_extent` | 7.1 | 未坐实 | | | 候选「交桶规则（落桶 1）」：ams251142 138 条零尺寸、ams7999 零尺寸点全符（Key0 项内） |
 | `spamap.bucket` | 7.1 | 未坐实 | | | 候选「600 / 2 000 / 6 000 / 20 000，界值归上一桶」：Key0 28 269 / 28 269；第四界只知在 (19 800, 21 200] |
 | `spamap.entries_k` | 7.1 | 未坐实 | | | 候选「单条 k = 0」：条目数与 k 3 507 / 3 628（基线 640）、18 404 / 21 257（ams7999）、327 / 327、305 / 305；差的恰是带 k = 1 条目的 121 与 2 853 个元素（§6 B3、B5） |

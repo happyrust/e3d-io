@@ -13,6 +13,10 @@
   given. --target-idb defaults to Core_IDB. --timeout-s limits exec (and the
   wrapper's own env / xrefs), default 60 s, 0 for none.
 
+  The E3D_IDBs are Core_IDB and Core3D_IDB (SPAMAP entries are computed in
+  Core3D.dll); a call whose --out-idb is either of them, or the target IDB,
+  is refused like any other call that could save one.
+
   exec, reset and supervisor stop without an instance id go to the one
   connected instance that has the target IDB open and that no other stateful
   session holds.
@@ -66,6 +70,7 @@ $InstallLookup = @(
     @{ Label = 'C:\Users\dpc\.agents\tools\ida-bridge'; Path = 'C:\Users\dpc\.agents\tools\ida-bridge' }
 )
 $CoreIdb = 'D:\ida_scratch\plant3\core.dll.i64'
+$Core3dIdb = 'D:\ida_scratch\plant3\Core3D.dll.i64'
 $Self = 'powershell -NoProfile -File tools/ida/ib.ps1'
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
@@ -226,8 +231,10 @@ $isSupervisor = $command -eq 'supervisor' -or $command -eq 'sup'
 $reasons = @()
 if ($rest -contains '--save') { $reasons += 'it carries --save' }
 if ($isSupervisor -and $rest.Count -ge 2 -and $rest[1] -eq 'save') { $reasons += 'it is supervisor save' }
+$guarded = [ordered]@{ 'Core_IDB' = $CoreIdb; 'Core3D_IDB' = $Core3dIdb; 'the target IDB' = $TargetIdb }
 foreach ($out in @(Get-OptionValues $rest @('--out-idb'))) {
-    if ((Get-Canonical $out) -eq (Get-Canonical $CoreIdb)) { $reasons += "its --out-idb is Core_IDB ($out)" }
+    $hit = @($guarded.Keys | Where-Object { (Get-Canonical $out) -eq (Get-Canonical $guarded[$_]) }) | Select-Object -First 1
+    if ($hit) { $reasons += "its --out-idb is $hit ($out)" }
 }
 $saving = 'idb\.save|save_database'
 foreach ($code in @(Get-OptionValues $rest @('-c', '--code'))) {

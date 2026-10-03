@@ -106,3 +106,5 @@ Core3D_IDB：`D:\ida_scratch\plant3\Core3D.dll.i64`（桥上常驻，C0 结束�
 | 覆盖字段 | core `DB_Noun::spatialMap` @ 0x58DB9D0 ← `DB_Noun::ReadData` @ 0x58D6D20 n 79 | 字典属性 847458（IMAP）读进 noun +0xA8；core 内无调用方，Core3D 经 `ATNINT` 读同一字段 | |
 
 **影响**：需求 1 把 E3D_Core 定为 core.dll，出处 ① 只认 Core_IDB。照已批的 Q1 = A，7.1 的八条编码规则与 `aabb.ori_form` / `compose` / `degenerate` 都拿不到 ①，需求 4.18 的并列取轴也就坐实不了；能落在 core.dll 的只有 `table_shape`、`table_header_rest`、`record_item` 与 `aabb.box` / `cyli` 的盒算术。是否把 Core3D.dll 纳入 E3D_Core 交用户拍板，定之前不进 C1。
+
+**用户拍板（2026-10-03 16:39，决策卡）：纳入 Core3D.dll。** 随即改 spec 与工具：术语表 E3D_Core = core.dll + Core3D.dll，新增 Core3D_IDB、E3D_IDB（= Core_IDB 或 Core3D_IDB），「坐实」出处 ①、需求 1 第 5 / 7 / 9 条、需求 4 第 4 / 18 条、需求 5 第 10 条、需求 6 第 16 条、需求 11 第 10 条改认 E3D_IDB；`ib.ps1` 拒存扩到任一 E3D_IDB 与 Target_IDB；`check_evidence.ps1` 按 IDB 分组核首末 SHA-256；模板加 Core3D_IDB 三行；`selftest.ps1` 加三例（22 项全过）。Q1 的口径随之变为「core.dll 与 Core3D.dll 都认」：7.5 的变换（`WSTRAM`）与尺寸下限（`BOXELE`）也可按 ① 坐实。

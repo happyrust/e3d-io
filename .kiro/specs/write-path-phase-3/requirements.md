@@ -6,7 +6,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 
 第二期（T0–T4）落地后，e3d-io 写的元素真 E3D 3.1 全部读得回，但几何元素在 E3D 里「导航得到、`Q ATT` 全对、空间上不存在」：E3D 给每个几何图元维护 SPAMAP 条目，空间搜索只看 SPAMAP；e3d-io 不写条目，所以 `WITHIN VOLUME` 看不见 e3d-io 写的元素，以该元素为体积会报 `(2,536) Error getting volume`，E3D 存盘也不自愈（`docs/evidence/2026-09-22-e3d-spamap-consequences.md`）。第三期以 SPAMAP 写侧维护为主线，其次是第二期 T2 留下的两项性能旗标，再其次是 S6b 页 1 桶表写侧。C 段其余项只在触发条件满足时纳入。
 
-方法论沿用 MISSION：唯一权威是 `core.dll` 与语料字节。每个写侧能力先经 ida-bridge 读 core 并落取证文档，再做读侧（读侧是写侧的验收方），再做写侧，最后过真 E3D 3.1 TTY 门。本期同时把 ida-bridge 的调用固定进仓，不再依赖 `%TEMP%` 下的包装和会漂移的安装路径、实例号。
+方法论沿用 MISSION：唯一权威是 E3D_Core（`core.dll`；SPAMAP 的条目计算另在 `Core3D.dll`）与语料字节。每个写侧能力先经 ida-bridge 读 core 并落取证文档，再做读侧（读侧是写侧的验收方），再做写侧，最后过真 E3D 3.1 TTY 门。本期同时把 ida-bridge 的调用固定进仓，不再依赖 `%TEMP%` 下的包装和会漂移的安装路径、实例号。
 
 基线：分支 `write-path` @ `c61b097`（0.4.0 之后）；`tools/e3d/write_gate.ps1` Q0 + 28 问、`alternate_write_gate.ps1` 5 轮、`format0_gate.ps1` 全 PASS。
 
@@ -52,7 +52,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 - 需求 3：SPAMAP_Baseline 钉在原件会话 640（已核实原件保留会话 1–646，640 在链上；「640 的表即 09-22 所测那张」为推断，读数不符时改用仓内受控快照）；普查另报「按元素的 k 组合」计数。
 - 需求 5 / 7：「改了」一律按本批结束状态与上一会话的值比较，不按「调用过 set」算；「跳过」下 Recompute_Set 中无 World_AABB 的元素删去旧条目、不留过期位置，也不写 SPAMAP_Record_Item；`Transaction::delete` 只删元素本身、不删后代（已核实 `src/write/transaction.rs`），本期不改。
 - 需求 8：重铸后不以原 refno 登记，原号下属于占用者的条目保留；合并中调用方给的 World_AABB 在 Merge_Latest 改了该元素或其祖先位姿时失效；Merge_Latest 删了祖先使本批元素不可达时不拒写，只不写条目并报告。
-- 需求 4：Key0 核对（第 10 条）只以条目自身的 6 个值字为输入，k = 1 条目亦然；条目数与 k 另立第 15 条，与 Key0、Spatial_Flags 分项报告；最短轴并列的取轴因语料不区分，只认 Core_IDB 出处；Spatial_Flags、条目数 / k 与需求 6 第 9 条的反例，只在会话链证明条目过期（此后的改动经需求 5 坐实不触发重算）时剔除。
+- 需求 4：Key0 核对（第 10 条）只以条目自身的 6 个值字为输入，k = 1 条目亦然；条目数与 k 另立第 15 条，与 Key0、Spatial_Flags 分项报告；最短轴并列的取轴因语料不区分，只认 E3D_IDB 出处；Spatial_Flags、条目数 / k 与需求 6 第 9 条的反例，只在会话链证明条目过期（此后的改动经需求 5 坐实不触发重算）时剔除。
 - 需求 6：第 5 条改以 Recompute_Set 判定；调用方每元素只给一个 World_AABB，多次给出取最后一次，只作用于本批；给在不属于 Recompute_Set 的元素上不拒写，只报告为「未使用的 World_AABB」；非法值、给在非 Geometric_Noun 上在调用处即拒；自算所需属性无法解码时「跳过」下也拒写（与需求 7 第 12 条同一立场）。
 - 需求 9：`aabb` 可用于 `insert` / `set` / `move`；报告按 refno 汇总并注明来源指令，「登记 / 删去」按新旧表的 11 字差集计；`--spatial` 取值非法按命令行参数错误处理。
 - 需求 10：判别力对照记为 Q13，排在 Q13a 之前，Q13 FAIL 时 Q13a–Q13h 一律 FAIL；Q13d / Q13e 以 Probe_Element 为体积；Q13h 比元素原点。
@@ -63,15 +63,17 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 
 ## Glossary
 
-- **E3D_Core**：E3D 3.1 的 `core.dll`，本期一切写侧行为的权威。
+- **E3D_Core**：E3D 3.1 的 `core.dll` 与 `Core3D.dll`，本期一切写侧行为的权威。SPAMAP 条目（框、Key0、flags、k、覆盖）由 Core3D.dll 的 FORTRAN 库 `maplib` / `mapboxlib` / `dbboxlib` 计算，经 core.dll 的类型 14 表属性写入（2026-10-03 里程碑 C 的 C0 读出，用户拍板纳入 Core3D.dll）。
 - **Core_IDB**：`D:\ida_scratch\plant3\core.dll.i64`（34 308 个函数，MSVC 符号 + FORTRAN 例程名）。
+- **Core3D_IDB**：`D:\ida_scratch\plant3\Core3D.dll.i64`；IDB 记录的输入文件 SHA-256 `E43EC507026B6BBD60A3944C8B1A200E4ED16310DEED9EF85D2517F64E7AD790`，与门用 E3D 的 `Core3D.dll` 相同。
+- **E3D_IDB**：Core_IDB 或 Core3D_IDB；Evidence_Doc 引用的每个地址须写明属于哪一个。
 - **IDA_Bridge**：本机 ida-bridge 安装（当前 `C:\Users\dpc\.agents-old\tools\ida-bridge`，不在 PATH）及其 idalib 实例。
 - **IB_Wrapper**：本期新建、受版本管理的仓内 ida-bridge 调用入口。
 - **Target_IDB**：一次 IB_Wrapper 调用所针对的 IDB，取调用方给出的 IDB 路径，未给时为 Core_IDB。
 - **IB_Xref_Helper**：`tools/ida/` 下受版本管理、经 IB_Wrapper 在已连接 IDA 实例内执行的交叉引用枚举助手。
 - **Evidence_Doc**：`docs/evidence/YYYY-MM-DD-*.md` 取证文档，带「复现命令」节。
 - **Phase_3_Evidence_Doc**：基线 `c61b097` 之后新增的 Evidence_Doc；此前入库的不受需求 1 第 7–9 条约束。
-- **坐实 / 未坐实**：「坐实」须有下列出处之一：① Core_IDB 中实现该行为的函数地址，及反编译行号或反汇编地址（需求 1 第 8 条）；② 一条仓内受版本管理的命令在 Corpus（含门用项目副本中由 E3D_Session 写出的字节）里该行为适用的全部实例上复现该行为、0 反例，Evidence_Doc 在「复现命令」节给出该命令、在「结论」节给出「一致数 / 总数」。没有上述出处，或按 ① 读出的规则在 Corpus 上有反例，即为「未坐实」。
+- **坐实 / 未坐实**：「坐实」须有下列出处之一：① E3D_IDB 中实现该行为的函数地址，及反编译行号或反汇编地址（需求 1 第 8 条）；② 一条仓内受版本管理的命令在 Corpus（含门用项目副本中由 E3D_Session 写出的字节）里该行为适用的全部实例上复现该行为、0 反例，Evidence_Doc 在「复现命令」节给出该命令、在「结论」节给出「一致数 / 总数」。没有上述出处，或按 ① 读出的规则在 Corpus 上有反例，即为「未坐实」。
 - **Phase_3_Workflow**：本期的开发流程：core 取证 → 读侧 → 写侧 → 真 E3D 门。
 - **Spec_Ledger**：本 spec 目录下的文档（requirements / design / tasks）；本期的决策、实测数字与留待项记于此。
 - **写侧能力**：本期改动 `src/write/` 的四项能力——SPAMAP 维护（需求 5 第 6 条、需求 6 第 2–8、10–15、17 条、需求 7–9）、发号下界（需求 11）、staging 优化（需求 12）、页 1 桶表写侧（需求 13 第 3、6、7、9、10 条；仅当需求 13 第 3 条的条件成立时存在）。
@@ -147,11 +149,11 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 2. IF 查找顺序中没有一处同时含 `src\ida_bridge` 目录与 `.venv\Scripts\python.exe`，THEN THE IB_Wrapper SHALL 以非零退出码退出，并按查找顺序逐条打印查过的位置及该处缺少的项（`IDA_BRIDGE_HOME` 未设置时注明「未设置」）。
 3. WHEN 调用方经 IB_Wrapper 发起 `exec`、`reset` 或 `supervisor stop` 而未给实例号，且恰有一个已连接实例打开 Target_IDB、该实例未被另一个 stateful session 占用（定义见第 10 条），THE IB_Wrapper SHALL 把该调用转发给这个实例，使调用方无需写死 `idalib-<pid>`；「打开 Target_IDB」指实例所报的 IDB 路径与 Target_IDB 的绝对全路径相同，比较时不区分大小写，`/` 与 `\` 视为相同。
 4. IF IDA_Bridge 桥服务不可达（连不上所配的桥地址），或桥服务可达但没有已连接实例打开 Target_IDB，THEN THE IB_Wrapper SHALL 以非零退出码退出，指明属于哪一种情形（前者附所试的桥地址），并按执行顺序打印让 Target_IDB 上线的完整 IB_Wrapper 命令（前者先列起桥服务的命令；两种情形都列在 Target_IDB 上启动 idalib 实例的命令）。这些命令按序原样执行后，重发同一调用即按第 3 条被转发。Target_IDB 文件不存在时，另指明该文件不存在，且不打印启动 idalib 实例的命令。
-5. IF 经 IB_Wrapper 的调用带 `--save`、是 `supervisor save`、其 `--out-idb` 按第 3 条的比较规则指向 Core_IDB，或其 `-c` 文本 / `-f` 文件内容含 `idb.save` 或 `save_database`，THEN THE IB_Wrapper SHALL 以非零退出码拒绝该调用，打印被拒原因，且不向 IDA_Bridge 发出任何请求，使只经 IB_Wrapper 的一轮取证（从首条调用之前到末条调用结束之后）前后 Core_IDB 的 SHA-256 相同。
+5. IF 经 IB_Wrapper 的调用带 `--save`、是 `supervisor save`、其 `--out-idb` 按第 3 条的比较规则指向任一 E3D_IDB 或 Target_IDB，或其 `-c` 文本 / `-f` 文件内容含 `idb.save` 或 `save_database`，THEN THE IB_Wrapper SHALL 以非零退出码拒绝该调用，打印被拒原因，且不向 IDA_Bridge 发出任何请求，使只经 IB_Wrapper 的一轮取证（从首条调用之前到末条调用结束之后）前后每个 E3D_IDB 的 SHA-256 相同。
 6. WHEN 调用方经 IB_Wrapper 对一个目标地址运行 IB_Xref_Helper，THE IB_Xref_Helper SHALL 在 60 s 内返回引用该地址的全部代码引用（不含顺序流）与数据引用，每条含引用源地址与所在函数名（不在函数内时为空）。枚举在取到 64 位 `BADADDR`（`0xFFFFFFFFFFFFFFFF`）或已取满 100 000 条时终止，后一种情形在结果中标明已截断。未截断时，所返回的引用源地址集合与 ida-bridge `xrefs` 表中同一 `to_ea`、去掉 `flow` 类后的 `from_ea` 集合相同。
-7. THE Phase_3_Evidence_Doc SHALL 在「复现命令」节中只以 IB_Wrapper、按仓库根相对路径调用的仓内脚本与 `cargo` 命令为命令入口，所用 SQL / IDAPython 文件都位于 `tools/ida/` 下且已受版本管理（内联的 `--sql` / `-c` 文本可直接写在命令里，Corpus 与 Core_IDB 路径可作命令参数）；该节不出现临时目录路径（`%TEMP%`、`$env:TEMP` 或其展开值）、IDA 实例号（`idalib-<数字>`、`idaui-<数字>`）与 IDA_Bridge 安装目录路径。
+7. THE Phase_3_Evidence_Doc SHALL 在「复现命令」节中只以 IB_Wrapper、按仓库根相对路径调用的仓内脚本与 `cargo` 命令为命令入口，所用 SQL / IDAPython 文件都位于 `tools/ida/` 下且已受版本管理（内联的 `--sql` / `-c` 文本可直接写在命令里，Corpus 与 E3D_IDB 路径可作命令参数）；该节不出现临时目录路径（`%TEMP%`、`$env:TEMP` 或其展开值）、IDA 实例号（`idalib-<数字>`、`idaui-<数字>`）与 IDA_Bridge 安装目录路径。
 8. THE Phase_3_Evidence_Doc SHALL 为其陈述的每一条 E3D_Core 行为给出所在函数的起始地址，以及该行为在反编译输出中的行号（ida-bridge `pseudocode` 表的 `n`）或其指令地址；地址均以十六进制书写。
-9. THE Phase_3_Evidence_Doc SHALL 记录取证时 Core_IDB 的 SHA-256（64 位十六进制）、IDA 版本号，以及仓库 HEAD 的完整提交号（40 位十六进制）。
+9. THE Phase_3_Evidence_Doc SHALL 记录取证时本轮所用每个 E3D_IDB 的 SHA-256（64 位十六进制，各在首条调用前与末条调用后记一次）、IDA 版本号，以及仓库 HEAD 的完整提交号（40 位十六进制）。
 10. IF 调用方经 IB_Wrapper 发起 `exec`、`reset` 或 `supervisor stop` 而未给实例号，且打开 Target_IDB 的已连接实例多于一个，或唯一的那个被另一个 stateful session 占用（其占用 session id 非空且不等于调用方所给的 `--session-id`；调用方未给时，任何非空占用都算），THEN THE IB_Wrapper SHALL 以非零退出码退出，不向任何实例转发该调用，并逐个打印这些实例的实例号、PID 与占用 session id（无占用时注明「无」）。
 11. WHEN IB_Wrapper 转发的 ida-bridge 命令结束，THE IB_Wrapper SHALL 以该命令的退出码退出。
 12. IF 被转发的 `exec` 在时限内未返回（时限取调用方所给的 `--timeout-s`，未给时为 60 s；`--timeout-s 0` 表示不设时限，本条不适用），THEN THE IB_Wrapper SHALL 在调用开始后「时限 + 10 s」之内以非零退出码退出，打印超时实例的实例号以及停止、重开该实例的完整 IB_Wrapper 命令，且不重发该调用、不停止该实例。
@@ -191,14 +193,14 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 
 ### Requirement 4: SPAMAP 键与值的编码规则
 
-**User Story:** 作为写侧开发者，我想要一套由 `core.dll` 坐实、并在全量语料上逐条复现的 SPAMAP 键与值编码，以便 e3d-io 为一个几何写的条目与 E3D 为同一几何写的条目逐字相同。
+**User Story:** 作为写侧开发者，我想要一套由 E3D_Core 坐实、并在全量语料上逐条复现的 SPAMAP 键与值编码，以便 e3d-io 为一个几何写的条目与 E3D 为同一几何写的条目逐字相同。
 
 #### Acceptance Criteria
 
 1. THE Evidence_Doc SHALL 为最短轴、桶、Key0、条目数与 k、Spatial_Flags 各指出 E3D_Core 中计算它的例程（起始地址及行号或指令地址，按需求 1 第 8 条），以同样格式指出把毫米坐标化为 0.1 mm 整数的取整点，并写明最短轴与桶按取整前的毫米值还是按取整后的 0.1 mm 整数判定。
 2. THE SPAMAP_Codec SHALL 按 Evidence_Doc 坐实的 min / max 取整规则，把 World_AABB（毫米）编为值的前 6 字 `[minx, miny, minz, maxx, maxy, maxz]`：0.1 mm 整数，可为负（语料中原生 BOX 的 minx 有 −30024）。
 3. THE SPAMAP_Codec SHALL 把 Key0 编为 `N × 10^8 + 最短轴的 min`，其中 min 取第 2 条所编的值字，`N = 6 × 轴序 + 桶`。
-4. WHEN 两根或三根轴的 extent 并列最小，THE SPAMAP_Codec SHALL 取 Evidence_Doc 坐实的那根轴作最短轴（SPAMAP_Baseline 有 538 条最短轴并列的条目，Corpus 不区分取哪根，按第 18 条只能以 Core_IDB 坐实）。
+4. WHEN 两根或三根轴的 extent 并列最小，THE SPAMAP_Codec SHALL 取 Evidence_Doc 坐实的那根轴作最短轴（SPAMAP_Baseline 有 538 条最短轴并列的条目，Corpus 不区分取哪根，按第 18 条只能以 E3D_IDB 坐实）。
 5. WHEN 最短轴的 extent 为 0，THE SPAMAP_Codec SHALL 按 Evidence_Doc 坐实的规则确定该元素各条目的桶与 Key0。
 6. THE SPAMAP_Codec SHALL 按 Evidence_Doc 坐实的规则确定桶，含相邻两桶分界值的归属，以及最短轴 extent 超出语料所见范围时的取值（SPAMAP_Baseline 所见 N：x 1–4、y 7–10、z 13–17）。
 7. THE SPAMAP_Codec SHALL 按 Evidence_Doc 坐实的规则（第 14 条）确定一个元素的条目数、每条的 k 与 k ≥ 1 条目的 6 个 AABB 值字。
@@ -212,13 +214,13 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 15. FOR ALL 键 refno 为 E3D_Authored_Element 且有 SPAMAP_Entry 的 Corpus 元素，SPAMAP_Codec 按第 7 条、以 Evidence_Doc 为该规则列出的输入算出的条目数与各条 k SHALL 与盘上相同（反例只按第 17 条剔除）。
 16. THE Codec_Check SHALL 对每个输入库分别输出 Key0（第 10 条）、条目数与 k（第 15 条）、Spatial_Flags（第 11 条）三项核对的一致数 / 总数，并各按键序列出前 100 个反例的键字与值字；一项的反例不计入另两项。
 17. IF 第 11、15 条或需求 6 第 9 条的核对出现反例，THEN THE Evidence_Doc SHALL 逐个列出反例；只有以会话链证明「该条目写于该元素或其祖先此后的某次改动之前，且该改动按需求 5 第 2、3、8 条坐实为不触发 SPAMAP_Recompute」的反例可从该核对的适用实例中剔除，其余反例使所核规则为「未坐实」。
-18. IF 第 2–9 条中一条规则在 Corpus 中没有适用实例，或 Corpus 的实例不能区分 Evidence_Doc 所列的候选规则（如最短轴并列时取哪根轴），THEN THE Evidence_Doc SHALL 只以 Core_IDB（「坐实」出处 ①）坐实该规则，不能以 ① 坐实时标为「未坐实」（需求 2 第 4 条）。
+18. IF 第 2–9 条中一条规则在 Corpus 中没有适用实例，或 Corpus 的实例不能区分 Evidence_Doc 所列的候选规则（如最短轴并列时取哪根轴），THEN THE Evidence_Doc SHALL 只以 E3D_IDB（「坐实」出处 ①）坐实该规则，不能以 ① 坐实时标为「未坐实」（需求 2 第 4 条）。
 19. IF 为一个元素编码须用到 Evidence_Doc 标为「未坐实」的规则，THEN THE SPAMAP_Codec SHALL 在该元素的编码结果中标明所依的每条未坐实规则（Evidence_Doc 中的规则名），供 Transaction 按需求 2 第 6 条（D7）与需求 6 第 14 条处理该元素。
 20. WHEN SPAMAP_Codec 以 BOX `24384/26484` 在 E3D 为其写出条目的会话中的状态为输入（301 × 400 × 500，World_AABB x ∈ [849.5, 1150.5]、y ∈ [1800, 2200]、z ∈ [2750, 3250] mm，其余属性取该会话中的值并记于 Evidence_Doc），THE SPAMAP_Codec SHALL 得出恰好一条条目：键 `[300008495, 24384, 26484, 0]`，值 `[8495, 18000, 27500, 11505, 22000, 32500, 2]`（最短轴 x、桶 3）。
 
 ### Requirement 5: SPAMAP 覆盖范围与重算时机
 
-**User Story:** 作为写侧开发者，我想知道 `core.dll` 对哪些 noun 维护 SPAMAP、哪些改动让它重算条目，以便 e3d-io 在同样的时机维护同样的条目，不多不少。
+**User Story:** 作为写侧开发者，我想知道 E3D_Core 对哪些 noun 维护 SPAMAP、哪些改动让它重算条目，以便 e3d-io 在同样的时机维护同样的条目，不多不少。
 
 #### Acceptance Criteria
 
@@ -235,7 +237,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 7. FOR ALL Corpus 中的 E3D_Authored_Element，「该元素在所在库最新会话的 SPAMAP 表中有至少 1 条 SPAMAP_Entry」SHALL 当且仅当「该元素满足第 1 条坐实的判定条件」（对账性质；由仓内命令逐元素核对，每个 Corpus 库 0 反例；`ams8000_0001` 中 EQUI / ZONE / SITE / GROU / FIXING 的元素无一满足该条件）。
 8. THE Evidence_Doc SHALL 坐实：E3D_Core 改变一个元素的 POS 或 ORI 时，是否在该改动所在会话中对该元素的 Geometric_Noun 后代做 SPAMAP_Recompute。须按改动的属性（POS、ORI）与层（直接成员、第 2 层及更深的后代）分别写明。
 9. THE Evidence_Doc SHALL 坐实：E3D_Session 删除一个没有 SPAMAP_Entry 的 Geometric_Noun 元素时，该删除能否不报错地经 `SAVEWORK` 提交；报错时记下 E3D 给出的错误号。被测元素如 0.4.0 写出的 BOX，直接删除它与删除它的 owner 各测一次。
-10. THE Evidence_Doc SHALL（承第 1 条）按第 1 条坐实的判定条件，对 Corpus 各库所用 noun 模板中的全部 noun 列出 Geometric_Noun 清单，并逐 noun 注明 Corpus 中该 noun 的 E3D_Authored_Element 个数。个数为 0 的 noun 标「无语料实例」，其归属只能以 Core_IDB 坐实。
+10. THE Evidence_Doc SHALL（承第 1 条）按第 1 条坐实的判定条件，对 Corpus 各库所用 noun 模板中的全部 noun 列出 Geometric_Noun 清单，并逐 noun 注明 Corpus 中该 noun 的 E3D_Authored_Element 个数。个数为 0 的 noun 标「无语料实例」，其归属只能以 E3D_IDB 坐实。
 11. THE Evidence_Doc SHALL（承第 5 条）逐 Geometric_Noun 给出 Corpus 中该 noun 有条目的 E3D_Authored_Element 里带与不带 SPAMAP_Record_Item 的个数。
 
 ### Requirement 6: 世界系 AABB 的来源与缺失策略（D1 / D2 / D3）
@@ -259,7 +261,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 13. WHEN 调用方为一个元素给出了 World_AABB，而该元素不属于 Recompute_Set，或在本批结束状态不存在、从 WORL 不可达，THE Transaction SHALL 在提交报告中把该 refno 列为「未使用的 World_AABB」，且不因此改动该元素的条目。
 14. WHERE 构建为发布提交的默认构建，IF 确定一个元素的 SPAMAP_Entry 须用到 Evidence_Doc 标为「未坐实」的规则（第 2 条自算所依的规则，如尺寸为 0 或负的 BOX、某种 ORI 存储形、owner 链中某类 noun 的位姿；或 SPAMAP_Codec 按需求 4 第 19 条标明的规则），THEN THE Transaction SHALL 视该元素没有可用 World_AABB（需求 2 第 6 条、D7），第 5、6 条为它列出的原因附该规则名。
 15. IF 按需求 4 第 7 条，一个元素的条目须用到既非调用方给出、也不能由第 2 条自算的输入（如 k ≥ 1 条目的值字来源；调用方每元素只给一个 World_AABB），THEN THE Transaction SHALL 视该元素没有可用 World_AABB，第 5、6 条为它列出的原因注明所缺的输入。
-16. IF Evidence_Doc 以 Core_IDB 坐实 E3D_Core 计算 World_AABB 的算术使第 9 条的逐字相同不可复现（如单精度浮点累积误差），THEN THE Spec_Ledger SHALL 记录第 9 条改用的判据（涉及的值字及每字容差，以 0.1 mm 计）与其 Evidence_Doc 出处，第 9 条按该判据核对。
+16. IF Evidence_Doc 以 E3D_IDB 坐实 E3D_Core 计算 World_AABB 的算术使第 9 条的逐字相同不可复现（如单精度浮点累积误差），THEN THE Spec_Ledger SHALL 记录第 9 条改用的判据（涉及的值字及每字容差，以 0.1 mm 计）与其 Evidence_Doc 出处，第 9 条按该判据核对。
 17. WHEN 本批插入一个 `Q POS WRT /*` 为 E 1000 N 2000 U 3000、世界朝向为缺省（Y is N and Z is U）的 301 × 400 × 500 BOX 且调用方未为它给出 World_AABB，THE Transaction SHALL 为它算出 World_AABB x ∈ [849.5, 1150.5]、y ∈ [1800, 2200]、z ∈ [2750, 3250] mm（即需求 4 第 20 条条目值的前 6 字）。
 
 ### Requirement 7: SPAMAP 随写入维护
@@ -357,7 +359,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 7. THE Evidence_Doc SHALL 以 E3D_Core 的发号例程（`db_get_bucket`，`0x5aadd90`，routine 360）坐实 Counter_Semantics，并以 Corpus 核对（`ams8000_0001` 扩展 24384：活最大 26483 / 页 1 值 26496；32576：31 / 98；`ams251142_0001`：946 / 947；`TES023` 17419：315 / 331，9227 无条目）。
 8. WHERE 构建为发布提交的默认构建，IF Counter_Semantics 未坐实，THEN THE Transaction SHALL 按 `c61b097` 的规则发号（每扩展取 base 会话索引中最大 word1 + 1，不以 Bucket_Floor 为下界），并在打开结果中标明计数器未用（需求 2 第 6 条、D7）。
 9. THE Transaction SHALL 对 Bucket_Table 未列出的扩展（如各库主扩展）同样经 Open_Fast_Path 得出首个待发 word1，不遍历全部索引键。
-10. IF Open_Fast_Path 依赖索引键的排列次序（如按 (word0, word1) 升序、沿 B+ 树取最右路径），THEN THE Evidence_Doc SHALL 坐实该次序（Core_IDB 出处，或在全部 Corpus 库上 0 反例的核对命令）。
+10. IF Open_Fast_Path 依赖索引键的排列次序（如按 (word0, word1) 升序、沿 B+ 树取最右路径），THEN THE Evidence_Doc SHALL 坐实该次序（E3D_IDB 出处，或在全部 Corpus 库上 0 反例的核对命令）。
 11. WHEN Transaction 在 Merge_Commit 中重铸插入元素的 refno，THE Transaction SHALL 使重铸所得的 word1 同样满足第 2、3 条（以 Merge_Latest 的索引与提交时读到的 Bucket_Table 计）。
 12. WHEN 调用方以 `open_at(base)` 打开，THE Transaction SHALL 以 base 会话的索引与打开时读到的 Bucket_Table 计第 2、3 条的下界。
 13. WHEN e3d-io 在 Bucket_Floor 高于活最大 word1 + 1 的扩展（如 `ams8000_0001` 的 24384）插入一个带名字的元素并提交，THE E3D_Session SHALL 对该名字 `Q REF` 给出的 word1 等于第 5 条口径下由门副本页 1 与索引算出的期望值（TTY_Gate 门问 Q14）。
