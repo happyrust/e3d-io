@@ -38,7 +38,7 @@
     - _Requirements: 15.3_
 
 - [ ] 2. IB_Wrapper 与取证工具（需求 1）
-  - [~] 2.1 实现 `tools/ida/ib.ps1` 主体（PS 5.1）
+  - [x] 2.1 实现 `tools/ida/ib.ps1` 主体（PS 5.1）
     - 用法 `ib.ps1 [--target-idb <path>] [--timeout-s <n>] <ida-bridge 命令与参数…>`：两个选项由包装器消费，其余原样转发；`--target-idb` 缺省为 Core_IDB
     - 安装查找与缺项报告（1.1、1.2），无可用安装退出 90
     - 子进程 `PYTHONPATH` 放入所选安装的 `src` 并自检能导入；不改 `.pth`、PATH 等用户配置
@@ -50,16 +50,16 @@
     - 包装器自身错误的 stderr 以 `[ib]` 开头
     - 实现时核对并在脚本注释中写明：`list` 输出格式与占用字段、CLI 入口模块、`supervisor stop` 是否存盘
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.10, 1.11, 1.12_
-  - [~] 2.2 加 `ib.ps1 env`、`ib.ps1 xrefs` 与 IB_Xref_Helper
+  - [x] 2.2 加 `ib.ps1 env`、`ib.ps1 xrefs` 与 IB_Xref_Helper
     - `env` 打印 Core_IDB 的 SHA-256（`Get-FileHash`）、IDA 版本（实例内 `ida_kernwin.get_kernel_version()`）与 `git rev-parse HEAD`
     - `tools/ida/xrefs_to.py`：包装器以 `-c "XREF_TARGET=0x…"` 注入目标、以 `-f` 运行；用 `ida_xref.xrefblk_t` 的 `first_to` / `next_to` 枚举代码与数据引用并排除顺序流（`XREF_FAR` 还是 `XREF_NOFLOW` 按所装 SDK 核对）；取到 `BADADDR` 或满 100 000 条即停；输出按源地址排序的 JSON（`from`、`kind`、`type`、`func`），截断时带 `truncated: true`
     - `tools/ida/queries/xrefs_to.sql` 取 `xrefs` 表中同一 `to_ea`、去掉 flow 类的 `from_ea`；`tools/ida/check_xrefs.ps1 <地址>` 比较两个集合
     - _Requirements: 1.5, 1.6, 1.9_
-  - [~] 2.3 建证据模板与机检
+  - [x] 2.3 建证据模板与机检
     - `tools/ida/EVIDENCE_TEMPLATE.md` 分「环境」「结论」「复现命令」「反例」四节；「结论」逐条写规则名、坐实与否、例程起始地址、`pseudocode.n` 行号或指令地址、Corpus 核对（库、命令、一致数 / 总数），未坐实的另写假设、输入类别与反例
     - `tools/ida/check_evidence.ps1 <doc>`：「复现命令」只以 `tools/ida/ib.ps1`、仓内相对路径脚本与 `cargo` 为入口；不含临时目录、`idalib-\d+` / `idaui-\d+` 与 IDA_Bridge 安装目录；所引 `tools/ida/` 文件受版本管理（`git ls-files --error-unmatch`）；地址十六进制、哈希 64 位、HEAD 40 位；比对「环境」节首尾两次 SHA-256
     - _Requirements: 1.7, 1.8, 1.9_
-  - [ ]* 2.4 写 `tools/ida/selftest.ps1` 离线自检
+  - [x]* 2.4 写 `tools/ida/selftest.ps1` 离线自检
     - 用假安装目录与不可达的桥地址，覆盖 1.2 的缺项报告、1.4 的桥不可达分支（92）、1.5 的拒存盘（91，且不发请求）
     - **Property 25: 一轮取证不改 Core_IDB**（离线部分）
     - **Validates: Requirements 1.5**

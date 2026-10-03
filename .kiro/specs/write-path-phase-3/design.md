@@ -99,7 +99,7 @@ flowchart TD
 
 1. 找安装：依次查 `IDA_BRIDGE_HOME`、`C:\Users\dpc\.agents-old\tools\ida-bridge`、`C:\Users\dpc\.agents\tools\ida-bridge`（这份清单是脚本顶部唯一的常量），取第一处同时含 `src\ida_bridge\` 与 `.venv\Scripts\python.exe` 的。一处都不全时，逐条打印查过的位置和所缺的项（环境变量未设置时注明「未设置」），退出码 90。
 2. 子进程环境：只在 `ProcessStartInfo.EnvironmentVariables` 中把所选的 `src` 放到 `PYTHONPATH` 最前面。`sys.path` 上的 PathFinder 排在 venv editable 安装追加的 finder 之前，所以会先找到它。转发前先跑 `python -c "import ida_bridge; print(ida_bridge.__file__)"` 自检，确认解析到的是所选 `src`。不改 `.pth`、PATH 等用户配置。CLI 入口（`python -m …`）以所选安装的 `pyproject.toml` 为准，实现时核对。
-3. 拒存盘，在发出任何请求之前检查：参数含 `--save`，命令是 `supervisor save`，`--out-idb` 按第 5 步的规则等于 Core_IDB，或 `-c` 文本、`-f` 文件内容含 `idb.save` / `save_database`。命中任一项即打印原因，退出码 91。只改内存 IDB 的 SQL 写不拦。另外，实现时核对 `supervisor stop` 关库时是否存盘；会存盘的话，就给它补上不存盘参数，或者拒绝该调用。
+3. 拒存盘，在发出任何请求之前检查：参数含 `--save`，命令是 `supervisor save`，`--out-idb` 按第 5 步的规则等于 Core_IDB，或 `-c` 文本、`-f` 文件内容含 `idb.save` / `save_database`。命中任一项即打印原因，退出码 91。只改内存 IDB 的 SQL 写不拦。另外，实现时核对 `supervisor stop` 关库时是否存盘；会存盘的话，就给它补上不存盘参数，或者拒绝该调用。（已核：idalib 实例退出时 `close_database(save=False)`，照转；UI 实例经 `idc.qexit(0)` 退出、IDA 关库即写盘，故 `supervisor stop` 指向 `idaui-<n>`、PID 或解析到 UI 实例时一律以 91 拒绝。）
 4. 连桥：TCP 连接所配的桥地址（默认 `127.0.0.1:8765`，取地址的方式与 ida-bridge 一致），2 s 内连不上即退出码 92。打印所试的地址，再按顺序打印 `tools/ida/ib.ps1 server start` 与 `tools/ida/ib.ps1 supervisor start-idalib --idb "<Target_IDB>"`。
 5. 解析实例：只对 `exec`、`reset`、`supervisor stop` 做，且仅当调用方没给 `idalib-<n>` / `idaui-<n>` 位置参数时。从 `list` 取每个已连接实例的实例号、PID、IDB 路径与占用 session id；这些字段从 `list` 的 JSON 输出还是 `server status` 取，实现时对所选版本核对。比较时两边都转成绝对全路径，不分大小写，`/` 与 `\` 视同。恰好一个且未被占用时，把它的实例号插为位置参数后转发。没有匹配时退出码 93，打印启动命令；Target_IDB 文件不存在时改为指明这一点，不打印启动命令。多于一个，或唯一的那个被别的 session 占用（占用 id 非空且不等于调用方的 `--session-id`）时退出码 94，逐个打印实例号、PID 与占用 id（没有则写「无」）。
 6. 超时：`exec` 的时限取 `--timeout-s`，缺省 60 s，0 表示不设限。到时只结束本地客户端进程树（`taskkill /T /F`），不停实例，也不重发。打印实例号、`tools/ida/ib.ps1 supervisor stop <实例号>` 与启动命令，在「时限 + 10 s」内以退出码 95 退出。
@@ -109,7 +109,7 @@ flowchart TD
 
 ### IB_Xref_Helper、查询文件与证据模板
 
-- `tools/ida/xrefs_to.py`：IDAPython，在实例内执行。包装器先以 `-c "XREF_TARGET=0x…"` 注入目标，再以 `-f tools/ida/xrefs_to.py` 运行它。脚本用 `ida_xref.xrefblk_t` 的 `first_to(ea, XREF_FAR)` / `next_to()` 一并枚举代码引用与数据引用；`XREF_FAR` 的作用是排除顺序流（新版 SDK 中可能改名为 `XREF_NOFLOW`，实现时按所装版本核对）。遇到 `BADADDR` 或取满 100 000 条即停。输出按源地址排序的 JSON，每条含 `from`、`kind`、`type`、`func`（不在函数内时为空串），截断时带 `truncated: true`。
+- `tools/ida/xrefs_to.py`：IDAPython，在实例内执行。ida-bridge 一次 `exec` 按 `--sql` → `-f`（依次）→ `-c` 的顺序跑、共用一份 globals，`-c` 总在最后，所以不能用 `-c` 先注入目标：文件定义 `xrefs_to(ea)`，包装器以 `-f tools/ida/xrefs_to.py -c "_result_ = xrefs_to(0x…)"` 调它。脚本用 `ida_xref.xrefblk_t` 的 `first_to(ea, XREF_FAR)` / `next_to()` 一并枚举代码引用与数据引用；`XREF_FAR` 的作用是排除顺序流（新版 SDK 中可能改名为 `XREF_NOFLOW`，实现时按所装版本核对）。遇到 `BADADDR` 或取满 100 000 条即停。输出按源地址排序的 JSON，每条含 `from`、`kind`、`type`、`func`（不在函数内时为空串），截断时带 `truncated: true`。
 - 模型对照：`tools/ida/queries/xrefs_to.sql` 从 ida-bridge 的 `xrefs` 表取同一 `to_ea`、去掉 flow 类的 `from_ea`，`tools/ida/check_xrefs.ps1 <地址>` 比较两个集合是否相同（需求 1 第 6 条）。取证用的其他 SQL / IDAPython 也一律放在 `tools/ida/queries/`，证据里以仓库相对路径经 `-f` 引用。
 - `tools/ida/EVIDENCE_TEMPLATE.md` 分四节：「环境」写 Core_IDB 的 SHA-256（首尾各一次）、IDA 版本、40 位的 HEAD；「结论」逐条规则写注册表中的规则名、坐实与否、例程起始地址、`pseudocode.n` 行号或指令地址，以及 Corpus 核对（库、命令、一致数 / 总数），未坐实的另写所作假设、须用到它的输入类别与反例；「复现命令」；「反例」。
 - `tools/ida/check_evidence.ps1 <doc>` 机检需求 1 第 7–9 条：「复现命令」节只以 `tools/ida/ib.ps1`、按仓内相对路径调用的脚本与 `cargo` 为入口；不含临时目录（`%TEMP%`、`$env:TEMP` 及其展开值）、`idalib-\d+` / `idaui-\d+` 与 IDA_Bridge 安装目录；所引的 `tools/ida/` 文件都受版本管理（`git ls-files --error-unmatch`）；地址为十六进制，哈希 64 位，HEAD 40 位。
