@@ -128,3 +128,7 @@ Core3D_IDB：`D:\ida_scratch\plant3\Core3D.dll.i64`（桥上常驻，C0 结束�
 ### C3（7.4，2026-10-03）
 
 `docs/evidence/2026-10-03-spamap-record-item.md`（`check_evidence.ps1` PASS，两个 IDB 首末 SHA-256 不变，7 个地址 `check_xrefs` PASS）。core `sub_5AB91B0` 的类型 14 分支（n 261–331）：元素宽 1 字（Key0），槽偏移 = 下标 − 1 = k，表键 [Key0, refno, refno, k]；记录尚无该项时整列先填 0x80000001，已有时读旧槽（0x80000000 / 0x80000001 为空）删旧键；n 396–419 经通用记录属性写入口 `sub_5AB7B90` 写回。该段不看 noun。**`spamap.record_item.<NOUN>` 坐实为各 noun 相同**（`RecordItem::Key0ByK`）：记录 `SPAMAP` 属性（类型 14，位置按模板，BOX 在 implicit word 35、存储 2 字）第 k 槽 = k 条目的 Key0，空槽 0x80000001。新测 `tests/spamap_record_item_real.rs`：基线 640 3 628 / 3 628，Corpus 25 517 / 25 517 带且逐槽相符，46 个 noun 无例外（BRAN 只有 k 1，记录项 `[0x80000001, Key0]`）。tasks 7.4 打勾。clippy 63、`cargo doc` 25 同基线。
+
+### 中途检查点（C3 之后，2026-10-03）
+
+Build_Checks（`CARGO_TARGET_DIR=target-phase3`，`cargo test --release --no-fail-fast -- --show-output`；日志与解析只在本机 `.agents/tasks/write-path-phase-3-milestone-c/`）：113 个测试二进制 + Doc-tests 1 个，690 / 0 / 30（里程碑 B 末 110 个、669 / 0 / 30；新增 `spamap_page_headers_real`、`spamap_coverage_real`、`spamap_record_item_real`）；报 skip 的仍是基线那 7 个；clippy 63、`cargo doc` 25 同基线。C 余下 C4（7.5）、C5（按 Q3 留 D）、C6。
