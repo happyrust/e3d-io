@@ -21,6 +21,7 @@
 - `tests/hunk_resolve_real.rs::e3ds_own_int_array_hunk_resolves_to_its_5709_ints`，第 50 行：期望页 16456，实得 16600。
 - 在干净的 `c61b097` 临时 worktree 上复跑，同样失败，与未提交改动无关。
 - 原因：`ams8000_0001` 原件在 2026-09-28 被 E3D 追加了会话 641–646（文件最后写入 2026-09-30 17:05:57），最新会话里 DBMDAT 24384/26333 的 DBMVAL 链起页从 16456（会话 640 所写）变为 16600。
+- 处置（2026-10-03）：测试改用 `ReadOnlyEngine::open_at(AMS8000, 640)`，此后全套为 627 / 0 / 30。
 
 ## skip 清单（skip 不计为通过）
 

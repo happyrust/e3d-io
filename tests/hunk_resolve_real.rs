@@ -26,12 +26,16 @@ const DESIGN_TEMPLATE_TYPE: u32 = 0x000B_0692;
 const DBMDAT: RefNo = RefNo { word0: 24_384, word1: 26_333 };
 const DBMVAL_WORDS: usize = 5_709;
 
+/// The newest session when the census read the sample. E3D has saved 641–646
+/// onto the installed file since and moved the chain, so the test opens here.
+const CENSUS_SESSION: u32 = 640;
+
 #[test]
 fn e3ds_own_int_array_hunk_resolves_to_its_5709_ints() {
     if common::missing(&[AMS8000, DESVIR, ATTLIB]) {
         return;
     }
-    let mut engine = ReadOnlyEngine::open(AMS8000).expect("open the sample");
+    let mut engine = ReadOnlyEngine::open_at(AMS8000, CENSUS_SESSION).expect("open the sample at the census session");
     let dbmval = db1_hash("DBMVAL");
 
     // Off the record alone: the directory entry, five words under `20 << 10`.
