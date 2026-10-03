@@ -1,6 +1,6 @@
 # 计划：e3d-io 写路径 · 第三期 · 里程碑 C（任务第 7 组前半：core 取证——编码、覆盖、记录项、AABB）
 
-状态：**评审通过**（2026-10-03，Plannotator 门 `approved`，无批注 → Q1–Q5 全按推荐项）→ 里程碑 C 进行中（见 §6）
+状态：**评审通过**（2026-10-03，Plannotator 门 `approved`，无批注 → Q1–Q5 全按推荐项）→ **里程碑 C 已完成**（2026-10-03，见 §6；`aabb.*` 五条待 D）
 日期：2026-10-03
 分支 / worktree：`write-path` @ `D:\work\plant-code\old\vendor\e3d-io-write`，HEAD `95f751f`（里程碑 B 收尾，领先 `github/write-path` 24 个提交，未推送）
 依据：`.kiro/specs/write-path-phase-3/` 需求 1、2、4、5、6 与任务第 7 组；`docs/plans/2026-10-03-write-path-phase-3-milestone-b-plan.md` §6（候选与反例）
@@ -136,3 +136,7 @@ Build_Checks（`CARGO_TARGET_DIR=target-phase3`，`cargo test --release --no-fai
 ### C4（7.5，2026-10-03）
 
 `docs/evidence/2026-10-03-spamap-aabb.md`（`check_evidence.ps1` PASS，两个 IDB 首末 SHA-256 不变，12 个地址 `check_xrefs` PASS）。读到：Core3D `WSTRAM` 从元素往上 `CONCAT(T_级, 已累积)` 到 WORL；`GETRAM` → `GETORI` → core `GTORI1`：R = Rz·Ry·Rx，core `SINCOS` 在 0 / ±90 / ±180（`LREQ` 容差 0.0001）给精确值、其余除 57.29577951308232；`BOXELE` 尺寸 < 0.5 取 0.5 后交 core `MBXBOX`（中心 ± Σ\|R·半长\|）或 `MBXSNO` → 两端圆 `MBXCIR`（r·√(1 − z_i²) 求并）；全程 double。候选换成同式（`ori_by_gtori1`、`every_pose_from_the_element_up`、`cylinder_by_end_circles`），Built_In_AABB 仍 1 572 / 1 590、18 个反例不变（1.5–273 mm，非算式或取整）。**`aabb.degenerate` 坐实**（`rules::degenerate_below_half`，`aabb.rs` 阈值改为 0.5；TES023 2 / 2，Corpus 分不出新旧，只以 ①）；其余五条记 ① 与反例清单（evidence 表），按「坐实」定义待 D 的 7.3 按需求 4.17 剔除后再判。tasks 7.5 保持进行中（待 D）。clippy 63、`cargo doc` 25 同基线。
+
+### C5、C6（2026-10-03）
+
+C5：按 Q3，4.20 留给 D，tasks 7.6 下记待办。C6 检查点：Build_Checks 113 个测试二进制 + Doc-tests，690 / 0 / 30（里程碑 B 末 669 / 0 / 30），skip 仍是基线那 7 个，clippy 63、`cargo doc` 25 同基线；Spec_Ledger「规则坐实状态总表」已逐条填 C 的规则。**里程碑 C 完成**：坐实 `spamap.{rounding, word_sign, short_axis, zero_extent, bucket, key0, table_shape, table_header_rest, entries_k, flags, coverage, record_item}` 与 `aabb.degenerate`（tasks 7.1、7.2、7.4 打勾）；`aabb.{ori_form, compose, box, cyli, arithmetic}` 出处 ① 已读、候选与 E3D 同式，18 个反例待 D 的 7.3 按需求 4.17 剔除后再判（7.5 进行中）。建议下一步：写里程碑 D 计划（7.3 重算探针、7.5 剔除后坐实、7.6 的 4.20、7.7 门槛核查），走 Plannotator。

@@ -201,6 +201,7 @@
     - _Requirements: 2.4, 6.1, 6.16_
   - [ ]* 7.6 写示例测试 4.20 与 6.17
     - 4.20：在 `tests/spamap_codec_real.rs` 中以 BOX `24384/26484` 在 E3D 为其写出条目那一会话的状态为输入（经 `ReadState`），断言 SPAMAP_Codec 恰得需求 4 第 20 条的那一条条目
+    - 待办（里程碑 C 计划 Q3）：4.20 部分留给里程碑 D，随 7.3 的探针让 E3D 改一次该 BOX 的 `XLEN` 得到那一会话；里程碑 C 末确认集下 codec 已能为合成状态整条编出 4.20 的 Key0 300 008 495（`src/spatial/codec.rs` 单测），仍缺 `aabb.*` 五条坐实与真实会话
     - 6.17：在 `tests/write_stage8_spamap_examples.rs` 中经 Transaction 插入需求 6 第 17 条的 BOX（不给 World_AABB）并提交，只用读侧读回，断言条目值前 6 字即该条的 World_AABB；此部分依赖 8.7
     - 所需规则未坐实时，测试断言 D7 回退（视同无可用 World_AABB），并把该示例作为待办记入 Spec_Ledger「规则坐实状态总表」备注
     - _Requirements: 4.20, 6.17_
