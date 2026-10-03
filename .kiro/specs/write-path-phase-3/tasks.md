@@ -64,7 +64,7 @@
     - **Property 25: 一轮取证不改 Core_IDB**（离线部分）
     - **Validates: Requirements 1.5**
     - _Requirements: 1.2, 1.4, 1.5_
-  - [ ]* 2.5 IB_Wrapper 实机冒烟
+  - [x]* 2.5 IB_Wrapper 实机冒烟
     - 经 IB_Wrapper 起桥与 idalib（Core_IDB），跑一次 `exec`，并覆盖多实例、被占用、超时三条路径
     - `check_xrefs.ps1` 跑至少 5 个地址，其中一个被大量引用；`env` 首尾两次哈希相同
     - 结果记入 Spec_Ledger「IB_Wrapper 实机冒烟」
@@ -522,12 +522,12 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 路径 | 命令 | 退出码与结果 | 日期 |
 |---|---|---|---|
-| 起桥与 idalib（Core_IDB），`exec` 一次 | | | |
-| 多实例 | | | |
-| 被占用 | | | |
-| 超时 | | | |
-| `check_xrefs.ps1`（≥ 5 个地址，含一个被大量引用的） | | | |
-| `env` 首尾 SHA-256 | | | |
+| 起桥与 idalib（Core_IDB），`exec` 一次 | 桥（server PID 13404）与 `idalib-4000`（2026-09-22 起开着 Core_IDB）是本机常驻环境，未另起；`ib.ps1 exec --sql "SELECT name, start_ea FROM funcs WHERE start_ea = 0x5a1d090"` | 0。未给实例号，按 `meta.idb_path` 解析到 `idalib-4000`（同桥另有 `plant210\core.dll.i64` 的实例，未误中），返回 `?startSearch@DB_RefTableIterator@@…` | 2026-10-03 |
+| 多实例 | 实机构造不出：IDA 打开 IDB 即锁其文件，同一 Core_IDB 起不了第二个实例。改由 `tools/ida/selftest.ps1` 以替身 ida_bridge 的固定 `list`（两实例同指目标，大小写与斜杠不同）覆盖 | 94，逐个列出 `idalib-21` / `idalib-22`、PID、占用 none | 2026-10-03 |
+| 被占用 | `ib.ps1 exec --stateful --session-id ib-smoke -c …` 之后：不带 session 调用；`--session-id someone-else` 调用；持有者再调；`ib.ps1 reset --session-id ib-smoke --release` | 0 / 94（`idalib-4000  pid 4000  held by session ib-smoke`）/ 94 / 0 / 0；释放后 `list` 无占用 | 2026-10-03 |
+| 超时 | `ib.ps1 --timeout-s 3 exec -c "import time; time.sleep(12); _result_ = 'woke'"` | 95，3.85 s 返回（时限 + 10 s 内），印实例号与停 / 重开命令；实例未停，sleep 结束后照常应答 | 2026-10-03 |
+| `check_xrefs.ps1`（≥ 5 个地址，含一个被大量引用的） | `0x586526b`（`@__security_check_cookie@4`，10 516 引用）、`0x5864da3`（`??2@YAPAXI@Z`，10 319）、`0x5a1d090`、`0x5ab91b0`、`0x5aecbe0`、`0x5ae9960` | 6 / 6 PASS：助手与 SQL `xrefs`（去 flow）的源地址集合逐一相同。SQL 侧按 ida-bridge 单次结果 10 000 行上限分页 | 2026-10-03 |
+| `env` 首尾 SHA-256 | `ib.ps1 env`，本轮首末各一次 | 首尾同为 `18D5C15525696730E83D35A88D58B421DF0A15D699F82CCF0821908A72A9992C`；IDA 9.2；HEAD `ebad935` | 2026-10-03 |
 
 #### SPAMAP_Baseline 读数（3.4）
 

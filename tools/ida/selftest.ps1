@@ -14,6 +14,10 @@
     start-idalib command is not (requirement 1.4).
   - 91: each call that could save Core_IDB is refused, and nothing connects
     to the configured bridge address meanwhile (requirement 1.5).
+  - 93 / 94 / forwarding, against a stand-in ida_bridge with a canned list:
+    no instance, two instances, one held by another session, the holder
+    itself, reset and supervisor stop resolved (requirements 1.3, 1.10). Two
+    live instances on one IDB cannot be had: IDA locks an open database.
   Prints PASS or FAIL per check; exit 0 when all pass.
 #>
 $ErrorActionPreference = 'Continue'
@@ -115,10 +119,82 @@ try {
         while ($listener.Pending()) { $listener.AcceptTcpClient().Close() }
     }
     $listener.Stop()
+
+    # --- 93, 94 and forwarding, against a stand-in ida_bridge ----------------------
+    # A venv's python.exe is a launcher that finds its interpreter through the
+    # pyvenv.cfg one level up, so the two files make a working stand-in whose
+    # ida_bridge prints a canned list and echoes what it was asked to run.
+    $fake = Join-Path $scratch 'fake'
+    New-Item -ItemType Directory -Path (Join-Path $fake 'src\ida_bridge'), (Join-Path $fake '.venv\Scripts') -Force | Out-Null
+    $venv = 'C:\Users\dpc\.agents-old\tools\ida-bridge\.venv'
+    Copy-Item -LiteralPath (Join-Path $venv 'Scripts\python.exe') -Destination (Join-Path $fake '.venv\Scripts\python.exe')
+    Copy-Item -LiteralPath (Join-Path $venv 'pyvenv.cfg') -Destination (Join-Path $fake '.venv\pyvenv.cfg')
+    [IO.File]::WriteAllText((Join-Path $fake 'src\ida_bridge\__init__.py'), '')
+    [IO.File]::WriteAllText((Join-Path $fake 'src\ida_bridge\__main__.py'),
+        "import json, os, sys`nargs = sys.argv[1:]`nif args[:2] == ['list', '--json']:`n    print(os.environ['IB_FAKE_LIST'])`nelse:`n    print(json.dumps({'forwarded': args}))`n")
+    $target = Join-Path $scratch 'Target.i64'
+    [IO.File]::WriteAllText($target, 'stands in for an IDB')
+    $env:IDA_BRIDGE_HOME = $fake
+    $bridge = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    $bridge.Start()
+    $env:IDA_BRIDGE_PORT = [string](([System.Net.IPEndPoint]$bridge.LocalEndpoint).Port)
+
+    function Set-Listed([object[]]$Instances) {
+        $env:IB_FAKE_LIST = (@{ ok = $true; clients = @($Instances) } | ConvertTo-Json -Depth 5 -Compress)
+    }
+    function New-Instance([string]$Id, [string]$IdbPath, [string]$Session) {
+        $instance = [ordered]@{ client_id = $Id; role = 'ida'; meta = @{ pid = [int]($Id -replace '\D', ''); idb_path = $IdbPath } }
+        if ($Session) { $instance.session_id = $Session }
+        return $instance
+    }
+    function Invoke-Against([object[]]$Instances, [string[]]$Arguments) {
+        Set-Listed $Instances
+        $run = Invoke-Ib $ib (@('--target-idb', $target) + $Arguments)
+        while ($bridge.Pending()) { $bridge.AcceptTcpClient().Close() }
+        return $run
+    }
+
+    $run = Invoke-Against @(New-Instance 'idalib-11' 'C:\elsewhere\other.i64') @('exec', '-c', '1')
+    Check '93 when no instance has the target open, with the start command' (
+        $run.Code -eq 93 -and $run.Output.Contains("supervisor start-idalib --idb `"$target`"")
+    ) $run.Output
+
+    $twice = @((New-Instance 'idalib-21' $target), (New-Instance 'idalib-22' $target.Replace('\', '/').ToUpperInvariant()))
+    $run = Invoke-Against $twice @('exec', '-c', '1')
+    Check '94 when two instances have the target open, both listed' (
+        $run.Code -eq 94 -and $run.Output.Contains('instance idalib-21  pid 21  held by session none') -and
+        $run.Output.Contains('instance idalib-22  pid 22  held by session none')
+    ) $run.Output
+
+    $held = @(New-Instance 'idalib-31' $target 'other')
+    $run = Invoke-Against $held @('exec', '-c', '1')
+    Check '94 when the one instance is held by another session' (
+        $run.Code -eq 94 -and $run.Output.Contains('held by session other')
+    ) $run.Output
+    $run = Invoke-Against $held @('exec', '--stateful', '--session-id', 'other', '-c', '1')
+    Check 'the holding session itself is forwarded, instance inserted' (
+        $run.Code -eq 0 -and $run.Output.Contains('"exec", "idalib-31", "--stateful", "--session-id", "other", "-c", "1"')
+    ) $run.Output
+
+    $run = Invoke-Against @(New-Instance 'idalib-41' $target) @('reset', '--session-id', 's', '--release')
+    Check 'reset is forwarded to the resolved instance' (
+        $run.Code -eq 0 -and $run.Output.Contains('"reset", "idalib-41", "--session-id", "s", "--release"')
+    ) $run.Output
+
+    $run = Invoke-Against @(New-Instance 'idalib-61' $target) @('supervisor', 'stop')
+    Check 'supervisor stop is forwarded to a resolved idalib instance' (
+        $run.Code -eq 0 -and $run.Output.Contains('"supervisor", "stop", "idalib-61"')
+    ) $run.Output
+    $run = Invoke-Against @(New-Instance 'idaui-51' $target) @('supervisor', 'stop')
+    Check '91 when supervisor stop resolves to a UI instance' (
+        $run.Code -eq 91 -and $run.Output.Contains('idaui-51 is a UI instance')
+    ) $run.Output
+    $bridge.Stop()
 } finally {
     if ($savedHome) { $env:IDA_BRIDGE_HOME = $savedHome } else { Remove-Item Env:\IDA_BRIDGE_HOME -ErrorAction SilentlyContinue }
     if ($savedHost) { $env:IDA_BRIDGE_HOST = $savedHost } else { Remove-Item Env:\IDA_BRIDGE_HOST -ErrorAction SilentlyContinue }
     if ($savedPort) { $env:IDA_BRIDGE_PORT = $savedPort } else { Remove-Item Env:\IDA_BRIDGE_PORT -ErrorAction SilentlyContinue }
+    Remove-Item Env:\IB_FAKE_LIST -ErrorAction SilentlyContinue
     Remove-Item -Recurse -Force -LiteralPath $scratch -ErrorAction SilentlyContinue
 }
 

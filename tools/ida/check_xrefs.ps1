@@ -42,14 +42,21 @@ $helper = ($helperText -join "`n") | ConvertFrom-Json
 
 $sql = ((Get-Content -LiteralPath (Join-Path $PSScriptRoot 'queries\xrefs_to.sql')) | Where-Object { $_ -notmatch '^\s*--' }) -join ' '
 $sql = $sql.Replace(':to_ea', $address)
-$modelText = & powershell -NoProfile -File $ib @wrapperArgs exec --json --sql $sql
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$model = ($modelText -join "`n") | ConvertFrom-Json
 
 $fromHelper = New-Object 'System.Collections.Generic.HashSet[UInt64]'
 foreach ($row in @($helper.xrefs)) { [void]$fromHelper.Add((ConvertTo-Address $row.from)) }
+
+# ida-bridge refuses an SQL result of more than 10000 rows, so the SQL side
+# is read a page at a time. Rows come back as objects keyed by column name.
+$page = 10000
 $fromSql = New-Object 'System.Collections.Generic.HashSet[UInt64]'
-foreach ($row in @($model.result.rows)) { [void]$fromSql.Add((ConvertTo-Address @($row)[0])) }
+for ($offset = 0; ; $offset += $page) {
+    $modelText = & powershell -NoProfile -File $ib @wrapperArgs exec --json --sql "$sql LIMIT $page OFFSET $offset"
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $rows = @((($modelText -join "`n") | ConvertFrom-Json).result.rows)
+    foreach ($row in $rows) { [void]$fromSql.Add((ConvertTo-Address $row.from_ea)) }
+    if ($rows.Count -lt $page) { break }
+}
 
 $onlyHelper = @($fromHelper | Where-Object { -not $fromSql.Contains($_) } | Sort-Object | ForEach-Object { '0x{0:X}' -f $_ })
 $onlySql = @($fromSql | Where-Object { -not $fromHelper.Contains($_) } | Sort-Object | ForEach-Object { '0x{0:X}' -f $_ })
