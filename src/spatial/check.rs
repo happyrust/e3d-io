@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, HashMap};
 use e3d_attlib::db1_dehash;
 
 use super::codec::{EntriesOf, SpamapCodec};
+use super::state::ReadState;
 use super::{SpatialState, WorldAabb};
 use crate::core_rules::RuleId;
 use crate::index::SpamapEntry;
@@ -29,6 +30,10 @@ pub const LISTED: usize = 100;
 pub struct Item {
     pub agree: u64,
     pub total: u64,
+    /// Of the misses, those for want of a pending rule: under the confirmed
+    /// rules D7's fallback, not a counterexample. `agree + waiting = total`
+    /// is the item's whole criterion once its rules are confirmed.
+    pub waiting: u64,
     /// The first [`LISTED`] misses, in key order.
     pub misses: Vec<Miss>,
     /// `(agree, total)` by noun; empty for Key0, which is checked on words.
@@ -60,13 +65,34 @@ pub struct Checked {
     pub excluded_elements: u64,
 }
 
+/// Why the codec made nothing for a case.
+enum Unmade {
+    /// It waits on these pending rules.
+    Pending(Vec<RuleId>),
+    /// Something no rule would change.
+    Other(String),
+}
+
 impl Item {
-    fn count(&mut self, noun: Option<&str>, agreed: bool, miss: impl FnOnce() -> Miss) {
+    /// Count one case: whether what the codec made agrees and what it made,
+    /// or why it made nothing.
+    fn count(&mut self, noun: Option<&str>, made: Result<(bool, Vec<u32>), Unmade>, stored: impl FnOnce() -> Vec<SpamapEntry>) {
+        let agreed = matches!(made, Ok((true, _)));
         self.total += 1;
         if agreed {
             self.agree += 1;
-        } else if self.misses.len() < LISTED {
-            self.misses.push(miss());
+        } else {
+            if matches!(made, Err(Unmade::Pending(_))) {
+                self.waiting += 1;
+            }
+            if self.misses.len() < LISTED {
+                let (codec, reasons) = match made {
+                    Ok((_, made)) => (made, Vec::new()),
+                    Err(Unmade::Pending(pending)) => (Vec::new(), names(&pending)),
+                    Err(Unmade::Other(why)) => (Vec::new(), vec![why]),
+                };
+                self.misses.push(Miss { stored: stored(), codec, reasons });
+            }
         }
         if let Some(noun) = noun {
             let tally = self.by_noun.entry(noun.to_owned()).or_default();
@@ -97,6 +123,15 @@ impl Authors {
         let at = self.ends.partition_point(|(end, _)| *end < page);
         self.ends.get(at).map(|(_, user)| user.as_str())
     }
+
+    /// Whether E3D wrote the element as `state` has it (E3D_Authored_Element):
+    /// its record is in a session whose USER is not [`E3DIO_USER`].
+    pub fn e3d_wrote(&self, state: &ReadState, refno: RefNo) -> bool {
+        state
+            .record_page(refno)
+            .and_then(|page| self.user_of(page))
+            .is_some_and(|user| !user.eq_ignore_ascii_case(E3DIO_USER))
+    }
 }
 
 /// The USER e3d-io's own sessions carry; anything else counts as E3D's.
@@ -122,12 +157,12 @@ pub fn check(
     };
 
     for entry in table {
-        let (agreed, made, reasons) = match codec.key0_of(&entry.aabb_words()) {
-            Ok(Some(key0)) => (key0 == entry.key0(), vec![key0], Vec::new()),
-            Ok(None) => (false, Vec::new(), vec!["Key0 cannot be represented".to_owned()]),
-            Err(pending) => (false, Vec::new(), names(&pending)),
+        let made = match codec.key0_of(&entry.aabb_words()) {
+            Ok(Some(key0)) => Ok((key0 == entry.key0(), vec![key0])),
+            Ok(None) => Err(Unmade::Other("Key0 cannot be represented".to_owned())),
+            Err(pending) => Err(Unmade::Pending(pending)),
         };
-        checked.key0.count(None, agreed, || Miss { stored: vec![*entry], codec: made, reasons });
+        checked.key0.count(None, made, || vec![*entry]);
     }
 
     let mut elements: Vec<(RefNo, Vec<SpamapEntry>)> = Vec::new();
@@ -152,43 +187,39 @@ pub fn check(
         let noun = noun_of(*refno);
         let mut stored_k: Vec<u32> = stored.iter().map(SpamapEntry::k).collect();
         stored_k.sort_unstable();
-        let made = codec_ks(codec, *refno, state, &stored[0]);
-        let (agreed, made, reasons) = match made {
-            Ok(ks) => (ks == stored_k, ks, Vec::new()),
-            Err(reasons) => (false, Vec::new(), reasons),
-        };
-        checked.entries_k.count(Some(&noun), agreed, || Miss { stored: stored.clone(), codec: made, reasons });
+        let made = codec_ks(codec, *refno, state, &stored[0]).map(|ks| (ks == stored_k, ks));
+        checked.entries_k.count(Some(&noun), made, || stored.clone());
         counted.insert(*refno, noun);
     }
 
     for entry in table {
         let Some(noun) = counted.get(&entry.refno()) else { continue };
-        let (agreed, made, reasons) = match codec.flags_of(entry.refno(), state, entry.k()) {
-            Ok(Ok(flags)) => (flags == entry.flags(), vec![flags], Vec::new()),
-            Ok(Err(pending)) => (false, Vec::new(), names(&pending)),
-            Err(undecodable) => (false, Vec::new(), vec![undecodable.to_string()]),
+        let made = match codec.flags_of(entry.refno(), state, entry.k()) {
+            Ok(Ok(flags)) => Ok((flags == entry.flags(), vec![flags])),
+            Ok(Err(pending)) => Err(Unmade::Pending(pending)),
+            Err(undecodable) => Err(Unmade::Other(undecodable.to_string())),
         };
-        checked.flags.count(Some(noun), agreed, || Miss { stored: vec![*entry], codec: made, reasons });
+        checked.flags.count(Some(noun), made, || vec![*entry]);
     }
     checked
 }
 
 /// The k of each entry the codec gives `refno` for the box of `first`, in
 /// order, or why it gives none.
-fn codec_ks(codec: &SpamapCodec<'_>, refno: RefNo, state: &dyn SpatialState, first: &SpamapEntry) -> Result<Vec<u32>, Vec<String>> {
-    let words = codec.decode_words(&first.aabb_words()).map_err(|pending| names(&pending))?;
+fn codec_ks(codec: &SpamapCodec<'_>, refno: RefNo, state: &dyn SpatialState, first: &SpamapEntry) -> Result<Vec<u32>, Unmade> {
+    let words = codec.decode_words(&first.aabb_words()).map_err(Unmade::Pending)?;
     let mm = words.map(|word| word as f64 / 10.0);
     let aabb = WorldAabb::new([mm[0], mm[1], mm[2]], [mm[3], mm[4], mm[5]])
-        .map_err(|invalid| vec![format!("the stored box is not one: {invalid}")])?;
+        .map_err(|invalid| Unmade::Other(format!("the stored box is not one: {invalid}")))?;
     match codec.entries_of(refno, state, &aabb) {
         Ok(EntriesOf::Entries(boxes)) => {
             let mut ks: Vec<u32> = boxes.iter().map(|(k, _)| *k).collect();
             ks.sort_unstable();
             Ok(ks)
         }
-        Ok(EntriesOf::NeedsUnconfirmed(pending)) => Err(names(&pending)),
-        Ok(EntriesOf::MissingInput(input)) => Err(vec![format!("missing input: {input}")]),
-        Err(error) => Err(vec![error.to_string()]),
+        Ok(EntriesOf::NeedsUnconfirmed(pending)) => Err(Unmade::Pending(pending)),
+        Ok(EntriesOf::MissingInput(input)) => Err(Unmade::Other(format!("missing input: {input}"))),
+        Err(error) => Err(Unmade::Other(error.to_string())),
     }
 }
 

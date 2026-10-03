@@ -1745,8 +1745,8 @@ fn census_database(path: &Path, session: Option<u32>) -> Result<Value, String> {
 /// FILE] [--refno W0/W1]` (requirements 4.10, 4.11, 4.15–4.17): per database,
 /// the codec under the chosen rules held against its SPAMAP table in three
 /// items — Key0 from each entry's own words, entry count and k, flags — each
-/// with agree / total, by noun, and its first misses with the rules they
-/// wait on. `--exclude` names elements taken out of the count and flags items,
+/// with agree / total, how many misses wait on a pending rule, by noun, and
+/// its first misses with the rules they wait on. `--exclude` names elements taken out of the count and flags items,
 /// one `DATABASE<TAB>W0/W1<TAB>evidence` per line. Inputs as `spamap-census`
 /// takes them; a database that cannot be read is listed, and the exit code is
 /// then 1.
@@ -1869,7 +1869,7 @@ struct SpamapCheck<'a> {
 
 impl SpamapCheck<'_> {
     fn database(&self, path: &Path, session: Option<u32>) -> Result<Value, String> {
-        use e3d_io::spatial::check::{check, Authors, E3DIO_USER};
+        use e3d_io::spatial::check::{check, Authors};
         let at = session.map_or(SessionSelector::Latest, SessionSelector::Exact);
         let mut view = DbView::open_at(path, at).map_err(|e| format!("open: {e}"))?;
         let sesno = view.selected_session();
@@ -1888,12 +1888,7 @@ impl SpamapCheck<'_> {
             None => table.entries().to_vec(),
         };
         let database = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
-        let authored = |refno: RefNo| {
-            state
-                .record_page(refno)
-                .and_then(|page| authors.user_of(page))
-                .is_some_and(|user| !user.eq_ignore_ascii_case(E3DIO_USER))
-        };
+        let authored = |refno: RefNo| authors.e3d_wrote(&state, refno);
         let excluded = |refno: RefNo| self.exclusions.iter().any(|(db, excluded, _)| *db == database && *excluded == refno);
         let codec = e3d_io::spatial::codec::SpamapCodec::new(self.rules);
         let checked = check(&entries, &state, &codec, &authored, &excluded);
@@ -1901,6 +1896,7 @@ impl SpamapCheck<'_> {
             json!({
                 "agree": item.agree,
                 "total": item.total,
+                "waiting": item.waiting,
                 "by_noun": item.by_noun.iter().map(|(noun, (agree, total))| (noun.clone(), json!([agree, total]))).collect::<BTreeMap<_, _>>(),
                 "first": item.misses.iter().map(|miss| json!({
                     "stored": miss.stored.iter().map(entry_words).collect::<Vec<_>>(),

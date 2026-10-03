@@ -132,7 +132,7 @@
     - 断言规则名唯一；每条 Confirmed 规则的出处文件存在，且其「结论」节含该规则名；`src/write/` 下的源码不出现 `candidates`
     - _Requirements: 2.6_
 
-- [ ] 5. SPAMAP_Codec 与 Codec_Check（需求 4）
+- [x] 5. SPAMAP_Codec 与 Codec_Check（需求 4）
   - [x] 5.1 实现 `src/spatial/codec.rs`
     - `SpamapCodec::encode` 按固定次序编码：取整 → 可表示范围 → 最短轴 → 零 extent → 桶 → Key0 → 条目数与 k → Spatial_Flags（经 `SpatialState` 读元素记录）
     - `Encoded`（`Entries { entries, relied_on }`、`NeedsUnconfirmed`、`MissingInput`）、`CodecError::OutOfRange { refno, axis, value_mm, range }`、`key0_of`
@@ -151,7 +151,7 @@
     - 随机 `CandidatePick` 决定哪些规则有实现；坐标含各轴边界附近与超出可表示范围、最短轴并列、最短轴 extent 为 0
     - **Property 6: Codec 结果三分**
     - **Validates: Requirements 4.12, 4.19**
-  - [~] 5.5 写 Codec Corpus 核对：`tests/spamap_codec_real.rs`
+  - [x] 5.5 写 Codec Corpus 核对：`tests/spamap_codec_real.rs`
     - Corpus 各库（含 SPAMAP_Baseline）三项计数；proptest 向单条条目注入一项失配，断言只改变对应那一项的计数
     - 规则坐实前用 candidates 跑，结果只作取证数据、不作通过判据；坐实后改由 `confirmed()` 断言一致数等于总数（只按剔除清单剔除）
     - **Property 5: Codec 三项核对分开计数**
