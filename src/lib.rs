@@ -1,4 +1,5 @@
 pub mod attlib_metadata;
+pub mod core_rules;
 pub mod dabacon_tags;
 pub mod db_element;
 pub mod db_param_env;
@@ -13,6 +14,7 @@ pub mod record;
 pub mod refno;
 pub mod schema;
 pub mod session;
+pub mod spatial;
 pub mod tty;
 pub mod uda_catalog;
 pub mod write;

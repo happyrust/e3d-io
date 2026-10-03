@@ -116,19 +116,19 @@
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 4. 规则注册表与空间值类型
-  - [~] 4.1 实现规则注册表 `src/core_rules.rs`
+  - [x] 4.1 实现规则注册表 `src/core_rules.rs`
     - `RuleId`（`#[non_exhaustive]`）、`Rule`、`RuleStatus`、`RULES`：按 design 规则表逐条登记，全部为 `Unconfirmed`，不预设任何取值
     - `RuleSet::confirmed()`（Transaction 唯一入口）与 `#[doc(hidden)] RuleSet::candidates(&CandidatePick)`；每类规则一个类型化实现槽枚举，初始只有 `Pending`
     - `const` 断言：实现槽不是 `Pending` ⇒ 状态为 Confirmed
     - `recompute_row`（表中没有的属性为 `Unconfirmed`）、`member_order_row`、`descendants_included`（D7、D8 的唯一落点）
     - 在 `src/lib.rs` 注册模块
     - _Requirements: 2.6, 5.2, 5.3, 5.8_
-  - [~] 4.2 实现空间值类型
+  - [x] 4.2 实现空间值类型
     - `src/spatial/mod.rs`：`WorldAabb`（构造即校验有限值与每轴 min ≤ max）、`SpatialPolicy`（`#[default] Require`，D3 的唯一落点）、`Axis`、`SpatialState` trait
     - `src/spatial/state.rs`：读侧 `ReadState`，按会话读元素记录与 owner 链
     - 在 `src/lib.rs` 注册模块；不放在 `src/write/`
     - _Requirements: 6.5, 6.6, 6.7, 6.10_
-  - [ ]* 4.3 写 `tests/core_rules_registry.rs`
+  - [x]* 4.3 写 `tests/core_rules_registry.rs`
     - 断言规则名唯一；每条 Confirmed 规则的出处文件存在，且其「结论」节含该规则名；`src/write/` 下的源码不出现 `candidates`
     - _Requirements: 2.6_
 

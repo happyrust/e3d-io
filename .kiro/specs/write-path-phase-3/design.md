@@ -148,12 +148,12 @@ pub fn read_spamap_tree(root: PageId,
 ```rust
 #[non_exhaustive] #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum RuleId { /* 下表各行 */ }
-pub struct Rule { pub id: RuleId, pub name: &'static str, pub status: RuleStatus }
+pub struct Rule { pub id: RuleId, pub name: &'static str, pub governs: &'static str, pub status: RuleStatus }
 pub enum RuleStatus {
     Confirmed { evidence: &'static str },                  // Evidence_Doc 路径与节名
     Unconfirmed { assumption: &'static str, inputs: &'static str, evidence: Option<&'static str> },
 }
-pub static RULES: &[Rule];                                   // 设计阶段每条都是 Unconfirmed
+pub const RULES: &[Rule];                                    // 设计阶段每条都是 Unconfirmed；const 才能进 const 断言
 pub struct RuleSet { /* 每条规则一个类型化实现槽，未坐实时为 Pending */ }
 impl RuleSet {
     pub fn confirmed() -> &'static RuleSet;                  // Transaction 唯一的入口
@@ -162,10 +162,10 @@ impl RuleSet {
 pub enum Trigger { Triggers, DoesNotTrigger, Unconfirmed }
 pub fn recompute_row(noun: u32, attr: u32) -> Trigger;       // 表中没有的属性为 Unconfirmed
 pub fn member_order_row(noun: u32) -> Trigger;
-pub fn descendants_included(kind: DescendantKind, depth: Depth) -> bool;
+pub fn descendants_included(kind: DescendantKind, depth: u32) -> bool;  // depth 1 = 成员
 ```
 
-每类规则（取整、桶、flags…）各有一个实现槽枚举。设计阶段这些枚举都只有 `Pending`，不预设任何取值。某条规则坐实时，在同一提交里按 Evidence_Doc 给它的枚举加上变体，并把状态改为 `Confirmed`。候选实现放在 `src/spatial/candidates.rs`，只接到 `candidates()` 上。
+每条规则一个实现槽 `Slot<T> { Pending, Confirmed(T), Candidate(T) }`，`T` 是该规则的实现类型。设计阶段每个实现类型都是空枚举，不预设任何取值，所以槽只能是 `Pending`。某条规则坐实时，在同一提交里按 Evidence_Doc 给它的实现类型加上变体、在 `RuleSet::confirmed()` 里填 `Confirmed`，并把状态改为 `Confirmed`。候选实现放在 `src/spatial/candidates.rs`，只经 `candidates()` 以 `Candidate` 填槽。
 
 | 规则名 | 管什么 | 出处需求 |
 |---|---|---|
@@ -215,7 +215,7 @@ impl SpamapCodec<'_> {
 pub trait SpatialState {                          // 一份元素状态的只读视图
     fn noun(&self, r: RefNo) -> Option<u32>;
     fn owner(&self, r: RefNo) -> Option<RefNo>;
-    fn attr(&self, r: RefNo, hash: u32) -> Result<Option<AttrValue>, UndecodableAttr>;
+    fn attr(&self, r: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr>; // 读写两侧共用的解码值
 }
 pub struct WorldFrame { pub rotation: [[f64; 3]; 3], pub origin_mm: [f64; 3] }
 pub trait FrameComposer {                         // 可替换：ORI 存储形与复合顺序待取证
