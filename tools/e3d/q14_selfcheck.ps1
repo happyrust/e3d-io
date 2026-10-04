@@ -14,7 +14,7 @@ foreach ($file in @('write_gate.ps1','q14_checks.ps1','q14_selfcheck.ps1')) {
     if ($errors.Count) { throw ($errors | Out-String) }
 }
 $json = Get-Content (Join-Path $PSScriptRoot 'write_gate_ops/q14_named.json') -Raw | ConvertFrom-Json
-if ($json.ops.Count -ne 1 -or $json.ops[0].name -ne '/E3DIO-Q14-NAMED') { throw 'Q14 op mismatch' }
+if ($json.ops.Count -ne 1 -or $json.ops[0].name -ne '/E3DIO-Q14-NAMED' -or $json.ops[0].noun -ne 'ZONE' -or $json.ops[0].owner -ne '/1RX03-PIPEBJ') { throw 'Q14 op mismatch' }
 $template = Get-Content (Join-Path $PSScriptRoot 'write_gate.mac.template') -Raw
 $body = ($template -split '-- Q14-TEMPLATE-BEGIN\r?\n',2)[1]
 $body = $body.Replace('{{LOGDIR}}','D:/scratch/logs').Replace('{{MACROLOG}}','D:/scratch/Q14.log')

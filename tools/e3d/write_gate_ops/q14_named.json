@@ -1,6 +1,6 @@
 {
   "comment": "e3d-io Q14: confirmed allocation floor in extent 24384",
   "ops": [
-    {"op":"insert","id":"named","owner":"/1RX03-MSUP","noun":"EQUI","name":"/E3DIO-Q14-NAMED"}
+    {"op":"insert","id":"named","owner":"/1RX03-PIPEBJ","noun":"ZONE","name":"/E3DIO-Q14-NAMED"}
   ]
 }
