@@ -106,3 +106,7 @@ E1 的父提交 `474ea14`（自 D6 的 `d8fecb6` 起只改文档）上重跑 SPA
 - E9：最终 cargo test --no-fail-fast -- --nocapture：722 通过 / 0 失败 / 30 ignored，122 个测试二进制 + Doc-tests；新增 E 测试无 skip；既有 skip 7 个（8 条提示，成员覆盖测试缺新旧两份样本），逐项在 Ledger。Clippy 63、cargo doc 25，均与基线相同。17 条 Off 金样通过。
 
 日志保存在 `.agents/tasks/write-path-phase-3-milestone-e/validation/`。任务 8.3–8.18 和 7.6 经本次验收后打勾。后续仍需 F 的完整空间 CLI 与真 E3D 门；性能、发号与页 1 桶表不在本次范围。
+
+### 后续推荐：第 9 组 9.1（2026-10-04，提交待定）
+
+按 E 完成后的推荐顺序开始 Write_CLI：CLI 支持 `--spatial require|skip|off`，操作级 `aabb` 仅允许 insert/set/move，六个有限数经 Transaction::set_aabb 校验；dry-run 与提交报告带 `spatial` 节。既有 CLI 测试统一显式 `--spatial off`，新增给框与非法框验证。全套测试 724 通过、0 失败、30 ignored；9.2/9.3（解析属性测试与完整 CLI 真跑门）留作本阶段后续。

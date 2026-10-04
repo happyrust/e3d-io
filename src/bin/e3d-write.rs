@@ -84,13 +84,16 @@ use serde_json::{json, Map, Value};
 
 use e3d_io::record::template::TemplateProvider;
 use e3d_io::session::SessionSelector;
-use e3d_io::write::{Dictionary, MemberPosition, OnClash, SessionRequest, Transaction, TransactionError};
+use e3d_io::spatial::{SpatialPolicy, SpatialReport};
+use e3d_io::write::{
+    Dictionary, MemberPosition, OnClash, SessionRequest, Transaction, TransactionError,
+};
 use e3d_io::{ReadOnlyEngine, RefNo};
 
 const DEFAULT_SCHEMA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31");
 const DEFAULT_USER: &str = "e3dio";
 const USAGE: &str = "usage: e3d-write apply --db <file> --ops <ops.json> [--schema <dir>] [--base <sesno>] \
-[--on-clash refuse|writer-wins] [--dry-run] [--no-dictionary] [--user <name>] [--comment <text>] [--report <report.json>]";
+[--on-clash refuse|writer-wins] [--spatial require|skip|off] [--dry-run] [--no-dictionary] [--user <name>] [--comment <text>] [--report <report.json>]";
 
 /// How a run ends short of a commit.
 enum Failure {
@@ -124,6 +127,7 @@ struct Args {
     schema: PathBuf,
     base: Option<u32>,
     on_clash: OnClash,
+    spatial: SpatialPolicy,
     dry_run: bool,
     dictionary: bool,
     user: Option<String>,
@@ -136,33 +140,59 @@ fn parse_args() -> Result<Args, Failure> {
     match args.next().as_deref() {
         Some("apply") => {}
         Some("--help" | "-h") | None => return Err(Failure::Usage(USAGE.to_string())),
-        Some(other) => return Err(Failure::Usage(format!("unknown command {other:?}\n{USAGE}"))),
+        Some(other) => {
+            return Err(Failure::Usage(format!(
+                "unknown command {other:?}\n{USAGE}"
+            )))
+        }
     }
     let mut db = None;
     let mut ops = None;
     let mut schema = None;
     let mut base = None;
     let mut on_clash = OnClash::Refuse;
+    let mut spatial = SpatialPolicy::Require;
     let mut dry_run = false;
     let mut dictionary = true;
     let mut user = None;
     let mut comment = None;
     let mut report = None;
     while let Some(flag) = args.next() {
-        let mut value = |what: &str| args.next().ok_or_else(|| Failure::Usage(format!("{flag} wants {what}\n{USAGE}")));
+        let mut value = |what: &str| {
+            args.next()
+                .ok_or_else(|| Failure::Usage(format!("{flag} wants {what}\n{USAGE}")))
+        };
         match flag.as_str() {
             "--db" => db = Some(PathBuf::from(value("a database file")?)),
             "--ops" => ops = Some(PathBuf::from(value("an instruction file")?)),
             "--schema" => schema = Some(PathBuf::from(value("a schema directory")?)),
             "--base" => {
                 let text = value("a session number")?;
-                base = Some(text.parse::<u32>().map_err(|_| Failure::Usage(format!("--base {text}: not a session number\n{USAGE}")))?);
+                base = Some(text.parse::<u32>().map_err(|_| {
+                    Failure::Usage(format!("--base {text}: not a session number\n{USAGE}"))
+                })?);
             }
             "--on-clash" => {
                 on_clash = match value("refuse or writer-wins")?.as_str() {
                     "refuse" => OnClash::Refuse,
                     "writer-wins" => OnClash::WriterWins,
-                    other => return Err(Failure::Usage(format!("--on-clash {other}: refuse or writer-wins\n{USAGE}"))),
+                    other => {
+                        return Err(Failure::Usage(format!(
+                            "--on-clash {other}: refuse or writer-wins\n{USAGE}"
+                        )))
+                    }
+                }
+            }
+            "--spatial" => {
+                spatial = match value("require, skip or off")?.as_str() {
+                    "require" => SpatialPolicy::Require,
+                    "skip" => SpatialPolicy::Skip,
+                    "off" => SpatialPolicy::Off,
+                    other => {
+                        return Err(Failure::Usage(format!(
+                            "--spatial {other}: require, skip or off\n{USAGE}"
+                        )))
+                    }
                 }
             }
             "--dry-run" => dry_run = true,
@@ -179,6 +209,7 @@ fn parse_args() -> Result<Args, Failure> {
         schema: schema.unwrap_or_else(|| PathBuf::from(DEFAULT_SCHEMA)),
         base,
         on_clash,
+        spatial,
         dry_run,
         dictionary,
         user,
@@ -211,11 +242,15 @@ impl Element {
         }
         let body = text.strip_prefix('=').unwrap_or(text);
         if let Some((word0, word1)) = body.split_once('/') {
-            if let (Ok(word0), Ok(word1)) = (word0.trim().parse::<u32>(), word1.trim().parse::<u32>()) {
+            if let (Ok(word0), Ok(word1)) =
+                (word0.trim().parse::<u32>(), word1.trim().parse::<u32>())
+            {
                 return Ok(Element::RefNo(RefNo::new(word0, word1)));
             }
         }
-        Err(format!("{text:?} is not an element: write =word0/word1, /NAME (/* for the WORL) or @id"))
+        Err(format!(
+            "{text:?} is not an element: write =word0/word1, /NAME (/* for the WORL) or @id"
+        ))
     }
 }
 
@@ -245,16 +280,70 @@ struct Attr {
     hunk: bool,
 }
 
+fn take_aabb(object: &mut Map<String, Value>) -> Result<Option<[f64; 6]>, String> {
+    let Some(value) = object.remove("aabb") else {
+        return Ok(None);
+    };
+    let Value::Array(values) = value else {
+        return Err("\"aabb\" must be an array of six numbers".into());
+    };
+    if values.len() != 6 {
+        return Err("\"aabb\" must contain exactly six numbers".into());
+    }
+    let mut out = [0.0; 6];
+    for (index, value) in values.into_iter().enumerate() {
+        out[index] = value
+            .as_f64()
+            .ok_or_else(|| format!("aabb[{index}] must be a number"))?;
+        if !out[index].is_finite() {
+            return Err(format!("aabb[{index}] must be finite"));
+        }
+    }
+    Ok(Some(out))
+}
+
 #[derive(Debug, Clone)]
 enum Op {
-    Insert { id: Option<String>, owner: Element, noun: String, name: Option<String>, attrs: Vec<Attr>, at: Option<Position> },
-    Set { refno: Element, attrs: Vec<Attr> },
-    Rename { refno: Element, name: String },
-    Delete { refno: Element },
-    Move { refno: Element, owner: Element, at: Position },
-    Reorder { refno: Element, at: Position },
-    Reference { group: Element, member: Element, at: Position },
-    Unreference { group: Element, member: Element },
+    Insert {
+        id: Option<String>,
+        owner: Element,
+        noun: String,
+        name: Option<String>,
+        attrs: Vec<Attr>,
+        at: Option<Position>,
+        aabb: Option<[f64; 6]>,
+    },
+    Set {
+        refno: Element,
+        attrs: Vec<Attr>,
+        aabb: Option<[f64; 6]>,
+    },
+    Rename {
+        refno: Element,
+        name: String,
+    },
+    Delete {
+        refno: Element,
+    },
+    Move {
+        refno: Element,
+        owner: Element,
+        at: Position,
+        aabb: Option<[f64; 6]>,
+    },
+    Reorder {
+        refno: Element,
+        at: Position,
+    },
+    Reference {
+        group: Element,
+        member: Element,
+        at: Position,
+    },
+    Unreference {
+        group: Element,
+        member: Element,
+    },
 }
 
 impl Op {
@@ -283,7 +372,8 @@ fn read_ops(path: &Path) -> Result<OpsFile, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     // A byte-order mark, which Windows editors like to put in front of UTF-8.
     let text = text.trim_start_matches('\u{feff}');
-    let value: Value = serde_json::from_str(text).map_err(|e| format!("{}: not JSON: {e}", path.display()))?;
+    let value: Value =
+        serde_json::from_str(text).map_err(|e| format!("{}: not JSON: {e}", path.display()))?;
     let (user, comment, list) = match value {
         Value::Array(list) => (None, None, list),
         Value::Object(mut object) => {
@@ -292,10 +382,16 @@ fn read_ops(path: &Path) -> Result<OpsFile, String> {
             let ops = match object.remove("ops") {
                 Some(Value::Array(list)) => list,
                 Some(_) => return Err("\"ops\" must be an array of instructions".to_string()),
-                None => return Err("an instruction file is an array, or an object with \"ops\"".to_string()),
+                None => {
+                    return Err(
+                        "an instruction file is an array, or an object with \"ops\"".to_string()
+                    )
+                }
             };
             if let Some(stray) = object.keys().next() {
-                return Err(format!("unknown field {stray:?} beside \"user\" / \"comment\" / \"ops\""));
+                return Err(format!(
+                    "unknown field {stray:?} beside \"user\" / \"comment\" / \"ops\""
+                ));
             }
             (user, comment, ops)
         }
@@ -363,20 +459,39 @@ fn take_attrs(object: &mut Map<String, Value>) -> Result<Vec<Attr>, String> {
     let mut out = Vec::with_capacity(attrs.len());
     for (name, value) in attrs {
         let attr = match value {
-            Value::String(text) => Attr { name: name.clone(), text, hunk: false },
+            Value::String(text) => Attr {
+                name: name.clone(),
+                text,
+                hunk: false,
+            },
             Value::Object(mut spec) => {
-                let text = take_string(&mut spec, "value")?.ok_or_else(|| format!("attrs.{name}: {{\"value\": …}} is required"))?;
+                let text = take_string(&mut spec, "value")?
+                    .ok_or_else(|| format!("attrs.{name}: {{\"value\": …}} is required"))?;
                 let hunk = match spec.remove("hunk") {
                     None | Some(Value::Null) => false,
                     Some(Value::Bool(hunk)) => hunk,
-                    Some(other) => return Err(format!("attrs.{name}.hunk must be true or false, not {other}")),
+                    Some(other) => {
+                        return Err(format!(
+                            "attrs.{name}.hunk must be true or false, not {other}"
+                        ))
+                    }
                 };
                 if let Some(stray) = spec.keys().next() {
-                    return Err(format!("attrs.{name}: unknown field {stray:?} beside \"value\" / \"hunk\""));
+                    return Err(format!(
+                        "attrs.{name}: unknown field {stray:?} beside \"value\" / \"hunk\""
+                    ));
                 }
-                Attr { name: name.clone(), text, hunk }
+                Attr {
+                    name: name.clone(),
+                    text,
+                    hunk,
+                }
             }
-            other => return Err(format!("attrs.{name}: a text, or {{\"value\": …, \"hunk\": true}}, not {other}")),
+            other => {
+                return Err(format!(
+                    "attrs.{name}: a text, or {{\"value\": …, \"hunk\": true}}, not {other}"
+                ))
+            }
         };
         out.push(attr);
     }
@@ -396,8 +511,9 @@ fn parse_op(item: Value) -> Result<Op, String> {
             name: take_string(&mut object, "name")?,
             attrs: take_attrs(&mut object)?,
             at: take_position(&mut object, "at")?,
+            aabb: take_aabb(&mut object)?,
         },
-        "set" | "update" => Op::Set { refno: take_element(&mut object, "refno")?, attrs: take_attrs(&mut object)? },
+        "set" | "update" => Op::Set { refno: take_element(&mut object, "refno")?, attrs: take_attrs(&mut object)?, aabb: take_aabb(&mut object)? },
         "rename" => Op::Rename {
             refno: take_element(&mut object, "refno")?,
             name: take_string(&mut object, "name")?.ok_or("\"name\" is required")?,
@@ -407,6 +523,7 @@ fn parse_op(item: Value) -> Result<Op, String> {
             refno: take_element(&mut object, "refno")?,
             owner: take_element(&mut object, "owner")?,
             at: take_position(&mut object, "at")?.unwrap_or(Position::Last),
+            aabb: take_aabb(&mut object)?,
         },
         "reorder" => Op::Reorder {
             refno: take_element(&mut object, "refno")?,
@@ -519,61 +636,135 @@ impl Run {
     }
 }
 
+fn spatial_policy_name(policy: SpatialPolicy) -> &'static str {
+    match policy {
+        SpatialPolicy::Require => "require",
+        SpatialPolicy::Skip => "skip",
+        SpatialPolicy::Off => "off",
+    }
+}
+
+fn spatial_report_json(report: &SpatialReport) -> Value {
+    json!({
+        "policy": spatial_policy_name(report.policy),
+        "table": format!("{:?}", report.table),
+        "pages": report.pages,
+        "elements": report.elements.iter().map(|(r, e)| (r.to_string(), json!({
+            "given": e.given_as.map(|v| v.to_string()),
+            "aabb": format!("{:?}", e.aabb),
+            "causes": e.causes.iter().map(|c| format!("{:?}", c)).collect::<Vec<_>>(),
+            "registered": e.registered.iter().map(|v| json!({ "key": v.key, "value": v.value })).collect::<Vec<_>>(),
+            "removed": e.removed.iter().map(|v| json!({ "key": v.key, "value": v.value })).collect::<Vec<_>>(),
+        }))).collect::<Map<_, _>>(),
+        "skipped": report.skipped.iter().map(|m| json!({ "refno": m.refno.to_string(), "given": m.given_as.map(|v| v.to_string()), "reasons": m.reasons.iter().map(|r| format!("{:?}", r)).collect::<Vec<_>>() })).collect::<Vec<_>>(),
+        "unused_aabb": report.unused_aabb.iter().map(ToString::to_string).collect::<Vec<_>>(),
+        "unreachable": report.unreachable.iter().map(|(r, a)| json!({ "refno": r.to_string(), "ancestor": a.to_string() })).collect::<Vec<_>>(),
+    })
+}
+
 fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
     let setup = |message: String| Failure::Setup(message);
     let db = args.db.to_string_lossy().into_owned();
     out.report.insert("database".into(), json!(db));
-    out.report.insert("ops_file".into(), json!(args.ops.to_string_lossy()));
+    out.report
+        .insert("ops_file".into(), json!(args.ops.to_string_lossy()));
     out.report.insert("dry_run".into(), json!(args.dry_run));
 
     let file = read_ops(&args.ops).map_err(setup)?;
-    let user = args.user.clone().or(file.user).unwrap_or_else(|| DEFAULT_USER.to_string());
+    let user = args
+        .user
+        .clone()
+        .or(file.user)
+        .unwrap_or_else(|| DEFAULT_USER.to_string());
     let comment = args.comment.clone().or(file.comment).unwrap_or_else(|| {
-        args.ops.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "e3d-write apply".to_string())
+        args.ops
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "e3d-write apply".to_string())
     });
     out.report.insert("user".into(), json!(user));
     out.report.insert("comment".into(), json!(comment));
 
     let desvir = args.schema.join("binaries").join("desvir.dat");
     let dictionary_path = args.schema.join("catalog").join("noun_attr_fields.json");
-    let mut provider = TemplateProvider::open(&desvir, None).map_err(|e| setup(format!("{}: {e}", desvir.display())))?;
+    let mut provider = TemplateProvider::open(&desvir, None)
+        .map_err(|e| setup(format!("{}: {e}", desvir.display())))?;
     let dictionary = if args.dictionary && dictionary_path.is_file() {
-        Some(Dictionary::read(&dictionary_path).map_err(|e| setup(format!("{}: {e}", dictionary_path.display())))?)
+        Some(
+            Dictionary::read(&dictionary_path)
+                .map_err(|e| setup(format!("{}: {e}", dictionary_path.display())))?,
+        )
     } else {
         None
     };
 
-    let latest_before = ReadOnlyEngine::open(&args.db).map_err(|e| setup(format!("{db}: {e}")))?.session().sesno;
+    let latest_before = ReadOnlyEngine::open(&args.db)
+        .map_err(|e| setup(format!("{db}: {e}")))?
+        .session()
+        .sesno;
     let selector = match args.base {
         Some(sesno) => SessionSelector::Exact(sesno),
         None => SessionSelector::Latest,
     };
-    let opened_at = args.base.map_or("the newest session".to_string(), |sesno| format!("session {sesno}"));
+    let opened_at = args.base.map_or("the newest session".to_string(), |sesno| {
+        format!("session {sesno}")
+    });
     let mut tx = Transaction::open_at(&args.db, selector, &mut provider)
         .map_err(|e| setup(format!("{db}: opening a transaction at {opened_at}: {e}")))?
-        .with_on_clash(args.on_clash).with_spatial(e3d_io::spatial::SpatialPolicy::Off);
+        .with_on_clash(args.on_clash)
+        .with_spatial(args.spatial);
     if let Some(dictionary) = &dictionary {
         tx = tx.with_dictionary(dictionary);
     }
     let base = tx.base_sesno();
     let mut resolver = Resolver {
-        engine: ReadOnlyEngine::open_at(&args.db, SessionSelector::Exact(base)).map_err(|e| setup(format!("{db}: {e}")))?,
+        engine: ReadOnlyEngine::open_at(&args.db, SessionSelector::Exact(base))
+            .map_err(|e| setup(format!("{db}: {e}")))?,
         ids: HashMap::new(),
         named: HashMap::new(),
     };
     out.report.insert("base_sesno".into(), json!(base));
-    out.report.insert("latest_before".into(), json!(latest_before));
-    out.report.insert("dictionary".into(), dictionary.as_ref().map_or(Value::Null, |d| json!(d.len())));
-    out.report.insert("on_clash".into(), json!(match args.on_clash { OnClash::Refuse => "refuse", OnClash::WriterWins => "writer-wins" }));
+    out.report
+        .insert("latest_before".into(), json!(latest_before));
+    out.report.insert(
+        "dictionary".into(),
+        dictionary.as_ref().map_or(Value::Null, |d| json!(d.len())),
+    );
+    out.report.insert(
+        "on_clash".into(),
+        json!(match args.on_clash {
+            OnClash::Refuse => "refuse",
+            OnClash::WriterWins => "writer-wins",
+        }),
+    );
+    out.report.insert(
+        "spatial_policy".into(),
+        json!(spatial_policy_name(args.spatial)),
+    );
 
-    out.say(format!("e3d-write apply: {} instruction(s) from {} onto {db}", file.ops.len(), args.ops.display()));
+    out.say(format!(
+        "e3d-write apply: {} instruction(s) from {} onto {db}",
+        file.ops.len(),
+        args.ops.display()
+    ));
     out.say(format!(
         "  base session     : {base}{}",
-        if latest_before == base { String::new() } else { format!(" (the newest is {latest_before}: the commit is a merge)") }
+        if latest_before == base {
+            String::new()
+        } else {
+            format!(" (the newest is {latest_before}: the commit is a merge)")
+        }
     ));
     out.say(match &dictionary {
-        Some(dictionary) => format!("  dictionary       : {} attributes from {}", dictionary.len(), dictionary_path.display()),
-        None if args.dictionary => format!("  dictionary       : none ({} is not there)", dictionary_path.display()),
+        Some(dictionary) => format!(
+            "  dictionary       : {} attributes from {}",
+            dictionary.len(),
+            dictionary_path.display()
+        ),
+        None if args.dictionary => format!(
+            "  dictionary       : none ({} is not there)",
+            dictionary_path.display()
+        ),
         None => "  dictionary       : none (--no-dictionary)".to_string(),
     });
 
@@ -583,21 +774,47 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
         let mut entry = Map::new();
         entry.insert("index".into(), json!(index));
         entry.insert("op".into(), json!(op.kind()));
-        let refused = |what: String, reason: String| Failure::Refused { op: Some(index), message: format!("op #{index} ({what}): {reason}") };
+        let refused = |what: String, reason: String| Failure::Refused {
+            op: Some(index),
+            message: format!("op #{index} ({what}): {reason}"),
+        };
         match op {
-            Op::Insert { id, owner, noun, name, attrs, at } => {
+            Op::Insert {
+                id,
+                owner,
+                noun,
+                name,
+                attrs,
+                at,
+                aabb,
+            } => {
                 let what = format!("insert {noun} under {owner}");
-                let owner_refno = resolver.resolve(owner).map_err(|r| refused(what.clone(), r))?;
+                let owner_refno = resolver
+                    .resolve(owner)
+                    .map_err(|r| refused(what.clone(), r))?;
                 let noun_hash = e3d_attlib::db1_hash(noun);
                 let refno = tx
                     .insert(owner_refno, noun_hash, name.as_deref(), |_, _| Ok(()))
                     .map_err(|e| refused(what.clone(), e.to_string()))?;
                 for attr in attrs {
-                    set_attr(&mut tx, refno, attr).map_err(|r| refused(format!("{what}: {}", attr.name), r))?;
+                    set_attr(&mut tx, refno, attr)
+                        .map_err(|r| refused(format!("{what}: {}", attr.name), r))?;
+                }
+                if let Some(aabb) = aabb {
+                    tx.set_aabb(refno, *aabb)
+                        .map_err(|e| refused(what.clone(), e.to_string()))?;
+                    entry.insert("aabb".into(), json!(aabb));
                 }
                 if let Some(at) = at {
-                    let position = resolver.position(at).map_err(|r| refused(what.clone(), r))?;
-                    tx.reorder(refno, position).map_err(|e| refused(format!("{what} at {}", position_json(&position)), e.to_string()))?;
+                    let position = resolver
+                        .position(at)
+                        .map_err(|r| refused(what.clone(), r))?;
+                    tx.reorder(refno, position).map_err(|e| {
+                        refused(
+                            format!("{what} at {}", position_json(&position)),
+                            e.to_string(),
+                        )
+                    })?;
                     entry.insert("at".into(), position_json(&position));
                 }
                 if let Some(id) = id {
@@ -612,7 +829,10 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
                 if let Some(name) = name {
                     entry.insert("name".into(), json!(name));
                 }
-                entry.insert("attrs".into(), json!(attrs.iter().map(|a| a.name.as_str()).collect::<Vec<_>>()));
+                entry.insert(
+                    "attrs".into(),
+                    json!(attrs.iter().map(|a| a.name.as_str()).collect::<Vec<_>>()),
+                );
                 entry.insert("given".into(), refno_json(refno));
                 entry.insert("refno".into(), refno_json(refno));
                 inserts.push((index, refno));
@@ -622,20 +842,41 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
                     id.as_deref().map_or(String::new(), |i| format!(" [@{i}]"))
                 ));
             }
-            Op::Set { refno, attrs } => {
+            Op::Set { refno, attrs, aabb } => {
                 let what = format!("set {refno}");
-                let target = resolver.resolve(refno).map_err(|r| refused(what.clone(), r))?;
+                let target = resolver
+                    .resolve(refno)
+                    .map_err(|r| refused(what.clone(), r))?;
                 for attr in attrs {
-                    set_attr(&mut tx, target, attr).map_err(|r| refused(format!("set {target} {}", attr.name), r))?;
+                    set_attr(&mut tx, target, attr)
+                        .map_err(|r| refused(format!("set {target} {}", attr.name), r))?;
+                }
+                if let Some(aabb) = aabb {
+                    tx.set_aabb(target, *aabb)
+                        .map_err(|e| refused(what.clone(), e.to_string()))?;
+                    entry.insert("aabb".into(), json!(aabb));
                 }
                 entry.insert("refno".into(), refno_json(target));
-                entry.insert("attrs".into(), json!(attrs.iter().map(|a| a.name.as_str()).collect::<Vec<_>>()));
-                out.say(format!("  #{index} set {target} {}", attrs.iter().map(|a| a.name.as_str()).collect::<Vec<_>>().join(", ")));
+                entry.insert(
+                    "attrs".into(),
+                    json!(attrs.iter().map(|a| a.name.as_str()).collect::<Vec<_>>()),
+                );
+                out.say(format!(
+                    "  #{index} set {target} {}",
+                    attrs
+                        .iter()
+                        .map(|a| a.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
             }
             Op::Rename { refno, name } => {
                 let what = format!("rename {refno} {name}");
-                let target = resolver.resolve(refno).map_err(|r| refused(what.clone(), r))?;
-                tx.rename(target, name).map_err(|e| refused(what, e.to_string()))?;
+                let target = resolver
+                    .resolve(refno)
+                    .map_err(|r| refused(what.clone(), r))?;
+                tx.rename(target, name)
+                    .map_err(|e| refused(what, e.to_string()))?;
                 resolver.named.insert(name.clone(), target);
                 entry.insert("refno".into(), refno_json(target));
                 entry.insert("name".into(), json!(name));
@@ -643,50 +884,98 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
             }
             Op::Delete { refno } => {
                 let what = format!("delete {refno}");
-                let target = resolver.resolve(refno).map_err(|r| refused(what.clone(), r))?;
-                tx.delete(target).map_err(|e| refused(what, e.to_string()))?;
+                let target = resolver
+                    .resolve(refno)
+                    .map_err(|r| refused(what.clone(), r))?;
+                tx.delete(target)
+                    .map_err(|e| refused(what, e.to_string()))?;
                 entry.insert("refno".into(), refno_json(target));
                 out.say(format!("  #{index} delete {target}"));
             }
-            Op::Move { refno, owner, at } => {
+            Op::Move {
+                refno,
+                owner,
+                at,
+                aabb,
+            } => {
                 let what = format!("move {refno} under {owner}");
-                let target = resolver.resolve(refno).map_err(|r| refused(what.clone(), r))?;
-                let owner_refno = resolver.resolve(owner).map_err(|r| refused(what.clone(), r))?;
-                let position = resolver.position(at).map_err(|r| refused(what.clone(), r))?;
-                tx.move_to(target, owner_refno, position).map_err(|e| refused(what, e.to_string()))?;
+                let target = resolver
+                    .resolve(refno)
+                    .map_err(|r| refused(what.clone(), r))?;
+                let owner_refno = resolver
+                    .resolve(owner)
+                    .map_err(|r| refused(what.clone(), r))?;
+                let position = resolver
+                    .position(at)
+                    .map_err(|r| refused(what.clone(), r))?;
+                tx.move_to(target, owner_refno, position)
+                    .map_err(|e| refused(what, e.to_string()))?;
+                if let Some(aabb) = aabb {
+                    tx.set_aabb(target, *aabb)
+                        .map_err(|e| refused(format!("move {target}"), e.to_string()))?;
+                    entry.insert("aabb".into(), json!(aabb));
+                }
                 entry.insert("refno".into(), refno_json(target));
                 entry.insert("owner".into(), refno_json(owner_refno));
                 entry.insert("at".into(), position_json(&position));
-                out.say(format!("  #{index} move {target} under {owner_refno} at {}", position_json(&position)));
+                out.say(format!(
+                    "  #{index} move {target} under {owner_refno} at {}",
+                    position_json(&position)
+                ));
             }
             Op::Reorder { refno, at } => {
                 let what = format!("reorder {refno}");
-                let target = resolver.resolve(refno).map_err(|r| refused(what.clone(), r))?;
-                let position = resolver.position(at).map_err(|r| refused(what.clone(), r))?;
-                tx.reorder(target, position).map_err(|e| refused(what, e.to_string()))?;
+                let target = resolver
+                    .resolve(refno)
+                    .map_err(|r| refused(what.clone(), r))?;
+                let position = resolver
+                    .position(at)
+                    .map_err(|r| refused(what.clone(), r))?;
+                tx.reorder(target, position)
+                    .map_err(|e| refused(what, e.to_string()))?;
                 entry.insert("refno".into(), refno_json(target));
                 entry.insert("at".into(), position_json(&position));
-                out.say(format!("  #{index} reorder {target} at {}", position_json(&position)));
+                out.say(format!(
+                    "  #{index} reorder {target} at {}",
+                    position_json(&position)
+                ));
             }
             Op::Reference { group, member, at } => {
                 let what = format!("reference {member} in {group}");
-                let group_refno = resolver.resolve(group).map_err(|r| refused(what.clone(), r))?;
-                let member_refno = resolver.resolve(member).map_err(|r| refused(what.clone(), r))?;
-                let position = resolver.position(at).map_err(|r| refused(what.clone(), r))?;
-                tx.add_reference_member(group_refno, member_refno, position).map_err(|e| refused(what, e.to_string()))?;
+                let group_refno = resolver
+                    .resolve(group)
+                    .map_err(|r| refused(what.clone(), r))?;
+                let member_refno = resolver
+                    .resolve(member)
+                    .map_err(|r| refused(what.clone(), r))?;
+                let position = resolver
+                    .position(at)
+                    .map_err(|r| refused(what.clone(), r))?;
+                tx.add_reference_member(group_refno, member_refno, position)
+                    .map_err(|e| refused(what, e.to_string()))?;
                 entry.insert("group".into(), refno_json(group_refno));
                 entry.insert("member".into(), refno_json(member_refno));
                 entry.insert("at".into(), position_json(&position));
-                out.say(format!("  #{index} reference {member_refno} in {group_refno} at {}", position_json(&position)));
+                out.say(format!(
+                    "  #{index} reference {member_refno} in {group_refno} at {}",
+                    position_json(&position)
+                ));
             }
             Op::Unreference { group, member } => {
                 let what = format!("unreference {member} from {group}");
-                let group_refno = resolver.resolve(group).map_err(|r| refused(what.clone(), r))?;
-                let member_refno = resolver.resolve(member).map_err(|r| refused(what.clone(), r))?;
-                tx.remove_reference_member(group_refno, member_refno).map_err(|e| refused(what, e.to_string()))?;
+                let group_refno = resolver
+                    .resolve(group)
+                    .map_err(|r| refused(what.clone(), r))?;
+                let member_refno = resolver
+                    .resolve(member)
+                    .map_err(|r| refused(what.clone(), r))?;
+                tx.remove_reference_member(group_refno, member_refno)
+                    .map_err(|e| refused(what, e.to_string()))?;
                 entry.insert("group".into(), refno_json(group_refno));
                 entry.insert("member".into(), refno_json(member_refno));
-                out.say(format!("  #{index} unreference {member_refno} from {group_refno}"));
+                out.say(format!(
+                    "  #{index} unreference {member_refno} from {group_refno}"
+                ));
             }
         }
         out.ops.push(Value::Object(entry));
@@ -698,7 +987,10 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
     if latest_before != base && !inserts.is_empty() {
         let mut latest = ReadOnlyEngine::open(&args.db).map_err(|e| setup(format!("{db}: {e}")))?;
         for (index, given) in &inserts {
-            let taken = latest.find_element(*given).map_err(|e| setup(format!("{db}: {e}")))?.is_some();
+            let taken = latest
+                .find_element(*given)
+                .map_err(|e| setup(format!("{db}: {e}")))?
+                .is_some();
             if let Some(Value::Object(entry)) = out.ops.get_mut(*index) {
                 entry.insert("taken_in_latest".into(), json!(taken));
             }
@@ -708,16 +1000,28 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
         }
     }
 
-    let request = SessionRequest { user: &user, comment: &comment, clock: None };
+    let request = SessionRequest {
+        user: &user,
+        comment: &comment,
+        clock: None,
+    };
     if args.dry_run {
-        let staged = tx.stage(&request).map_err(|e| Failure::Refused { op: None, message: format!("staging: {e}") })?;
+        let staged = tx.stage(&request).map_err(|e| Failure::Refused {
+            op: None,
+            message: format!("staging: {e}"),
+        })?;
         let (previous, summary) = (staged.previous(), staged.staged());
         let pages = summary.end.page.saturating_sub(previous.end.page);
-        staged.rollback().map_err(|e| Failure::Refused { op: None, message: format!("rolling the staged pages back: {e}") })?;
+        let spatial = spatial_report_json(staged.spatial());
+        staged.rollback().map_err(|e| Failure::Refused {
+            op: None,
+            message: format!("rolling the staged pages back: {e}"),
+        })?;
         out.report.insert(
             "staged".into(),
             json!({ "sesno": summary.sesno, "previous_sesno": previous.sesno, "pages": pages, "rolled_back": true }),
         );
+        out.report.insert("spatial".into(), spatial);
         out.report.insert("commit".into(), Value::Null);
         out.say(format!(
             "  dry run          : session {} would follow {} on {pages} page(s); staged and rolled back, nothing committed",
@@ -726,7 +1030,12 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
         return Ok(());
     }
 
-    let commit = tx.commit_reporting(&request).map_err(|e| Failure::Refused { op: None, message: format!("commit: {e}") })?;
+    let commit = tx
+        .commit_reporting(&request)
+        .map_err(|e| Failure::Refused {
+            op: None,
+            message: format!("commit: {e}"),
+        })?;
     for (given, written) in &commit.reminted {
         if let Some((index, _)) = inserts.iter().find(|(_, refno)| refno == given) {
             if let Some(Value::Object(entry)) = out.ops.get_mut(*index) {
@@ -735,6 +1044,8 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
         }
     }
     out.report.insert("staged".into(), Value::Null);
+    out.report
+        .insert("spatial".into(), spatial_report_json(&commit.spatial));
     out.report.insert(
         "commit".into(),
         json!({
@@ -747,10 +1058,19 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
             "retried_after_move": commit.retried_after_move,
         }),
     );
-    out.say(format!("wrote session {} to {db}", commit.report.written.sesno));
-    out.say(format!("  previous session : {}", commit.report.previous.sesno));
+    out.say(format!(
+        "wrote session {} to {db}",
+        commit.report.written.sesno
+    ));
+    out.say(format!(
+        "  previous session : {}",
+        commit.report.previous.sesno
+    ));
     if let Some(onto) = commit.merged_onto {
-        out.say(format!("  merged onto      : {onto} (base {})", commit.base_sesno));
+        out.say(format!(
+            "  merged onto      : {onto} (base {})",
+            commit.base_sesno
+        ));
     }
     for (given, written) in &commit.reminted {
         out.say(format!("  re-minted        : {given} -> {written}"));
@@ -758,22 +1078,35 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
     if commit.retried_after_move {
         out.say("  retried on Moved : yes");
     }
-    out.say(format!("  appended pages   : {}", commit.report.appended_pages.len()));
+    out.say(format!(
+        "  appended pages   : {}",
+        commit.report.appended_pages.len()
+    ));
     Ok(())
 }
 
 /// One attribute of an instruction onto the transaction: `set`, or `set_hunk`.
 fn set_attr(tx: &mut Transaction<'_>, refno: RefNo, attr: &Attr) -> Result<(), String> {
-    let result = if attr.hunk { tx.set_hunk(refno, &attr.name, &attr.text) } else { tx.set(refno, &attr.name, &attr.text) };
+    let result = if attr.hunk {
+        tx.set_hunk(refno, &attr.name, &attr.text)
+    } else {
+        tx.set(refno, &attr.name, &attr.text)
+    };
     result.map_err(|e| match e {
         // These name the attribute and quote the text themselves.
-        TransactionError::Value { .. } | TransactionError::Dictionary(_) | TransactionError::NotAHunk { .. } => e.to_string(),
+        TransactionError::Value { .. }
+        | TransactionError::Dictionary(_)
+        | TransactionError::NotAHunk { .. } => e.to_string(),
         other => {
             let mut shown = attr.text.chars().take(40).collect::<String>();
             if shown.len() < attr.text.len() {
                 shown.push('…');
             }
-            format!("{} = {shown:?}{}: {other}", attr.name, if attr.hunk { " (as a hunk)" } else { "" })
+            format!(
+                "{} = {shown:?}{}: {other}",
+                attr.name,
+                if attr.hunk { " (as a hunk)" } else { "" }
+            )
         }
     })
 }
@@ -786,7 +1119,11 @@ fn main() -> ExitCode {
             return failure.exit_code();
         }
     };
-    let mut out = Run { report: Map::new(), ops: Vec::new(), lines: Vec::new() };
+    let mut out = Run {
+        report: Map::new(),
+        ops: Vec::new(),
+        lines: Vec::new(),
+    };
     let outcome = run(&args, &mut out);
     let mut report = out.report;
     report.insert("ops".into(), Value::Array(out.ops));
@@ -800,7 +1137,10 @@ fn main() -> ExitCode {
                 Failure::Refused { op, .. } => *op,
                 _ => None,
             };
-            report.insert("error".into(), json!({ "op": op, "message": failure.message() }));
+            report.insert(
+                "error".into(),
+                json!({ "op": op, "message": failure.message() }),
+            );
             failure.exit_code()
         }
     };
@@ -810,7 +1150,10 @@ fn main() -> ExitCode {
     }
     print!("{text}");
     if let Some(path) = &args.report {
-        match serde_json::to_string_pretty(&Value::Object(report)).map_err(|e| e.to_string()).and_then(|json| fs::write(path, json + "\n").map_err(|e| e.to_string())) {
+        match serde_json::to_string_pretty(&Value::Object(report))
+            .map_err(|e| e.to_string())
+            .and_then(|json| fs::write(path, json + "\n").map_err(|e| e.to_string()))
+        {
             Ok(()) => println!("  report           : {}", path.display()),
             Err(error) => {
                 eprintln!("e3d-write: writing the report {}: {error}", path.display());

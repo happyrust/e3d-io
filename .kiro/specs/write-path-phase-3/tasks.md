@@ -304,11 +304,12 @@
     - 已验收（2026-10-04，E2–E9，`fd9ed67`）：`cargo test --no-fail-fast -- --nocapture` 为 722 / 0 / 30（122 个测试二进制 + Doc-tests）；既有 skip 7 个（8 条提示，其中成员覆盖测试同时缺新、旧样本），新增 E 测试无 skip。`cargo clippy --all-targets` 63、`cargo doc` 25，与 E1 基线相同。17 条 Off 金样通过，未更新金样。CLI 显式 Off，完整空间 CLI 与真 E3D 门留到 F。
 
 - [ ] 9. Write_CLI（需求 9）
-  - [~] 9.1 扩展 `src/bin/e3d-write.rs`
+  - [x] 9.1 扩展 `src/bin/e3d-write.rs`
     - `aabb`（世界系毫米 `[minx, miny, minz, maxx, maxy, maxz]`）只能用于 `insert` / `set` / `move`：建批阶段校验恰 6 个有限 JSON 数、每轴 min ≤ max；允许只带 `aabb` 的 `set`（只调 `set_aabb`）；带在其他指令或非 Geometric_Noun 上即拒；拒绝时写 `op #n` 与原因、退出码 1、不写任何字节；同一元素多条带 `aabb` 时取序号最大的一条
     - `--spatial require|skip|off`：缺省 `require`；非法值走 `Failure::Usage`（退出码 2），列出合法取值，在打开库之前退出
     - 记录 `touched` 与来源指令；`--report` 增加 `spatial` 节（refno 用写入号，重铸时保留 `given`）；dry run 从 `StagedSession::spatial()` 取同一份报告后 rollback；stage 阶段空间拒写退出码 1，逐个列出 refno、原因与来源指令
     - `--no-dictionary` 保持 0.4.0 行为
+    - 已完成基础 CLI 空间接入：`--spatial require|skip|off`、insert/set/move 的 `aabb` 六值校验、Transaction `set_aabb`、dry-run/commit 空间报告；既有 CLI 测试显式 `--spatial off`，新增 2 项 CLI 验证。9.2 解析属性测试与 9.3 真跑 bin 测试仍待后续。
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 9.11, 9.12, 9.13_
   - [ ]* 9.2 写 CLI 解析 proptest（`src/bin/e3d-write.rs` 内 `#[cfg(test)]`）
     - **Property 19: CLI `aabb` 与 `--spatial` 校验**
