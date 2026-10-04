@@ -301,13 +301,13 @@ pub const RULES: &[Rule] = &[
         id: RuleId::AllocCounterSemantics,
         name: "alloc.counter_semantics",
         governs: "what page 1's per-extent counter says about the next word1 (Counter_Semantics)",
-        status: unconfirmed("every insert into an extent page 1 lists", None),
+        status: confirmed("docs/evidence/2026-10-05-allocation-counter-index.md#alloc.counter_semantics"),
     },
     Rule {
         id: RuleId::AllocIndexOrder,
         name: "alloc.index_order",
         governs: "whether index keys sort by (word0, word1), and how they compare",
-        status: unconfirmed("every Transaction::open that would seek instead of scan", None),
+        status: confirmed("docs/evidence/2026-10-05-allocation-counter-index.md#alloc.index_order"),
     },
     Rule {
         id: RuleId::BucketCollision,
@@ -793,11 +793,20 @@ impl Implementation<candidate::Arithmetic> for Arithmetic {
     }
 }
 
+/// `alloc.counter_semantics`: page 1 stores the first unused word1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CounterSemantics {
+    NextAvailable,
+}
+
+/// `alloc.index_order`: fixed-width INDEX keys compare signed words;
+/// ordinary native refnos have nonnegative words, so RefNo::Ord agrees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexOrder {
+    NonnegativeLexicographic,
+}
+
 implementations! {
-    /// `alloc.counter_semantics`.
-    CounterSemantics;
-    /// `alloc.index_order`.
-    IndexOrder;
     /// `bucket.collision`.
     BucketCollision;
     /// `bucket.persist`.
@@ -867,8 +876,8 @@ const CONFIRMED: RuleSet = RuleSet {
     members: Slot::Confirmed(Members::Imap3IntoImap5),
     degenerate: Slot::Confirmed(Degenerate::BelowHalf),
     arithmetic: Slot::Confirmed(Arithmetic::Double),
-    counter_semantics: Slot::Pending,
-    index_order: Slot::Pending,
+    counter_semantics: Slot::Confirmed(CounterSemantics::NextAvailable),
+    index_order: Slot::Confirmed(IndexOrder::NonnegativeLexicographic),
     bucket_collision: Slot::Pending,
     bucket_persist: Slot::Pending,
 };
@@ -926,6 +935,22 @@ const _: () = {
 };
 
 impl RuleSet {
+    /// Confirmed counter interpretation, or None for the index-only fallback.
+    pub fn counter_semantics(&self) -> Option<CounterSemantics> {
+        match self.counter_semantics {
+            Slot::Confirmed(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Confirmed ordinary INDEX ordering, or None for the eager scan fallback.
+    pub fn index_order(&self) -> Option<IndexOrder> {
+        match self.index_order {
+            Slot::Confirmed(value) => Some(value),
+            _ => None,
+        }
+    }
+
     /// The rules the evidence has confirmed: the only rule set the write side uses.
     pub fn confirmed() -> &'static RuleSet {
         &CONFIRMED_SET

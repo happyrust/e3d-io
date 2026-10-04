@@ -1,0 +1,95 @@
+
+running 1 test
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001 session=1 keys=0 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001 session=323 keys=6637 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001 session=646 keys=6639 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001 session=1 keys=0 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001 session=100 keys=34707 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001 session=200 keys=34709 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7351_0001 session=1 keys=0 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7351_0001 session=2 keys=2 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7351_0001 session=116 keys=3345855 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001 session=1 keys=0 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001 session=2 keys=2 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001 session=10 keys=948 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023 session=1 keys=0 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023 session=101 keys=320 violations=0
+ALLOC-ORDER D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023 session=109 keys=320 violations=0
+test ordinary_index_keys_are_strictly_ordered_on_latest_and_retained_sessions ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+
+running 2 tests
+test ams8000_names_its_two_secondary_extents ... ok
+test the_bucket_table_counters_sit_above_the_live_maximum ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 4 tests
+test the_conclusion_finder_reads_a_section_to_the_next_heading ... ok
+test rule_names_are_unique ... ok
+test the_write_side_never_names_candidates ... ok
+test every_confirmed_rule_is_stated_in_the_conclusion_of_its_evidence ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 15 tests
+test lookup_and_enumeration_agree_across_the_whole_corpus ... ignored, walks and re-seeks every key of 429 databases; run with --ignored
+test a_child_at_the_wrong_level_is_refused ... ok
+test a_tree_that_points_back_at_itself_is_refused_by_both_paths ... ok
+test a_lookup_descends_from_the_session_root_and_stops_at_the_leaf ... ok
+test a_page_that_cannot_be_read_is_an_error_not_an_absent_key ... ok
+test a_cold_lookup_costs_one_page_per_level ... ok
+test enumeration_and_lookup_name_the_same_keys ... ok
+test predecessor_rejects_bad_paths_and_unsorted_keys ... ok
+test predecessor_handles_empty_leaves_sentinels_and_unsigned_extents ... ok
+D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001: worst lookup read 3 pages of 16620
+test reading_a_page_as_a_node_has_one_implementation ... ok
+D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7329_0001: worst lookup read 3 pages of 2390
+D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001: worst lookup read 2 pages of 83
+test a_cold_lookup_on_a_real_tree_costs_its_height ... ok
+test choosing_a_child_has_one_implementation ... ok
+test strict_predecessor_matches_a_scan_across_leaf_separators ... ok
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001 session=1 keys=0 order_violations=0 max_predecessor_reads=1
+D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001: keys=6639 leaves=106 height=3
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001 session=323 keys=6637 order_violations=0 max_predecessor_reads=3
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001 session=646 keys=6639 order_violations=0 max_predecessor_reads=3
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001 session=1 keys=0 order_violations=0 max_predecessor_reads=1
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001 session=100 keys=34707 order_violations=0 max_predecessor_reads=3
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7999_0001 session=200 keys=34709 order_violations=0 max_predecessor_reads=3
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7351_0001 session=1 keys=0 order_violations=0 max_predecessor_reads=1
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7351_0001 session=2 keys=2 order_violations=0 max_predecessor_reads=1
+D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7329_0001: keys=12763 leaves=203 height=3
+D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001: keys=238 leaves=3 height=2
+test lookup_and_enumeration_agree_on_the_sample_databases ... ok
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7351_0001 session=116 keys=3345855 order_violations=0 max_predecessor_reads=4
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001 session=1 keys=0 order_violations=0 max_predecessor_reads=1
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001 session=2 keys=2 order_violations=0 max_predecessor_reads=1
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001 session=10 keys=948 order_violations=0 max_predecessor_reads=2
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023 session=1 keys=0 order_violations=0 max_predecessor_reads=1
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023 session=101 keys=320 order_violations=0 max_predecessor_reads=2
+ALLOC-CORPUS D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023 session=109 keys=320 order_violations=0 max_predecessor_reads=2
+test allocation_predecessor_and_order_on_required_corpus ... ok
+
+test result: ok. 14 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.83s
+
+
+running 2 tests
+test diagnostic_rejects_missing_invalid_or_nonexistent_inputs ... ok
+test diagnostic_matches_scan_at_exact_retained_session_and_absent_extent ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+   Compiling e3d-io v0.4.0 (D:\work\plant-code\old\vendor\e3d-io-write)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.42s
+     Running tests\allocation_order_real.rs (D:\Rust\target\debug\build\e3d-io/3185bb2dc3d84c09\out\allocation_order_real-3185bb2dc3d84c09.exe)
+     Running tests\bucket_table_real.rs (D:\Rust\target\debug\build\e3d-io/55577a1b291ab880\out\bucket_table_real-55577a1b291ab880.exe)
+D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001: 2 bucket entries, all above the live max: [BucketEntry { extent_word0: 24384, next_word1: 26506, extra: 0 }, BucketEntry { extent_word0: 32576, next_word1: 98, extra: 0 }]
+D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001: 1 bucket entries, all above the live max: [BucketEntry { extent_word0: 2013287686, next_word1: 947, extra: 0 }]
+D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023: 1 bucket entries, all above the live max: [BucketEntry { extent_word0: 17419, next_word1: 331, extra: 0 }]
+     Running tests\core_rules_registry.rs (D:\Rust\target\debug\build\e3d-io/2a0d00d78f05497d\out\core_rules_registry-2a0d00d78f05497d.exe)
+     Running tests\index_cursor_real.rs (D:\Rust\target\debug\build\e3d-io/343174fc278f490d\out\index_cursor_real-343174fc278f490d.exe)
+     Running tests\next_word1_cli.rs (D:\Rust\target\debug\build\e3d-io/798cb0089dca4677\out\next_word1_cli-798cb0089dca4677.exe)

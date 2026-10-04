@@ -1,0 +1,176 @@
+0x5b00f10: push    ebp
+0x5b00f11: mov     ebp, esp
+0x5b00f13: sub     esp, 10h
+0x5b00f16: push    ebx
+0x5b00f17: push    esi
+0x5b00f18: mov     esi, [ebp+arg_8]
+0x5b00f1b: push    edi
+0x5b00f1c: mov     ecx, [esi+0Ch]
+0x5b00f1f: test    ecx, ecx
+0x5b00f21: jle     loc_5B00FF4
+0x5b00f27: cmp     [ebp+arg_4], ecx
+0x5b00f2a: mov     ebx, ecx
+0x5b00f2c: mov     eax, dword_6453DC4
+0x5b00f31: cmovl   ebx, [ebp+arg_4]
+0x5b00f35: add     ecx, 2
+0x5b00f38: sub     eax, [esi+18h]
+0x5b00f3b: sub     eax, 7
+0x5b00f3e: mov     [ebp+var_C], ecx
+0x5b00f41: cdq
+0x5b00f42: idiv    ecx
+0x5b00f44: mov     [ebp+var_4], 0
+0x5b00f4b: lea     ecx, [eax+1]
+0x5b00f4e: mov     eax, ecx
+0x5b00f50: mov     [ebp+var_8], ecx
+0x5b00f53: cdq
+0x5b00f54: sub     eax, edx
+0x5b00f56: mov     edi, eax
+0x5b00f58: sar     edi, 1
+0x5b00f5a: lea     esi, [edi-1]
+0x5b00f5d: imul    esi, [ebp+var_C]
+0x5b00f61: add     esi, 7
+0x5b00f64: mov     [ebp+var_10], esi
+0x5b00f67: test    edi, edi
+0x5b00f69: jle     short loc_5B00FC4
+0x5b00f6b: nop     dword ptr [eax+eax+00h]
+0x5b00f70: xor     eax, eax
+0x5b00f72: test    ebx, ebx
+0x5b00f74: jle     short loc_5B00F99
+0x5b00f76: mov     ecx, [ebp+arg_8]
+0x5b00f79: lea     ecx, [ecx+esi*4]
+0x5b00f7c: nop     dword ptr [eax+00h]
+0x5b00f80: mov     edx, [ebp+arg_0]
+0x5b00f83: mov     esi, [ecx]
+0x5b00f85: mov     edx, [edx+eax*4]
+0x5b00f88: cmp     edx, esi
+0x5b00f8a: jl      short loc_5B00FA1
+0x5b00f8c: jg      short loc_5B00FEC
+0x5b00f8e: inc     eax
+0x5b00f8f: add     ecx, 4
+0x5b00f92: cmp     eax, ebx
+0x5b00f94: jl      short loc_5B00F80
+0x5b00f96: mov     esi, [ebp+var_10]
+0x5b00f99: mov     eax, [ebp+arg_8]
+0x5b00f9c: cmp     ebx, [eax+0Ch]
+0x5b00f9f: jge     short loc_5B00FC4
+0x5b00fa1: mov     ecx, edi
+0x5b00fa3: mov     [ebp+var_8], ecx
+0x5b00fa6: mov     eax, [ebp+var_4]
+0x5b00fa9: add     eax, ecx
+0x5b00fab: cdq
+0x5b00fac: sub     eax, edx
+0x5b00fae: mov     edi, eax
+0x5b00fb0: sar     edi, 1
+0x5b00fb2: lea     esi, [edi-1]
+0x5b00fb5: imul    esi, [ebp+var_C]
+0x5b00fb9: add     esi, 7
+0x5b00fbc: mov     [ebp+var_10], esi
+0x5b00fbf: cmp     edi, [ebp+var_4]
+0x5b00fc2: jg      short loc_5B00F70
+0x5b00fc4: mov     ebx, [ebp+arg_8]
+0x5b00fc7: mov     ecx, [ebp+arg_C]
+0x5b00fca: pop     edi
+0x5b00fcb: mov     edx, [ebx+0Ch]
+0x5b00fce: add     edx, esi
+0x5b00fd0: mov     eax, [ebx+edx*4]
+0x5b00fd3: mov     [ecx], eax
+0x5b00fd5: mov     eax, [ebx+edx*4+4]
+0x5b00fd9: mov     [ecx+4], eax
+0x5b00fdc: mov     eax, [ebp+arg_10]
+0x5b00fdf: mov     [eax], esi
+0x5b00fe1: mov     eax, 1
+0x5b00fe6: pop     esi
+0x5b00fe7: pop     ebx
+0x5b00fe8: mov     esp, ebp
+0x5b00fea: pop     ebp
+0x5b00feb: retn
+0x5b00fec: mov     ecx, [ebp+var_8]
+0x5b00fef: mov     [ebp+var_4], edi
+0x5b00ff2: jmp     short loc_5B00FA6
+0x5b00ff4: mov     ecx, dword_6453DC4
+0x5b00ffa: mov     eax, 7
+0x5b00fff: sub     ecx, [esi+18h]
+0x5b01002: mov     [ebp+var_10], ecx
+0x5b01005: mov     [ebp+var_8], 0
+0x5b0100c: mov     [ebp+var_4], eax
+0x5b0100f: cmp     ecx, eax
+0x5b01011: jle     loc_5B010DC
+0x5b01017: mov     ecx, [ebp+arg_4]
+0x5b0101a: nop     word ptr [eax+eax+00h]
+0x5b01020: mov     edx, [esi+eax*4]
+0x5b01023: lea     esi, [esi+eax*4]
+0x5b01026: cmp     ecx, edx
+0x5b01028: mov     [ebp+var_C], edx
+0x5b0102b: mov     ebx, edx
+0x5b0102d: cmovl   ebx, ecx
+0x5b01030: xor     edx, edx
+0x5b01032: test    ebx, ebx
+0x5b01034: jle     short loc_5B0107B
+0x5b01036: add     esi, 4
+0x5b01039: nop     dword ptr [eax+00000000h]
+0x5b01040: mov     eax, [ebp+arg_0]
+0x5b01043: mov     ecx, [eax+edx*4]
+0x5b01046: mov     eax, [esi]
+0x5b01048: cmp     ecx, 80000001h
+0x5b0104e: jz      short loc_5B0105D
+0x5b01050: mov     edi, eax
+0x5b01052: cmp     eax, 80000001h
+0x5b01057: jz      short loc_5B010B8
+0x5b01059: cmp     ecx, edi
+0x5b0105b: ja      short loc_5B010B8
+0x5b0105d: cmp     eax, 80000001h
+0x5b01062: jz      short loc_5B01070
+0x5b01064: cmp     ecx, 80000001h
+0x5b0106a: jz      short loc_5B01083
+0x5b0106c: cmp     ecx, eax
+0x5b0106e: jb      short loc_5B01083
+0x5b01070: inc     edx
+0x5b01071: add     esi, 4
+0x5b01074: cmp     edx, ebx
+0x5b01076: jl      short loc_5B01040
+0x5b01078: mov     eax, [ebp+var_4]
+0x5b0107b: mov     ecx, [ebp+var_C]
+0x5b0107e: cmp     [ebp+arg_4], ecx
+0x5b01081: jge     short loc_5B010BE
+0x5b01083: mov     edx, [ebp+var_8]
+0x5b01086: test    edx, edx
+0x5b01088: jz      short loc_5B010DC
+0x5b0108a: mov     ebx, [ebp+arg_8]
+0x5b0108d: mov     ecx, [ebp+arg_C]
+0x5b01090: pop     edi
+0x5b01091: pop     esi
+0x5b01092: mov     eax, [ebx+edx*4]
+0x5b01095: add     eax, edx
+0x5b01097: mov     eax, [ebx+eax*4+4]
+0x5b0109b: mov     [ecx], eax
+0x5b0109d: mov     eax, [ebx+edx*4]
+0x5b010a0: add     eax, edx
+0x5b010a2: mov     eax, [ebx+eax*4+8]
+0x5b010a6: mov     [ecx+4], eax
+0x5b010a9: mov     eax, [ebp+arg_10]
+0x5b010ac: pop     ebx
+0x5b010ad: mov     [eax], edx
+0x5b010af: mov     eax, 1
+0x5b010b4: mov     esp, ebp
+0x5b010b6: pop     ebp
+0x5b010b7: retn
+0x5b010b8: mov     ecx, [ebp+var_C]
+0x5b010bb: mov     eax, [ebp+var_4]
+0x5b010be: mov     esi, [ebp+arg_8]
+0x5b010c1: add     ecx, 3
+0x5b010c4: mov     edx, eax
+0x5b010c6: add     eax, ecx
+0x5b010c8: mov     ecx, [ebp+arg_4]
+0x5b010cb: mov     [ebp+var_8], edx
+0x5b010ce: mov     [ebp+var_4], eax
+0x5b010d1: cmp     eax, [ebp+var_10]
+0x5b010d4: jl      loc_5B01020
+0x5b010da: jmp     short loc_5B01086
+0x5b010dc: mov     dword_6453B98, 216h
+0x5b010e6: xor     eax, eax
+0x5b010e8: pop     edi
+0x5b010e9: pop     esi
+0x5b010ea: pop     ebx
+0x5b010eb: mov     esp, ebp
+0x5b010ed: pop     ebp
+0x5b010ee: retn

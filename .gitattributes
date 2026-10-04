@@ -8,3 +8,6 @@
 
 # Q13 evidence manifest hashes the original driver/CLI bytes, including BOM/CRLF.
 docs/evidence/assets/2026-10-04-q13-gate/** -text whitespace=cr-at-eol
+
+# Allocation probe evidence retains the original IB/TTY output bytes.
+docs/evidence/assets/2026-10-05-allocation/** -text whitespace=cr-at-eol,-blank-at-eol

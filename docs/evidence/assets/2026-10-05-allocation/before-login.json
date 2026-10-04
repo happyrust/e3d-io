@@ -1,0 +1,15 @@
+{
+  "bucket_counter": 26506,
+  "bucket_error": null,
+  "bucket_floor": null,
+  "counter_use": "unconfirmed",
+  "db": "D:\\e3dio-alloc-probe-final\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "extent": 24384,
+  "index_keys": 6639,
+  "index_next_word1": 26484,
+  "next_word1": 26484,
+  "scan_max_word1": 26483,
+  "seek_max_word1": 26483,
+  "seek_page_reads": 3,
+  "sesno": 646
+}

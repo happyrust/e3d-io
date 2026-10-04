@@ -1,0 +1,25 @@
+{
+  "outcome": "indeterminate",
+  "before_identity": {
+    "dbnum": 8000,
+    "db_type": "DESI",
+    "world_refno": "16192/0"
+  },
+  "after_identity": {
+    "dbnum": 8000,
+    "db_type": "DESI",
+    "world_refno": "16192/0"
+  },
+  "before_sesno": 646,
+  "after_sesno": 646,
+  "classification_error": null,
+  "attempts": [
+    {
+      "alive_seen": true,
+      "done_seen": false,
+      "exit_status": 1,
+      "timed_out": false,
+      "scenario_log": "\ufeff"
+    }
+  ]
+}

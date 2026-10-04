@@ -1,0 +1,15 @@
+{
+  "bucket_counter": 26507,
+  "bucket_error": null,
+  "bucket_floor": null,
+  "counter_use": "unconfirmed",
+  "db": "D:\\e3dio-alloc-probe-final\\after-new.db",
+  "extent": 24384,
+  "index_keys": 6640,
+  "index_next_word1": 26507,
+  "next_word1": 26507,
+  "scan_max_word1": 26506,
+  "seek_max_word1": 26506,
+  "seek_page_reads": 3,
+  "sesno": 647
+}

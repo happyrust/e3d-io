@@ -354,10 +354,11 @@
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 11. 发号下界与 Open_Fast_Path（需求 11；与第 3–10 组并行）
-  - [~] 11.1 取证 Counter_Semantics 与索引键序
+  - [x] 11.1 取证 Counter_Semantics 与索引键序
     - 经 IB_Wrapper 读 `db_get_bucket` 等例程；Counter_Semantics 另以一次 E3D_Session 实测（探针脚本放 `tools/e3d/`，副本每轮从原件重置，会话 USER 为 `e3dio`）
     - 写 Phase_3_Evidence_Doc，经 `check_evidence.ps1` 机检；结论写入 `src/core_rules.rs` 的 `alloc.counter_semantics`、`alloc.index_order`
     - _Requirements: 2.4, 11.7, 11.10_
+    - F1 验证：`docs/evidence/2026-10-05-allocation-counter-index.md`；机检 PASS，四库桶表、五库 15 会话次序门通过，0 反例。环境适配：原生 e3dio 登录失败，沿用既有 SYSTEM 登录，SAVEWORK User=dpc；日志与 CLI User=e3dio 分列，不改源项目帐号。两次 NEW / 中间删除及源哈希验证通过。
   - [~] 11.2 录 Open_Fast_Path 的 Golden_Hashes
     - 在 Open_Fast_Path 首个写侧提交（11.4）的父提交上，用 `tools/golden/record.ps1` 录 `tests/golden/write_hashes.json`（固定时钟与预铸 refno）并入库；与 11.4 之间有别的提交时重录
     - 剔除的键记入 Spec_Ledger「Golden 剔除键」
@@ -582,8 +583,8 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `aabb.members` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① Core3D `MPBOX2` n 37–79：IMAP 5 的元素对每个 IMAP 3 成员（FRMC 为 0 → `GETRAM` + `CONCAT`）跑 `BOXELE`，按轴并入元素框；② `tools/e3d/spamap_probes/d3/`：改 LEVE 后 18 个条目不变，各加大 100 mm 后改写、成员伸出的几侧照旧。`rules::imap_3_into_imap_5`；成员只算 NBOX / NCYL / NCON / NPYR，其余 noun → MissingInput（D7）。C4 的 18 个反例全由此解释，未剔除 |
 | `aabb.degenerate` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb.md` | C4 | ① Core3D `BOXELE`：HEIG / DIAM、XLEN / YLEN / ZLEN 小于 0.5 一律取 0.5（含负、0）；`aabb.rs` 改为对 < 0.5 的尺寸查此规则；TES023 两个零尺寸 CYLI 2 / 2；Corpus 分不出与旧候选，只以 ① 坐实。成员同：NBOX、NCYL 各尺寸与 NCON、NPYR 的 HEIG（D3） |
 | `aabb.arithmetic` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① 上列例程全 double（含 `MBXPYR`、`MBXPOI`、`TRAVEC`、`MVMULT`）；`rules::double_precision`；1 590 / 1 590 逐字，需求 6 第 16 条的放宽判据不需要 |
-| `alloc.counter_semantics` | 11.1 | | | | |
-| `alloc.index_order` | 11.1 | | | | |
+| `alloc.counter_semantics` | 11.1 | 坐实 | `docs/evidence/2026-10-05-allocation-counter-index.md` | F1 | NextAvailable：页 1 直接返回、缓存随后 +1；SYSTEM NEW 26506、删除后 NEW 26507；源库不变，原生 User=dpc 分列 |
+| `alloc.index_order` | 11.1 | 坐实 | `docs/evidence/2026-10-05-allocation-counter-index.md` | F1 | 固定宽有符号词典序，native 普通两字非负；五库 15 个最新/保留会话原始次序 0 反例 |
 | `bucket.collision` | 13.1 | | | | |
 | `bucket.persist` | 13.1 | | | | |
 
