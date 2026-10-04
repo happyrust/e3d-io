@@ -106,7 +106,7 @@ function Invoke-Native([scriptblock]$command) {
 }
 Push-Location $crate
 try {
-    $build = Invoke-Native { cargo build --quiet --bin e3d-write }
+    $build = Invoke-Native { cargo build --quiet --bin e3d-write --bin e3d-descriptor }
     if ($build.ExitCode) { Write-Output $build.Output; throw 'cargo build --bin e3d-write failed' }
     $eap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -171,6 +171,19 @@ if ($hashAfter -ne $hashBefore) {
 }
 
 Write-Output 'sessions:'
+# Q14 must precede any writes or TTY login: the fresh copy has a floor gap.
+$descriptor = Join-Path $targetDir 'debug\e3d-descriptor.exe'
+$q14clock = [Diagnostics.Stopwatch]::StartNew()
+$q14diagnostic = Invoke-Native { & $descriptor next-word1 --db $copyDb --extent 24384 }
+if ($q14diagnostic.ExitCode) { throw "Q14 diagnostic failed: $($q14diagnostic.Output)" }
+$q14expected = $q14diagnostic.Output | ConvertFrom-Json
+if ($q14expected.counter_use -ne 'next_available' -or $q14expected.bucket_floor -le $q14expected.index_next_word1) { throw 'Q14 requires Bucket_Floor > index max+1' }
+$q14diagnostic.Output | Set-Content (Join-Path $opsOut 'q14-before.json')
+$r14 = Invoke-Session 'q14_named' @{} @('--user','e3dio','--base',"$($q14expected.sesno)")
+$q14ref = $r14.Report.ops[0].refno
+if ($q14ref -ne "24384/$($q14expected.next_word1)") { throw "Q14 CLI refno $q14ref differs from read-side expectation" }
+$q14clock.Stop()
+$q14writeSeconds = $q14clock.Elapsed.TotalSeconds
 $r10 = Invoke-Session '10_box'
 $ids = @{ BOX = $r10.Report.ops[0].refno; ZONE = $r10.Report.ops[0].owner }
 $r20 = Invoke-Session '20_group' @{ BOX = $ids.BOX }
@@ -229,6 +242,8 @@ function Invoke-E3D([string]$template, [string]$macroName, [hashtable]$vars, [sw
     $out = Join-Path $Scratch ('driver-out-' + [IO.Path]::GetFileNameWithoutExtension($macroName))
     New-Item -ItemType Directory -Force $out | Out-Null
     $text = Get-Content (Join-Path $PSScriptRoot $template) -Raw
+    $q14sections = $text -split '-- Q14-TEMPLATE-BEGIN\r?\n', 2
+    if ($vars.ContainsKey('Q14')) { $text = $q14sections[1] } else { $text = $q14sections[0] }
     $sections = $text -split '-- Q13-TEMPLATE-BEGIN\r?\n', 2
     if ($vars.ContainsKey('Q13')) { $text = $sections[1] } else { $text = $sections[0] }
     $text = $text.Replace('{{LOGDIR}}', (& $forward $logDir)).Replace('{{MACROLOG}}', (& $forward ([IO.Path]::ChangeExtension($macroPath, '.log'))))
@@ -423,6 +438,16 @@ if ($saves -notmatch 'E3DSAVE-SAVED') {
 }
 
 . (Join-Path $PSScriptRoot 'q13_gate.ps1')
+. (Join-Path $PSScriptRoot 'q14_checks.ps1')
+$q14clock.Restart()
+try {
+    Invoke-E3D 'write_gate.mac.template' 'Q14.mac' @{Q14='1'} | Out-Host
+    $q14path = Join-Path $logDir 'Q14.log'
+    $q14pass = (Test-Path $q14path) -and (Test-Q14Ref (Read-LogText $q14path) $q14ref)
+} catch { $q14pass = $false; Write-Output "Q14 driver: $($_.Exception.Message)" }
+if ($q14pass) { Write-Output "PASS Q14  expected=$q14ref base=$($q14expected.sesno) bucket=$($q14expected.bucket_floor) index_next=$($q14expected.index_next_word1)" }
+else { Write-Output 'FAIL Q14'; $failures++ }
+Write-Output "TIME Q14_seconds=$($q14writeSeconds + $q14clock.Elapsed.TotalSeconds)"
 if ((Get-FileHash (Join-Path $Project $DbRelative) -Algorithm SHA256).Hash -ne $sourceHash) { throw 'source database changed' }
 Write-Output "TIME total_seconds=$($gateClock.Elapsed.TotalSeconds)"
 Write-Output ''
