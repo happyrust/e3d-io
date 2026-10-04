@@ -107,6 +107,16 @@ E1 的父提交 `474ea14`（自 D6 的 `d8fecb6` 起只改文档）上重跑 SPA
 
 日志保存在 `.agents/tasks/write-path-phase-3-milestone-e/validation/`。任务 8.3–8.18 和 7.6 经本次验收后打勾。后续仍需 F 的完整空间 CLI 与真 E3D 门；性能、发号与页 1 桶表不在本次范围。
 
-### 后续推荐：第 9 组 9.1（2026-10-04，提交待定）
+### 后续推荐：第 9 组 9.1（2026-10-04，`426484d`）
 
 按 E 完成后的推荐顺序开始 Write_CLI：CLI 支持 `--spatial require|skip|off`，操作级 `aabb` 仅允许 insert/set/move，六个有限数经 Transaction::set_aabb 校验；dry-run 与提交报告带 `spatial` 节。既有 CLI 测试统一显式 `--spatial off`，新增给框与非法框验证。全套测试 724 通过、0 失败、30 ignored；9.2/9.3（解析属性测试与完整 CLI 真跑门）留作本阶段后续。
+
+### Write_CLI 收口：9.2、9.3（2026-10-04，本次原子提交）
+
+执行用户批准的《第 9 组 Write_CLI 收口计划》。抽出纯参数解析入口，新增 6 项解析测试（3 组各 256 例 proptest）；新增 `tests/write_stage8_spamap_cli.rs` 的 11 项测试，含 16 例库副本随机模型。新增测试无 skip，fixture 缺失即失败。复用既有受控副本和描述符；CLI 真跑辅助不预设 Off，因此覆盖默认 Require；既有 CLI 辅助及 7 项期望保持不变。
+
+修正验收发现的三个问题：解析阶段 min≤max 校验；空间 staging/commit 错误来源关联（沿固定 base owner 链追祖先）；重铸后更新所有操作行中的元素引用而保留 given。空间报告形状沿用 9.1。读侧逐条验证 registered/removed 与真实 SPAMAP 全量差集，dry-run 与 commit 空间报告一致；拒写核 SHA-256、长度、最新会话号不变。覆盖 Require/Skip/Off、缺框删除旧条目、非法/非几何/越界拒写、set/move 与合法最后值、unused、祖先删除与重铸保留占用者。JSON 无 NaN/Infinity，非法字面量及溢出指数由 JSON 解码拒绝；库级另验证非法框保留此前值。
+
+验收顺序：既有 CLI 7 项→全套 `cargo test --no-fail-fast -- --nocapture` 741 / 0 / 30→`cargo clippy --all-targets` 62→`cargo doc` 25；全部成功。既有 skip 7 个 / 8 条提示不变，17 条 Off 金样通过、SHA-256 不变、禁止重录。日志保存在 `.agents/tasks/write-path-phase-3-cli/validation/`。任务 9.2、9.3 与第 9 组经本次验收打勾。
+
+提交：`test(cli): 9.2-9.3 validate spatial parsing and real runs`，单一原子提交包含修复、测试与账本。下一阶段为第 10 组 E3D Gate；本次未宣称产品级空间门通过，不接性能、发号与桶表工作。

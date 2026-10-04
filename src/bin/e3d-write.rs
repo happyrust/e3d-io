@@ -12,6 +12,7 @@
 //!                 [--schema <dir>]                the schema pack (default: the crate's schema/e3d31)
 //!                 [--base <sesno>]                open at this session; a merge if the file has moved on
 //!                 [--on-clash refuse|writer-wins] what a merge does where both sides changed one thing (default refuse)
+//!                 [--spatial require|skip|off]     handling of missing spatial bounds (default require)
 //!                 [--dry-run]                     stage and roll back: every check, nothing committed
 //!                 [--no-dictionary]               do not hold values to E3D's dictionary limits
 //!                 [--user <name>] [--comment <text>]
@@ -26,11 +27,11 @@
 //!
 //! | `op` | fields | facade call |
 //! |---|---|---|
-//! | `insert` | `owner`, `noun`; optional `name`, `id`, `attrs`, `at` | `insert`, then `set` per attribute, `reorder` for `at` |
-//! | `set` (or `update`) | `refno`, `attrs` | `set` / `set_hunk` per attribute |
+//! | `insert` | `owner`, `noun`; optional `name`, `id`, `attrs`, `at`, `aabb` | `insert`, then `set` per attribute, `set_aabb`, `reorder` for `at` |
+//! | `set` (or `update`) | `refno`; optional `attrs`, `aabb` | `set` / `set_hunk` per attribute, `set_aabb` |
 //! | `rename` | `refno`, `name` | `rename` |
 //! | `delete` | `refno` | `delete` |
-//! | `move` | `refno`, `owner`; optional `at` | `move_to` |
+//! | `move` | `refno`, `owner`; optional `at`, `aabb` | `move_to`, `set_aabb` |
 //! | `reorder` | `refno`, `at` | `reorder` |
 //! | `reference` | `group`, `member`; optional `at` | `add_reference_member` |
 //! | `unreference` | `group`, `member` | `remove_reference_member` |
@@ -50,6 +51,10 @@
 //! store the value out of the record as a hunk ([`Transaction::set_hunk`]).
 //! Attributes of one instruction are set in the order the JSON reader hands
 //! them over (by name).
+//! `aabb` is `[minx, miny, minz, maxx, maxy, maxz]` in world millimetres;
+//! all six coordinates must be finite and each min must not exceed its max.
+//! Giving a box alone does not cause spatial recomputation; the final legal
+//! box for each element is used if its final edits require recomputation.
 //!
 //! Instructions are applied in order and the first one refused stops the run
 //! before anything is written — the message names the instruction (`op #n
@@ -136,7 +141,11 @@ struct Args {
 }
 
 fn parse_args() -> Result<Args, Failure> {
-    let mut args = std::env::args().skip(1);
+    parse_args_from(std::env::args().skip(1))
+}
+
+fn parse_args_from(input: impl IntoIterator<Item = String>) -> Result<Args, Failure> {
+    let mut args = input.into_iter();
     match args.next().as_deref() {
         Some("apply") => {}
         Some("--help" | "-h") | None => return Err(Failure::Usage(USAGE.to_string())),
@@ -299,6 +308,7 @@ fn take_aabb(object: &mut Map<String, Value>) -> Result<Option<[f64; 6]>, String
             return Err(format!("aabb[{index}] must be finite"));
         }
     }
+    e3d_io::spatial::WorldAabb::from_mm(out).map_err(|e| format!("aabb: invalid AABB: {e}"))?;
     Ok(Some(out))
 }
 
@@ -634,6 +644,65 @@ impl Run {
     fn say(&mut self, line: impl Into<String>) {
         self.lines.push(line.into());
     }
+
+    fn refused_spatial(
+        &self,
+        phase: &str,
+        error: TransactionError,
+        base: &mut ReadOnlyEngine,
+    ) -> Failure {
+        let mut refs = Vec::new();
+        if let TransactionError::Spatial(spatial) = &error {
+            match spatial {
+                e3d_io::spatial::SpatialError::MissingAabb(missing) => {
+                    refs.extend(missing.iter().map(|m| m.given_as.unwrap_or(m.refno)));
+                }
+                e3d_io::spatial::SpatialError::UndecodableAttr { refno, .. }
+                | e3d_io::spatial::SpatialError::OutOfRange { refno, .. } => refs.push(*refno),
+                _ => {}
+            }
+        }
+        // An ancestor edit can force an untouched descendant to need a box.
+        // Trace the fixed base rather than reopening a potentially newer session.
+        for r in refs.clone() {
+            let mut at = r;
+            let mut seen = std::collections::HashSet::new();
+            while seen.insert(at) {
+                let Ok(Some(record)) = base.find_element(at) else {
+                    break;
+                };
+                at = record.header().owner;
+                if !at.is_valid() {
+                    break;
+                }
+                refs.push(at);
+            }
+        }
+        let sources: Vec<_> = self
+            .ops
+            .iter()
+            .filter(|entry| refs.iter().any(|r| entry["refno"] == refno_json(*r)))
+            .filter_map(|entry| entry["index"].as_u64())
+            .collect();
+        Failure::Refused {
+            op: sources.last().copied().map(|n| n as usize),
+            message: format!(
+                "{phase}: {error}{}",
+                if sources.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "; source ops: {}",
+                        sources
+                            .iter()
+                            .map(|n| format!("op #{n}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
+            ),
+        }
+    }
 }
 
 fn spatial_policy_name(policy: SpatialPolicy) -> &'static str {
@@ -670,7 +739,16 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
         .insert("ops_file".into(), json!(args.ops.to_string_lossy()));
     out.report.insert("dry_run".into(), json!(args.dry_run));
 
-    let file = read_ops(&args.ops).map_err(setup)?;
+    let file = read_ops(&args.ops).map_err(|message| {
+        if !message.contains("aabb") {
+            return Failure::Setup(message);
+        }
+        let op = message
+            .strip_prefix("op #")
+            .and_then(|s| s.split_once(':'))
+            .and_then(|(n, _)| n.parse().ok());
+        Failure::Refused { op, message }
+    })?;
     let user = args
         .user
         .clone()
@@ -1006,10 +1084,9 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
         clock: None,
     };
     if args.dry_run {
-        let staged = tx.stage(&request).map_err(|e| Failure::Refused {
-            op: None,
-            message: format!("staging: {e}"),
-        })?;
+        let staged = tx
+            .stage(&request)
+            .map_err(|e| out.refused_spatial("staging", e, &mut resolver.engine))?;
         let (previous, summary) = (staged.previous(), staged.staged());
         let pages = summary.end.page.saturating_sub(previous.end.page);
         let spatial = spatial_report_json(staged.spatial());
@@ -1032,14 +1109,22 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
 
     let commit = tx
         .commit_reporting(&request)
-        .map_err(|e| Failure::Refused {
-            op: None,
-            message: format!("commit: {e}"),
-        })?;
+        .map_err(|e| out.refused_spatial("commit", e, &mut resolver.engine))?;
     for (given, written) in &commit.reminted {
-        if let Some((index, _)) = inserts.iter().find(|(_, refno)| refno == given) {
-            if let Some(Value::Object(entry)) = out.ops.get_mut(*index) {
-                entry.insert("refno".into(), refno_json(*written));
+        for op in &mut out.ops {
+            if let Value::Object(entry) = op {
+                for field in ["refno", "owner", "group", "member"] {
+                    if entry.get(field) == Some(&refno_json(*given)) {
+                        entry.insert(field.into(), refno_json(*written));
+                    }
+                }
+                if let Some(Value::Object(at)) = entry.get_mut("at") {
+                    for field in ["before", "after"] {
+                        if at.get(field) == Some(&refno_json(*given)) {
+                            at.insert(field.into(), refno_json(*written));
+                        }
+                    }
+                }
             }
         }
     }
@@ -1167,4 +1252,113 @@ fn main() -> ExitCode {
         eprintln!("e3d-write: {}", failure.message());
     }
     code
+}
+
+#[cfg(test)]
+mod spatial_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn args(extra: &[&str]) -> Result<Args, Failure> {
+        parse_args_from(
+            ["apply", "--db", "absent-db", "--ops", "absent-ops"]
+                .into_iter()
+                .chain(extra.iter().copied())
+                .map(str::to_owned),
+        )
+    }
+
+    #[test]
+    fn policy_default_help_and_usage_errors() {
+        assert_eq!(
+            args(&[]).unwrap_or_else(|_| panic!("default")).spatial,
+            SpatialPolicy::Require
+        );
+        assert!(USAGE.contains("require|skip|off"));
+        for extra in [vec!["--spatial"], vec!["--spatial", "unknown"]] {
+            assert!(matches!(args(&extra), Err(Failure::Usage(_))));
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn policy_parsing_matches_only_the_three_values(text in "[a-z-]{0,16}") {
+            let result = args(&["--spatial", &text]);
+            prop_assert_eq!(result.is_ok(), matches!(text.as_str(), "require" | "skip" | "off"));
+        }
+        #[test]
+        fn valid_aabb_roundtrips(x in -100000i32..100000, width in 0u32..10000) {
+            let values=[x as f64,2.,3.,x as f64+width as f64,2.,3.];
+            let mut object=Map::new(); object.insert("aabb".into(),json!(values));
+            prop_assert_eq!(take_aabb(&mut object).unwrap(),Some(values));
+            prop_assert!(object.is_empty());
+        }
+        #[test]
+        fn wrong_lengths_and_reversed_axes_are_rejected(length in 0usize..12, axis in 0usize..3) {
+            let mut object=Map::new(); object.insert("aabb".into(),json!(vec![0.;length]));
+            prop_assert_eq!(take_aabb(&mut object).is_ok(),length==6);
+            let mut values=[0.;6]; values[axis]=1.;
+            object.insert("aabb".into(),json!(values));
+            prop_assert!(take_aabb(&mut object).is_err());
+        }
+    }
+
+    #[test]
+    fn policy_values_and_aabb_types_are_explicit() {
+        for (text, policy) in [
+            ("require", SpatialPolicy::Require),
+            ("skip", SpatialPolicy::Skip),
+            ("off", SpatialPolicy::Off),
+        ] {
+            assert_eq!(
+                args(&["--spatial", text])
+                    .unwrap_or_else(|_| panic!("policy"))
+                    .spatial,
+                policy
+            );
+        }
+        for value in [
+            json!("0 0 0 1 1 1"),
+            json!({}),
+            json!(null),
+            json!([0, 0, 0, 1, 1, "2"]),
+            json!([0, 0, 0, 1, 1, null]),
+        ] {
+            let mut object = Map::new();
+            object.insert("aabb".into(), value);
+            assert!(take_aabb(&mut object).is_err());
+        }
+        // JSON has no NaN/Infinity literal; overflowing exponent must fail too.
+        for text in [
+            "[NaN,0,0,1,1,1]",
+            "[Infinity,0,0,1,1,1]",
+            "[1e999,0,0,1,1,1]",
+        ] {
+            assert!(serde_json::from_str::<Value>(text).is_err());
+        }
+    }
+
+    #[test]
+    fn only_insert_set_and_move_accept_aabb() {
+        for op in [
+            json!({"op":"insert","owner":"1/1","noun":"BOX"}),
+            json!({"op":"set","refno":"1/1"}),
+            json!({"op":"move","refno":"1/1","owner":"1/2"}),
+        ] {
+            let mut op = op;
+            op["aabb"] = json!([0, 0, 0, 1, 1, 1]);
+            assert!(parse_op(op).is_ok());
+        }
+        for op in [
+            json!({"op":"rename","refno":"1/1","name":"/X"}),
+            json!({"op":"delete","refno":"1/1"}),
+            json!({"op":"reorder","refno":"1/1","at":"first"}),
+            json!({"op":"reference","group":"1/1","member":"1/2"}),
+            json!({"op":"unreference","group":"1/1","member":"1/2"}),
+        ] {
+            let mut op = op;
+            op["aabb"] = json!([0, 0, 0, 1, 1, 1]);
+            assert!(parse_op(op).unwrap_err().contains("aabb"));
+        }
+    }
 }

@@ -303,18 +303,20 @@
     - Ensure all tests pass, ask the user if questions arise.
     - 已验收（2026-10-04，E2–E9，`fd9ed67`）：`cargo test --no-fail-fast -- --nocapture` 为 722 / 0 / 30（122 个测试二进制 + Doc-tests）；既有 skip 7 个（8 条提示，其中成员覆盖测试同时缺新、旧样本），新增 E 测试无 skip。`cargo clippy --all-targets` 63、`cargo doc` 25，与 E1 基线相同。17 条 Off 金样通过，未更新金样。CLI 显式 Off，完整空间 CLI 与真 E3D 门留到 F。
 
-- [ ] 9. Write_CLI（需求 9）
+- [x] 9. Write_CLI（需求 9）
   - [x] 9.1 扩展 `src/bin/e3d-write.rs`
     - `aabb`（世界系毫米 `[minx, miny, minz, maxx, maxy, maxz]`）只能用于 `insert` / `set` / `move`：建批阶段校验恰 6 个有限 JSON 数、每轴 min ≤ max；允许只带 `aabb` 的 `set`（只调 `set_aabb`）；带在其他指令或非 Geometric_Noun 上即拒；拒绝时写 `op #n` 与原因、退出码 1、不写任何字节；同一元素多条带 `aabb` 时取序号最大的一条
     - `--spatial require|skip|off`：缺省 `require`；非法值走 `Failure::Usage`（退出码 2），列出合法取值，在打开库之前退出
     - 记录 `touched` 与来源指令；`--report` 增加 `spatial` 节（refno 用写入号，重铸时保留 `given`）；dry run 从 `StagedSession::spatial()` 取同一份报告后 rollback；stage 阶段空间拒写退出码 1，逐个列出 refno、原因与来源指令
     - `--no-dictionary` 保持 0.4.0 行为
-    - 已完成基础 CLI 空间接入：`--spatial require|skip|off`、insert/set/move 的 `aabb` 六值校验、Transaction `set_aabb`、dry-run/commit 空间报告；既有 CLI 测试显式 `--spatial off`，新增 2 项 CLI 验证。9.2 解析属性测试与 9.3 真跑 bin 测试仍待后续。
+    - 已完成基础 CLI 空间接入：`--spatial require|skip|off`、insert/set/move 的 `aabb` 六值校验、Transaction `set_aabb`、dry-run/commit 空间报告；既有 CLI 测试显式 `--spatial off`，新增 2 项 CLI 验证。9.2/9.3 已在本次 CLI 收口提交验收；补齐解析 min≤max、空间拒写来源、重铸后全部操作引用。
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 9.11, 9.12, 9.13_
-  - [ ]* 9.2 写 CLI 解析 proptest（`src/bin/e3d-write.rs` 内 `#[cfg(test)]`）
+  - [x]* 9.2 写 CLI 解析 proptest（`src/bin/e3d-write.rs` 内 `#[cfg(test)]`）
+    - 已验收：6 项解析测试，其中 3 组 proptest（每组 256 例）；默认/合法/缺值/非法策略、帮助、AABB 数值/长度/轴序、允许操作、非有限 JSON。抽出 parse_args_from，生产参数仍由同一解析函数处理。
     - **Property 19: CLI `aabb` 与 `--spatial` 校验**
     - **Validates: Requirements 9.2, 9.7, 9.8, 9.12**
-  - [ ]* 9.3 写真跑 bin 测试：`tests/write_stage8_spamap_cli.rs`
+  - [x]* 9.3 写真跑 bin 测试：`tests/write_stage8_spamap_cli.rs`
+    - 已验收：11 项（其中一组 16 例 proptest）；必需受控副本缺失即失败，不 skip。只用读侧对照完整条目差集；dry-run/commit 报告相同；拒写核 SHA-256/长度/会话号；覆盖三策略、set/move、多次给框、unused、祖先删除、重铸保留占用者与 given、祖先触发缺框来源。既有 CLI 7 项不改期望。
     - 核对退出码与 `--db` 文件哈希；`--report` 的 `spatial` 节与读侧读回的差集比对；示例 9.1、9.3、9.6、9.11、9.13
     - **Property 15: dry run 与提交一致**
     - **Validates: Requirements 8.5, 9.5**
@@ -626,6 +628,23 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `write_stage6_spread::spread_inserts_read_back_across_many_owners` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
 
 CLI：`src/bin/e3d-write.rs` 显式 Off 作为 E→F 过渡，不新增空间参数或报告；既有五个 CLI 测试期望不变。
+
+#### Write_CLI 收口验收（9.2、9.3）
+
+2026-10-04；提交以 `test(cli): 9.2-9.3 validate spatial parsing and real runs` 标识（本次原子提交）。9.1 基线为 `426484d`。
+
+| 检查 | 结果 |
+|---|---|
+| 既有 CLI 定向检查 | 7 / 0 / 0，所有期望保留，调用显式 Off |
+| 新增解析 / 真跑 | 6 / 11 项，全通过，无 skip；解析 3×256 例、库副本随机 16 例 |
+| 全套测试 | 741 / 0 / 30（123 个测试二进制 + Doc-tests） |
+| 既有 skip | 7 个提前返回测试 / 8 条提示，见下方清单；新增无 skip |
+| Clippy / doc | 62 / 25 warning，不高于 63 / 25 基线 |
+| Golden | 17 条全部通过；off_compat.json SHA-256 `1b2ac106e9a69a9a5fe677b439ae7c43ef190191dcd8d392b2375a6602e4e80a` 与 HEAD 一致，未重录 |
+
+解析阶段拒绝 min>max；AABB 指令错误报告序号，其他既有文件解析错误语义保留。空间拒写沿固定 base 的 owner 链关联来源（包括祖先编辑触发的后代）；提交重铸修正操作行的 refno/owner/group/member/位置引用，given 原号保留。报告 JSON 结构沿用 9.1，未新增依赖。
+
+日志：`.agents/tasks/write-path-phase-3-cli/validation/{tests,clippy,doc}.log`。第 10 组 Gate_Ops、TTY/E3D 与人工图形门均未在此次执行或记为通过，性能、发号、页 1 桶表留待后续。
 
 #### Probe 预判与门耗时（10.4）
 
