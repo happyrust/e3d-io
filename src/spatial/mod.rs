@@ -18,6 +18,7 @@ pub mod rules;
 pub mod state;
 
 use crate::core_rules::{Implementation, RuleId, Slot};
+use crate::index::{SpamapEntry, SpamapReadError};
 use crate::record::descriptor::DescriptorValue;
 use crate::refno::RefNo;
 
@@ -106,6 +107,112 @@ pub enum SpatialPolicy {
     Off,
 }
 
+/// The change made to the SPAMAP table by a staged write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SpamapTableChange {
+    #[default]
+    Unchanged,
+    Rewritten {
+        root: u32,
+    },
+    Created {
+        root: u32,
+    },
+}
+
+/// Why a recomputed element did not receive a usable AABB.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MissingReason {
+    NoValue,
+    Invalidated,
+    Unconfirmed(Vec<&'static str>),
+    MissingInput(&'static str),
+}
+
+/// One element refused or skipped by spatial planning.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingAabb {
+    pub refno: RefNo,
+    pub given_as: Option<RefNo>,
+    pub reasons: Vec<MissingReason>,
+}
+
+/// The source used for an element's final AABB.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AabbSource {
+    Given,
+    BuiltIn,
+    None,
+}
+
+/// Why an element was included in the recompute set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecomputeCause {
+    Inserted,
+    OwnAttrs(Vec<u32>),
+    MemberOrder,
+    OwnerChanged,
+    AncestorOwner(RefNo),
+    AncestorPose(RefNo),
+    AncestorAttrs { ancestor: RefNo, attrs: Vec<u32> },
+    AncestorMemberOrder(RefNo),
+    Imap3Member(RefNo),
+    Deleted,
+    AncestorDeleted(RefNo),
+}
+
+/// Spatial result for one recomputed element.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ElementSpatial {
+    pub given_as: Option<RefNo>,
+    pub causes: Vec<RecomputeCause>,
+    pub aabb: AabbSource,
+    pub registered: Vec<SpamapEntry>,
+    pub removed: Vec<SpamapEntry>,
+}
+
+/// Report returned by staging and commits.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SpatialReport {
+    pub policy: SpatialPolicy,
+    pub table: SpamapTableChange,
+    pub pages: Vec<u32>,
+    pub elements: std::collections::BTreeMap<RefNo, ElementSpatial>,
+    pub skipped: Vec<MissingAabb>,
+    pub unused_aabb: Vec<RefNo>,
+    pub unreachable: Vec<(RefNo, RefNo)>,
+}
+
+/// Errors raised while planning or writing spatial state.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum SpatialError {
+    #[error("{refno}: invalid AABB on {axis}")]
+    InvalidAabb { refno: RefNo, axis: Axis },
+    #[error("{refno}: noun {noun:#x} is not geometric")]
+    NotGeometric { refno: RefNo, noun: u32 },
+    #[error("one or more elements have no usable AABB: {0:?}")]
+    MissingAabb(Vec<MissingAabb>),
+    #[error("{refno}: attribute {name} ({hash}) could not be decoded")]
+    UndecodableAttr {
+        refno: RefNo,
+        name: String,
+        hash: u32,
+    },
+    #[error("{refno}: {value_mm} mm on {axis} is outside {range:?}")]
+    OutOfRange {
+        refno: RefNo,
+        axis: Axis,
+        value_mm: f64,
+        range: (i64, i64),
+    },
+    #[error("malformed SPAMAP: {0}")]
+    MalformedTable(SpamapReadError),
+    #[error("SPAMAP table directory is full ({count} entries, {room} free)")]
+    DirectoryFull { count: u32, room: u32 },
+}
+
 /// Element state as of one session, or as of the end of one batch.
 pub trait SpatialState {
     /// The element's noun, or `None` when there is no such element.
@@ -150,7 +257,11 @@ pub(crate) struct Walk {
 
 impl Walk {
     /// The rule's function, or `None` with the rule noted as pending.
-    pub(crate) fn take<T: Implementation<C>, C: Copy>(&mut self, id: RuleId, slot: &Slot<T, C>) -> Option<C> {
+    pub(crate) fn take<T: Implementation<C>, C: Copy>(
+        &mut self,
+        id: RuleId,
+        slot: &Slot<T, C>,
+    ) -> Option<C> {
         match slot {
             Slot::Pending => {
                 self.need(id);

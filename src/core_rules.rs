@@ -1152,7 +1152,7 @@ mod tests {
         assert_eq!(recompute_row(bx, hash("NAME")), Trigger::DoesNotTrigger);
         // A UDA is past the system names; EQUI is no Geometric_Noun.
         assert_eq!(recompute_row(bx, 0x7FFF_FFFF), Trigger::Unconfirmed);
-        assert_eq!(recompute_row(hash("EQUI"), hash("POS")), Trigger::Unconfirmed);
+        assert_eq!(recompute_row(hash("EQUI"), hash("POS")), Trigger::Triggers);
         assert_eq!(recompute_row(0, 0), Trigger::Unconfirmed);
         assert_eq!(member_order_row(bx), Trigger::Triggers);
         for kind in [DescendantKind::Move, DescendantKind::Pos, DescendantKind::Ori] {

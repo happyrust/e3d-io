@@ -551,7 +551,7 @@ fn run(args: &Args, out: &mut Run) -> Result<(), Failure> {
     let opened_at = args.base.map_or("the newest session".to_string(), |sesno| format!("session {sesno}"));
     let mut tx = Transaction::open_at(&args.db, selector, &mut provider)
         .map_err(|e| setup(format!("{db}: opening a transaction at {opened_at}: {e}")))?
-        .with_on_clash(args.on_clash);
+        .with_on_clash(args.on_clash).with_spatial(e3d_io::spatial::SpatialPolicy::Off);
     if let Some(dictionary) = &dictionary {
         tx = tx.with_dictionary(dictionary);
     }

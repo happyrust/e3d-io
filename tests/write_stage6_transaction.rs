@@ -98,7 +98,7 @@ fn a_facade_insert_equals_the_primitive_path_byte_for_byte() {
         ReadOnlyEngine::open(&facade_copy.path).unwrap().descriptor().header_format,
     );
     let box_refno = {
-        let mut tx = Transaction::open(&facade_copy.path, &mut facade_provider).expect("open tx");
+        let mut tx = Transaction::open(&facade_copy.path, &mut facade_provider).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let refno = tx
             .insert(zone, box_hash, None, |draft, template| {
                 build_box(draft, template, format).map_err(|detail| {
@@ -197,7 +197,7 @@ fn a_facade_rename_moves_the_name_and_rewrites_the_record() {
 
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.rename(refno, new_name).expect("rename");
         tx.commit(&SessionRequest { user: "e3dio", comment: "e3d-io S6 rename", clock: Some(clock()) })
             .expect("commit");
@@ -237,7 +237,7 @@ fn a_facade_delete_drops_the_key_and_the_owner_membership() {
     // Insert a box (S+1), so the delete has a known member of a known owner.
     let box_refno = {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let refno = tx
             .insert(zone, box_hash, None, |draft, template| {
                 build_box(draft, template, format).map_err(|detail| {
@@ -258,7 +258,7 @@ fn a_facade_delete_drops_the_key_and_the_owner_membership() {
     // Delete it (S+2).
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.delete(box_refno).expect("delete");
         tx.commit(&SessionRequest { user: "e3dio", comment: "e3d-io S6 delete", clock: Some(clock()) })
             .expect("commit");
@@ -342,7 +342,7 @@ fn latest(path: &Path) -> u32 {
 fn insert_box(copy: &DbCopy, zone: RefNo, comment: &str) -> RefNo {
     let format = TextFormat::from_header(ReadOnlyEngine::open(&copy.path).unwrap().descriptor().header_format);
     let mut prov = provider();
-    let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+    let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
     let refno = tx
         .insert(zone, db1_hash("BOX"), None, |draft, template| {
             build_box(draft, template, format)
@@ -387,7 +387,7 @@ fn move_to_reparents_the_box_and_rewrites_exactly_both_owners() {
     // --- S+2: A → B, last ---
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.move_to(the_box, zone_b, MemberPosition::Last).expect("move");
         tx.commit(&SessionRequest { user: "e3dio", comment: "e3d-io T1a: move A -> B", clock: Some(clock()) })
             .expect("commit");
@@ -424,7 +424,7 @@ fn move_to_reparents_the_box_and_rewrites_exactly_both_owners() {
     let anchor = a_after[0];
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.move_to(the_box, zone_a, MemberPosition::After(anchor)).expect("move back");
         tx.commit(&SessionRequest { user: "e3dio", comment: "e3d-io T1a: move B -> A after", clock: Some(clock()) })
             .expect("commit");
@@ -457,7 +457,7 @@ fn reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner() {
 
     let commit = |at: MemberPosition, comment: &str| {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.reorder(the_box, at).expect("reorder");
         tx.commit(&SessionRequest { user: "e3dio", comment, clock: Some(clock()) }).expect("commit");
         latest(&copy.path)
@@ -519,7 +519,7 @@ fn reference_members_are_edited_on_the_group_and_nowhere_else() {
     // BOX that is a child of ZONE A ---
     let (gpwl, grou, the_box) = {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let gpwl = tx.insert(world, db1_hash("GPWL"), None, |_, _| Ok(())).expect("gpwl");
         let grou = tx.insert(gpwl, db1_hash("GROU"), None, |_, _| Ok(())).expect("grou");
         tx.add_reference_member(grou, zone_a, MemberPosition::Last).expect("reference the zone");
@@ -548,7 +548,7 @@ fn reference_members_are_edited_on_the_group_and_nowhere_else() {
     let box_place = owner_and_place(&copy.path, the_box);
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.add_reference_member(grou, zone_b, MemberPosition::First).expect("reference zone B");
         tx.remove_reference_member(grou, zone_a).expect("drop zone A");
         tx.commit(&SessionRequest { user: "e3dio", comment: "e3d-io T1a: edit the references", clock: Some(clock()) })
@@ -564,7 +564,7 @@ fn reference_members_are_edited_on_the_group_and_nowhere_else() {
     let bytes_before = copy.current_bytes();
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         assert!(
             matches!(tx.move_to(the_box, grou, MemberPosition::Last), Err(TransactionError::OwnerIsReferenceList { owner }) if owner == grou),
             "a child cannot be moved under a reference list"
@@ -613,7 +613,7 @@ fn a_move_within_the_inserting_transaction_touches_only_the_final_owner() {
 
     let the_box = {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let the_box = tx
             .insert(zone_a, db1_hash("BOX"), None, |draft, template| {
                 build_box(draft, template, format).map_err(|detail| TransactionError::Parse { refno: RefNo::new(0, 0), detail })
@@ -635,7 +635,7 @@ fn a_move_within_the_inserting_transaction_touches_only_the_final_owner() {
     // Move it to A and delete it in one go: A must not end up listing it.
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.move_to(the_box, zone_a, MemberPosition::Last).expect("move");
         tx.delete(the_box).expect("delete");
         tx.commit(&SessionRequest { user: "e3dio", comment: "e3d-io T1a: move then delete", clock: Some(clock()) })

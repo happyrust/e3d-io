@@ -20,6 +20,26 @@ const LAYOUT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/catalog/
 
 type Template = (u32, Vec<(String, u32)>);
 
+#[test]
+fn ancestor_trigger_table_matches_the_dictionary() {
+    let dictionary = AttrDict::parse_file(ATTLIB).expect("required dictionary");
+    let layout: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(LAYOUT).unwrap()).unwrap();
+    let mut extra = BTreeSet::new();
+    let mut mismatches = Vec::new();
+    for noun in layout.as_array().unwrap() {
+        let hash = noun["hash"].as_u64().unwrap() as u32;
+        for attr in noun["attrs"].as_array().unwrap() {
+            let h = attr["hash"].as_u64().unwrap() as u32;
+            let trigger = dictionary.dchc(h).is_some_and(|d| d != 0) && !dictionary.wnoevt(h);
+            if trigger && !rules::RECOMPUTING.iter().any(|(_, listed)| *listed == h) { extra.insert(h); }
+            let expected = if trigger { Trigger::Triggers } else { Trigger::DoesNotTrigger };
+            if recompute_row(hash, h) != expected { mismatches.push((noun["short"].clone(), attr["name"].clone())); }
+        }
+    }
+    assert_eq!(extra.iter().copied().collect::<Vec<_>>(), rules::ANCESTOR_RECOMPUTING);
+    assert!(mismatches.is_empty(), "{mismatches:?}");
+}
+
 /// Each Geometric_Noun (`IMAP` 1, 5 or 7) by short name, with its hash and its
 /// template's attributes, as the layout E3D exported names them.
 fn geometric_templates() -> BTreeMap<String, Template> {

@@ -1164,6 +1164,15 @@ pub fn extract_parsed_element_with_descriptors(
     attlib: &e3d_attlib::AttlibData,
     template: &record::template::NounTemplate,
 ) -> Result<record::descriptor::ElementExtraction, ResolveError> {
+    extract_parsed_with_optional_dictionary(refno, parsed, Some(attlib), template)
+}
+
+pub(crate) fn extract_parsed_with_optional_dictionary(
+    refno: RefNo,
+    parsed: &record::element::ParsedElement,
+    attlib: Option<&e3d_attlib::AttlibData>,
+    template: &record::template::NounTemplate,
+) -> Result<record::descriptor::ElementExtraction, ResolveError> {
     {
         if template.noun_hash != parsed.noun_hash {
             return Err(ResolveError::TemplateNounMismatch {
@@ -1199,7 +1208,7 @@ pub fn extract_parsed_element_with_descriptors(
                 let mut extracted = record::descriptor::extract_attribute(
                     parsed,
                     descriptor,
-                    attlib.attr_def(descriptor.hash),
+                    attlib.and_then(|dictionary| dictionary.attr_def(descriptor.hash)),
                     layout,
                     name,
                 );
@@ -1212,7 +1221,7 @@ pub fn extract_parsed_element_with_descriptors(
                     {
                         extracted.value = Some(explicit_value_to_descriptor_value(
                             &explicit.value,
-                            attlib.attr_def(descriptor.hash),
+                            attlib.and_then(|dictionary| dictionary.attr_def(descriptor.hash)),
                             descriptor.storage_type_code,
                             descriptor.hash,
                         ));
@@ -1229,7 +1238,7 @@ pub fn extract_parsed_element_with_descriptors(
                 ) {
                     if let Some(default) = record::descriptor::extract_default(
                         descriptor,
-                        attlib.attr_def(descriptor.hash),
+                        attlib.and_then(|dictionary| dictionary.attr_def(descriptor.hash)),
                         &template.defaults,
                         extracted.name.clone(),
                     ) {

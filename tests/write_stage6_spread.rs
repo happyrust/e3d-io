@@ -95,7 +95,7 @@ fn spread_inserts_read_back_across_many_owners() {
     // --- one session: OWNERS zones, then PER_OWNER boxes round-robin into them ---
     let (zones, boxes) = {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let mut zones = Vec::with_capacity(OWNERS);
         for z in 0..OWNERS {
             let name = format!("/E3DIO-SPREAD-Z{z:03}");

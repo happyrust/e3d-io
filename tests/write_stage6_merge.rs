@@ -116,7 +116,7 @@ fn tally(path: &Path, from: u32, to: u32) -> (u64, u64, u64) {
 /// scenarios edit, committed as its own session first.
 fn seed_box(copy: &DbCopy, zone: RefNo, name: &str, xlen: &str) -> RefNo {
     let mut prov = provider();
-    let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+    let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
     let the_box = tx.insert(zone, db1_hash("BOX"), Some(name), |_, _| Ok(())).expect("box");
     tx.set(the_box, "XLEN", xlen).expect("XLEN");
     tx.commit(&request("e3dio", "e3d-io T1c: a box to edit")).expect("commit");
@@ -142,7 +142,7 @@ fn a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile() {
 
     // --- B opens at S and builds its batch: a named BOX under ZONE B, ZONE B's DESC ---
     let mut prov_b = provider();
-    let mut b = Transaction::open(&copy.path, &mut prov_b).expect("open B");
+    let mut b = Transaction::open(&copy.path, &mut prov_b).expect("open B").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
     assert_eq!(b.base_sesno(), s);
     let box_b_given = b.insert(zone_b, db1_hash("BOX"), Some("/E3DIO-MERGE-B"), |_, _| Ok(())).expect("B's box");
     b.set(box_b_given, "XLEN", "222").expect("XLEN");
@@ -151,7 +151,7 @@ fn a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile() {
     // --- A commits S+1 meanwhile: a named BOX under ZONE A (the same refno B was given), ZONE A's DESC ---
     let box_a = {
         let mut prov_a = provider();
-        let mut a = Transaction::open(&copy.path, &mut prov_a).expect("open A");
+        let mut a = Transaction::open(&copy.path, &mut prov_a).expect("open A").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let box_a = a.insert(zone_a, db1_hash("BOX"), Some("/E3DIO-MERGE-A"), |_, _| Ok(())).expect("A's box");
         a.set(box_a, "XLEN", "111").expect("XLEN");
         a.set(zone_a, "DESC", "A described this zone").expect("DESC");
@@ -202,7 +202,7 @@ fn a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile() {
     // --- a transaction opened explicitly at S, after both, merges the same way ---
     let (zone_c_box, commit) = {
         let mut prov = provider();
-        let mut c = Transaction::open_at(&copy.path, SessionSelector::Exact(s), &mut prov).expect("open at S");
+        let mut c = Transaction::open_at(&copy.path, SessionSelector::Exact(s), &mut prov).expect("open at S").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         assert_eq!(c.base_sesno(), s);
         let the_box = c.insert(zone_a, db1_hash("BOX"), Some("/E3DIO-MERGE-C"), |_, _| Ok(())).expect("C's box");
         c.set(zone_a, "FUNC", "C-FUNC").expect("FUNC");
@@ -244,7 +244,7 @@ fn a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins() {
     // A: ZONE DESC, BOX XLEN and ZLEN.
     {
         let mut prov = provider();
-        let mut a = Transaction::open(&copy.path, &mut prov).expect("open A");
+        let mut a = Transaction::open(&copy.path, &mut prov).expect("open A").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         a.set(zone, "DESC", "A's description").expect("DESC");
         a.set(the_box, "XLEN", "101").expect("XLEN");
         a.set(the_box, "ZLEN", "301").expect("ZLEN");
@@ -261,7 +261,7 @@ fn a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins() {
     };
     {
         let mut prov = provider();
-        let mut b = Transaction::open_at(&copy.path, SessionSelector::Exact(s), &mut prov).expect("open B");
+        let mut b = Transaction::open_at(&copy.path, SessionSelector::Exact(s), &mut prov).expect("open B").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         build_b(&mut b);
         match b.commit(&request("B", "e3d-io T1c: B clashes")) {
             Err(TransactionError::Clashes(clashes)) => {
@@ -285,7 +285,7 @@ fn a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins() {
     {
         let mut prov = provider();
         let mut b = Transaction::open_at(&copy.path, SessionSelector::Exact(s), &mut prov)
-            .expect("open B")
+            .expect("open B").with_spatial(e3d_io::spatial::SpatialPolicy::Off)
             .with_on_clash(OnClash::WriterWins);
         build_b(&mut b);
         let commit = b.commit_reporting(&request("B", "e3d-io T1c: B wins")).expect("B merges");
@@ -319,7 +319,7 @@ fn a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused() 
     // A: deletes one box, changes the other, names a new one.
     {
         let mut prov = provider();
-        let mut a = Transaction::open(&copy.path, &mut prov).expect("open A");
+        let mut a = Transaction::open(&copy.path, &mut prov).expect("open A").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         a.delete(deleted_by_a).expect("delete");
         a.set(changed_by_a, "XLEN", "22").expect("XLEN");
         a.insert(zone, db1_hash("BOX"), Some("/E3DIO-561"), |_, _| Ok(())).expect("named box");
@@ -329,7 +329,7 @@ fn a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused() 
 
     let refused = |edit: &dyn Fn(&mut Transaction<'_>), expect_code: u32| {
         let mut prov = provider();
-        let mut b = Transaction::open_at(&copy.path, SessionSelector::Exact(s), &mut prov).expect("open B");
+        let mut b = Transaction::open_at(&copy.path, SessionSelector::Exact(s), &mut prov).expect("open B").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         edit(&mut b);
         match b.commit(&request("B", "e3d-io T1c: B conflicts")) {
             Err(TransactionError::Conflicts(conflicts)) => {
@@ -370,7 +370,7 @@ fn a_writer_that_commits_between_staging_and_page_0_is_merged_over_once() {
     // the file is put back to S — so it can be dropped in "between" later.
     let box_a = {
         let mut prov = provider();
-        let mut a = Transaction::open(&copy.path, &mut prov).expect("open A");
+        let mut a = Transaction::open(&copy.path, &mut prov).expect("open A").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let box_a = a.insert(zone_a, db1_hash("BOX"), Some("/E3DIO-MOVED-A"), |_, _| Ok(())).expect("A's box");
         a.commit(&request("A", "e3d-io T1c: the writer in between")).expect("A commits");
         box_a
@@ -382,7 +382,7 @@ fn a_writer_that_commits_between_staging_and_page_0_is_merged_over_once() {
     // B at S; its first staging lands on top of S; before its page 0 goes in,
     // the file becomes what A committed (A's page 0 names A's session page).
     let mut prov = provider();
-    let mut b = Transaction::open(&copy.path, &mut prov).expect("open B");
+    let mut b = Transaction::open(&copy.path, &mut prov).expect("open B").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
     let box_b_given = b.insert(zone_b, db1_hash("BOX"), Some("/E3DIO-MOVED-B"), |_, _| Ok(())).expect("B's box");
     b.set(zone_b, "DESC", "B was here").expect("DESC");
     let mut stagings = Vec::new();

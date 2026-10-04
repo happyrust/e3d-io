@@ -201,9 +201,9 @@
     - 坐实的变体补进 `src/spatial/aabb.rs`；不能逐字复现时，按需求 6 第 16 条把改用的判据记入 Spec_Ledger「规则坐实状态总表」`aabb.arithmetic` 行
     - 已做（里程碑 C 的 C4、D 的 D3）：`docs/evidence/2026-10-03-spamap-aabb.md`、`docs/evidence/2026-10-03-spamap-aabb-members.md`；C4 留下的 18 个反例由新增的 `aabb.members`（IMAP 5 元素并入 IMAP 3 成员的框）解释，另增 `aabb.cone`、`aabb.pyramid`，九条全部坐实，Built_In_AABB 1 590 / 1 590 逐字，未剔除、未放宽
     - _Requirements: 2.4, 6.1, 6.16_
-  - [ ]* 7.6 写示例测试 4.20 与 6.17
+  - [x]* 7.6 写示例测试 4.20 与 6.17
     - 4.20：在 `tests/spamap_codec_real.rs` 中以 BOX `24384/26484` 在 E3D 为其写出条目那一会话的状态为输入（经 `ReadState`），断言 SPAMAP_Codec 恰得需求 4 第 20 条的那一条条目
-    - 4.20 已做（里程碑 D 的 D4）：探针 `tools/e3d/spamap_probes/selfcheck_e3dio_box_xlen.pml` 让 E3D 改该 BOX 的 `XLEN`，得到的会话 648 钉为 `D:\e3dio-fixtures\phase3\spamap-4-20\ams8000_0001`（输入记于 `docs/evidence/2026-10-03-spamap-aabb-members.md`）；`requirement_4_20s_box_encodes_to_exactly_its_entry` 在坐实集下恰得该条目，与盘上所存相同。6.17 部分仍待 8.7
+    - 4.20 已做（里程碑 D 的 D4）：探针 `tools/e3d/spamap_probes/selfcheck_e3dio_box_xlen.pml` 让 E3D 改该 BOX 的 `XLEN`，得到的会话 648 钉为 `D:\e3dio-fixtures\phase3\spamap-4-20\ams8000_0001`（输入记于 `docs/evidence/2026-10-03-spamap-aabb-members.md`）；`requirement_4_20s_box_encodes_to_exactly_its_entry` 在坐实集下恰得该条目，与盘上所存相同。6.17 已做（E2–E9，本次实现提交）：`write_stage8_spamap_examples::requirement_6_17_box_registers_its_exact_world_bounds` 只用读侧验证六个坐标字
     - 6.17：在 `tests/write_stage8_spamap_examples.rs` 中经 Transaction 插入需求 6 第 17 条的 BOX（不给 World_AABB）并提交，只用读侧读回，断言条目值前 6 字即该条的 World_AABB；此部分依赖 8.7
     - 所需规则未坐实时，测试断言 D7 回退（视同无可用 World_AABB），并把该示例作为待办记入 Spec_Ledger「规则坐实状态总表」备注
     - _Requirements: 4.20, 6.17_
@@ -216,7 +216,7 @@
     - Ensure all tests pass, ask the user if questions arise.
     - 已做（里程碑 D 的 D6，`d8fecb6`，其后只改文档）：114 个测试二进制 + Doc-tests，697 / 0 / 30，skip 仍是基线那 7 个；clippy 63、`cargo doc` 25 同基线
 
-- [ ] 8. SPAMAP_Writer 接入 Transaction（需求 5 第 6 条、需求 6–8）
+- [x] 8. SPAMAP_Writer 接入 Transaction（需求 5 第 6 条、需求 6–8）
   - [x] 8.1 把 `src/write/keyed_cow.rs` 泛化为 `rewrite_table::<V>`
     - `V = 0` 时写出字节不变，由既有单测与 1.4 的金样守住；`V = 7` 供 SPAMAP，页头其余字按 `spamap.table_header_rest`
     - 另加 `#[doc(hidden)]`、不带规则的建树入口，供 Property 2 调用
@@ -227,44 +227,44 @@
     - **Validates: Requirements 3.1, 3.6**
     - **Property 10: 编辑集合幂等**
     - **Validates: Requirements 7.10**
-  - [~] 8.3 实现 `src/write/spamap/end_state.rs`
+  - [x] 8.3 实现 `src/write/spamap/end_state.rs`
     - `EndState` = 上一会话 ⊕ 定稿记录，即本批结束状态（合并时为 Merged_State）；提供 `previous`、`in_new_index`、`members`、`reachable_from_worl`、`theirs_changed`，并实现 `SpatialState`
     - 建 `src/write/spamap/mod.rs`，在 `src/write/mod.rs` 注册
     - _Requirements: 7.13, 8.1, 8.6, 8.8_
-  - [~] 8.4 实现 `SpatialStage::plan`：`src/write/spamap/plan.rs`
+  - [x] 8.4 实现 `SpatialStage::plan`：`src/write/spamap/plan.rs`
     - Recompute_Set 按定义 ①–⑦ 求，只按本批结束状态；后代是否纳入只经 `core_rules::descendants_included`；⑤ 的祖先重算属性按 `recompute_row`（扩到祖先 noun），成员次序按 `member_order_row`，⑦ 取 IMAP 3 元素的第一个 IMAP 不为 3 的祖先
     - 逐元素判存在、从 WORL 可达、属于 Geometric_Noun；可用 World_AABB 依次取调用方值 → Built_In_AABB → 无；经 SPAMAP_Codec 得 Target_Entries
     - 仅 Recompute_Set 非空时读上一会话表（全遍历并校验）得旧条目；编辑集 = 删 旧(RS) + 插 Target(RS)，并判定净编辑是否为空
     - 汇总 `MissingAabb`（refno、`given_as`、`类别:规则名`）：「要求」下拒写整批，「跳过」下列入 `skipped`；`UndecodableAttr`、`OutOfRange`、`MalformedTable` 在「要求」「跳过」下都拒写；给在 Recompute_Set 之外元素上的值列入 `unused_aabb`
     - _Requirements: 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.13, 6.14, 6.15, 7.1, 7.2, 7.3, 7.4, 7.5, 7.11, 7.12, 7.13, 7.14_
-  - [ ]* 8.5 写 plan 模块内 proptest（`src/write/spamap/plan.rs` 的 `#[cfg(test)]`）
+  - [x] 8.5 写 plan 模块内 proptest（`src/write/spamap/plan.rs` 的 `#[cfg(test)]`）
     - 合成的 `SpatialState` 加替身编码器，对照按 Recompute_Set 定义 ①–⑦ 直译的参考实现；生成器含成员次序、祖先非几何重算属性、IMAP 3 成员三类改动
     - **Property 9: Recompute_Set 模型**（① 模块内层）
     - **Validates: Requirements 6.2, 6.3, 6.4, 6.13, 7.1, 7.2, 7.3, 7.4, 7.5, 7.9, 7.11, 8.2, 8.8**
-  - [~] 8.6 实现 staging 挂点
+  - [x] 8.6 实现 staging 挂点
     - 原语增加 crate 私有入口，带 `SpatialStage`；公开原语 `stage_element_session[_with]`、`stage_merge_session_with` 签名不变，内部传 `None`（不维护 SPAMAP，写出 0.4.0 的字节）
     - 挂点在记录、成员、索引、NAME、claim、TYPEX、反向表编辑定稿之后（合并时在三方合并之后）、写任何页之前；所有拒写都发生在追加第一页之前；若发现挂点之前已写页，改接现有 rollback 截断路径，并以测试断言文件逐字节不变
     - SPAMAP 页排在其他表页之后、会话页之前；经 `table_overrides` / `table_additions` 写表目录；上一会话无表且 Target_Entries 非空时建表；`WriteError::TableDirectoryFull` 映射为 `SpatialError::DirectoryFull`
     - _Requirements: 7.6, 7.7, 7.8, 7.12_
-  - [~] 8.7 扩展 Transaction 公开 API
+  - [x] 8.7 扩展 Transaction 公开 API
     - 动手前在 Downstream_Crates 中搜 `TransactionError` 与 `TransactionCommit` 的穷尽 `match` 与结构体字面量；搜到即停下，把清单交用户确认后再改（需用户）
     - 新增 `Transaction::with_spatial`、`set_aabb`（在调用处校验：非有限值或 min > max 报 `InvalidAabb`，已坐实为非 Geometric_Noun 报 `NotGeometric`，出错时草稿与此前接受的值不变；多次给值取最后一次）、`StagedSession::spatial`、`TransactionCommit.spatial`、`TransactionError::Spatial`；`SpatialError` 为 `#[non_exhaustive]`，并给 `TransactionError` 加 `#[non_exhaustive]`
     - `SpatialStage` 只存 Spatial_Policy 与按调用方 refno 记下的 World_AABB，派生量每次 stage 内重算
     - 与 8.10 同一提交落地，使每个提交上的既有测试不因 D3 默认而失败
     - _Requirements: 6.3, 6.4, 6.10, 6.11, 6.12, 15.4, 15.9_
-  - [~] 8.8 实现合并与重铸下的 SPAMAP
+  - [x] 8.8 实现合并与重铸下的 SPAMAP
     - 合并时 EndState 的底、旧 SPAMAP 表与表目录都取 Merge_Latest；合并模块把 base 与 Merge_Latest 的比较结果经 `EndState::theirs_changed` 交给 plan，判定调用方给值是否失效（祖先链按需惰性比较）
     - 重铸映射（给定号 → 写入号）传给 plan：条目按新号编键，原号下占用者的条目保留；因 Merge_Latest 删了祖先而不可达的元素不写条目，列入 `SpatialReport.unreachable`（附被删祖先）
     - `commit_observed` 遇 `Moved` 时整个 stage 重跑一次，第二次 `Moved` 照旧上抛；SPAMAP 条目差异不算撞车
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9_
-  - [~] 8.9 写入 SPAMAP_Record_Item（仅当 7.4 坐实 E3D 写该项）
+  - [x] 8.9 写入 SPAMAP_Record_Item（仅当 7.4 坐实 E3D 写该项）
     - plan 另产出记录项补丁，在记录分页之前并入写集（可能带入本批未写的后代记录）；未坐实或坐实为「不写」时本任务不做
     - _Requirements: 5.6_
-  - [~] 8.10 适配既有测试
+  - [x] 8.10 适配既有测试
     - 因 D3 默认「要求」而失败的既有测试（如 `tests/write_stage6_*.rs` 中插入 BOX / EQUI / GROU 的批次）按需求 15 第 7 条只许显式指定 Spatial_Policy（如 `.with_spatial(Off)`），不改其他期望
     - 所改测试逐条记入 Spec_Ledger「测试适配清单」
     - _Requirements: 15.7_
-  - [~] 8.11 写库副本模型测试：`tests/write_stage8_spamap_model.rs`
+  - [x] 8.11 写库副本模型测试：`tests/write_stage8_spamap_model.rs`
     - 库副本 proptest（16 例，`DbCopy::of`），只用读侧读回新会话表（需求 2 第 5 条）；dry run 先断言文件 SHA-256 与长度不变，再提交并比对报告；Property 13 在 `commit_observed` 的 observe 回调里读表
     - **Property 9: Recompute_Set 模型**（② 库副本层）
     - **Validates: Requirements 6.2, 6.3, 6.4, 6.13, 7.1, 7.2, 7.3, 7.4, 7.5, 7.9, 7.11, 8.2, 8.8**
@@ -276,31 +276,32 @@
     - **Validates: Requirements 7.7**
     - **Property 15: dry run 与提交一致**
     - **Validates: Requirements 8.5, 9.5**
-  - [~] 8.12 写合并测试：`tests/write_stage8_spamap_merge.rs`
+  - [x] 8.12 写合并测试：`tests/write_stage8_spamap_merge.rs`
     - 库副本 proptest（16 例），两个写者，其一经 `commit_observed` 在 stage 与 page 0 之间提交以触发 `Moved`；只用读侧读回
     - **Property 14: 合并下的保留、重铸与不可达**
     - **Validates: Requirements 8.3, 8.4, 8.7, 8.9**
-  - [~] 8.13 写「关闭」兼容测试：`tests/write_stage8_off_compat.rs`
+  - [x] 8.13 写「关闭」兼容测试：`tests/write_stage8_off_compat.rs`
     - `tests/write_stage6_*.rs` 的批次以 `with_spatial(Off)`、固定 `SessionRequest.clock` 写出，逐字节对照 1.4 录下的 `tests/golden/off_compat.json`；发号下界落地后只比不含新发 refno 的副本，或以预铸 refno 走原语路径
     - **Property 16: 「关闭」下与 0.4.0 逐字节相同**
     - **Validates: Requirements 15.3**
-  - [ ]* 8.14 写拒写测试：`tests/write_stage8_spamap_refuse.rs`
+  - [x] 8.14 写拒写测试：`tests/write_stage8_spamap_refuse.rs`
     - 库副本 proptest，每批注入至多一类 A / B 原因，断言各策略下的拒写与 `skipped`，拒写后文件 SHA-256 与长度不变；另加表目录已满的示例测试
     - **Property 17: 缺值与空间拒写**
     - **Validates: Requirements 2.6, 6.5, 6.6, 6.8, 6.14, 6.15, 7.12, 8.6**
     - _Requirements: 7.12_
-  - [ ]* 8.15 写 `set_aabb` proptest：`tests/write_stage8_spamap_api.rs`
+  - [x] 8.15 写 `set_aabb` proptest：`tests/write_stage8_spamap_api.rs`
     - **Property 18: `set_aabb` 校验与取最后一次**
     - **Validates: Requirements 6.10, 6.11, 6.12**
-  - [ ]* 8.16 写 SPAMAP_Record_Item 测试：`tests/write_stage8_spamap_record_item.rs`（仅当 8.9 存在）
+  - [x] 8.16 写 SPAMAP_Record_Item 测试：`tests/write_stage8_spamap_record_item.rs`（仅当 8.9 存在）
     - Corpus 遍历加库副本 proptest
     - **Property 26: SPAMAP_Record_Item 逐字相同（仅当需求 5 第 5 条坐实 E3D_Core 写该项）**
     - **Validates: Requirements 5.6**
-  - [ ]* 8.17 写建表示例测试（需求 7 第 8 条）
+  - [x] 8.17 写建表示例测试（需求 7 第 8 条）
     - 在 `tests/write_stage8_spamap_examples.rs` 中以无 SPAMAP 表的库副本为底提交几何元素，只用读侧断言新会话表目录新增名 hash 230902453 的表项且条目可读回；`spamap.table_header_rest` 未坐实时断言按 D7 视同无可用 World_AABB
     - _Requirements: 7.8_
-  - [~] 8.18 Checkpoint - 第 8 组：Ensure all tests pass
+  - [x] 8.18 Checkpoint - 第 8 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
+    - 已验收（2026-10-04，E2–E9，本次实现提交）：`cargo test --no-fail-fast -- --nocapture` 为 722 / 0 / 30（122 个测试二进制 + Doc-tests）；既有 skip 7 个（8 条提示，其中成员覆盖测试同时缺新、旧样本），新增 E 测试无 skip。`cargo clippy --all-targets` 63、`cargo doc` 25，与 E1 基线相同。17 条 Off 金样通过，未更新金样。CLI 显式 Off，完整空间 CLI 与真 E3D 门留到 F。
 
 - [ ] 9. Write_CLI（需求 9）
   - [~] 9.1 扩展 `src/bin/e3d-write.rs`
@@ -564,7 +565,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `spamap.entries_k` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-branch-entries.md` | C2 | `MBXGO` 只由 `MPBOX2`（tube 0：一条 k = 0、自身框）与 `MPBXBR` 调；`MPBXBR` 只走 BRAN 与 HNGT noun，从尾到头给成员记 k = 0 与离开它的管子 k = 1、给 BRAN 记头管 k = 1，管框要目录 P 点与管径 → 分支 / 吊架树为 MissingInput（需求 6.15，Codec_Check 记 waiting）。坐实集 Corpus 判定 11 167 / 11 167、基线 986 / 986，waiting 14 350 / 2 642 |
 | `spamap.flags` | 7.1 | 坐实 | `docs/evidence/2026-10-03-spamap-flags.md` | C2 | `MAPINS` 三个逻辑量按 1 / 2 / 4；`MPBOX` 上溯（DDEP 1、SITE / BLOCK / SSOWLD / HBLWLD 启用，WORL 不启用），不启用全 0；WBOX 时 OBST 1–3，否则 `BOXELE` OBST 1–2，IMAP 5 并入 IMAP 3 成员；box type 1 / 18 / 19 / 23 与分支树不说。坐实集 Corpus 判定 4 783 / 4 783、基线 402 / 402 |
 | `spamap.coverage` | 7.2 | 坐实 | `docs/evidence/2026-10-03-spamap-coverage.md` | C2 | 按元素三态：Core3D `MPBOX` / `MLSADD` 按 noun 的 IMAP（字典字段 847458）1、5 记，7 看 owner 的 IMAP 是否为 2，box type 1（`getBoxType`，SCTN / GENSEC / WLJOIN 除外）须 SPRE 非 0（`GTSTDT` → `MBXSTL` 失败 → `MAPREM`）；BRAN 与 HNGT 四个（`MPBXBR` 未读）、UDET、模板无 SPAMAP 的八个未坐实。Property 7 坐实集 40 556 / 40 556 判定无反例，`waiting` 2 060（BRAN 1 819、HANG 241） |
-| `spamap.recompute.<NOUN>` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 与 noun 无关：Core3D `VDESPT` 对字典 `DCHC` 非 0 的属性入队，core `PostSetAttribute` 不为 `WNOEVT` 属性发事件；`VDESRO` 入队被挪的成员。300 个 Geometric_Noun 模板 722 个属性中 176 个触发（`rules::RECOMPUTING`，`tests/spamap_recompute_real.rs` 逐 noun 打印并与 `attlib.dat` 核对）。E3D_Session 以 e3d-io 写的无条目元素区分触发与否：32 / 32（BOX 10、CYLI 8、CONE / DISH / PYRA 6、成员次序 8）。B8 那几处反例按此本应重算，归 D3 走会话链 |
+| `spamap.recompute.<NOUN>` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 与 noun 无关：Core3D `VDESPT` 对字典 `DCHC` 非 0 的属性入队，core `PostSetAttribute` 不为 `WNOEVT` 属性发事件；`VDESRO` 入队被挪的成员。300 个 Geometric_Noun 模板 722 个属性中 176 个触发（`rules::RECOMPUTING`，`tests/spamap_recompute_real.rs` 逐 noun 打印并与 `attlib.dat` 核对）。E3D_Session 以 e3d-io 写的无条目元素区分触发与否：32 / 32（BOX 10、CYLI 8、CONE / DISH / PYRA 6、成员次序 8）。B8 那几处反例按此本应重算，归 D3 走会话链；E3 扩展全部祖先 noun 的静态 DCHC/WNOEVT 表，`ancestor_trigger_table_matches_the_dictionary` 从 attlib 重推验证通过，规则取证不变 |
 | `spamap.descendants.{move,pos,ori}` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 换 owner（`VDESIR`）与 POS / ORI 改动（`VDESPT`，DCHC 3）入队该元素，`MPBOX` 走整棵子树，各层都重算，不在 IMAP 0、BRAN、HNGT 之下继续（`rules::mpbox_walks_below`）。E3D_Session：move 4 / 4、POS 7 / 7、ORI 6 / 6（第 1、2 层，有无条目两种）。另见证据「规格外的发现」：owner 的 NUMB 等其他重算属性、容器 REORDER 同样整树重算——已由 2026-10-03 规格修订收进 Recompute_Set ②④⑤ 与需求 7 第 4 条（Plannotator 通过） |
 | `spamap.delete_residue` | 7.3 | 坐实 | `docs/evidence/2026-10-03-spamap-recompute.md` | D2 | 不留残留：删除那一会话中被删元素与其各层后代的条目都已删去（出处 ②，4 / 4；Core3D 删除路径只动队列，删键之处未读）。需求 5 第 9 条：删无条目 BOX、删其 owner 都能 `SAVEWORK`，无错误号 |
 | `spamap.record_item.<NOUN>` | 7.4 | 坐实 | `docs/evidence/2026-10-03-spamap-record-item.md` | C3 | 各 noun 相同：core `sub_5AB91B0` 类型 14 写条目时把 Key0 写进记录 `SPAMAP` 属性第 k 槽，新项整列先填 0x80000001；位置按模板（BOX implicit word 35、存储 2 字）。Corpus 25 517 / 25 517、基线 3 628 / 3 628 带且逐槽相符，46 个 noun 无例外（`tests/spamap_record_item_real.rs`） |
@@ -605,7 +606,25 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 测试或 Gate_Ops | 原因（D3 默认 / 发号下界） | 改动（显式 Spatial_Policy / 期望 refno） | 提交 |
 |---|---|---|---|
-| | | | |
+| `write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_transaction::a_facade_rename_moves_the_name_and_rewrites_the_record` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_transaction::reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_merge::a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_merge::a_writer_that_commits_between_staging_and_page_0_is_merged_over_once` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_set_by_name::every_shape_set_by_name_reads_back_as_the_value_it_names` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_set_by_name::the_dictionary_holds_a_set_to_what_e3d_allows` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_set_by_name::a_name_set_twice_in_one_transaction_files_the_last_one_only` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_spread::spread_inserts_read_back_across_many_owners` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+
+CLI：`src/bin/e3d-write.rs` 显式 Off 作为 E→F 过渡，不新增空间参数或报告；既有五个 CLI 测试期望不变。
 
 #### Probe 预判与门耗时（10.4）
 
@@ -637,9 +656,17 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 #### skip 清单（14.4）
 
+E 验收沿用既有 7 个提前返回测试；另有 Rust harness 的 30 个 ignored。新增必需测试无 skip。
+
 | 测试 | 所缺样本 |
 |---|---|
-| | |
+| `element_version_census::how_often_is_the_answered_copy_not_the_richest` | evidence/20260826-tty-sampling/sample.tsv |
+| `live_tree_sample_resolves::every_sampled_element_resolves_to_itself_in_the_shape_recorded` | evidence/2026-08-30-tty-sampling/sample.tsv |
+| `live_tree_sample_resolves::the_sample_covers_every_bucket_the_old_list_did_that_a_live_tree_can_witness` | 新、旧 sample.tsv（两条提示，一个测试） |
+| `live_tree_sample_resolves::both_storage_layouts_are_covered` | evidence/2026-08-30-tty-sampling/sample.tsv |
+| `sampled_elements_resolve::every_sampled_element_resolves_to_itself_in_the_shape_recorded` | evidence/20260826-tty-sampling/sample.tsv |
+| `refno_dbno_corpus::every_installed_corpus_key_decodes_to_its_descriptor_dbno` | E3D_CORPUS_ROOTS 未配置 |
+| `world_refno_corpus::every_installed_database_keeps_its_world_where_the_descriptor_says` | E3D_CORPUS_ROOTS 未配置 |
 
 #### 下游检查（14.5）
 

@@ -41,12 +41,12 @@ use crate::refno::RefNo;
 use crate::session::DbView;
 
 use super::record::{
-    member_list_diff, three_way_clashes, three_way_with_standing, ClashSite, MemberEdit, MemberMerge, MemberStanding,
-    MergeMode,
+    member_list_diff, three_way_clashes, three_way_with_standing, ClashSite, MemberEdit,
+    MemberMerge, MemberStanding, MergeMode,
 };
 use super::{
-    stage_session_with_base, CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft, SessionRequest,
-    StagedSession, WriteError,
+    CommitReport, ElementWrite, NamedEdit, NamedEditKind, RecordDraft,
+    SessionRequest, StagedSession, WriteError,
 };
 use crate::ReadOnlyEngine;
 
@@ -104,7 +104,11 @@ pub struct MergeClash {
 
 impl MergeClash {
     pub(crate) fn summary(clashes: &[MergeClash]) -> String {
-        clashes.iter().map(|c| c.detail.clone()).collect::<Vec<_>>().join("; ")
+        clashes
+            .iter()
+            .map(|c| c.detail.clone())
+            .collect::<Vec<_>>()
+            .join("; ")
     }
 }
 
@@ -118,7 +122,9 @@ impl MergeOptions<'_> {
         };
         let kind = templates
             .template_for(noun_hash)?
-            .map_or(MemberListKind::Unknown, |template| template.member_list_kind);
+            .map_or(MemberListKind::Unknown, |template| {
+                template.member_list_kind
+            });
         Ok(if kind == MemberListKind::Referenced {
             MemberMerge::WholeList
         } else {
@@ -128,7 +134,12 @@ impl MergeOptions<'_> {
 
     /// A [`MergeClash`] for `site` on `refno` of `noun_hash`, the attribute
     /// named where the templates can name it.
-    fn describe_clash(&mut self, refno: RefNo, noun_hash: u32, site: ClashSite) -> Result<MergeClash, WriteError> {
+    fn describe_clash(
+        &mut self,
+        refno: RefNo,
+        noun_hash: u32,
+        site: ClashSite,
+    ) -> Result<MergeClash, WriteError> {
         let attribute = match site {
             ClashSite::ExplicitAttribute(hash) => Some(hash),
             ClashSite::ImplicitWord(index) => match self.templates.as_deref_mut() {
@@ -138,7 +149,9 @@ impl MergeOptions<'_> {
                         .iter()
                         .find(|attr| {
                             let offset = attr.wide.location.word_offset() as usize;
-                            offset != 0 && (offset..offset + attr.wide.storage_words as usize).contains(&index)
+                            offset != 0
+                                && (offset..offset + attr.wide.storage_words as usize)
+                                    .contains(&index)
                         })
                         .map(|attr| attr.hash)
                 }),
@@ -153,17 +166,32 @@ impl MergeOptions<'_> {
                 .unwrap_or_else(|| format!("{hash:#x}"))
         });
         let detail = match (site, &name) {
-            (ClashSite::Owner, _) => format!("{refno}: moved here and moved in the committed session, to different owners"),
-            (ClashSite::MemberList, _) => format!("{refno}: its reference list was changed here and in the committed session"),
-            (ClashSite::ImplicitWord(index), None) => {
-                format!("{refno}: implicit word {index} was changed here and in the committed session")
+            (ClashSite::Owner, _) => format!(
+                "{refno}: moved here and moved in the committed session, to different owners"
+            ),
+            (ClashSite::MemberList, _) => {
+                format!("{refno}: its reference list was changed here and in the committed session")
             }
-            (_, Some(name)) => format!("{refno}: {name} was changed here and in the committed session"),
+            (ClashSite::ImplicitWord(index), None) => {
+                format!(
+                    "{refno}: implicit word {index} was changed here and in the committed session"
+                )
+            }
+            (_, Some(name)) => {
+                format!("{refno}: {name} was changed here and in the committed session")
+            }
             (ClashSite::ExplicitAttribute(hash), None) => {
-                format!("{refno}: attribute {hash:#x} was changed here and in the committed session")
+                format!(
+                    "{refno}: attribute {hash:#x} was changed here and in the committed session"
+                )
             }
         };
-        Ok(MergeClash { refno, site, attribute, detail })
+        Ok(MergeClash {
+            refno,
+            site,
+            attribute,
+            detail,
+        })
     }
 }
 
@@ -239,7 +267,14 @@ pub fn write_merge_session(
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
 ) -> Result<CommitReport, WriteError> {
-    write_merge_session_with(path, request, base_sesno, elements, name_edits, MergeOptions::default())
+    write_merge_session_with(
+        path,
+        request,
+        base_sesno,
+        elements,
+        name_edits,
+        MergeOptions::default(),
+    )
 }
 
 /// [`write_merge_session`] with [`MergeOptions`]: hand it the schema's
@@ -267,17 +302,25 @@ pub fn stage_merge_session_with(
     base_sesno: u32,
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
-    mut options: MergeOptions<'_>,
+    options: MergeOptions<'_>,
 ) -> Result<StagedSession, WriteError> {
-    let path = path.as_ref();
-    let conflicts = scan_conflicts(path, base_sesno, elements, name_edits)?;
-    if !conflicts.is_empty() {
-        return Err(WriteError::MergeConflicts(conflicts));
-    }
-    let rebased = rebase_updates(path, base_sesno, elements, &mut options)?;
-    // The same templates keep the keyed tables (`TYPEX`, the reverse-reference
-    // tables) in step with the records the merge writes on top of latest.
-    stage_session_with_base(path, request, &rebased, name_edits, Some(base_sesno), options.templates)
+    let mut file = super::PageFile::open(path.as_ref())?;
+    file.lock_for_write()?;
+    let (_, _, _, latest) = super::read_base(&mut file)?;
+    let mut options = options;
+    let rebased = prepare_merge(path.as_ref(), base_sesno, latest.sesno, elements, name_edits, &mut options)?;
+    super::stage_session_locked(path, request, &rebased, name_edits, Some(base_sesno),
+        options.templates, None, file, Some(latest.page.page))
+}
+
+/// Scan and rebase against the same session fixed by the caller's write lock.
+pub(crate) fn prepare_merge(
+    path: &std::path::Path, base_sesno: u32, latest_sesno: u32,
+    elements: &[ElementWrite], name_edits: &[NamedEdit], options: &mut MergeOptions<'_>,
+) -> Result<Vec<ElementWrite>, WriteError> {
+    let conflicts = scan_conflicts(path, base_sesno, latest_sesno, elements, name_edits)?;
+    if !conflicts.is_empty() { return Err(WriteError::MergeConflicts(conflicts)); }
+    rebase_updates(path, base_sesno, latest_sesno, elements, options)
 }
 
 /// Rebase each of the writer's element updates onto the committed record, so a
@@ -293,6 +336,7 @@ pub fn stage_merge_session_with(
 fn rebase_updates(
     path: &std::path::Path,
     base_sesno: u32,
+    latest_sesno: u32,
     elements: &[ElementWrite],
     options: &mut MergeOptions<'_>,
 ) -> Result<Vec<ElementWrite>, WriteError> {
@@ -302,7 +346,7 @@ fn rebase_updates(
         MergeMode::PlainSaveWork
     };
     let mut base = ReadOnlyEngine::open_at(path, base_sesno)?;
-    let mut latest = ReadOnlyEngine::open(path)?;
+    let mut latest = ReadOnlyEngine::open_at(path, latest_sesno)?;
     let mut out = Vec::with_capacity(elements.len());
     // `(element, the owner the committed record names)` for each element the
     // merge re-parents; fixed up after every update is rebased.
@@ -321,17 +365,26 @@ fn rebase_updates(
                         let latest_draft = RecordDraft::from_record_bytes(&latest_view.raw_bytes)?;
                         let member_merge = options.member_merge_for(latest_draft.noun_hash)?;
                         if options.on_clash == OnClash::Refuse {
-                            for site in three_way_clashes(&base_draft, &latest_draft, working, member_merge) {
-                                clashes.push(options.describe_clash(working.refno, latest_draft.noun_hash, site)?);
+                            for site in
+                                three_way_clashes(&base_draft, &latest_draft, working, member_merge)
+                            {
+                                clashes.push(options.describe_clash(
+                                    working.refno,
+                                    latest_draft.noun_hash,
+                                    site,
+                                )?);
                             }
                         }
                         // `sub_5B20CA0`'s lookups for each member the writer
                         // added, done up front so a read failure is this
                         // function's error rather than a silent "unknown".
                         let standing = match member_merge {
-                            MemberMerge::MemberByMember => {
-                                member_standing(&mut base, &mut latest, base_draft.members(), working.members())?
-                            }
+                            MemberMerge::MemberByMember => member_standing(
+                                &mut base,
+                                &mut latest,
+                                base_draft.members(),
+                                working.members(),
+                            )?,
                             MemberMerge::WholeList => HashMap::new(),
                         };
                         let merged = three_way_with_standing(
@@ -349,7 +402,10 @@ fn rebase_updates(
                         // unless the committed side moved it at all — so the
                         // owner the committed record names must let go of it.
                         let writer_moved = working.owner != base_draft.owner;
-                        if writer_moved && merged.owner == working.owner && merged.owner != latest_draft.owner {
+                        if writer_moved
+                            && merged.owner == working.owner
+                            && merged.owner != latest_draft.owner
+                        {
                             re_parented.push((working.refno, latest_draft.owner));
                         }
                         // INDEX de-duplication (A3a, sub_5B07080): a merged
@@ -392,7 +448,9 @@ fn detach_from_committed_owner(
 ) -> Result<(), WriteError> {
     for element in out.iter_mut() {
         match element {
-            ElementWrite::Update(draft) | ElementWrite::Insert(draft) if draft.refno == committed_owner => {
+            ElementWrite::Update(draft) | ElementWrite::Insert(draft)
+                if draft.refno == committed_owner =>
+            {
                 draft.remove_member(member);
                 return Ok(());
             }
@@ -429,7 +487,10 @@ fn member_standing(
         let owner_in = |engine: &mut ReadOnlyEngine| -> Result<Option<RefNo>, WriteError> {
             Ok(engine.find_element(member)?.map(|view| view.header().owner))
         };
-        let standing = MemberStanding { base_owner: owner_in(base)?, latest_owner: owner_in(latest)? };
+        let standing = MemberStanding {
+            base_owner: owner_in(base)?,
+            latest_owner: owner_in(latest)?,
+        };
         out.insert(member, standing);
     }
     Ok(out)
@@ -440,13 +501,14 @@ fn member_standing(
 fn scan_conflicts(
     path: &std::path::Path,
     base_sesno: u32,
+    latest_sesno: u32,
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
 ) -> Result<Vec<MergeConflict>, WriteError> {
     let working = WorkingChanges::of(elements);
 
     let base_root = DbView::open_at(path, base_sesno)?.index_root();
-    let mut latest = DbView::open(path)?;
+    let mut latest = DbView::open_at(path, latest_sesno)?;
     let latest_root = latest.index_root();
 
     // base ↔ latest: what the committed session changed since the writer's base.
@@ -475,7 +537,9 @@ fn scan_conflicts(
                 code: code::CHANGED_UNDER_DELETE,
                 refno: Some(*refno),
                 name: None,
-                detail: format!("562: {refno} was changed here but deleted in the committed session"),
+                detail: format!(
+                    "562: {refno} was changed here but deleted in the committed session"
+                ),
             });
         }
     }
@@ -486,7 +550,9 @@ fn scan_conflicts(
                 code: code::DELETED_UNDER_CHANGE,
                 refno: Some(*refno),
                 name: None,
-                detail: format!("590: {refno} was deleted here but changed in the committed session"),
+                detail: format!(
+                    "590: {refno} was deleted here but changed in the committed session"
+                ),
             });
         }
     }
@@ -497,7 +563,9 @@ fn scan_conflicts(
                 code: code::DELETED_UNDER_CHANGE,
                 refno: Some(*refno),
                 name: None,
-                detail: format!("590: {refno} was inserted here but the committed session already has it"),
+                detail: format!(
+                    "590: {refno} was inserted here but the committed session already has it"
+                ),
             });
         }
     }
@@ -533,7 +601,11 @@ fn scan_conflicts(
 }
 
 /// Whether `refno` is indexed by the latest session — one descent.
-fn latest_indexes(latest: &mut DbView, root: crate::page::PageId, refno: RefNo) -> Result<bool, WriteError> {
+fn latest_indexes(
+    latest: &mut DbView,
+    root: crate::page::PageId,
+    refno: RefNo,
+) -> Result<bool, WriteError> {
     let found = IndexCursor::at_root(latest.pages_mut(), root)
         .seek(refno)
         .map_err(|e| other(e.to_string()))?;

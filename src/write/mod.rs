@@ -48,6 +48,7 @@ pub mod pages;
 pub mod record;
 pub mod reverse;
 pub mod session_page;
+pub(crate) mod spamap;
 pub mod transaction;
 pub mod value;
 
@@ -68,27 +69,29 @@ pub use attr::{set_attribute, AttributeWriteError};
 // Error types are part of [`WriteError`], so they stay public; the edit and
 // key types are the mechanics `plan_side_tables` and `place_record` use
 // internally.
+pub use crate::spatial::{SpatialError, SpatialPolicy, SpatialReport, WorldAabb};
 pub use claim_cow::ClaimCowError;
+pub use dictionary::{Dictionary, DictionaryEntry, DictionaryError, DictionaryLoadError};
 pub use index_cow::IndexCowError;
+use index_cow::{EditKind, LeafEdit};
 pub use keyed_cow::KeyedCowError;
+use keyed_cow::KeyedEditKind;
 #[doc(hidden)]
 pub use keyed_cow::{build_table, rewrite_table, KeyedKey, KeyedRewrite, TableEdit, TableEditKind};
-use index_cow::{EditKind, LeafEdit};
-use keyed_cow::KeyedEditKind;
 pub use merge::{
-    stage_merge_session_with, write_merge_session, write_merge_session_with, MergeClash, MergeConflict, MergeOptions,
-    OnClash,
+    stage_merge_session_with, write_merge_session, write_merge_session_with, MergeClash,
+    MergeConflict, MergeOptions, OnClash,
 };
 pub use named_cow::{NamedCowError, NamedEdit, NamedEditKind};
 pub use pages::PageFile;
 pub use record::{
-    ClashSite, HunkDraft, MemberMerge, MemberStanding, MergeMode, PlacedRecord, RecordDraft, RecordEncodeError,
-    FORMAT_COUNT_MAX,
+    ClashSite, HunkDraft, MemberMerge, MemberStanding, MergeMode, PlacedRecord, RecordDraft,
+    RecordEncodeError, FORMAT_COUNT_MAX,
 };
 pub use reverse::{
-    ensure_typex, reference_array, reference_value, set_reference, set_reference_array, table_keys, typex_table_hash,
+    ensure_typex, reference_array, reference_value, set_reference, set_reference_array, table_keys,
+    typex_table_hash,
 };
-pub use dictionary::{Dictionary, DictionaryEntry, DictionaryError, DictionaryLoadError};
 pub use session_page::{build_session_page, NewSession, SessionClock, E3DIO_VERSION_TAG};
 pub use transaction::{MemberPosition, Transaction, TransactionCommit, TransactionError};
 pub use value::{parse_value, ValueParseError};
@@ -115,13 +118,21 @@ pub enum WriteError {
         detail: String,
     },
     #[error("page {page_no}: buffer is {len} bytes, a page is {want}")]
-    PageLength { page_no: u32, len: usize, want: usize },
+    PageLength {
+        page_no: u32,
+        len: usize,
+        want: usize,
+    },
     #[error("{0}")]
     Descriptor(#[from] crate::error::E3dReaderError),
     #[error("{0}")]
     Session(#[from] SessionError),
     #[error("{page}: previous session page is {len} bytes, need {need} to carry it over")]
-    PreviousSessionPageTooShort { page: PageId, len: usize, need: usize },
+    PreviousSessionPageTooShort {
+        page: PageId,
+        len: usize,
+        need: usize,
+    },
     #[error("{page}: page type {page_type} is not a session page")]
     NotASessionPage { page: PageId, page_type: u32 },
     #[error("{field}: {source}")]
@@ -198,10 +209,16 @@ pub enum WriteError {
         "{refno}: the {block} block is {words} words, at or past the format word's 0x3FFF, and ends \
          in a zero word that core.dll's chain-length reading would drop"
     )]
-    SaturatedBlockEndsInZero { refno: RefNo, block: &'static str, words: usize },
+    SaturatedBlockEndsInZero {
+        refno: RefNo,
+        block: &'static str,
+        words: usize,
+    },
     /// The schema templates a write was given could not be read.
     #[error("{0}")]
     Template(#[from] crate::record::template::TemplateLoadError),
+    #[error("{0}")]
+    Spatial(#[from] crate::spatial::SpatialError),
 }
 
 /// What an element write may consult beyond the file itself.
@@ -266,6 +283,7 @@ pub struct StagedSession {
     page0: Vec<u8>,
     old_len_bytes: u64,
     appended_pages: Vec<u32>,
+    spatial: crate::spatial::SpatialReport,
 }
 
 /// The session a write is based on, as page 0 and its session page state it.
@@ -289,7 +307,9 @@ pub struct CommitReport {
 
 /// Read page 0 and the newest session page, refusing anything stage 1 cannot
 /// write on: a multi-extent file, a file shorter than its own session says.
-fn read_base(file: &mut PageFile) -> Result<(Vec<u8>, DbDescriptor, Vec<u8>, SessionPage), WriteError> {
+fn read_base(
+    file: &mut PageFile,
+) -> Result<(Vec<u8>, DbDescriptor, Vec<u8>, SessionPage), WriteError> {
     let page0 = file.read_page(0)?;
     let descriptor = DbDescriptor::parse(&page0)?;
     if descriptor.ext_no != u32::from(PageId::PRIMARY) {
@@ -330,7 +350,7 @@ pub fn stage_empty_session(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
 ) -> Result<StagedSession, WriteError> {
-    stage_session_with_base(path, request, &[], &[], None, None)
+    stage_session_with_base(path, request, &[], &[], None, None, None)
 }
 
 impl StagedSession {
@@ -351,6 +371,11 @@ impl StagedSession {
     /// The pages this staging appended, sorted.
     pub fn appended_pages(&self) -> &[u32] {
         &self.appended_pages
+    }
+
+    /// Spatial planning result for this staging.
+    pub fn spatial(&self) -> &crate::spatial::SpatialReport {
+        &self.spatial
     }
 
     /// Write page 0 and sync: the commit point.
@@ -464,7 +489,7 @@ pub fn stage_element_session(
     elements: &[ElementWrite],
     name_edits: &[NamedEdit],
 ) -> Result<StagedSession, WriteError> {
-    stage_session_with_base(path, request, elements, name_edits, None, None)
+    stage_session_with_base(path, request, elements, name_edits, None, None, None)
 }
 
 /// [`stage_element_session`] with [`WriteOptions`].
@@ -475,7 +500,15 @@ pub fn stage_element_session_with(
     name_edits: &[NamedEdit],
     options: WriteOptions<'_>,
 ) -> Result<StagedSession, WriteError> {
-    stage_session_with_base(path, request, elements, name_edits, None, options.templates)
+    stage_session_with_base(
+        path,
+        request,
+        elements,
+        name_edits,
+        None,
+        options.templates,
+        None,
+    )
 }
 
 /// The side-table work of one staging: the element list as it will be written
@@ -502,14 +535,15 @@ const CLAIM_MAX_CLIMB: usize = 256;
 /// side.
 fn plan_side_tables(
     path: &Path,
+    latest: u32,
     elements: &[ElementWrite],
     templates: &mut TemplateProvider,
 ) -> Result<SideTableWork, WriteError> {
     // The session this write becomes, for the claim sessions filed below.
-    let new_sesno = crate::session::DbView::open(path)?.session().sesno + 1;
+    let new_sesno = latest + 1;
     // One read-only view of the newest session, for the records an update or
     // delete replaces and for the owner-climb the claim plan needs.
-    let mut engine = crate::ReadOnlyEngine::open(path)?;
+    let mut engine = crate::ReadOnlyEngine::open_at(path, latest)?;
     let mut old: HashMap<RefNo, RecordDraft> = HashMap::new();
     for element in elements {
         let refno = match element {
@@ -671,7 +705,10 @@ fn place_record(
     let header_words = implicit.len();
     // The header and implicit region are one contiguous run and cannot span.
     if header_words > page_words - 1 {
-        return Err(WriteError::RecordTooLong { words: header_words, page_words });
+        return Err(WriteError::RecordTooLong {
+            words: header_words,
+            page_words,
+        });
     }
 
     let member_payload: Vec<u32> = draft
@@ -681,7 +718,9 @@ fn place_record(
         .collect();
 
     // The open bump page, or a fresh one.
-    let mut working = current.take().unwrap_or_else(|| new_data_page(next, page_words));
+    let mut working = current
+        .take()
+        .unwrap_or_else(|| new_data_page(next, page_words));
     let mut done: Vec<(u32, Vec<u8>)> = Vec::new();
 
     // Hunks first. `4SCEA` writes an out-of-record value into the current
@@ -713,7 +752,11 @@ fn place_record(
     // the one shape that reading would truncate rather than write it.
     for (block, payload) in [("member", &member_payload), ("explicit", &explicit_payload)] {
         if payload.len() >= record::FORMAT_COUNT_MAX && payload.last() == Some(&0) {
-            return Err(WriteError::SaturatedBlockEndsInZero { refno: draft.refno, block, words: payload.len() });
+            return Err(WriteError::SaturatedBlockEndsInZero {
+                refno: draft.refno,
+                block,
+                words: payload.len(),
+            });
         }
     }
 
@@ -754,8 +797,30 @@ fn place_record(
     });
 
     // The two tail blocks, members then explicit — the order `encode` uses.
-    let member_addr = place_block(2, &[], 1, &member_payload, draft.refno, page_words, ext, &mut working, &mut done, next);
-    let explicit_addr = place_block(1, &[], 1, &explicit_payload, draft.refno, page_words, ext, &mut working, &mut done, next);
+    let member_addr = place_block(
+        2,
+        &[],
+        1,
+        &member_payload,
+        draft.refno,
+        page_words,
+        ext,
+        &mut working,
+        &mut done,
+        next,
+    );
+    let explicit_addr = place_block(
+        1,
+        &[],
+        1,
+        &explicit_payload,
+        draft.refno,
+        page_words,
+        ext,
+        &mut working,
+        &mut done,
+        next,
+    );
 
     // Back-patch the header slots into whichever page still holds the header.
     let header_buf = if working.0 == header_page {
@@ -831,7 +896,11 @@ fn place_block(
         } else {
             (0, 0)
         };
-        put_word(&mut working.1, seg_off, (kind_word << 16) | (header_words + take) as u32);
+        put_word(
+            &mut working.1,
+            seg_off,
+            (kind_word << 16) | (header_words + take) as u32,
+        );
         put_word(&mut working.1, seg_off + 1, owner.word0);
         put_word(&mut working.1, seg_off + 2, owner.word1);
         put_word(&mut working.1, seg_off + 3, cont.0);
@@ -849,7 +918,10 @@ fn place_block(
         // Move to the continuation page — the one the segment just named.
         let full = std::mem::replace(working, new_data_page(next, page_words));
         done.push((full.0, full.1));
-        debug_assert_eq!(working.0, cont.0, "the continuation page is the one just drawn");
+        debug_assert_eq!(
+            working.0, cont.0,
+            "the continuation page is the one just drawn"
+        );
         remaining = &remaining[take..];
     }
 }
@@ -867,21 +939,39 @@ pub(crate) fn stage_session_with_base(
     name_edits: &[NamedEdit],
     base_sesno: Option<u32>,
     templates: Option<&mut TemplateProvider>,
+    spatial: Option<&crate::write::spamap::SpatialStage>,
 ) -> Result<StagedSession, WriteError> {
-    // The keyed-table and claim plan reads the newest session's records
-    // through the read side, so it is made before the write handle is opened.
+    let mut file = PageFile::open(path.as_ref())?;
+    file.lock_for_write()?;
+    stage_session_locked(path, request, elements, name_edits, base_sesno, templates, spatial, file, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn stage_session_locked(
+    path: impl AsRef<Path>, request: &SessionRequest<'_>, elements: &[ElementWrite],
+    name_edits: &[NamedEdit], base_sesno: Option<u32>, mut templates: Option<&mut TemplateProvider>,
+    spatial: Option<&crate::write::spamap::SpatialStage>, mut file: PageFile, expected: Option<u32>,
+) -> Result<StagedSession, WriteError> {
+    let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
+    if let Some(expected) = expected {
+        if previous.page.page != expected { return Err(WriteError::Moved { path: path.as_ref().to_path_buf(), expected, found: previous.page.page }); }
+    }
+    let prepared = match (spatial, templates.as_deref_mut()) {
+        (Some(stage), Some(provider)) => Some(stage.prepare(path.as_ref(), previous.sesno, elements, provider)?),
+        _ => None,
+    };
+    let elements = prepared.as_ref().map_or(elements, |(_, writes)| writes.as_slice());
+    // The keyed-table and claim plan reads the newest session's records.
+    // Compute it only after the sentinel lock and base session are fixed, so
+    // no concurrent writer can invalidate the plan before the first append.
     let side = match templates {
-        Some(templates) => Some(plan_side_tables(path.as_ref(), elements, templates)?),
+        Some(templates) => Some(plan_side_tables(path.as_ref(), previous.sesno, elements, templates)?),
         None => None,
     };
-    let elements: &[ElementWrite] = side.as_ref().map_or(elements, |work| work.elements.as_slice());
+    let elements: &[ElementWrite] = side
+        .as_ref()
+        .map_or(elements, |work| work.elements.as_slice());
 
-    let mut file = PageFile::open(path)?;
-    // Enter write mode: take the sentinel lock before appending anything, so a
-    // file a real E3D (or another instance of this crate) is writing is refused
-    // at once and untouched. Held until this handle drops at commit or rollback.
-    file.lock_for_write()?;
-    let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
     let text = TextFormat::from_header(descriptor.header_format);
     let page_words = file.page_size().words() as usize;
     let ext = PageId::PRIMARY;
@@ -899,12 +989,26 @@ pub(crate) fn stage_session_with_base(
         let mut current: Option<(u32, Vec<u8>, usize)> = None;
         for element in elements {
             match element {
-                ElementWrite::Insert(draft) => {
-                    place_record(draft, EditKind::Insert, page_words, ext, &mut current, &mut appended, &mut next, &mut edits)?
-                }
-                ElementWrite::Update(draft) => {
-                    place_record(draft, EditKind::Update, page_words, ext, &mut current, &mut appended, &mut next, &mut edits)?
-                }
+                ElementWrite::Insert(draft) => place_record(
+                    draft,
+                    EditKind::Insert,
+                    page_words,
+                    ext,
+                    &mut current,
+                    &mut appended,
+                    &mut next,
+                    &mut edits,
+                )?,
+                ElementWrite::Update(draft) => place_record(
+                    draft,
+                    EditKind::Update,
+                    page_words,
+                    ext,
+                    &mut current,
+                    &mut appended,
+                    &mut next,
+                    &mut edits,
+                )?,
                 ElementWrite::Delete(refno) => edits.push(LeafEdit {
                     refno: *refno,
                     page_no: 0,
@@ -925,10 +1029,8 @@ pub(crate) fn stage_session_with_base(
         previous.index_root
     } else {
         let rewrite = {
-            let mut read_page = |page_no: u32| {
-                file.read_page(page_no)
-                    .map_err(|error| error.to_string())
-            };
+            let mut read_page =
+                |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
             let mut alloc = || {
                 let page = next;
                 next += 1;
@@ -957,13 +1059,21 @@ pub(crate) fn stage_session_with_base(
             .table_root(name_hash)
             .ok_or(WriteError::NoNameTable { name_hash })?;
         let named = {
-            let mut read_page = |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
+            let mut read_page =
+                |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
             let mut alloc = || {
                 let page = next;
                 next += 1;
                 page
             };
-            named_cow::rewrite_named_table(root, page_words, name_edits, &mut read_page, &mut alloc, page_limit)?
+            named_cow::rewrite_named_table(
+                root,
+                page_words,
+                name_edits,
+                &mut read_page,
+                &mut alloc,
+                page_limit,
+            )?
         };
         for page in named.pages {
             appended.push(page);
@@ -984,13 +1094,22 @@ pub(crate) fn stage_session_with_base(
                 continue;
             }
             let rewrite = {
-                let mut read_page = |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
+                let mut read_page =
+                    |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
                 let mut alloc = || {
                     let page = next;
                     next += 1;
                     page
                 };
-                keyed_cow::rewrite_keyed_table(root, table, page_words, edits, &mut read_page, &mut alloc, page_limit)?
+                keyed_cow::rewrite_keyed_table(
+                    root,
+                    table,
+                    page_words,
+                    edits,
+                    &mut read_page,
+                    &mut alloc,
+                    page_limit,
+                )?
             };
             for page in rewrite.pages {
                 appended.push(page);
@@ -1007,13 +1126,21 @@ pub(crate) fn stage_session_with_base(
     let claim_root = match &side {
         Some(work) if !work.claims.is_empty() => {
             let rewrite = {
-                let mut read_page = |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
+                let mut read_page =
+                    |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
                 let mut alloc = || {
                     let page = next;
                     next += 1;
                     page
                 };
-                claim_cow::rewrite_claim_table(previous.claim, page_words, &work.claims, &mut read_page, &mut alloc, page_limit)?
+                claim_cow::rewrite_claim_table(
+                    previous.claim,
+                    page_words,
+                    &work.claims,
+                    &mut read_page,
+                    &mut alloc,
+                    page_limit,
+                )?
             };
             for page in rewrite.pages {
                 appended.push(page);
@@ -1022,6 +1149,66 @@ pub(crate) fn stage_session_with_base(
         }
         _ => previous.claim,
     };
+
+    // --- SPAMAP: after all ordinary side tables, before the session page ---
+    let mut spatial_report = crate::spatial::SpatialReport::default();
+    if let Some((plan, _)) = prepared {
+        spatial_report = plan.report;
+        if !plan.edits.inserts.is_empty() || !plan.edits.deletes.is_empty() {
+            let root = previous.table_root(crate::index::SPAMAP_NAME_HASH);
+            let edits: Vec<crate::write::keyed_cow::TableEdit<7>> = plan
+                .edits
+                .deletes
+                .into_iter()
+                .map(|key| crate::write::keyed_cow::TableEdit {
+                    key,
+                    kind: crate::write::keyed_cow::TableEditKind::Delete,
+                })
+                .chain(plan.edits.inserts.into_iter().map(|(key, value)| {
+                    crate::write::keyed_cow::TableEdit {
+                        key,
+                        kind: crate::write::keyed_cow::TableEditKind::Insert(value),
+                    }
+                }))
+                .collect();
+            let rewrite = {
+                let mut read_page =
+                    |page_no: u32| file.read_page(page_no).map_err(|error| error.to_string());
+                let mut alloc = || {
+                    let page = next;
+                    next += 1;
+                    page
+                };
+                keyed_cow::rewrite_table::<7>(
+                    root,
+                    crate::index::SPAMAP_NAME_HASH,
+                    1,
+                    page_words,
+                    &edits,
+                    &mut read_page,
+                    &mut alloc,
+                    page_limit,
+                )?
+            };
+            spatial_report.pages = rewrite.pages.iter().map(|(page, _)| *page).collect();
+            spatial_report.table = if root.is_some() {
+                crate::spatial::SpamapTableChange::Rewritten {
+                    root: rewrite.root.page,
+                }
+            } else {
+                crate::spatial::SpamapTableChange::Created {
+                    root: rewrite.root.page,
+                }
+            };
+            for page in rewrite.pages {
+                appended.push(page);
+            }
+            match root {
+                Some(_) => table_overrides.push((crate::index::SPAMAP_NAME_HASH, rewrite.root)),
+                None => table_additions.push((crate::index::SPAMAP_NAME_HASH, rewrite.root)),
+            }
+        }
+    }
 
     // --- the session page, last, naming the new index root ---
     let new_sesno = previous.sesno + 1;
@@ -1046,7 +1233,10 @@ pub(crate) fn stage_session_with_base(
             clock,
             text,
         },
-    )?;
+    ).map_err(|error| match error {
+        WriteError::TableDirectoryFull { count, room } if spatial.is_some_and(|s| s.policy != crate::spatial::SpatialPolicy::Off) => crate::spatial::SpatialError::DirectoryFull { count, room }.into(),
+        error => error,
+    })?;
     appended.push((session_page.page, page));
 
     // --- write every new page and sync; page 0 is left for the commit ---
@@ -1087,5 +1277,6 @@ pub(crate) fn stage_session_with_base(
         page0,
         old_len_bytes,
         appended_pages,
+        spatial: spatial_report,
     })
 }

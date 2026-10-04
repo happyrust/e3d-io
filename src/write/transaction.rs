@@ -1,6 +1,6 @@
 //! A transaction facade over the element write path: mint refnos, keep owner
 //! member lists and the `NAME` table in step, and hand the batch to
-//! [`stage_element_session_with`] — the three chores a caller of
+//! [`super::stage_element_session_with`] — the three chores a caller of
 //! [`write_element_session_with`](super::write_element_session_with) does by hand today
 //! (`docs/plans/2026-09-21-write-path-next-steps.md` S6, §6).
 //!
@@ -71,7 +71,7 @@
 //!   `[ISOH DELDSG SLOREF AEXCES LEXCES LOOS]` as E3D's own does; `build` sets
 //!   values on top of that.
 //! - **`TYPEX`, the reverse-reference tables and the claim tree** follow every
-//!   write through [`stage_element_session_with`], because the transaction
+//!   write through [`super::stage_element_session_with`], because the transaction
 //!   always carries the schema; `TYPEX` is appended after what `build` set,
 //!   where E3D 3.1 puts it.
 //!
@@ -90,27 +90,34 @@ use crate::ReadOnlyEngine;
 
 use super::attr::AttributeWriteError;
 use super::dictionary::{Dictionary, DictionaryError};
-use super::merge::{stage_merge_session_with, MergeClash, MergeConflict, MergeOptions, OnClash};
+use super::merge::{MergeClash, MergeConflict, MergeOptions, OnClash};
 use super::named_cow::{NamedEdit, NamedEditKind};
 use super::record::{RecordDraft, RecordEncodeError};
 use super::value::{parse_value, ValueParseError};
-use super::{
-    stage_element_session_with, CommitReport, ElementWrite, SessionRequest, StagedSession, WriteError, WriteOptions,
+use super::{CommitReport, ElementWrite, SessionRequest, StagedSession, WriteError};
+use crate::spatial::{
+    SpatialError, SpatialPolicy, SpatialReport, WorldAabb,
 };
 
 /// Why a transaction operation could not be recorded. Nothing is written until
 /// [`Transaction::stage`] / [`Transaction::commit`]; these are raised while the
 /// batch is being built, and a commit raises [`WriteError`] as before.
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionError {
     #[error(transparent)]
-    Write(#[from] WriteError),
+    Spatial(#[from] SpatialError),
+    #[error(transparent)]
+    Write(WriteError),
     #[error(transparent)]
     Record(#[from] RecordEncodeError),
     #[error(transparent)]
     Attribute(#[from] AttributeWriteError),
     #[error("name {name:?}: {source}")]
-    Name { name: String, source: TextEncodeError },
+    Name {
+        name: String,
+        source: TextEncodeError,
+    },
     #[error("{0}")]
     Read(#[from] crate::error::E3dReaderError),
     #[error("{0}")]
@@ -140,7 +147,11 @@ pub enum TransactionError {
     #[error("noun {noun:#x} has no attribute named {name}")]
     UnknownAttribute { noun: u32, name: String },
     #[error("{name} = {input:?}: {source}")]
-    Value { name: String, input: String, source: ValueParseError },
+    Value {
+        name: String,
+        input: String,
+        source: ValueParseError,
+    },
     #[error(transparent)]
     Dictionary(#[from] DictionaryError),
     /// [`Transaction::set_hunk`] was asked to store out of the record what
@@ -164,6 +175,15 @@ pub enum TransactionError {
     Clashes(Vec<MergeClash>),
 }
 
+impl From<WriteError> for TransactionError {
+    fn from(error: WriteError) -> Self {
+        match error {
+            WriteError::Spatial(error) => Self::Spatial(error),
+            error => Self::Write(error),
+        }
+    }
+}
+
 /// What [`Transaction::commit_reporting`] says about a commit beyond the
 /// [`CommitReport`] the write path returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,6 +201,7 @@ pub struct TransactionCommit {
     /// Whether the page-0 write found yet another session committed after the
     /// staging and the batch was staged a second time on the new latest.
     pub retried_after_move: bool,
+    pub spatial: SpatialReport,
 }
 
 /// Where a member goes in its owner's list — the positions `REORDER` names.
@@ -202,9 +223,18 @@ enum MemberOp {
     /// Put `member` into `owner`'s list at `at`. `reference` says the owner is a
     /// reference-list noun and the caller means its list (a child insert under
     /// such an owner changes nothing).
-    Add { owner: RefNo, member: RefNo, at: MemberPosition, reference: bool },
+    Add {
+        owner: RefNo,
+        member: RefNo,
+        at: MemberPosition,
+        reference: bool,
+    },
     /// Take `member` out of `owner`'s list.
-    Remove { owner: RefNo, member: RefNo, reference: bool },
+    Remove {
+        owner: RefNo,
+        member: RefNo,
+        reference: bool,
+    },
 }
 
 /// A batch of element writes against the newest session of one database.
@@ -235,12 +265,17 @@ pub struct Transaction<'a> {
     base_sesno: u32,
     /// What a merge does where both sides changed the same thing.
     on_clash: OnClash,
+    spatial_policy: SpatialPolicy,
+    spatial_given: std::collections::HashMap<RefNo, WorldAabb>,
 }
 
 impl<'a> Transaction<'a> {
     /// Open a transaction on `path`'s newest session with the schema at hand —
     /// [`Transaction::open_at`] with [`SessionSelector::Latest`].
-    pub fn open(path: impl AsRef<Path>, templates: &'a mut TemplateProvider) -> Result<Self, TransactionError> {
+    pub fn open(
+        path: impl AsRef<Path>,
+        templates: &'a mut TemplateProvider,
+    ) -> Result<Self, TransactionError> {
         Self::open_at(path, SessionSelector::Latest, templates)
     }
 
@@ -283,6 +318,8 @@ impl<'a> Transaction<'a> {
             dictionary: None,
             base_sesno,
             on_clash: OnClash::Refuse,
+            spatial_policy: SpatialPolicy::Require,
+            spatial_given: std::collections::HashMap::new(),
         })
     }
 
@@ -300,6 +337,29 @@ impl<'a> Transaction<'a> {
     pub fn with_on_clash(mut self, on_clash: OnClash) -> Self {
         self.on_clash = on_clash;
         self
+    }
+
+    /// Select how missing World_AABB values are handled when staging.
+    pub fn with_spatial(mut self, policy: SpatialPolicy) -> Self {
+        self.spatial_policy = policy;
+        self
+    }
+
+    /// Provide or replace the World_AABB used for `refno` during spatial planning.
+    pub fn set_aabb(&mut self, refno: RefNo, aabb_mm: [f64; 6]) -> Result<(), TransactionError> {
+        let aabb = WorldAabb::from_mm(aabb_mm).map_err(|error| {
+            let axis = match error {
+                crate::spatial::InvalidAabb::NotFinite { axis }
+                | crate::spatial::InvalidAabb::MinAboveMax { axis, .. } => axis,
+            };
+            SpatialError::InvalidAabb { refno, axis }
+        })?;
+        let noun = self.draft_noun(refno, "set AABB")?;
+        if !matches!(crate::spatial::rules::imap_of(noun), 1 | 5 | 7) {
+            return Err(SpatialError::NotGeometric { refno, noun }.into());
+        }
+        self.spatial_given.insert(refno, aabb);
+        Ok(())
     }
 
     /// Apply E3D's dictionary to every [`Transaction::set`] / [`Transaction::set_hunk`]: an attribute the
@@ -348,11 +408,22 @@ impl<'a> Transaction<'a> {
     /// implicit slot, which E3D reads instead of the explicit stream the
     /// hunk's directory entry sits in. An array past the descriptor's count
     /// is refused as an inline one is.
-    pub fn set_hunk(&mut self, refno: RefNo, name: &str, value: &str) -> Result<(), TransactionError> {
+    pub fn set_hunk(
+        &mut self,
+        refno: RefNo,
+        name: &str,
+        value: &str,
+    ) -> Result<(), TransactionError> {
         self.set_stored(refno, name, value, true)
     }
 
-    fn set_stored(&mut self, refno: RefNo, name: &str, value: &str, hunk: bool) -> Result<(), TransactionError> {
+    fn set_stored(
+        &mut self,
+        refno: RefNo,
+        name: &str,
+        value: &str,
+        hunk: bool,
+    ) -> Result<(), TransactionError> {
         let noun = self.draft_noun(refno, "set")?;
         let template = self
             .templates
@@ -364,13 +435,22 @@ impl<'a> Transaction<'a> {
             .attrs
             .iter()
             .find(|attr| attr.hash == hash)
-            .ok_or_else(|| TransactionError::UnknownAttribute { noun, name: name.to_string() })?
+            .ok_or_else(|| TransactionError::UnknownAttribute {
+                noun,
+                name: name.to_string(),
+            })?
             .clone();
         let parsed = {
             let engine = &mut self.engine;
-            parse_value(&attr, value, &mut |named: &str| engine.find_by_name(named).map_err(|e| e.to_string()))
+            parse_value(&attr, value, &mut |named: &str| {
+                engine.find_by_name(named).map_err(|e| e.to_string())
+            })
         }
-        .map_err(|source| TransactionError::Value { name: name.to_string(), input: value.to_string(), source })?;
+        .map_err(|source| TransactionError::Value {
+            name: name.to_string(),
+            input: value.to_string(),
+            source,
+        })?;
         if let Some(dictionary) = self.dictionary {
             let already_set = self.attribute_is_set(refno, &attr)?;
             dictionary.check(hash, name, &parsed, already_set)?;
@@ -380,12 +460,17 @@ impl<'a> Transaction<'a> {
         }
         if hash == e3d_attlib::db1_hash("NAME") {
             return match &parsed {
-                DescriptorValue::Text(new_name) => self.set_name_to(refno, &template, Some(new_name)),
+                DescriptorValue::Text(new_name) => {
+                    self.set_name_to(refno, &template, Some(new_name))
+                }
                 DescriptorValue::Unset => self.set_name_to(refno, &template, None),
                 other => Err(TransactionError::Value {
                     name: name.to_string(),
                     input: value.to_string(),
-                    source: ValueParseError::Token { token: format!("{other:?}"), expected: "a name" },
+                    source: ValueParseError::Token {
+                        token: format!("{other:?}"),
+                        expected: "a name",
+                    },
                 }),
             };
         }
@@ -405,9 +490,14 @@ impl<'a> Transaction<'a> {
         attr: &crate::record::template::TemplateAttr,
         value: &DescriptorValue,
     ) -> Result<(), TransactionError> {
-        let refuse = |reason: &'static str| TransactionError::NotAHunk { name: name.to_string(), reason };
+        let refuse = |reason: &'static str| TransactionError::NotAHunk {
+            name: name.to_string(),
+            reason,
+        };
         if attr.hash == e3d_attlib::db1_hash("NAME") {
-            return Err(refuse("NAME is the record's name and the NAME table's key; it is set inline"));
+            return Err(refuse(
+                "NAME is the record's name and the NAME table's key; it is set inline",
+            ));
         }
         if attr.wide.location.word_offset() != 0 {
             return Err(refuse("the attribute has an implicit slot, which E3D reads instead of the explicit stream"));
@@ -417,10 +507,20 @@ impl<'a> Transaction<'a> {
             DescriptorValue::RealArray(reals) => reals.len(),
             DescriptorValue::IntArray(ints) => ints.len(),
             DescriptorValue::TextList(items) => items.len(),
-            _ => return Err(refuse("only a text, a real array, an integer array or a string list is stored as a hunk")),
+            _ => return Err(refuse(
+                "only a text, a real array, an integer array or a string list is stored as a hunk",
+            )),
         };
-        if attr.logical_count != 0 && count > attr.logical_count as usize && !matches!(value, DescriptorValue::TextList(_)) {
-            return Err(AttributeWriteError::TooManyElements { hash: attr.hash, count, max: attr.logical_count }.into());
+        if attr.logical_count != 0
+            && count > attr.logical_count as usize
+            && !matches!(value, DescriptorValue::TextList(_))
+        {
+            return Err(AttributeWriteError::TooManyElements {
+                hash: attr.hash,
+                count,
+                max: attr.logical_count,
+            }
+            .into());
         }
         let format = self.text_format;
         let draft = self.draft_mut(refno, "set")?;
@@ -428,7 +528,9 @@ impl<'a> Transaction<'a> {
             DescriptorValue::Text(text) => draft.set_text_hunk(attr.hash, text, format)?,
             DescriptorValue::RealArray(reals) => draft.set_real_array_hunk(attr.hash, reals)?,
             DescriptorValue::IntArray(ints) => draft.set_int_array_hunk(attr.hash, ints)?,
-            DescriptorValue::TextList(items) => draft.set_text_list_hunk(attr.hash, items, format)?,
+            DescriptorValue::TextList(items) => {
+                draft.set_text_list_hunk(attr.hash, items, format)?
+            }
             _ => unreachable!("the shape was checked above"),
         }
         Ok(())
@@ -480,7 +582,12 @@ impl<'a> Transaction<'a> {
             self.set_name(&mut draft, &template, refno, None, name)?;
         }
         self.register(ElementWrite::Insert(draft));
-        self.member_ops.push(MemberOp::Add { owner, member: refno, at: MemberPosition::Last, reference: false });
+        self.member_ops.push(MemberOp::Add {
+            owner,
+            member: refno,
+            at: MemberPosition::Last,
+            reference: false,
+        });
         Ok(refno)
     }
 
@@ -496,9 +603,16 @@ impl<'a> Transaction<'a> {
     /// in this transaction, one that is the element itself or sits beneath it,
     /// and an anchor that is not a member. Moving under the current owner is a
     /// [`Transaction::reorder`].
-    pub fn move_to(&mut self, refno: RefNo, new_owner: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
+    pub fn move_to(
+        &mut self,
+        refno: RefNo,
+        new_owner: RefNo,
+        at: MemberPosition,
+    ) -> Result<(), TransactionError> {
         self.draft_noun(refno, "moved")?; // exists, not deleted
-        let old_owner = self.owner_of(refno)?.ok_or(TransactionError::NotFound { refno })?;
+        let old_owner = self
+            .owner_of(refno)?
+            .ok_or(TransactionError::NotFound { refno })?;
         if old_owner == new_owner {
             return self.reorder(refno, at);
         }
@@ -514,7 +628,10 @@ impl<'a> Transaction<'a> {
         let mut hops = 0;
         while let Some(at_ref) = cursor {
             if at_ref == refno {
-                return Err(TransactionError::WouldOwnItself { refno, owner: new_owner });
+                return Err(TransactionError::WouldOwnItself {
+                    refno,
+                    owner: new_owner,
+                });
             }
             hops += 1;
             if hops > 10_000 {
@@ -525,7 +642,10 @@ impl<'a> Transaction<'a> {
         self.check_anchor(new_owner, refno, at)?;
         let stored_owner = match self.writes.get(&refno) {
             Some(ElementWrite::Insert(_)) => None,
-            _ => self.engine.find_element(refno)?.map(|view| view.header().owner),
+            _ => self
+                .engine
+                .find_element(refno)?
+                .map(|view| view.header().owner),
         };
         self.draft_mut(refno, "moved")?.owner = new_owner;
         // A queued addition to the old owner (the insert's own, or an earlier
@@ -537,9 +657,18 @@ impl<'a> Transaction<'a> {
             !matches!(op, MemberOp::Add { owner, member, reference: false, .. } if *owner == old_owner && *member == refno)
         });
         if stored_owner == Some(old_owner) {
-            self.member_ops.push(MemberOp::Remove { owner: old_owner, member: refno, reference: false });
+            self.member_ops.push(MemberOp::Remove {
+                owner: old_owner,
+                member: refno,
+                reference: false,
+            });
         }
-        self.member_ops.push(MemberOp::Add { owner: new_owner, member: refno, at, reference: false });
+        self.member_ops.push(MemberOp::Add {
+            owner: new_owner,
+            member: refno,
+            at,
+            reference: false,
+        });
         Ok(())
     }
 
@@ -547,44 +676,75 @@ impl<'a> Transaction<'a> {
     /// the owner is rewritten; the element's record is untouched.
     pub fn reorder(&mut self, refno: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
         self.draft_noun(refno, "reordered")?;
-        let owner = self.owner_of(refno)?.ok_or(TransactionError::NotFound { refno })?;
+        let owner = self
+            .owner_of(refno)?
+            .ok_or(TransactionError::NotFound { refno })?;
         if !owner.is_valid() {
-            return Err(TransactionError::NotAMember { owner, member: refno });
+            return Err(TransactionError::NotAMember {
+                owner,
+                member: refno,
+            });
         }
         let owner_noun = self.draft_noun(owner, "an owner")?;
         if self.member_list_is_referenced(owner_noun)? {
             return Err(TransactionError::OwnerIsReferenceList { owner });
         }
         self.check_anchor(owner, refno, at)?;
-        self.member_ops.push(MemberOp::Add { owner, member: refno, at, reference: false });
+        self.member_ops.push(MemberOp::Add {
+            owner,
+            member: refno,
+            at,
+            reference: false,
+        });
         Ok(())
     }
 
     /// Put `member` into the reference list of `group` (a `GROU`-like noun whose
     /// members are references, not children) at `at`, or move it there if the
     /// list already holds it. The member's own owner is untouched.
-    pub fn add_reference_member(&mut self, group: RefNo, member: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
+    pub fn add_reference_member(
+        &mut self,
+        group: RefNo,
+        member: RefNo,
+        at: MemberPosition,
+    ) -> Result<(), TransactionError> {
         let group_noun = self.draft_noun(group, "a reference list")?;
         if !self.member_list_is_referenced(group_noun)? {
             return Err(TransactionError::NotAReferenceList { owner: group });
         }
         self.draft_noun(member, "referenced")?; // exists, not deleted
         self.check_anchor(group, member, at)?;
-        self.member_ops.push(MemberOp::Add { owner: group, member, at, reference: true });
+        self.member_ops.push(MemberOp::Add {
+            owner: group,
+            member,
+            at,
+            reference: true,
+        });
         Ok(())
     }
 
     /// Take `member` out of `group`'s reference list. Refused when the list does
     /// not hold it.
-    pub fn remove_reference_member(&mut self, group: RefNo, member: RefNo) -> Result<(), TransactionError> {
+    pub fn remove_reference_member(
+        &mut self,
+        group: RefNo,
+        member: RefNo,
+    ) -> Result<(), TransactionError> {
         let group_noun = self.draft_noun(group, "a reference list")?;
         if !self.member_list_is_referenced(group_noun)? {
             return Err(TransactionError::NotAReferenceList { owner: group });
         }
         if !self.members_of(group)?.contains(&member) && !self.pending_add(group, member) {
-            return Err(TransactionError::NotAMember { owner: group, member });
+            return Err(TransactionError::NotAMember {
+                owner: group,
+                member,
+            });
         }
-        self.member_ops.push(MemberOp::Remove { owner: group, member, reference: true });
+        self.member_ops.push(MemberOp::Remove {
+            owner: group,
+            member,
+            reference: true,
+        });
         Ok(())
     }
 
@@ -624,7 +784,12 @@ impl<'a> Transaction<'a> {
     /// insert's name, an earlier rename) is withdrawn first, so renaming twice
     /// in one transaction files one net change, and renaming back to the
     /// stored name files none.
-    fn set_name_to(&mut self, refno: RefNo, template: &NounTemplate, new: Option<&str>) -> Result<(), TransactionError> {
+    fn set_name_to(
+        &mut self,
+        refno: RefNo,
+        template: &NounTemplate,
+        new: Option<&str>,
+    ) -> Result<(), TransactionError> {
         let stored = self.stored_name(refno)?;
         let format = self.text_format;
         // Make sure the element is a pending draft carrying its base bytes.
@@ -635,9 +800,20 @@ impl<'a> Transaction<'a> {
                     Some(name) => DescriptorValue::Text(name.to_string()),
                     None => DescriptorValue::Unset,
                 };
-                super::attr::set_attribute(draft, template, e3d_attlib::db1_hash("NAME"), &value, format)?;
+                super::attr::set_attribute(
+                    draft,
+                    template,
+                    e3d_attlib::db1_hash("NAME"),
+                    &value,
+                    format,
+                )?;
             }
-            _ => return Err(TransactionError::Deleted { refno, what: "renamed" }),
+            _ => {
+                return Err(TransactionError::Deleted {
+                    refno,
+                    what: "renamed",
+                })
+            }
         }
         // Whatever this transaction had queued for the element's name is
         // superseded: the record now says `new`, the table must say the same.
@@ -651,12 +827,21 @@ impl<'a> Transaction<'a> {
     /// implicit slot whose first word is neither an unset sentinel nor zero
     /// (an empty array or a zero scalar counts as unset here, which is the
     /// lenient reading a set-once rule wants). A packed bit is never "set".
-    fn attribute_is_set(&mut self, refno: RefNo, attr: &crate::record::template::TemplateAttr) -> Result<bool, TransactionError> {
+    fn attribute_is_set(
+        &mut self,
+        refno: RefNo,
+        attr: &crate::record::template::TemplateAttr,
+    ) -> Result<bool, TransactionError> {
         let draft = match self.writes.get(&refno) {
             Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => draft.clone(),
-            Some(ElementWrite::Delete(_)) => return Err(TransactionError::Deleted { refno, what: "set" }),
+            Some(ElementWrite::Delete(_)) => {
+                return Err(TransactionError::Deleted { refno, what: "set" })
+            }
             None => {
-                let view = self.engine.find_element(refno)?.ok_or(TransactionError::NotFound { refno })?;
+                let view = self
+                    .engine
+                    .find_element(refno)?
+                    .ok_or(TransactionError::NotFound { refno })?;
                 RecordDraft::from_record_bytes(&view.raw_bytes)?
             }
         };
@@ -667,10 +852,9 @@ impl<'a> Transaction<'a> {
         if attr.storage_type_code == 5 {
             return Ok(false);
         }
-        Ok(draft
-            .implicit()
-            .get(offset)
-            .is_some_and(|word| *word != 0 && !crate::record::descriptor::UNSET_SENTINELS.contains(word)))
+        Ok(draft.implicit().get(offset).is_some_and(|word| {
+            *word != 0 && !crate::record::descriptor::UNSET_SENTINELS.contains(word)
+        }))
     }
 
     /// Delete an element: drop its key, and take it out of its owner's member
@@ -682,17 +866,23 @@ impl<'a> Transaction<'a> {
             .find_element(refno)?
             .ok_or(TransactionError::NotFound { refno })?;
         let owner = view.header().owner;
-        let parsed = crate::record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format)
-            .map_err(|detail| TransactionError::Parse { refno, detail })?;
+        let parsed =
+            crate::record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format)
+                .map_err(|detail| TransactionError::Parse { refno, detail })?;
         let old = crate::element_name::stored_name(&parsed);
         self.register(ElementWrite::Delete(refno));
         // A queued placement of the element in some owner's child list (a
         // move or reorder earlier in this transaction) is withdrawn; the list
         // that holds it on disk loses it. A reference list keeps its entry —
         // that is the caller's list to edit.
-        self.member_ops
-            .retain(|op| !matches!(op, MemberOp::Add { member, reference: false, .. } if *member == refno));
-        self.member_ops.push(MemberOp::Remove { owner, member: refno, reference: false });
+        self.member_ops.retain(
+            |op| !matches!(op, MemberOp::Add { member, reference: false, .. } if *member == refno),
+        );
+        self.member_ops.push(MemberOp::Remove {
+            owner,
+            member: refno,
+            reference: false,
+        });
         let format = self.text_format;
         // A name this transaction queued for the element (a rename) goes with it.
         self.names.retain(|edit| edit.refno != refno);
@@ -707,15 +897,47 @@ impl<'a> Transaction<'a> {
     /// the base this is the merge staging (module docs); a refno the committed
     /// session took is re-minted first, silently — [`Transaction::commit_reporting`]
     /// is the form that reports it.
-    pub fn stage(mut self, request: &SessionRequest<'_>) -> Result<StagedSession, TransactionError> {
+    pub fn stage(
+        mut self,
+        request: &SessionRequest<'_>,
+    ) -> Result<StagedSession, TransactionError> {
         self.resolve_members()?;
-        let Transaction { path, templates, names, order, mut writes, base_sesno, on_clash, .. } = self;
-        let mut elements: Vec<ElementWrite> =
-            order.iter().map(|refno| writes.remove(refno).expect("every ordered refno has a write")).collect();
+        let Transaction {
+            path,
+            templates,
+            names,
+            order,
+            mut writes,
+            base_sesno,
+            on_clash,
+            spatial_policy,
+            spatial_given,
+            ..
+        } = self;
+        let mut elements: Vec<ElementWrite> = order
+            .iter()
+            .map(|refno| {
+                writes
+                    .remove(refno)
+                    .expect("every ordered refno has a write")
+            })
+            .collect();
         let mut names = names;
         let latest = ReadOnlyEngine::open(&path)?.session().sesno;
         let mut reminted = Vec::new();
-        Self::stage_batch(&path, base_sesno, latest, on_clash, templates, request, &mut elements, &mut names, &mut reminted)
+        Self::stage_batch(
+            &path,
+            base_sesno,
+            latest,
+            on_clash,
+            spatial_policy,
+            &spatial_given,
+            templates,
+            request,
+            &mut elements,
+            &mut names,
+            &mut reminted,
+        )
     }
 
     /// Stage and commit in one step — [`Transaction::commit_reporting`] without
@@ -730,7 +952,10 @@ impl<'a> Transaction<'a> {
     /// them, and whether the staging had to be redone because another writer
     /// committed between it and the page-0 write ([`WriteError::Moved`] —
     /// retried once; a second `Moved` is returned).
-    pub fn commit_reporting(self, request: &SessionRequest<'_>) -> Result<TransactionCommit, TransactionError> {
+    pub fn commit_reporting(
+        self,
+        request: &SessionRequest<'_>,
+    ) -> Result<TransactionCommit, TransactionError> {
         self.commit_observed(request, |_| {})
     }
 
@@ -744,26 +969,52 @@ impl<'a> Transaction<'a> {
         mut observe: impl FnMut(&StagedSession),
     ) -> Result<TransactionCommit, TransactionError> {
         self.resolve_members()?;
-        let Transaction { path, templates, names, order, mut writes, base_sesno, on_clash, .. } = self;
-        let mut elements: Vec<ElementWrite> =
-            order.iter().map(|refno| writes.remove(refno).expect("every ordered refno has a write")).collect();
+        let Transaction {
+            path,
+            templates,
+            names,
+            order,
+            mut writes,
+            base_sesno,
+            on_clash,
+            spatial_policy,
+            spatial_given,
+            ..
+        } = self;
+        let mut elements: Vec<ElementWrite> = order
+            .iter()
+            .map(|refno| {
+                writes
+                    .remove(refno)
+                    .expect("every ordered refno has a write")
+            })
+            .collect();
         let mut names = names;
         let mut reminted: Vec<(RefNo, RefNo)> = Vec::new();
+        let original_elements = elements.clone();
+        let original_names = names.clone();
         let mut retried_after_move = false;
         loop {
+            elements.clone_from(&original_elements);
+            names.clone_from(&original_names);
+            reminted.clear();
             let latest = ReadOnlyEngine::open(&path)?.session().sesno;
             let staged = Self::stage_batch(
                 &path,
                 base_sesno,
                 latest,
                 on_clash,
+                spatial_policy,
+                &spatial_given,
                 &mut *templates,
                 request,
                 &mut elements,
                 &mut names,
                 &mut reminted,
             )?;
+            let latest = staged.previous().sesno;
             observe(&staged);
+            let spatial = staged.spatial().clone();
             match staged.commit() {
                 Ok(report) => {
                     return Ok(TransactionCommit {
@@ -772,6 +1023,7 @@ impl<'a> Transaction<'a> {
                         merged_onto: (latest != base_sesno).then_some(latest),
                         reminted,
                         retried_after_move,
+                        spatial,
                     })
                 }
                 // Another writer got its page 0 in between our staging and ours:
@@ -793,31 +1045,38 @@ impl<'a> Transaction<'a> {
     fn stage_batch(
         path: &Path,
         base_sesno: u32,
-        latest: u32,
+        _latest: u32,
         on_clash: OnClash,
+        spatial_policy: SpatialPolicy,
+        spatial_given: &std::collections::HashMap<RefNo, WorldAabb>,
         templates: &mut TemplateProvider,
         request: &SessionRequest<'_>,
         elements: &mut Vec<ElementWrite>,
         names: &mut Vec<NamedEdit>,
         reminted: &mut Vec<(RefNo, RefNo)>,
     ) -> Result<StagedSession, TransactionError> {
-        if latest == base_sesno {
-            return Ok(stage_element_session_with(
-                path,
-                request,
-                elements.as_slice(),
-                names.as_slice(),
-                WriteOptions { templates: Some(templates) },
-            )?);
+        let mut file = super::PageFile::open(path)?;
+        file.lock_for_write()?;
+        let (_, _, _, pinned) = super::read_base(&mut file)?;
+        let latest = pinned.sesno;
+        if latest != base_sesno {
+            Self::remint_taken_refnos(path, latest, templates, elements.as_mut_slice(), names.as_mut_slice(), reminted)?;
         }
-        Self::remint_taken_refnos(path, templates, elements.as_mut_slice(), names.as_mut_slice(), reminted)?;
-        let options = MergeOptions { templates: Some(templates), extract_flush: false, on_clash };
-        match stage_merge_session_with(path, request, base_sesno, elements.as_slice(), names.as_slice(), options) {
-            Ok(staged) => Ok(staged),
-            Err(WriteError::MergeConflicts(conflicts)) => Err(TransactionError::Conflicts(conflicts)),
-            Err(WriteError::MergeClashes(clashes)) => Err(TransactionError::Clashes(clashes)),
-            Err(error) => Err(error.into()),
-        }
+        let rebased = if latest != base_sesno {
+            let mut options = MergeOptions { templates: Some(&mut *templates), extract_flush: false, on_clash };
+            super::merge::prepare_merge(path, base_sesno, latest, elements, names, &mut options)
+                .map_err(|error| match error {
+                    WriteError::MergeConflicts(c) => TransactionError::Conflicts(c),
+                    WriteError::MergeClashes(c) => TransactionError::Clashes(c),
+                    error => error.into(),
+                })?
+        } else { elements.clone() };
+        let spatial_stage = super::spamap::SpatialStage {
+            policy: spatial_policy, given: spatial_given.clone(), reminted: reminted.clone(), base_sesno,
+        };
+        Ok(super::stage_session_locked(path, request, &rebased, names,
+            (latest != base_sesno).then_some(base_sesno), Some(templates),
+            Some(&spatial_stage), file, Some(pinned.page.page))?)
     }
 
     /// Give every insert whose refno the newest session already indexes a
@@ -829,6 +1088,7 @@ impl<'a> Transaction<'a> {
     /// implicit slots the templates place) that pointed at it.
     fn remint_taken_refnos(
         path: &Path,
+        latest_sesno: u32,
         templates: &mut TemplateProvider,
         elements: &mut [ElementWrite],
         names: &mut [NamedEdit],
@@ -844,7 +1104,7 @@ impl<'a> Transaction<'a> {
         if inserted.is_empty() {
             return Ok(());
         }
-        let mut latest = ReadOnlyEngine::open(path)?;
+        let mut latest = ReadOnlyEngine::open_at(path, latest_sesno)?;
         let mut taken = Vec::new();
         for refno in &inserted {
             if latest.find_element(*refno)?.is_some() {
@@ -930,8 +1190,16 @@ impl<'a> Transaction<'a> {
             let slots: Vec<(usize, usize)> = template
                 .attrs
                 .iter()
-                .filter(|attr| is_reference_type(attr.storage_type_code) && attr.wide.location.word_offset() != 0)
-                .map(|attr| (attr.wide.location.word_offset() as usize, attr.wide.storage_words as usize))
+                .filter(|attr| {
+                    is_reference_type(attr.storage_type_code)
+                        && attr.wide.location.word_offset() != 0
+                })
+                .map(|attr| {
+                    (
+                        attr.wide.location.word_offset() as usize,
+                        attr.wide.storage_words as usize,
+                    )
+                })
                 .collect();
             // A scalar slot is the pair itself, an array slot `[n][pairs…]`:
             // every adjacent pair in the slot is looked at, whatever the
@@ -939,7 +1207,8 @@ impl<'a> Transaction<'a> {
             // in one attribute's data is not a thing).
             for (offset, words) in slots {
                 for at in offset..offset + words.saturating_sub(1) {
-                    let hit = draft.implicit().get(at) == Some(&old.word0) && draft.implicit().get(at + 1) == Some(&old.word1);
+                    let hit = draft.implicit().get(at) == Some(&old.word0)
+                        && draft.implicit().get(at + 1) == Some(&old.word1);
                     if hit {
                         *draft.implicit_word_mut(at).expect("in range") = new.word0;
                         *draft.implicit_word_mut(at + 1).expect("in range") = new.word1;
@@ -962,8 +1231,17 @@ impl<'a> Transaction<'a> {
         let ops = std::mem::take(&mut self.member_ops);
         for op in ops {
             match op {
-                MemberOp::Add { owner, member, at, reference } => self.add_to_owner(owner, member, at, reference)?,
-                MemberOp::Remove { owner, member, reference } => self.remove_from_owner(owner, member, reference)?,
+                MemberOp::Add {
+                    owner,
+                    member,
+                    at,
+                    reference,
+                } => self.add_to_owner(owner, member, at, reference)?,
+                MemberOp::Remove {
+                    owner,
+                    member,
+                    reference,
+                } => self.remove_from_owner(owner, member, reference)?,
             }
         }
         Ok(())
@@ -977,7 +1255,10 @@ impl<'a> Transaction<'a> {
             Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => Ok(draft.noun_hash),
             Some(ElementWrite::Delete(_)) => Err(TransactionError::Deleted { refno, what }),
             None => {
-                let view = self.engine.find_element(refno)?.ok_or(TransactionError::NotFound { refno })?;
+                let view = self
+                    .engine
+                    .find_element(refno)?
+                    .ok_or(TransactionError::NotFound { refno })?;
                 Ok(view.header().noun_hash)
             }
         }
@@ -985,12 +1266,19 @@ impl<'a> Transaction<'a> {
 
     /// A mutable pending draft for `refno`: the one already in the batch, or the
     /// base record read into a new update.
-    fn draft_mut(&mut self, refno: RefNo, what: &'static str) -> Result<&mut RecordDraft, TransactionError> {
+    fn draft_mut(
+        &mut self,
+        refno: RefNo,
+        what: &'static str,
+    ) -> Result<&mut RecordDraft, TransactionError> {
         if matches!(self.writes.get(&refno), Some(ElementWrite::Delete(_))) {
             return Err(TransactionError::Deleted { refno, what });
         }
         if !self.writes.contains_key(&refno) {
-            let view = self.engine.find_element(refno)?.ok_or(TransactionError::NotFound { refno })?;
+            let view = self
+                .engine
+                .find_element(refno)?
+                .ok_or(TransactionError::NotFound { refno })?;
             let draft = RecordDraft::from_record_bytes(&view.raw_bytes)?;
             self.register(ElementWrite::Update(draft));
         }
@@ -1017,7 +1305,13 @@ impl<'a> Transaction<'a> {
     /// reference-list owner (`GROU`) keeps the members the caller sets: a child
     /// insert (`reference == false`) does not touch its list, only
     /// [`Transaction::add_reference_member`] does.
-    fn add_to_owner(&mut self, owner: RefNo, member: RefNo, at: MemberPosition, reference: bool) -> Result<(), TransactionError> {
+    fn add_to_owner(
+        &mut self,
+        owner: RefNo,
+        member: RefNo,
+        at: MemberPosition,
+        reference: bool,
+    ) -> Result<(), TransactionError> {
         if !owner.is_valid() {
             return Ok(()); // the WORLD's owner is null; nothing owns it.
         }
@@ -1035,7 +1329,12 @@ impl<'a> Transaction<'a> {
     /// Remove `member` from `owner`'s member list, if the owner is not itself
     /// gone. A child-list owner loses a child (`reference == false`); a
     /// reference list loses a reference only when the caller asked for that.
-    fn remove_from_owner(&mut self, owner: RefNo, member: RefNo, reference: bool) -> Result<(), TransactionError> {
+    fn remove_from_owner(
+        &mut self,
+        owner: RefNo,
+        member: RefNo,
+        reference: bool,
+    ) -> Result<(), TransactionError> {
         if !owner.is_valid() || matches!(self.writes.get(&owner), Some(ElementWrite::Delete(_))) {
             return Ok(());
         }
@@ -1054,7 +1353,12 @@ impl<'a> Transaction<'a> {
     /// Put `member` at `at` in `draft`'s list: appended first when it is not
     /// there, then moved — `move_member_after` is the one list edit `REORDER`
     /// makes, so `First` / `After` / `Before` all reduce to it.
-    fn place_member(draft: &mut RecordDraft, owner: RefNo, member: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
+    fn place_member(
+        draft: &mut RecordDraft,
+        owner: RefNo,
+        member: RefNo,
+        at: MemberPosition,
+    ) -> Result<(), TransactionError> {
         if !draft.members().contains(&member) {
             draft.push_member(member);
         }
@@ -1086,7 +1390,11 @@ impl<'a> Transaction<'a> {
                 };
                 // The member before the anchor, skipping the member itself
                 // (which is being moved out of wherever it sits).
-                members[..index].iter().rev().find(|m| **m != member).copied()
+                members[..index]
+                    .iter()
+                    .rev()
+                    .find(|m| **m != member)
+                    .copied()
             }
         };
         draft.move_member_after(member, anchor);
@@ -1096,7 +1404,12 @@ impl<'a> Transaction<'a> {
     /// Refuse an anchor that is neither in the owner's list as stored nor
     /// queued to be added to it in this transaction. The list itself is
     /// checked again at stage time, when the queued additions have landed.
-    fn check_anchor(&mut self, owner: RefNo, member: RefNo, at: MemberPosition) -> Result<(), TransactionError> {
+    fn check_anchor(
+        &mut self,
+        owner: RefNo,
+        member: RefNo,
+        at: MemberPosition,
+    ) -> Result<(), TransactionError> {
         let anchor = match at {
             MemberPosition::After(anchor) | MemberPosition::Before(anchor) => anchor,
             MemberPosition::Last | MemberPosition::First => return Ok(()),
@@ -1121,9 +1434,14 @@ impl<'a> Transaction<'a> {
     /// record's. `None` when the element is nowhere.
     fn owner_of(&mut self, refno: RefNo) -> Result<Option<RefNo>, TransactionError> {
         match self.writes.get(&refno) {
-            Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => Ok(Some(draft.owner)),
+            Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => {
+                Ok(Some(draft.owner))
+            }
             Some(ElementWrite::Delete(_)) => Ok(None),
-            None => Ok(self.engine.find_element(refno)?.map(|view| view.header().owner)),
+            None => Ok(self
+                .engine
+                .find_element(refno)?
+                .map(|view| view.header().owner)),
         }
     }
 
@@ -1131,14 +1449,19 @@ impl<'a> Transaction<'a> {
     /// base record's; empty when the element is nowhere.
     fn members_of(&mut self, refno: RefNo) -> Result<Vec<RefNo>, TransactionError> {
         match self.writes.get(&refno) {
-            Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => Ok(draft.members().to_vec()),
+            Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => {
+                Ok(draft.members().to_vec())
+            }
             Some(ElementWrite::Delete(_)) => Ok(Vec::new()),
             None => {
                 let Some(view) = self.engine.find_element(refno)? else {
                     return Ok(Vec::new());
                 };
-                let parsed = crate::record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format)
-                    .map_err(|detail| TransactionError::Parse { refno, detail })?;
+                let parsed = crate::record::element::ParsedElement::parse_as(
+                    &view.raw_bytes,
+                    self.text_format,
+                )
+                .map_err(|detail| TransactionError::Parse { refno, detail })?;
                 Ok(parsed.members)
             }
         }
@@ -1156,8 +1479,9 @@ impl<'a> Transaction<'a> {
         let Some(view) = self.engine.find_element(refno)? else {
             return Ok(None);
         };
-        let parsed = crate::record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format)
-            .map_err(|detail| TransactionError::Parse { refno, detail })?;
+        let parsed =
+            crate::record::element::ParsedElement::parse_as(&view.raw_bytes, self.text_format)
+                .map_err(|detail| TransactionError::Parse { refno, detail })?;
         Ok(crate::element_name::stored_name(&parsed))
     }
 
@@ -1171,7 +1495,13 @@ impl<'a> Transaction<'a> {
         name: &str,
     ) -> Result<(), TransactionError> {
         let format = self.text_format;
-        super::attr::set_attribute(draft, template, e3d_attlib::db1_hash("NAME"), &DescriptorValue::Text(name.to_string()), format)?;
+        super::attr::set_attribute(
+            draft,
+            template,
+            e3d_attlib::db1_hash("NAME"),
+            &DescriptorValue::Text(name.to_string()),
+            format,
+        )?;
         Self::file_name_edits(&mut self.names, refno, format, old, Some(name))
     }
 
@@ -1188,14 +1518,30 @@ impl<'a> Transaction<'a> {
             return Ok(());
         }
         if let Some(old) = old {
-            let key = crate::index::named::encode_name_as(old, format)
-                .map_err(|source| TransactionError::Name { name: old.to_string(), source })?;
-            names.push(NamedEdit { key, refno, kind: NamedEditKind::Delete });
+            let key = crate::index::named::encode_name_as(old, format).map_err(|source| {
+                TransactionError::Name {
+                    name: old.to_string(),
+                    source,
+                }
+            })?;
+            names.push(NamedEdit {
+                key,
+                refno,
+                kind: NamedEditKind::Delete,
+            });
         }
         if let Some(new) = new {
-            let key = crate::index::named::encode_name_as(new, format)
-                .map_err(|source| TransactionError::Name { name: new.to_string(), source })?;
-            names.push(NamedEdit { key, refno, kind: NamedEditKind::Insert });
+            let key = crate::index::named::encode_name_as(new, format).map_err(|source| {
+                TransactionError::Name {
+                    name: new.to_string(),
+                    source,
+                }
+            })?;
+            names.push(NamedEdit {
+                key,
+                refno,
+                kind: NamedEditKind::Insert,
+            });
         }
         Ok(())
     }

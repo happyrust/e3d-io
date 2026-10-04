@@ -126,7 +126,7 @@ fn every_shape_set_by_name_reads_back_as_the_value_it_names() {
     // --- S+1: three new elements, every value by name ---
     let (equi, the_box, fixing) = {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let equi = tx.insert(zone, db1_hash("EQUI"), Some("/E3DIO-SET-EQUI"), |_, _| Ok(())).expect("equi");
         tx.set(equi, "DESC", "  反应堆厂房 -3.320m~±0.00m  ").expect("DESC");
         tx.set(equi, "FUNC", "'PUMP FEED'").expect("FUNC");
@@ -191,7 +191,7 @@ fn every_shape_set_by_name_reads_back_as_the_value_it_names() {
     // DESC, and two values unset ---
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.set(fixing, "CREF", "/E3DIO-SET-BOX").expect("CREF by name");
         tx.set(zone, "DESC", "e3d-io T1b: a stored element set by name").expect("ZONE DESC");
         tx.set(equi, "DESC", "unset").expect("unset DESC");
@@ -240,7 +240,7 @@ fn the_dictionary_holds_a_set_to_what_e3d_allows() {
 
     let equi = {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_dictionary(&dictionary);
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off).with_dictionary(&dictionary);
         let equi = tx.insert(zone, db1_hash("EQUI"), None, |_, _| Ok(())).expect("equi");
         // ② a text: SIZE characters, though the template would take 480 bytes.
         assert!(matches!(
@@ -284,7 +284,7 @@ fn the_dictionary_holds_a_set_to_what_e3d_allows() {
     // unset the attribute takes a value again.
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_dictionary(&dictionary);
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off).with_dictionary(&dictionary);
         assert!(matches!(
             tx.set(equi, "UUIDIA", "5 6 7 8"),
             Err(TransactionError::Dictionary(DictionaryError::SetOnce { .. }))
@@ -299,7 +299,7 @@ fn the_dictionary_holds_a_set_to_what_e3d_allows() {
     // a fourth POS element is still refused, by the descriptor this time.
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.set(equi, "DESC", &text(121)).expect("the template allows 480 bytes");
         assert!(matches!(tx.set(equi, "POS", "1 2 3 4"), Err(TransactionError::Attribute(_))));
         tx.set(equi, "RATM", "1").expect("the template stores RATM");
@@ -326,7 +326,7 @@ fn a_name_set_twice_in_one_transaction_files_the_last_one_only() {
     // Inserted as FIRST, renamed to SECOND before the commit.
     let the_box = {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let the_box = tx.insert(zone, box_hash, Some("/E3DIO-N-FIRST"), |_, _| Ok(())).expect("box");
         tx.set(the_box, "NAME", "/E3DIO-N-SECOND").expect("rename the pending insert");
         tx.commit(&request("e3d-io T1b: insert, rename")).expect("commit");
@@ -339,7 +339,7 @@ fn a_name_set_twice_in_one_transaction_files_the_last_one_only() {
     // Renamed twice: one net change.
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.rename(the_box, "/E3DIO-N-THIRD").expect("rename");
         tx.set(the_box, "NAME", "/E3DIO-N-FOURTH").expect("rename again");
         tx.commit(&request("e3d-io T1b: rename twice")).expect("commit");
@@ -351,7 +351,7 @@ fn a_name_set_twice_in_one_transaction_files_the_last_one_only() {
     // Renamed and renamed back: the table is not touched, the record is rewritten as it was.
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.rename(the_box, "/E3DIO-N-FIFTH").expect("rename");
         tx.rename(the_box, "/E3DIO-N-FOURTH").expect("and back");
         tx.commit(&request("e3d-io T1b: rename and back")).expect("commit");
@@ -362,7 +362,7 @@ fn a_name_set_twice_in_one_transaction_files_the_last_one_only() {
     // Unset through `set`, then named again in a later transaction.
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.set(the_box, "NAME", "unset").expect("unname");
         tx.commit(&request("e3d-io T1b: unname")).expect("commit");
     }
@@ -370,7 +370,7 @@ fn a_name_set_twice_in_one_transaction_files_the_last_one_only() {
     assert!(matches!(value(&extract(&copy.path, the_box), "NAME"), None | Some(DescriptorValue::Unset)));
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.set(the_box, "NAME", "/E3DIO-N-SIXTH").expect("name again");
         tx.commit(&request("e3d-io T1b: name again")).expect("commit");
     }
@@ -379,7 +379,7 @@ fn a_name_set_twice_in_one_transaction_files_the_last_one_only() {
     // Renamed, then deleted: no key survives.
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         tx.rename(the_box, "/E3DIO-N-SEVENTH").expect("rename");
         tx.delete(the_box).expect("delete");
         tx.commit(&request("e3d-io T1b: rename, delete")).expect("commit");
@@ -402,7 +402,7 @@ fn what_cannot_be_read_is_refused_and_writes_nothing() {
     let zone = first_zone(&copy.path);
     let the_box = {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let the_box = tx.insert(zone, db1_hash("BOX"), Some("/E3DIO-REFUSE"), |_, _| Ok(())).expect("box");
         tx.set(the_box, "XLEN", "1").expect("XLEN");
         tx.commit(&request("e3d-io T1b: a box to refuse on")).expect("commit");
@@ -412,7 +412,7 @@ fn what_cannot_be_read_is_refused_and_writes_nothing() {
     let sesno_before = latest(&copy.path);
     {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         assert!(
             matches!(tx.set(the_box, "NOPE", "1"), Err(TransactionError::UnknownAttribute { name, .. }) if name == "NOPE"),
             "a name no attribute has"
@@ -493,7 +493,7 @@ fn a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back() {
 
     let (equi, fixing) = {
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_dictionary(&dictionary);
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off).with_dictionary(&dictionary);
         let equi = tx.insert(zone, db1_hash("EQUI"), Some("/E3DIO-HUNK-EQUI"), |_, _| Ok(())).expect("equi");
         tx.set_hunk(equi, "DESC", &desc).expect("DESC as a hunk");
         tx.set_hunk(equi, "DESP", &desp_text).expect("DESP as a hunk");
@@ -530,7 +530,7 @@ fn a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back() {
     {
         // Without the dictionary the descriptor's own count still bounds a hunk array.
         let mut prov = provider();
-        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx");
+        let mut tx = Transaction::open(&copy.path, &mut prov).expect("open tx").with_spatial(e3d_io::spatial::SpatialPolicy::Off);
         let too_many = (1..=101).map(|i| i.to_string()).collect::<Vec<_>>().join(" ");
         assert!(matches!(
             tx.set_hunk(equi, "DESP", &too_many),

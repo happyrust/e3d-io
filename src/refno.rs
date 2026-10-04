@@ -3,7 +3,7 @@
 /// Bit layout recovered from E3D 3.1 core.dll (sub_5AEB6B0):
 /// - dbno = (word0 & 0x1FFF) | ((word0 >> 13) & 0x3E000)
 /// - word1 must be >= 0 (sign bit = 0)
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RefNo {
     pub word0: u32,
     pub word1: u32,

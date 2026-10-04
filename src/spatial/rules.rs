@@ -598,15 +598,14 @@ pub const IMAP_7: &[&str] = &["PALJ"];
 /// attribute's dictionary `DCHC` is not 0, and core.dll's
 /// `DB_ElementChangesPlugger::PostSetAttribute` sends no change event at all
 /// for a `WNOEVT` attribute; none of the seven is in a Geometric_Noun template.
-/// The table covers the Geometric_Nouns (`IMAP` 1, 5 and 7): another noun, or
-/// an attribute outside the system names (a UDA), is unconfirmed.
+/// The static tables cover geometric and ancestor noun templates. DCHC is
+/// dictionary-wide; an attribute outside the system names (a UDA) is unconfirmed.
 pub fn recompute_by_dchc(noun: u32, attr: u32) -> crate::core_rules::Trigger {
     use crate::core_rules::Trigger;
     static SET: OnceLock<Vec<u32>> = OnceLock::new();
-    if !matches!(imap_of(noun), 1 | 5 | 7) {
-        return Trigger::Unconfirmed;
-    }
-    if SET.get_or_init(|| RECOMPUTING.iter().map(|&(_, hash)| hash).collect()).contains(&attr) {
+    let _ = noun;
+    if SET.get_or_init(|| RECOMPUTING.iter().map(|&(_, hash)| hash).collect()).contains(&attr)
+        || ANCESTOR_RECOMPUTING.binary_search(&attr).is_ok() {
         Trigger::Triggers
     } else if e3d_attlib::is_system_hash(attr) {
         Trigger::DoesNotTrigger
@@ -661,6 +660,31 @@ pub const RECOMPUTING: &[(&str, u32)] = &[
     ("WTHICK", 160147283), ("XBOT", 936114), ("XBSH", 702834), ("XLEN", 810996), ("XOFF", 654342), ("XTOP", 857868),
     ("XTSH", 703320), ("YBOT", 936115), ("YBSH", 702835), ("YDIR", 892429), ("YLEN", 810997), ("YOFF", 654343),
     ("YTOP", 857869), ("YTSH", 703321), ("ZDIR", 892430), ("ZDIS", 912113), ("ZLEN", 810998), ("ZOFF", 654344),
+];
+
+/// Additional DCHC != 0, non-WNOEVT attributes from all noun templates.
+/// Re-derived by spamap_recompute_real::ancestor_trigger_table_matches_the_dictionary.
+pub const ANCESTOR_RECOMPUTING: &[u32] = &[
+    532093, 532105, 532120, 532132, 532159, 540841, 540868, 545848,
+    554997, 557809, 564289, 564420, 569892, 604023, 604762, 611392,
+    611404, 612916, 617359, 617371, 639268, 639295, 639322, 639751,
+    643156, 643336, 643385, 643522, 643534, 644292, 654334, 658453,
+    658467, 660544, 660571, 678539, 679471, 709869, 711574, 712060,
+    712452, 712465, 726127, 772338, 772598, 790306, 790792, 818035,
+    840244, 840256, 840329, 845454, 847299, 847312, 860467, 860779,
+    861019, 861046, 865137, 892412, 892424, 896732, 896740, 896744,
+    900835, 900844, 907540, 907567, 912103, 912575, 912593, 916788,
+    916793, 916805, 920662, 920689, 926629, 926656, 959885, 1004605,
+    1004632, 1004659, 1004902, 3832064, 3832076, 4531060, 4531071, 4531074,
+    4531078, 4862573, 5025773, 5188432, 5276279, 5788241, 5788249, 5788253,
+    7466538, 9541695, 12834188, 12997388, 13247894, 45284352, 46673272, 62949643,
+    65553204, 76885706, 78801289, 78801296, 82239046, 89608294, 89640140, 89647224,
+    89650346, 89651464, 90112070, 90112073, 90115166, 90122226, 90127654, 108442720,
+    108521659, 131865750, 132496806, 132499725, 133571854, 163023684, 179124226, 181088151,
+    202373416, 204321238, 212521413, 220090462, 230816833, 240391440, 240453010, 240537608,
+    240687133, 240706816, 243807330, 263676877, 276479052, 281449960, 281450626, 281451418,
+    281459059, 281461624, 288449096, 288478022, 295269562, 339021227, 340615550, 341146991,
+    370145882,
 ];
 
 #[cfg(test)]
