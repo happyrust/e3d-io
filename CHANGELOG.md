@@ -4,6 +4,9 @@
 
 ### Added
 
+- `Transaction::allocation_basis()` reports the pinned index session/root and each extent's first allocation. Opening a transaction now defers confirmed index-order queries until an extent first allocates; this optimization retains the index max+1 policy and existing output bytes. Unconfirmed ordering still performs the eager scan at open.
+- Read-only `e3d-descriptor next-word1 --db FILE --extent WORD0 [--session N]` compares predecessor and full-scan maxima and reports the current page-1 counter, its interpretation and expected allocation floor.
+
 Read-side seams for the e3d-studio converter and browser (`docs/plans/2026-09-30-e3d-studio-gui-design.md` §4.7, T2). All additive.
 
 - `project_database_paths(root)` is public and re-exported at the crate root: the primary, extensionless databases under a project tree — the candidate set `project_dabacon_tags` reports on — for a caller that lists a project's databases itself. A file root comes back alone and unvalidated; a directory that cannot be listed is still an `Err`.

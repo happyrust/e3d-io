@@ -369,6 +369,7 @@
     - _Requirements: 11.4, 11.5, 11.13_
     - F2：前驱/CLI 定向 18 通过、0 失败、新增无 skip，既有 1 ignored；五库 15 会话独立扫描一致、冷读至多 4 页。完整 Cargo 751/0/30，随后桶表坏计数保护定向 5/0；Clippy 63、doc 25，Off 金样 SHA-256 未变。诊断先 seek 后 scan，缺桶与坏页 1 明确回退。
   - [~] 11.4 实现 `src/write/alloc.rs`
+    - F4 字节中性部分通过：Allocator 接 open/open_at/固定 latest 重铸；仍 IndexOnly max+1，Pending 次序保持 open 时扫描。直接父提交 `718cf77` 上重录新金样，21 条 entries 与 F3 完全一致；完整 Cargo 755/0/30，Clippy/doc 63/25，旧 Off 17 条未变。页 1 下界留 F5。
     - `Allocator`：惰性 seek（`alloc.index_order` 未坐实时不启用 Open_Fast_Path、`open` 全扫描），以 `max_word1_scan` 为朴素对照，记下 `AllocationBasis`（页 1 解析失败记 `CounterUse::Unavailable`；Counter_Semantics 未坐实记 `Unconfirmed`，发号 = base 索引 max + 1）
     - 发号逻辑从 `src/write/transaction.rs` 抽出，接入 `open`、`open_at(base)` 与重铸（重铸取提交时读到的页 1）；`RefnoExhausted` 照旧
     - 先单独提交 Open_Fast_Path（字节中性，对照 11.2 的金样），再另一提交落发号下界；后者动手前按需求 2 第 1、2 条核对父提交，结果记入 Spec_Ledger「取证门槛核查」，并在该提交重录或删去受影响的金样、记入「Golden 剔除键」
@@ -595,7 +596,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 |---|---|---|---|---|---|---|
 | SPAMAP 维护 | 8.1（里程碑 E 的 E1） | `474ea14`：E0 在其上重跑 SPAMAP 相关 9 个测试二进制，0 失败、无 skip（预核于 `d8fecb6` / `6811730`，其后只改文档） | 7.1 `docs/evidence/2026-10-03-spamap-encoding.md`、`…-spamap-branch-entries.md`、`…-spamap-flags.md`；7.2 `…-spamap-coverage.md`；7.3 `…-spamap-recompute.md`；7.4 `…-spamap-record-item.md`；7.5 `…-spamap-aabb.md`、`…-spamap-aabb-members.md`——结论都含例程地址与 Corpus 核对，`check_evidence` 全 PASS；第 7 组规则全部坐实（规则坐实状态总表） | 读侧解码：`src/index/spamap.rs`（SPAMAP_Reader）与 `src/spatial/`（codec、aabb、check、state），不在 `src/write/` 下、代码不引用 `src/write/`。以 Corpus 为输入的测试在 `d8fecb6` 的 Build_Checks 中 0 失败、未跳过：`spamap_reader_real`（3.4）、`spamap_codec_real`（5.5、7.2，含 4.20）、`spamap_aabb_real`（6.3）、`spamap_coverage_real`、`spamap_record_item_real`、`spamap_recompute_real`、`spamap_page_headers_real`、`spamap_census_real`；坐实集下各项 agree + waiting = total | Q13/Q13a–h 全 PASS；docs/evidence/2026-10-04-q13-spatial-gate.md | `fd9ed67` 库实现；`4939b8a` 门首提交 + 本次修正/验收提交（10.1–10.3）；10.4 整体待 Q14 |
 | 发号下界 | | | | | | |
-| Open_Fast_Path（字节中性，按需求 2 第 7 条） | | | | | | |
+| Open_Fast_Path（字节中性，按需求 2 第 7 条） | F4 | `718cf77`；在此准备提交上两遍重录，21 条 entries 与 F3 完全一致 | `docs/evidence/2026-10-05-allocation-counter-index.md#alloc.index_order`（F1 `d4f5ab4`） | F2 `6232c21` 的 `last_before` / 必需 Corpus；F4 独立 eager/lazy/scan 模型，完整 Cargo 755/0/30，金样全部通过，无新增 skip | 本优化仍 max+1；发号行为改变与 Q14 留 F5/F6 | F4（字节中性部分） |
 | staging 优化（字节中性，按需求 2 第 7 条） | | | | | | |
 | 页 1 桶表写侧（条件） | | | | | | |
 

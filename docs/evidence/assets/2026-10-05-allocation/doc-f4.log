@@ -1,0 +1,204 @@
+ Documenting e3d-io v0.4.0 (D:\work\plant-code\old\vendor\e3d-io-write)
+    Checking e3d-io v0.4.0 (D:\work\plant-code\old\vendor\e3d-io-write)
+warning: public documentation for `cursor` links to private item `read_node`
+  --> src\index\cursor.rs:14:9
+   |
+14 | //!   [`read_node`] and [`crate::index::choose_child`], so a key the walk emits
+   |         ^^^^^^^^^ this item is private
+   |
+   = note: this link will resolve properly if you pass `--document-private-items`
+   = note: `#[warn(rustdoc::private_intra_doc_links)]` on by default
+
+warning: public documentation for `cursor` links to private item `read_node`
+  --> src\index\cursor.rs:28:7
+   |
+28 | //! [`read_node`] and [`located`] are `pub(super)` so that
+   |       ^^^^^^^^^ this item is private
+   |
+   = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `cursor` links to private item `located`
+  --> src\index\cursor.rs:28:25
+   |
+28 | //! [`read_node`] and [`located`] are `pub(super)` so that
+   |                         ^^^^^^^ this item is private
+   |
+   = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `diff` links to private item `read_node`
+  --> src\index\diff.rs:26:41
+   |
+26 | //! own**: pages become nodes through [`read_node`], leaf values become
+   |                                         ^^^^^^^^^ this item is private
+   |
+   = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `diff` links to private item `located`
+  --> src\index\diff.rs:27:25
+   |
+27 | //! addresses through [`located`], and keys order through
+   |                         ^^^^^^^ this item is private
+   |
+   = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `key_dwords` links to private item `DEFAULT_KEY_DWORDS`
+   --> src\index\mod.rs:361:42
+    |
+361 |     /// Declared key width. Zero means [`DEFAULT_KEY_DWORDS`]; the field here
+    |                                          ^^^^^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: unresolved link to `ExtentSet::file`
+  --> src\page\io.rs:10:66
+   |
+10 | ...sed to pick a file | [`ExtentSet::file`] resolves it, and an absent extent is [`PageIoError::MissingExtent`] |
+   |                           ^^^^^^^^^^^^^^^ the struct `ExtentSet` has no field or associated item named `file`
+   |
+   = note: `#[warn(rustdoc::broken_intra_doc_links)]` on by default
+
+warning: public documentation for `attach` links to private item `Self::open_primary`
+   --> src\page\io.rs:141:11
+    |
+141 |     /// [`Self::open_primary`] calls this for every sibling the naming
+    |           ^^^^^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: unresolved link to `crate::record::descriptor::AttrNameIndex`
+  --> src\read_stats.rs:68:27
+   |
+68 |     /// [`AttrNameIndex`](crate::record::descriptor::AttrNameIndex)。留着这个计数
+   |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no item named `AttrNameIndex` in module `descriptor`
+
+warning: public documentation for `evaluate` links to private item `apply_function`
+   --> src\record\catalogue_expr.rs:413:24
+    |
+413 | /// against E3D (see [`apply_function`]).
+    |                        ^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `catalogue_pml` links to private item `Attribute::uda_key`
+  --> src\record\catalogue_pml.rs:31:8
+   |
+31 | //! ([`Attribute::uda_key`]), [`evaluate_words`] asks the environment for the
+   |        ^^^^^^^^^^^^^^^^^^ this item is private
+   |
+   = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `catalogue_pml` links to private item `parse`
+  --> src\record\catalogue_pml.rs:53:38
+   |
+53 | //! read the words through the one [`parse`]. Two walkers over the same wire
+   |                                      ^^^^^ this item is private
+   |
+   = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `PREVIOUS_ELEMENT_NAME` links to private item `PREVIOUS_ELEMENT`
+   --> src\record\catalogue_pml.rs:165:26
+    |
+165 | /// How E3D spells the [`PREVIOUS_ELEMENT`] owner, and the name an environment
+    |                          ^^^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `evaluate_words` links to private item `parse`
+   --> src\record\catalogue_pml.rs:375:42
+    |
+375 | /// attribute, when the program is one [`parse`] declines, when the stack does
+    |                                          ^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `evaluate_words` links to private item `OP_ATANT`
+   --> src\record\catalogue_pml.rs:378:17
+    |
+378 | /// pass on). [`OP_ATANT`] declines too — see [`apply_numeric`].
+    |                 ^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `evaluate_words` links to private item `apply_numeric`
+   --> src\record\catalogue_pml.rs:378:49
+    |
+378 | /// pass on). [`OP_ATANT`] declines too — see [`apply_numeric`].
+    |                                                 ^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `is_program` links to private item `PROGRAM_MARKER`
+   --> src\record\catalogue_pml.rs:615:40
+    |
+615 | /// that counts the whole blob, then [`PROGRAM_MARKER`].
+    |                                        ^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `stored_expression_words` links to private item `stored_expression`
+   --> src\record\descriptor.rs:548:14
+    |
+548 | /// Unlike [`stored_expression`] this does not require the body to decode — the
+    |              ^^^^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: unresolved link to `storage_type_code`
+  --> src\record\template.rs:75:46
+   |
+75 |     /// Deprecated compatibility alias for [`storage_type_code`].
+   |                                              ^^^^^^^^^^^^^^^^^ no item named `storage_type_code` in scope
+   |
+   = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+
+warning: public documentation for `header` links to private item `HEADER_WORDS`
+   --> src\record\mod.rs:146:32
+    |
+146 |     /// records shorter than [`HEADER_WORDS`] — so this cannot run off the end.
+    |                                ^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `read_record_header` links to private item `header_at`
+   --> src\record\mod.rs:453:24
+    |
+453 | /// through the same [`header_at`], so they cannot disagree about it.
+    |                        ^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `lock_for_write` links to private item `sentinel::LOCK_OFFSET`
+  --> src\write\pages.rs:61:44
+   |
+61 |     /// an exclusive lock on one byte at [`sentinel::LOCK_OFFSET`]
+   |                                            ^^^^^^^^^^^^^^^^^^^^^ this item is private
+   |
+   = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `apply_attlib_storage_aliases` links to private item `SHARED_STORAGE_IDS`
+   --> src\noun_catalog.rs:185:35
+    |
+185 |     /// 按 attlib 给共用存储号的那几格起对名字（[`SHARED_STORAGE_IDS`]）。
+    |                                                   ^^^^^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `apply_attlib_storage_aliases` links to private item `SHARED_STORAGE_IDS`
+   --> src\noun_catalog.rs:193:16
+    |
+193 |     /// 规则：对 [`SHARED_STORAGE_IDS`] 里的每一对 `(存成谁的号, 实际属性)`，一个 noun
+    |                    ^^^^^^^^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: public documentation for `uda_number` links to private item `Self::hosts`
+   --> src\db_param_env.rs:811:45
+    |
+811 |     /// （[`DbElement::uda_by_key`]）。宿主顺序同 [`Self::hosts`]：先设计构件再目录件。
+    |                                                     ^^^^^^^^^^^ this item is private
+    |
+    = note: this link will resolve properly if you pass `--document-private-items`
+
+warning: `e3d-io` (lib doc) generated 25 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.50s
+   Generated D:\Rust\target\doc\e3d_io\index.html and 2 other files

@@ -355,6 +355,11 @@ impl ReadOnlyEngine {
         self.session.index_root
     }
 
+    /// Shared cursor over this engine's pinned session, for internal planners.
+    pub(crate) fn index_cursor(&mut self) -> IndexCursor<'_> {
+        IndexCursor::at_root(&mut self.cache, self.session.index_root)
+    }
+
     /// What changed between two sessions of this file.
     ///
     /// Independent of the session this engine was opened at: the two roots

@@ -92,3 +92,7 @@ F1 提交 `d4f5ab4`。完成 `last_before` / `last`、独立扫描与随机模�
 ## F3 执行记录（2026-10-05）
 
 F2 提交 `6232c21`。新增固定时钟、从源索引预铸 refno 的原语批次金样测试，32/128/257 BOX 三副本读回成员关系；两遍通过。新 `write_hashes.json` 保留 21 条，剔除 7 个时间不稳定键（明细见录制日志/Golden 表）；原 Off 17 条 SHA-256 仍 `1b2ac106e9a69a9a5fe677b439ae7c43ef190191dcd8d392b2375a6602e4e80a`。F4 直接以本准备提交为父提交，改写侧前再录一次，断言 21 条内容完全一致，只更新录制提交元数据。
+
+## F4 执行记录（2026-10-05）
+
+直接父提交 F3 `718cf77`，写侧改动前两遍重录的新金样 21 条 entries 完全相同；录制元数据记录该父提交。Allocator 惰性缓存每扩展 max+1，首号经共享 IndexCursor 前驱，open/open_at 不扫描叶或元素；Pending 次序保持 open 时全扫描与原记录校验。重铸接收固定 latest 读引擎，复用 Allocator，不重新查询 latest。新增 `allocation_basis()` 记录根/会话/首号，CounterUse 此阶段为 IndexOnly。定向 25/0；完整 Cargo 755/0/30；Clippy/doc 63/25。旧 Off 17 条哈希不变，新 21 条比对通过。11.4 页 1 下界尚未启用，F5/F6/F7 待办。

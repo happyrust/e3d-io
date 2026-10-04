@@ -1,5 +1,5 @@
 {
-  "recorded_on": "6232c2141237d9bec0e2803b6dd5ffabe1d05d91",
+  "recorded_on": "718cf77b4475c8fc1d479f032746762e1f1dc5e1",
   "uncommitted_changes_under_src_or_tests": false,
   "tests": ["write_scale_golden", "write_stage6_transaction", "write_stage6_merge", "write_stage6_set_by_name", "write_stage6_spread", "write_stage6_cli"],
   "samples": {

@@ -1,0 +1,141 @@
+[golden] run 1 of 2: cargo test --no-fail-fast --test write_scale_golden --test write_stage6_transaction --test write_stage6_merge --test write_stage6_set_by_name --test write_stage6_spread --test write_stage6_cli
+
+running 1 test
+test deterministic_pre_minted_batches_read_back ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.15s
+
+
+running 7 tests
+test spatial_cli_rejects_bad_aabb_without_writing ... ok
+test spatial_cli_writes_given_aabb_and_reports_readable_spatial_diff ... ok
+test a_name_bound_earlier_in_the_file_resolves_before_the_commit ... ok
+test an_instruction_file_is_applied_as_one_session_through_the_facade ... ok
+test a_dry_run_makes_every_check_and_leaves_the_file_byte_identical ... ok
+test a_base_behind_the_newest_session_merges_and_reports_the_reminting ... ok
+test a_refused_instruction_names_itself_and_writes_nothing ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.33s
+
+
+running 4 tests
+test a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused ... ok
+test a_writer_that_commits_between_staging_and_page_0_is_merged_over_once ... ok
+test a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins ... ok
+test a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+
+
+running 5 tests
+test what_cannot_be_read_is_refused_and_writes_nothing ... ok
+test a_name_set_twice_in_one_transaction_files_the_last_one_only ... ok
+test every_shape_set_by_name_reads_back_as_the_value_it_names ... ok
+test a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back ... ok
+test the_dictionary_holds_a_set_to_what_e3d_allows ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.76s
+
+
+running 1 test
+test spread_inserts_read_back_across_many_owners ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s
+
+
+running 7 tests
+test a_facade_rename_moves_the_name_and_rewrites_the_record ... ok
+test a_facade_delete_drops_the_key_and_the_owner_membership ... ok
+test a_move_within_the_inserting_transaction_touches_only_the_final_owner ... ok
+test reference_members_are_edited_on_the_group_and_nowhere_else ... ok
+test reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner ... ok
+test move_to_reparents_the_box_and_rewrites_exactly_both_owners ... ok
+test a_facade_insert_equals_the_primitive_path_byte_for_byte ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.17s
+
+[golden] run 2 of 2: cargo test --no-fail-fast --test write_scale_golden --test write_stage6_transaction --test write_stage6_merge --test write_stage6_set_by_name --test write_stage6_spread --test write_stage6_cli
+
+running 1 test
+test deterministic_pre_minted_batches_read_back ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.14s
+
+
+running 7 tests
+test spatial_cli_rejects_bad_aabb_without_writing ... ok
+test spatial_cli_writes_given_aabb_and_reports_readable_spatial_diff ... ok
+test a_name_bound_earlier_in_the_file_resolves_before_the_commit ... ok
+test an_instruction_file_is_applied_as_one_session_through_the_facade ... ok
+test a_dry_run_makes_every_check_and_leaves_the_file_byte_identical ... ok
+test a_base_behind_the_newest_session_merges_and_reports_the_reminting ... ok
+test a_refused_instruction_names_itself_and_writes_nothing ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.28s
+
+
+running 4 tests
+test a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused ... ok
+test a_writer_that_commits_between_staging_and_page_0_is_merged_over_once ... ok
+test a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins ... ok
+test a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+
+
+running 5 tests
+test what_cannot_be_read_is_refused_and_writes_nothing ... ok
+test a_name_set_twice_in_one_transaction_files_the_last_one_only ... ok
+test every_shape_set_by_name_reads_back_as_the_value_it_names ... ok
+test a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back ... ok
+test the_dictionary_holds_a_set_to_what_e3d_allows ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s
+
+
+running 1 test
+test spread_inserts_read_back_across_many_owners ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+
+running 7 tests
+test a_facade_rename_moves_the_name_and_rewrites_the_record ... ok
+test a_facade_delete_drops_the_key_and_the_owner_membership ... ok
+test a_move_within_the_inserting_transaction_touches_only_the_final_owner ... ok
+test move_to_reparents_the_box_and_rewrites_exactly_both_owners ... ok
+test reference_members_are_edited_on_the_group_and_nowhere_else ... ok
+test reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner ... ok
+test a_facade_insert_equals_the_primitive_path_byte_for_byte ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.19s
+
+[golden] wrote tests\golden\write_hashes.json: 21 entries, recorded on 718cf77b4475c8fc1d479f032746762e1f1dc5e1
+[golden] dropped 7:
+  write_stage6_cli::a_base_behind_the_newest_session_merges_and_reports_the_reminting#0	ends differently between runs
+  write_stage6_cli::a_dry_run_makes_every_check_and_leaves_the_file_byte_identical#0	ends differently between runs
+  write_stage6_cli::a_name_bound_earlier_in_the_file_resolves_before_the_commit#0	ends differently between runs
+  write_stage6_cli::a_refused_instruction_names_itself_and_writes_nothing#0	ends differently between runs
+  write_stage6_cli::an_instruction_file_is_applied_as_one_session_through_the_facade#0	ends differently between runs
+  write_stage6_cli::spatial_cli_writes_given_aabb_and_reports_readable_spatial_diff#0	ends differently between runs
+  write_stage6_spread::spread_inserts_read_back_across_many_owners#0	ends differently between runs
+[golden] snapshot manifest:
+  name	length	sha256	installed	installed_last_write
+  ams8000_0001	34037760	3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023	D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001	2026-09-30 17:05:57
+  ams5100_0001	169984	E333695C557F2DA4BD22B2545B38D116C1A5D7F27FC3BBC4EDB193F38078C508	D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams5100_0001	2022-07-01 21:25:34
+  ams251142_0001	305152	57F5076B9AB35E539C849504935867D3BB3F6D860428E9959259D907E15840E8	D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams251142_0001	2016-01-08 20:24:58
+  TES023	288768	CDB87F444680019E4054BC03A0AB514D5BCDA2805B719EB42D00A98B51CE3D6B	D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023	2021-10-04 11:26:19
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests\write_scale_golden.rs (D:\Rust\target\debug\build\e3d-io/414c48130f709246\out\write_scale_golden-414c48130f709246.exe)
+     Running tests\write_stage6_cli.rs (D:\Rust\target\debug\build\e3d-io/5687bd62bbf2e197\out\write_stage6_cli-5687bd62bbf2e197.exe)
+     Running tests\write_stage6_merge.rs (D:\Rust\target\debug\build\e3d-io/eca7047eb3ea07ea\out\write_stage6_merge-eca7047eb3ea07ea.exe)
+     Running tests\write_stage6_set_by_name.rs (D:\Rust\target\debug\build\e3d-io/f4d814bb39bf1a21\out\write_stage6_set_by_name-f4d814bb39bf1a21.exe)
+     Running tests\write_stage6_spread.rs (D:\Rust\target\debug\build\e3d-io/2b1f4fc7b0ca1d03\out\write_stage6_spread-2b1f4fc7b0ca1d03.exe)
+     Running tests\write_stage6_transaction.rs (D:\Rust\target\debug\build\e3d-io/43805454a307550d\out\write_stage6_transaction-43805454a307550d.exe)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests\write_scale_golden.rs (D:\Rust\target\debug\build\e3d-io/414c48130f709246\out\write_scale_golden-414c48130f709246.exe)
+     Running tests\write_stage6_cli.rs (D:\Rust\target\debug\build\e3d-io/5687bd62bbf2e197\out\write_stage6_cli-5687bd62bbf2e197.exe)
+     Running tests\write_stage6_merge.rs (D:\Rust\target\debug\build\e3d-io/eca7047eb3ea07ea\out\write_stage6_merge-eca7047eb3ea07ea.exe)
+     Running tests\write_stage6_set_by_name.rs (D:\Rust\target\debug\build\e3d-io/f4d814bb39bf1a21\out\write_stage6_set_by_name-f4d814bb39bf1a21.exe)
+     Running tests\write_stage6_spread.rs (D:\Rust\target\debug\build\e3d-io/2b1f4fc7b0ca1d03\out\write_stage6_spread-2b1f4fc7b0ca1d03.exe)
+     Running tests\write_stage6_transaction.rs (D:\Rust\target\debug\build\e3d-io/43805454a307550d\out\write_stage6_transaction-43805454a307550d.exe)

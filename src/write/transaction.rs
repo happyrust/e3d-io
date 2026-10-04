@@ -258,7 +258,7 @@ pub struct Transaction<'a> {
     /// hand-written batch would put them.
     member_ops: Vec<MemberOp>,
     /// Per-extent (`word0`) next `word1` to hand out; seeded from the base.
-    next_word1: HashMap<u32, u32>,
+    allocator: super::alloc::Allocator,
     /// E3D's dictionary limits, applied by [`Transaction::set`] when given.
     dictionary: Option<&'a Dictionary>,
     /// The session the batch is relative to: the one `engine` reads.
@@ -295,16 +295,7 @@ impl<'a> Transaction<'a> {
         let mut engine = ReadOnlyEngine::open_at(&path, at)?;
         let base_sesno = engine.session().sesno;
         let text_format = engine.text_format();
-        let mut next_word1: HashMap<u32, u32> = HashMap::new();
-        for element in engine.scan_elements(crate::engine::ScanTier::Header)? {
-            let element = element?;
-            let entry = next_word1.entry(element.refno.word0).or_insert(0);
-            *entry = (*entry).max(element.refno.word1);
-        }
-        // Store the next number to hand out, not the max seen.
-        for value in next_word1.values_mut() {
-            *value += 1;
-        }
+        let allocator = super::alloc::Allocator::open(&mut engine)?;
         Ok(Self {
             path,
             engine,
@@ -314,7 +305,7 @@ impl<'a> Transaction<'a> {
             writes: HashMap::new(),
             names: Vec::new(),
             member_ops: Vec::new(),
-            next_word1,
+            allocator,
             dictionary: None,
             base_sesno,
             on_clash: OnClash::Refuse,
@@ -327,6 +318,11 @@ impl<'a> Transaction<'a> {
     /// relative to, and the `BASESN` a merged commit records.
     pub fn base_sesno(&self) -> u32 {
         self.base_sesno
+    }
+
+    /// Snapshot and first-number evidence; extent rows appear on first allocation.
+    pub fn allocation_basis(&self) -> &super::AllocationBasis {
+        &self.allocator.basis
     }
 
     /// What a merged commit does where this batch and the committed sessions
@@ -539,13 +535,7 @@ impl<'a> Transaction<'a> {
     /// A fresh `word1` in `word0`'s extent, past every one seen at open and
     /// every one handed out since.
     fn allocate(&mut self, word0: u32) -> Result<RefNo, TransactionError> {
-        let next = self.next_word1.entry(word0).or_insert(1);
-        if (*next as i32) < 0 {
-            return Err(TransactionError::RefnoExhausted { word0 });
-        }
-        let refno = RefNo::new(word0, *next);
-        *next += 1;
-        Ok(refno)
+        self.allocator.allocate(&mut self.engine, word0)
     }
 
     /// Insert a new element of `noun` under `owner`, built from the noun's
@@ -1060,7 +1050,8 @@ impl<'a> Transaction<'a> {
         let (_, _, _, pinned) = super::read_base(&mut file)?;
         let latest = pinned.sesno;
         if latest != base_sesno {
-            Self::remint_taken_refnos(path, latest, templates, elements.as_mut_slice(), names.as_mut_slice(), reminted)?;
+            let mut snapshot = ReadOnlyEngine::open_at(path, latest)?;
+            Self::remint_taken_refnos(&mut snapshot, templates, elements.as_mut_slice(), names.as_mut_slice(), reminted)?;
         }
         let rebased = if latest != base_sesno {
             let mut options = MergeOptions { templates: Some(&mut *templates), extract_flush: false, on_clash };
@@ -1087,8 +1078,7 @@ impl<'a> Transaction<'a> {
     /// attribute in the batch (explicit type 4 / 8 / 16 / 17 fields, and the
     /// implicit slots the templates place) that pointed at it.
     fn remint_taken_refnos(
-        path: &Path,
-        latest_sesno: u32,
+        latest: &mut ReadOnlyEngine,
         templates: &mut TemplateProvider,
         elements: &mut [ElementWrite],
         names: &mut [NamedEdit],
@@ -1104,7 +1094,6 @@ impl<'a> Transaction<'a> {
         if inserted.is_empty() {
             return Ok(());
         }
-        let mut latest = ReadOnlyEngine::open_at(path, latest_sesno)?;
         let mut taken = Vec::new();
         for refno in &inserted {
             if latest.find_element(*refno)?.is_some() {
@@ -1116,21 +1105,11 @@ impl<'a> Transaction<'a> {
         }
         // The newest session's highest `word1` per extent, past which the fresh
         // numbers go — skipping any the batch already uses.
-        let mut next: HashMap<u32, u32> = HashMap::new();
-        for element in latest.scan_elements(crate::engine::ScanTier::Header)? {
-            let element = element?;
-            let entry = next.entry(element.refno.word0).or_insert(0);
-            *entry = (*entry).max(element.refno.word1);
-        }
+        let mut allocator = super::alloc::Allocator::open(latest)?;
         let mut used: HashSet<RefNo> = inserted.iter().copied().collect();
         for old in taken {
-            let counter = next.entry(old.word0).or_insert(0);
             let new = loop {
-                *counter += 1;
-                if (*counter as i32) < 0 {
-                    return Err(TransactionError::RefnoExhausted { word0: old.word0 });
-                }
-                let candidate = RefNo::new(old.word0, *counter);
+                let candidate = allocator.allocate(latest, old.word0)?;
                 if !used.contains(&candidate) {
                     break candidate;
                 }

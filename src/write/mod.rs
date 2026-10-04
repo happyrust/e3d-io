@@ -32,6 +32,8 @@
 //! guard on a platform without `LockFileEx`, where the lock is a no-op.
 
 pub mod attr;
+pub(crate) mod alloc;
+pub use alloc::{AllocationBasis, CounterUse, ExtentAllocationBasis};
 // The copy-on-write mechanics of the tree tables and the claim plan are the
 // write path's internals — a caller drives the three steps (open a transaction
 // or session, change values, commit), not the per-leaf edits. They are
