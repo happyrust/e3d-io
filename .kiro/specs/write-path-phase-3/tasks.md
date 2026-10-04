@@ -368,13 +368,15 @@
     - `next-word1 --db <f> --extent <w0>` 在读侧算出「全索引 max + 1」与 Bucket_Floor，作为 Q14 与需求 11 第 5 条的期望值
     - _Requirements: 11.4, 11.5, 11.13_
     - F2：前驱/CLI 定向 18 通过、0 失败、新增无 skip，既有 1 ignored；五库 15 会话独立扫描一致、冷读至多 4 页。完整 Cargo 751/0/30，随后桶表坏计数保护定向 5/0；Clippy 63、doc 25，Off 金样 SHA-256 未变。诊断先 seek 后 scan，缺桶与坏页 1 明确回退。
-  - [~] 11.4 实现 `src/write/alloc.rs`
+  - [x] 11.4 实现 `src/write/alloc.rs`
+    - F5：父 `aacdcf9`，NextAvailable 下界启用；规则回退、坏页/重复桶、历史 base/固定 latest/重试覆盖。完整 765/0/30 + 补重复桶 1/0，Clippy/doc 63/25；门槛 F1/F2 已通过；不维护页 1。
     - F4 字节中性部分通过：Allocator 接 open/open_at/固定 latest 重铸；仍 IndexOnly max+1，Pending 次序保持 open 时扫描。直接父提交 `718cf77` 上重录新金样，21 条 entries 与 F3 完全一致；完整 Cargo 755/0/30，Clippy/doc 63/25，旧 Off 17 条未变。页 1 下界留 F5。
     - `Allocator`：惰性 seek（`alloc.index_order` 未坐实时不启用 Open_Fast_Path、`open` 全扫描），以 `max_word1_scan` 为朴素对照，记下 `AllocationBasis`（页 1 解析失败记 `CounterUse::Unavailable`；Counter_Semantics 未坐实记 `Unconfirmed`，发号 = base 索引 max + 1）
     - 发号逻辑从 `src/write/transaction.rs` 抽出，接入 `open`、`open_at(base)` 与重铸（重铸取提交时读到的页 1）；`RefnoExhausted` 照旧
     - 先单独提交 Open_Fast_Path（字节中性，对照 11.2 的金样），再另一提交落发号下界；后者动手前按需求 2 第 1、2 条核对父提交，结果记入 Spec_Ledger「取证门槛核查」，并在该提交重录或删去受影响的金样、记入「Golden 剔除键」
     - _Requirements: 11.2, 11.3, 11.4, 11.6, 11.8, 11.9, 11.11, 11.12_
-  - [~] 11.5 写发号测试
+  - [x] 11.5 写发号测试
+    - F5：必需 Corpus 最新全量、16 例保留会话 + 读侧 CLI、16 例库副本；定向 16 项通过，无新增 skip。删除最大及 Moved 一/二次单列。
     - `tests/write_stage9_alloc_real.rs`：每库最新会话全量，加 proptest 抽样保留会话号，期望值与 `e3d-descriptor next-word1` 一致
     - `tests/write_stage9_alloc.rs`：库副本 proptest（16 例），只用读侧核对新会话索引；另写示例 11.5、11.6
     - 核对 11.4 中 Open_Fast_Path 提交上 `cargo test --no-fail-fast` 的金样比对 0 失败且未跳过
@@ -391,7 +393,8 @@
   - [~] 11.7 加门问 Q14
     - 新增 `tools/e3d/write_gate_ops/q14_named.json`（在扩展 24384 写一个带名字的元素）；在 `write_gate.ps1` 与 `write_gate.mac.template` 加 Q14：用 `next-word1` 算期望 word1，与 E3D `Q REF` 比对
     - _Requirements: 11.13_
-  - [~] 11.8 适配因发号下界失败的既有测试
+  - [x] 11.8 适配因发号下界失败的既有测试
+    - 既有语义断言无需更改。16 个动态发号金样键两遍验证后以锁旧哈希的精确退役清单迁移；原 Off 文件 SHA-256 未改，未受影响及预铸批次继续校验。明细 `docs/evidence/2026-10-05-allocation-floor-goldens.md`。
     - 按需求 15 第 7 条只改期望 refno，逐条记入 Spec_Ledger「测试适配清单」；与 11.4 的发号下界提交同一提交落地
     - _Requirements: 15.7_
   - [~] 11.9 Checkpoint - 第 11 组：Ensure all tests pass

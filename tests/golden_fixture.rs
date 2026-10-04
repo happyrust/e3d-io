@@ -79,3 +79,16 @@ fn golden_files_are_the_json_files_of_the_directory() {
         )]
     );
 }
+
+#[test]
+fn retirement_is_exact_and_requires_the_original_hash() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("old.json"), r#"{"entries":{"t#0":{"source":"s","source_sha256":"AA","sha256":"BB","len":3},"t#1":{"source":"s","source_sha256":"AA","sha256":"CC","len":3}}}"#).unwrap();
+    let replacement = r#"{"entries":{"t#0":{"source":"s","source_sha256":"AA","sha256":"DD","len":3}},"retired":[{"file":"old.json","key":"t#0","sha256":"BB","reason":"allocation floor"}]}"#;
+    fs::write(dir.path().join("new.json"), replacement).unwrap();
+    let loaded = golden::load(dir.path());
+    assert_eq!(loaded["t#0"][0].1.sha256, "DD");
+    assert_eq!(loaded["t#1"][0].1.sha256, "CC");
+    fs::write(dir.path().join("new.json"), replacement.replace("\"sha256\":\"BB\"", "\"sha256\":\"WRONG\"")).unwrap();
+    assert!(std::panic::catch_unwind(|| golden::load(dir.path())).is_err());
+}

@@ -157,6 +157,7 @@ fn goldens() -> &'static BTreeMap<String, Vec<(String, Recorded)>> {
 /// Read the `*.json` files of `dir`; an absent directory has none.
 pub fn load(dir: &Path) -> BTreeMap<String, Vec<(String, Recorded)>> {
     let mut by_key: BTreeMap<String, Vec<(String, Recorded)>> = BTreeMap::new();
+    let mut retirements = Vec::new();
     let Ok(listing) = fs::read_dir(dir) else {
         return by_key;
     };
@@ -170,6 +171,13 @@ pub fn load(dir: &Path) -> BTreeMap<String, Vec<(String, Recorded)>> {
         let text = fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
         let json: serde_json::Value =
             serde_json::from_str(&text).unwrap_or_else(|error| panic!("{} is not JSON: {error}", path.display()));
+        if let Some(rows) = json.get("retired") {
+            for row in rows.as_array().expect("retired must be an array") {
+                let field = |name: &str| row[name].as_str().expect("retirement needs string fields").to_owned();
+                assert!(!field("reason").is_empty(), "retirement needs a reason");
+                retirements.push((field("file"), field("key"), field("sha256")));
+            }
+        }
         let entries = json
             .get("entries")
             .and_then(|entries| entries.as_object())
@@ -190,6 +198,15 @@ pub fn load(dir: &Path) -> BTreeMap<String, Vec<(String, Recorded)>> {
                 Recorded { source: text("source"), source_sha256: text("source_sha256"), sha256: text("sha256"), len };
             by_key.entry(key.clone()).or_default().push((file.clone(), recorded));
         }
+    }
+    // Allocation behavior changes retire exact historical recordings, never an
+    // entire file or a wildcard. Pin the old hash so later edits fail closed.
+    for (file, key, hash) in retirements {
+        let entries = by_key.get_mut(&key).expect("retirement names an unknown key");
+        let at = entries.iter().position(|(f, _)| f == &file).expect("retirement names an unknown file/key");
+        assert_eq!(entries[at].1.sha256, hash, "retirement target hash changed");
+        entries.remove(at);
+        if entries.is_empty() { by_key.remove(&key); }
     }
     by_key
 }

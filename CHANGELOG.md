@@ -4,7 +4,8 @@
 
 ### Added
 
-- `Transaction::allocation_basis()` reports the pinned index session/root and each extent's first allocation. Opening a transaction now defers confirmed index-order queries until an extent first allocates; this optimization retains the index max+1 policy and existing output bytes. Unconfirmed ordering still performs the eager scan at open.
+- `Transaction::allocation_basis()` reports the pinned index session/root, counter interpretation or failure reason, and each extent's first allocation. Opening a transaction defers confirmed index-order queries until an extent first allocates. Unconfirmed ordering still performs the eager scan at open.
+- Transaction allocation now starts at `max(base index max + 1, page-1 NextAvailable counter)`; reminting uses the pinned merge snapshot and its counter. Newly minted refnos can therefore change. Read refnos from the insertion or commit report instead of predicting them from live elements; pre-minted primitive writes retain their bytes. Missing counters use the index, and malformed or unconfirmed counters report their fallback through `allocation_basis()`. Allocation does not write page 1.
 - Read-only `e3d-descriptor next-word1 --db FILE --extent WORD0 [--session N]` compares predecessor and full-scan maxima and reports the current page-1 counter, its interpretation and expected allocation floor.
 
 Read-side seams for the e3d-studio converter and browser (`docs/plans/2026-09-30-e3d-studio-gui-design.md` §4.7, T2). All additive.

@@ -26,12 +26,9 @@
 //! `(2013287686, 947)`; `TES023`: `(17419, 331)`; `ams5100_0001`: none.
 //!
 //! This crate reads the table (to know what the next number would be) but does
-//! not maintain it on write yet: the write path hands out `max(word1) + 1` in
-//! the owner's extent and leaves page 1 alone (a page-0 re-read / the sentinel
-//! lock guards a concurrent writer). Because `updateBucketList` re-derives the
-//! counter from the elements at save, `max + 1` is what E3D converges to; the
-//! remaining gap is the reserve E3D keeps above the live maximum. Maintaining
-//! page 1 on write is tracked as S6b in the plan.
+//! not maintain it on write yet: Transaction takes the greater of the pinned
+//! index maximum plus one and this confirmed NextAvailable counter. Allocation
+//! leaves page 1 alone; maintaining it on write remains S6b in the plan.
 
 /// One extent's next-`word1` counter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

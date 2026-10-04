@@ -96,3 +96,9 @@ F2 提交 `6232c21`。新增固定时钟、从源索引预铸 refno 的原语批
 ## F4 执行记录（2026-10-05）
 
 直接父提交 F3 `718cf77`，写侧改动前两遍重录的新金样 21 条 entries 完全相同；录制元数据记录该父提交。Allocator 惰性缓存每扩展 max+1，首号经共享 IndexCursor 前驱，open/open_at 不扫描叶或元素；Pending 次序保持 open 时全扫描与原记录校验。重铸接收固定 latest 读引擎，复用 Allocator，不重新查询 latest。新增 `allocation_basis()` 记录根/会话/首号，CounterUse 此阶段为 IndexOnly。定向 25/0；完整 Cargo 755/0/30；Clippy/doc 63/25。旧 Off 17 条哈希不变，新 21 条比对通过。11.4 页 1 下界尚未启用，F5/F6/F7 待办。
+
+## F5 执行记录（2026-10-05）
+
+父提交 `aacdcf9`；门槛复用 F1 `d4f5ab4` 证据、F2 `6232c21` 读侧 Corpus。启用 NextAvailable 下界，open_at 仍固定 base 索引及打开时的页 1；重铸/重试以同一次 latest 快照重建。坏页/重复扩展回退 Unavailable，Pending 语义回退 Unconfirmed；不写页 1。库副本 16 例模型、保留会话 16 例模型、全 Corpus 最新全量及 CLI 对照通过；缺桶、规则回退、溢出、删除最大、历史 base、撞号和一/二次 Moved 均通过。完整 Cargo 765/0/30，随后补重复桶测试 1/0（总 766）；Clippy/doc 63/25。
+
+原 Off 17 条和优化 21 条文件原样保留。仅 16 个动态发号键因需求 11 变号，逐项锁旧哈希退役、两遍录新下界金样；未受影响 5 键继续比对（含 3 个预铸原语批次），详见 `docs/evidence/2026-10-05-allocation-floor-goldens.md`。这一步是行为变更，F4 的字节中性验收仍以原 17/21 条为准。11.6/11.7/11.9 尚未验收。
