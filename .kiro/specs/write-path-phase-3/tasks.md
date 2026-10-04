@@ -327,21 +327,22 @@
     - _Requirements: 9.1, 9.3, 9.6, 9.11, 9.13_
 
 - [ ] 10. 门（需求 10）
-  - [~] 10.1 写 Gate_Ops（`tools/e3d/write_gate_ops/`）
+  - [x] 10.1 写 Gate_Ops（`tools/e3d/write_gate_ops/`）
     - 新增 `q13_control.json`（`--spatial off`，写 Control_Box）、`q13_boxes.json`（`require`，写 ZONE 及其下 BOX、Q13_Box 与作 Probe_Element 的 BOX）、`q13_move.json`、`q13_xlen.json`、`q13_delete.json`、`q13_cyli_equi.json`（CYLI、带平移与旋转的 EQUI 及其下 BOX）
     - 既有 Gate_Ops 中插入几何 noun 的批次按需求 15 第 7 条显式指定 `--spatial`，逐条记入 Spec_Ledger「测试适配清单」
     - _Requirements: 10.16, 15.7_
-  - [~] 10.2 扩展 E3D 宏模板
+  - [x] 10.2 扩展 E3D 宏模板
     - `tools/e3d/write_gate.mac.template` 加 Q13 段：只用 PML1（`VAR !r EVALUATE (REF) FOR ALL BOX WITHIN VOLUME =w0/w1 <余量>`、`Q VAR !r`，Q13h 另加 `Q POS WRT /*`），每问以 `$P [Q13x-BEGIN]` / `$P [Q13x-END]` 夹住；Q13 排在 Q13a 之前，先以包含 Control_Box 的 Probe_Element、再以 Control_Box 本身为体积各搜一次；不用 PML2 对象与 `COLLECT`，不对图元设 `DESC`
     - `tools/e3d/write_gate_e3d_saves.mac.template` 加 Q13g 所需的「E3D 改 XLEN 并 SAVEWORK」
     - _Requirements: 10.1, 10.8, 10.13_
-  - [~] 10.3 扩展 `tools/e3d/write_gate.ps1`
+  - [x] 10.3 扩展 `tools/e3d/write_gate.ps1`
     - 在 Q12e 之后加 Q13 组：e3d-io 写入全部经 `e3d-write apply --report` 与 Gate_Ops（会话 USER 为 `e3dio`），所问 refno 取自 `--report`，不写死
     - 按标记切日志段，判「列出 / 省略 / 无 `(2,536)`」，每问一行 `PASS <问号>` 或 `FAIL <问号>`；Q13 FAIL 时 Q13a–Q13h 一律 FAIL
     - Q13g 借助 `e3d-descriptor spamap` 与 `spamap-check --refno`；Q13h 借助 `world-frame`（各轴之差 ≤ 0.1 mm）
     - 打印 Probe 预判的 `PROBE` 行与耗时的 `TIME` 行
     - _Requirements: 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9, 10.12, 10.13, 10.14, 10.15, 10.16, 10.17_
   - [~] 10.4 跑门并记录
+    - 2026-10-04 部分完成：Q0 + 既有 28 问 + Q13/Q13a–h、alternate 5 轮、原样 FORMAT 0 全 PASS。总 199.5563017 s / Q13 161.8146313 s。Q14 等第 11 组，不标整体完成；证据 `docs/evidence/2026-10-04-q13-spatial-gate.md`。
     - 在 SPAMAP 维护记为完成的提交上跑 E3D_Gate_Set：TTY_Gate（含 Q13 组与 Q14）、`alternate_write_gate.ps1` 5 轮（13.5 存在时含 Q15）、`format0_gate.ps1`（只跑不改），全数 PASS
     - 把 `PROBE` 预判、总耗时与 Q13 组耗时抄入 Spec_Ledger「Probe 预判与门耗时」；在「取证门槛核查」填各写侧能力的门问与记为完成的提交
     - _Requirements: 2.3, 10.10, 10.15, 10.17_
@@ -590,7 +591,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 写侧能力 | 首个写侧提交 | 父提交 | Evidence_Doc | 读侧解码与 Corpus 测试 | 门问 | 记为完成的提交 |
 |---|---|---|---|---|---|---|
-| SPAMAP 维护 | 8.1（里程碑 E 的 E1） | `474ea14`：E0 在其上重跑 SPAMAP 相关 9 个测试二进制，0 失败、无 skip（预核于 `d8fecb6` / `6811730`，其后只改文档） | 7.1 `docs/evidence/2026-10-03-spamap-encoding.md`、`…-spamap-branch-entries.md`、`…-spamap-flags.md`；7.2 `…-spamap-coverage.md`；7.3 `…-spamap-recompute.md`；7.4 `…-spamap-record-item.md`；7.5 `…-spamap-aabb.md`、`…-spamap-aabb-members.md`——结论都含例程地址与 Corpus 核对，`check_evidence` 全 PASS；第 7 组规则全部坐实（规则坐实状态总表） | 读侧解码：`src/index/spamap.rs`（SPAMAP_Reader）与 `src/spatial/`（codec、aabb、check、state），不在 `src/write/` 下、代码不引用 `src/write/`。以 Corpus 为输入的测试在 `d8fecb6` 的 Build_Checks 中 0 失败、未跳过：`spamap_reader_real`（3.4）、`spamap_codec_real`（5.5、7.2，含 4.20）、`spamap_aabb_real`（6.3）、`spamap_coverage_real`、`spamap_record_item_real`、`spamap_recompute_real`、`spamap_page_headers_real`、`spamap_census_real`；坐实集下各项 agree + waiting = total | Q13 组（第 10 组，未做） | |
+| SPAMAP 维护 | 8.1（里程碑 E 的 E1） | `474ea14`：E0 在其上重跑 SPAMAP 相关 9 个测试二进制，0 失败、无 skip（预核于 `d8fecb6` / `6811730`，其后只改文档） | 7.1 `docs/evidence/2026-10-03-spamap-encoding.md`、`…-spamap-branch-entries.md`、`…-spamap-flags.md`；7.2 `…-spamap-coverage.md`；7.3 `…-spamap-recompute.md`；7.4 `…-spamap-record-item.md`；7.5 `…-spamap-aabb.md`、`…-spamap-aabb-members.md`——结论都含例程地址与 Corpus 核对，`check_evidence` 全 PASS；第 7 组规则全部坐实（规则坐实状态总表） | 读侧解码：`src/index/spamap.rs`（SPAMAP_Reader）与 `src/spatial/`（codec、aabb、check、state），不在 `src/write/` 下、代码不引用 `src/write/`。以 Corpus 为输入的测试在 `d8fecb6` 的 Build_Checks 中 0 失败、未跳过：`spamap_reader_real`（3.4）、`spamap_codec_real`（5.5、7.2，含 4.20）、`spamap_aabb_real`（6.3）、`spamap_coverage_real`、`spamap_record_item_real`、`spamap_recompute_real`、`spamap_page_headers_real`、`spamap_census_real`；坐实集下各项 agree + waiting = total | Q13/Q13a–h 全 PASS；docs/evidence/2026-10-04-q13-spatial-gate.md | `fd9ed67` 库实现；`4939b8a` 门首提交 + 本次修正/验收提交（10.1–10.3）；10.4 整体待 Q14 |
 | 发号下界 | | | | | | |
 | Open_Fast_Path（字节中性，按需求 2 第 7 条） | | | | | | |
 | staging 优化（字节中性，按需求 2 第 7 条） | | | | | | |
@@ -609,6 +610,18 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 测试或 Gate_Ops | 原因（D3 默认 / 发号下界） | 改动（显式 Spatial_Policy / 期望 refno） | 提交 |
 |---|---|---|---|
+| `write_gate` refused 六批次 | CLI 默认 Require；保留旧拒写原因 | 显式 Off，原期望不改 | 4939b8a |
+| `10_box`（含 dry-run） | CLI 默认 Require；保留旧几何读回门 | 显式 Off，原期望不改 | 4939b8a |
+| `20_group` | 同上，保留引用成员门 | 显式 Off，原期望不改 | 4939b8a |
+| `30_hunk_equis` | 同上，保留 hunk 门 | 显式 Off，原期望不改 | 4939b8a |
+| `40_hunk_fixing` | 同上，保留字符串列表门 | 显式 Off，原期望不改 | 4939b8a |
+| `50_moves` | 同上，保留原 BOX 创建门 | 显式 Off，原期望不改 | 4939b8a |
+| `51_moves_apply` | 同上，保留 move/reorder/reference 门 | 显式 Off，原期望不改 | 4939b8a |
+| `60_big` | 同上，保留 8200 BOX 成员计数门 | 显式 Off，原期望不改 | 4939b8a |
+| `70_strings` | 同上，保留按名设值门 | 显式 Off，原期望不改 | 4939b8a |
+| `80_text` | 同上，保留中文字节兼容门 | 显式 Off，原期望不改 | 4939b8a |
+| `90_merge` | 同上，保留原 E3D 三方合并门 | 显式 Off，原期望不改 | 4939b8a |
+| `alternate_write_gate` 探针 / 五轮 IO EQUI | 同上，保留原交替写门 | 显式 Off，原期望不改 | 本次修正/验收提交 |
 | `write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
 | `write_stage6_transaction::a_facade_rename_moves_the_name_and_rewrites_the_record` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
 | `write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
@@ -648,13 +661,32 @@ CLI：`src/bin/e3d-write.rs` 显式 Off 作为 E→F 过渡，不新增空间参
 
 #### Probe 预判与门耗时（10.4）
 
+2026-10-04：基线 `dcc71d8`，脚本首提交 `4939b8a`；真实门发现 BOM 与默认整毫米显示的判分问题，修正后完整重跑。10.1–10.3 经验收打勾；10.4 部分完成，Q14 待第 11 组，10.5、10.6 待办。详见 `docs/evidence/2026-10-04-q13-spatial-gate.md` 及同名 assets 的报告、框、SAVEWORK、manifest。
+
+| 本次自动验收 | 结果 |
+|---|---|
+| TTY | 38 PASS / 0 FAIL：Q0 + 既有 28 问 + Q13/Q13a–h |
+| alternate / FORMAT 0 | 5 轮 T4a–c PASS；FORMAT 0 原样 E1/E2/F0–F5 全 PASS |
+| 离线 | 38 项纯检查；库副本六批次、读侧 11 字与 Probe 共 154 项，无 skip |
+| Cargo / Clippy / doc | 742 / 0 / 30；63 / 25 warning。既有 7 个提前返回测试不变，17 条 Golden SHA-256 不变 |
+| Q13g | SAVEWORK 精确会话 666，退出 latest 667 不用于核对；五项各 1/1、waiting=0；完整 11 字相等 |
+| Q13h | CYLI、变换 BOX 每轴误差 [0,0,0] mm；E3D 显示设 `PRECISION 3DP`，阈值保持 0.1 mm |
+
+测试适配补记（仅显式策略，原问与期望不改）：`write_gate.ps1` 的 `refused/*`、10_box dry-run、10_box、20_group、30_hunk_equis、40_hunk_fixing、50_moves、51_moves_apply、60_big、70_strings、80_text、90_merge 全部显式 Off；`alternate_write_gate.ps1` 的探针 dry-run 与五轮 IO EQUI 批次显式 Off。`format0_gate.ps1` 未改。Q13_control 为 Off，另五批次 Require，未提供调用方 AABB。
+
+写侧门槛补记：E 的插入 / 空间维护由 Q13a–c，move / XLEN / delete 由 Q13d–f，E3D 保存兼容由 Q13g，CYLI 与祖先旋转 / 平移由 Q13h 坐实。库 SPAMAP 实现仍为 `fd9ed67`；本次未扩大规则、依赖、性能或发号范围。
+
 | 门问 | Probe_Element | 被测 BOX | 余量 | 预判（相交 / 不相交） |
 |---|---|---|---|---|
-| | | | | |
+| Q13 | 16192/12 | 16192/6 | 0 mm | 相交，搜索省略 Control；Control 作体积 (2,536) |
+| Q13d 旧位 | 16192/13 | 16192/8 | 0 mm | move 前相交、后不相交 |
+| Q13d 新位 | 16192/14 | 16192/8 | 0 mm | move 前不相交、后相交 |
+| Q13e | 16192/15 | 16192/9 | 0 mm | XLEN 前不相交、后相交 |
+| Q13f | 16192/16 | 16192/10 | 0 mm | 删除前相交、后省略 |
 
 | 运行提交 | 总耗时 | Q13 组耗时 |
 |---|---|---|
-| | | |
+| 4939b8a + 本次门判分修正（第二提交） | 199.5563017 s | 161.8146313 s |
 
 #### `open` 计时（11.6）
 

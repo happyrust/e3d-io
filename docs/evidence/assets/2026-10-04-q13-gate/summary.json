@@ -1,0 +1,99 @@
+{
+  "baseline": "dcc71d8",
+  "implementation_commit": "4939b8a",
+  "verdicts": [
+    "PASS Q0",
+    "PASS Q1",
+    "PASS Q2",
+    "PASS Q3a",
+    "PASS Q3b",
+    "PASS Q3c",
+    "PASS Q3d",
+    "PASS Q3e",
+    "PASS Q3f",
+    "PASS Q4a",
+    "PASS Q4b",
+    "PASS Q5",
+    "PASS Q6",
+    "PASS Q6b",
+    "PASS Q7",
+    "PASS Q8a",
+    "PASS Q8b",
+    "PASS Q9a",
+    "PASS Q9b",
+    "PASS Q9c",
+    "PASS Q9d",
+    "PASS Q10",
+    "PASS Q11a",
+    "PASS Q11b",
+    "PASS Q12a",
+    "PASS Q12b",
+    "PASS Q12c",
+    "PASS Q12d",
+    "PASS Q12e",
+    "PASS Q13",
+    "PASS Q13a",
+    "PASS Q13b",
+    "PASS Q13c",
+    "PASS Q13d",
+    "PASS Q13e",
+    "PASS Q13f",
+    "PASS Q13g",
+    "PASS Q13h"
+  ],
+  "times_seconds": {
+    "q13_seconds": "161.8146313",
+    "total_seconds": "199.5563017"
+  },
+  "savework_session": 666,
+  "world_origin_comparison": [
+    {
+      "element": "cylinder",
+      "e3d_mm": [
+        2178.73,
+        8003.96,
+        1400.0
+      ],
+      "world_frame_mm": [
+        2178.73,
+        8003.96,
+        1400.0
+      ],
+      "error_mm": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "element": "transformed",
+      "e3d_mm": [
+        3978.73,
+        12103.96,
+        3700.0
+      ],
+      "world_frame_mm": [
+        3978.73,
+        12103.96,
+        3700.0
+      ],
+      "error_mm": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "tests": {
+    "passed": 742,
+    "failed": 0,
+    "ignored": 30
+  },
+  "clippy_warnings": 63,
+  "doc_warnings": 25,
+  "source_sha256": {
+    "D:/AVEVA/Projects/E3D3.1/AvevaMarineSample/ams000/ams8000_0001": "3cab5d7d2b2c40fdf0829b91c555d19d55c530dd49860a4665560e5c553fe023",
+    "D:/AVEVA/Projects/E3D3.1/TEST/TES000/TES023": "cdb87f444680019e4054bc03a0ab514d5bcda2805b719eb42d00a98b51ce3d6b"
+  },
+  "golden_sha256": "1b2ac106e9a69a9a5fe677b439ae7c43ef190191dcd8d392b2375a6602e4e80a"
+}

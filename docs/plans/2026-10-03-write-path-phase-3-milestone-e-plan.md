@@ -120,3 +120,13 @@ E1 的父提交 `474ea14`（自 D6 的 `d8fecb6` 起只改文档）上重跑 SPA
 验收顺序：既有 CLI 7 项→全套 `cargo test --no-fail-fast -- --nocapture` 741 / 0 / 30→`cargo clippy --all-targets` 62→`cargo doc` 25；全部成功。既有 skip 7 个 / 8 条提示不变，17 条 Off 金样通过、SHA-256 不变、禁止重录。日志保存在 `.agents/tasks/write-path-phase-3-cli/validation/`。任务 9.2、9.3 与第 9 组经本次验收打勾。
 
 提交：`test(cli): 9.2-9.3 validate spatial parsing and real runs`，单一原子提交包含修复、测试与账本。下一阶段为第 10 组 E3D Gate；本次未宣称产品级空间门通过，不接性能、发号与桶表工作。
+
+### Q13 自动空间门：10.1–10.3（2026-10-04）
+
+以 `dcc71d8` 为基线执行批准的自动门范围。首提交 `4939b8a` 新增六份 Gate_Ops、Q13 runner、严格日志判分及离线测试。在该提交上真跑发现日志 UTF-8 BOM 与默认整毫米显示问题；第二提交包含判分修正与验收证据。最终复用 `write_gate.mac.template` 和 SAVEWORK 模板的独立 Q13 段，保持旧宏原问。旧 apply 批次显式 Off，Q13 Control Off、其他 Require，不给调用方 AABB；所有新 refno 从报告取得，唯一固定参照 BOX 为 24384/24777。
+
+SITE 位于原生参照世界原点 O，BOX / Probe 场景按方案固定。八份相交预判全部成立；TTY 每次关闭后再 CLI 写入，以新会话读新状态。只判嵌套 Q VAR 输出，命令回显、缺标记、缺结果、驱动错误均不 PASS；控制失败向全组传播。Q13g 从 SAVEWORK 日志确定精确会话 666，未用退出后的 667；完整 11 字与 Codec 相等，spamap-check 五项各 1/1。Q13h 用 PML1 `PRECISION 3DP` 输出坐标，CYLI 与变换 BOX 世界原点每轴误差 0 mm，未放宽 0.1 mm 阈值。
+
+最终完整 TTY：Q0 + 既有 28 问 + Q13/Q13a–h 共 38 PASS、0 FAIL；五轮交替写 T4a–c 全 PASS；FORMAT 0 原脚本全 PASS。总耗时 199.5563017 s、Q13 161.8146313 s；门串行且 scratch 分开，源库 SHA-256 不变。38 项纯离线检查与受控副本六批次、逐字读侧、Probe 合计 154 项全通过；Cargo 全套 742 / 0 / 30，新增门测试无 skip，Clippy/doc 63/25，既有样本缺失和 17 条 Golden 不变。
+
+证据：`docs/evidence/2026-10-04-q13-spatial-gate.md`，原始结果、报告、世界框、refno、保存会话及 SHA-256 manifest 在对应 assets；Cargo 完整日志位于 `.agents/tasks/write-path-phase-3-gate/validation/`。10.1–10.3 完成；10.4 仅本次自动门部分完成，Q14 留待第 11 组；10.5 人工图形验收、10.6 最终检查点未完成。下一开发阶段为第 11 组，不接性能或页 1 桶表。

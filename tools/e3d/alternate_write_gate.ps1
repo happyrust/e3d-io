@@ -136,7 +136,7 @@ function NameOf([string]$refno) {
 # Resolve the first ZONE's refno once, through a dry-run that references it by name.
 $probeOps = Join-Path $Scratch 'alt_probe.json'
 [IO.File]::WriteAllText($probeOps, "[{`"op`":`"insert`",`"owner`":`"$ZoneName`",`"noun`":`"EQUI`"}]", $utf8)
-$probe = Invoke-Native { & $writeExe apply --db $copyDb --ops $probeOps --schema $schema --dry-run --report (Join-Path $Scratch 'alt_probe.report.json') }
+$probe = Invoke-Native { & $writeExe apply --db $copyDb --ops $probeOps --schema $schema --spatial off --dry-run --report (Join-Path $Scratch 'alt_probe.report.json') }
 if ($probe.ExitCode) { Write-Output $probe.Output; throw "cannot resolve $ZoneName" }
 $zoneRef = ([IO.File]::ReadAllText((Join-Path $Scratch 'alt_probe.report.json'), $utf8) | ConvertFrom-Json).ops[0].owner
 $baseBefore = [int]((Sessions)[0].sesno)
@@ -189,7 +189,7 @@ for ($r = 1; $r -le $Rounds; $r++) {
     $ioOps = Join-Path $Scratch "alt_io_$r.json"
     [IO.File]::WriteAllText($ioOps, "{`"comment`":`"e3d-io T4 alternate round $r`",`"ops`":[{`"op`":`"insert`",`"owner`":`"$ZoneName`",`"noun`":`"EQUI`",`"name`":`"$ioName`",`"attrs`":{`"POS`":`"$($r * 100) 0 0`",`"FUNC`":`"ALT-IO-$r`"}}]}", $utf8)
     $ioReport = Join-Path $Scratch "alt_io_$r.report.json"
-    $io = Invoke-Native { & $writeExe apply --db $copyDb --ops $ioOps --schema $schema --report $ioReport }
+    $io = Invoke-Native { & $writeExe apply --db $copyDb --ops $ioOps --schema $schema --spatial off --report $ioReport }
     if ($io.ExitCode) { Write-Output "FAIL R$r  e3d-write round $r failed"; Write-Output $io.Output; $failures++; break }
     $rep = [IO.File]::ReadAllText($ioReport, $utf8) | ConvertFrom-Json
     $ioSes = [int]$rep.commit.written.sesno

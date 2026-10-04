@@ -3,6 +3,7 @@
 $qclock = [Diagnostics.Stopwatch]::StartNew()
 $qr = @{}
 $qids = @{}
+[IO.File]::WriteAllText((Join-Path $logDir 'q13-probes.jsonl'), '')
 $descriptor = 'D:\Rust\target\debug\e3d-descriptor.exe'
 $qschema = Join-Path $crate 'schema\e3d31'
 function Get-Q13Frame([string]$ref, [int]$session = 0) {
@@ -45,10 +46,10 @@ endhandle
 `$P [$tag-RESULT-END]
 `$P [$tag-END]
 "@
-    Invoke-E3D 'q13.mac.template' "$tag.mac" @{TAG=$tag;BODY=$body} | Out-Host
+    Invoke-E3D 'write_gate.mac.template' "$tag.mac" @{Q13='1';TAG=$tag;BODY=$body} | Out-Host
     $path = Join-Path $logDir "$tag.log"
     if (-not (Test-Path $path)) { return $false }
-    Test-Q13Search (Read-LogText $path) $tag $present $absent -VolumeError:$volumeError
+    Test-Q13Search -Text (Read-LogText $path) -Tag $tag -Present $present -Absent $absent -VolumeError:$volumeError
 }
 try {
     $origin = (Get-Q13Frame '24384/24777').frame.origin_mm
@@ -59,6 +60,7 @@ try {
     $c1 = Search-Q13 'Q13-control-probe' $qids.controlprobe @($qids.controlprobe) @($qids.control)
     $c2 = Search-Q13 'Q13-control-volume' $qids.control -volumeError
     $qr.Q13 = $c1 -and $c2
+    Write-Host "PROBE control_scoring probe=$c1 volume_error=$c2"
     if (-not $qr.Q13) { throw 'Q13 control failed; dependent questions invalid' }
     $qr.Q13a = Search-Q13 'Q13a' $qids.main @($qids.main) @() 100
     $boxes = @('main','moving','growing','deleting','controlprobe','oldprobe','newprobe','growprobe','deleteprobe') | ForEach-Object { $qids[$_] }
@@ -85,7 +87,7 @@ try {
     $null = Apply-Q13 'q13_delete' @{DELETING=$qids.deleting}
     $f2 = Search-Q13 'Q13f-after' $qids.deleteprobe @($qids.deleteprobe) @($qids.deleting)
     $qr.Q13f = $f1 -and $f2
-    Invoke-E3D 'q13_save.mac.template' 'Q13g.mac' @{MAIN=$qids.main} -stateful | Out-Host
+    Invoke-E3D 'write_gate_e3d_saves.mac.template' 'Q13g.mac' @{Q13='1';MAIN=$qids.main} -stateful | Out-Host
     $save = Get-Q13Block (Read-LogText (Join-Path $logDir 'Q13g.log')) 'Q13g'
     $m = [regex]::Matches($save,'Last saved session number (\d+)')
     if ($m.Count -ne 1 -or $save -match 'ERROR|\(\d+,\s*\d+\)') { throw 'SAVEWORK session evidence invalid' }
@@ -98,26 +100,39 @@ try {
     $check = Invoke-Native { & $descriptor spamap-check --input $copyDb --schema $qschema --rules confirmed --refno $qids.main --session "$copyDb=$ses" }
     $check.Output | Set-Content (Join-Path $logDir 'Q13g-check.json')
     $qr.Q13g = -not $check.ExitCode -and (($wf.entries | ConvertTo-Json -Compress -Depth 8) -eq ($table.entries | ConvertTo-Json -Compress -Depth 8))
+    if (-not $check.ExitCode) {
+        $checked = $check.Output | ConvertFrom-Json
+        foreach ($item in @('key0','entries_k','flags','built_in_aabb','coverage')) {
+            $metric = $checked.databases[0].$item
+            if ($metric.total -lt 1 -or $metric.agree -ne $metric.total -or $metric.waiting -ne 0) { $qr.Q13g=$false }
+        }
+    }
+    $wf | ConvertTo-Json -Depth 16 | Set-Content (Join-Path $logDir 'Q13g-world-frame.json')
     Write-Host "PROBE SAVEWORK session=$ses refno=$($qids.main)"
     $null = Apply-Q13 'q13_cyli_equi' @{QZONE=$qids.zone}
-    $body = "`$P [Q13h-BEGIN]`n"
+    $body = "`$P [Q13h-BEGIN]`nMM DISTANCE`nPRECISION 3DP`n"
     foreach ($id in @('cylinder','transformed')) {
         $body += "=$($qids[$id])`nQ POS WRT /*`n"
     }
     $body += "`$P [Q13h-END]"
-    Invoke-E3D 'q13.mac.template' 'Q13h.mac' @{TAG='Q13h';BODY=$body} | Out-Host
+    Invoke-E3D 'write_gate.mac.template' 'Q13h.mac' @{Q13='1';TAG='Q13h';BODY=$body} | Out-Host
     $pos = Get-Q13Block (Read-LogText (Join-Path $logDir 'Q13h.log')) 'Q13h'
-    $matches13 = [regex]::Matches($pos,'Position\s+E\s+([-\d.]+)mm\s+N\s+([-\d.]+)mm\s+U\s+([-\d.]+)mm')
-    $ok = $matches13.Count -eq 2
+    $matches13 = [regex]::Matches($pos,'Position\s+([EW])\s+([-\d.]+)mm\s+([NS])\s+([-\d.]+)mm\s+([UD])\s+([-\d.]+)mm')
+    $ok = $matches13.Count -eq 2 -and $pos -notmatch 'ERROR|\(\d+,\s*\d+\)'
     $j = 0
     foreach ($id in @('cylinder','transformed')) {
         $frame = Get-Q13Frame $qids[$id]
-        if ($ok) { for ($axis=0; $axis -lt 3; $axis++) { if ([Math]::Abs([double]$matches13[$j].Groups[$axis+1].Value - $frame.frame.origin_mm[$axis]) -gt 0.1) { $ok=$false } } }
+        $frame | ConvertTo-Json -Depth 16 | Set-Content (Join-Path $logDir "Q13h-$id-world-frame.json")
+        if ($ok) { for ($axis=0; $axis -lt 3; $axis++) {
+            $sign=if ($matches13[$j].Groups[$axis*2+1].Value -match '[WSD]') {-1} else {1}
+            $actual=$sign * [double]$matches13[$j].Groups[$axis*2+2].Value
+            if ([Math]::Abs($actual - $frame.frame.origin_mm[$axis]) -gt 0.1) { $ok=$false }
+        } }
         $j++
     }
     # Include CYLI independently, since ordinary BOX queries deliberately filter noun.
     $body = "`$P [Q13h-search-BEGIN]`nVAR !q13 EVALUATE (REF) FOR ALL CYLI WITHIN VOLUME =24384/24777 100000`n`$P [Q13h-search-RESULT-BEGIN]`nQ VAR !q13`n`$P [Q13h-search-RESULT-END]`n`$P [Q13h-search-END]"
-    Invoke-E3D 'q13.mac.template' 'Q13h-search.mac' @{TAG='Q13h-search';BODY=$body} | Out-Host
+    Invoke-E3D 'write_gate.mac.template' 'Q13h-search.mac' @{Q13='1';TAG='Q13h-search';BODY=$body} | Out-Host
     $cyli = Test-Q13Search (Read-LogText (Join-Path $logDir 'Q13h-search.log')) 'Q13h-search' @($qids.cylinder)
     $box = Search-Q13 'Q13h-box' '24384/24777' @($qids.transformed) @() 100000
     $qr.Q13h = $ok -and $cyli -and $box

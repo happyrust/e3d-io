@@ -1,7 +1,0 @@
--- Same PML1 ALPHA LOG / driver summary protocol as write_gate.mac.template.
-ALPHA LOG "{{LOGDIR}}/{{TAG}}.log" OVER
-{{BODY}}
-ALPHA LOG END
-ALPHA LOG "{{MACROLOG}}" OVER
-$P E3DIO-GATE-DONE
-ALPHA LOG END

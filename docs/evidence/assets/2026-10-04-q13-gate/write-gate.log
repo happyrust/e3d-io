@@ -1,0 +1,90 @@
+reset D:\e3dio-gate\AvevaMarineSample\ams000\ams8000_0001 from the original
+PASS Q0  e3d-write refused 6 bad instruction files with a reason each, --dry-run staged session 647 and rolled it back; the database is byte-identical
+         attr_typo: op #0 (set 24384/47 DESCR): DESCR = "a typo": noun 0x9c5ed has no attribute named DESCR
+         desc_121: op #0 (insert EQUI under /1RX03-MSUP: DESC): DESC: 121 characters, the dictionary allows 120
+         owner_deleted: op #1 (insert BOX under /1RX03-LCT): owner 24384/22400 is deleted in this transaction
+         pos_4: op #0 (insert EQUI under /1RX03-MSUP: POS): POS: 4 elements, the dictionary allows 3
+         ratm: op #0 (insert EQUI under /1RX03-MSUP: RATM): RATM is not an attribute in E3D's dictionary (E3D: "does not have attribute")
+         refno_missing: op #0 (set =24384/2147483000): =24384/2147483000 is not indexed in the base session (an element inserted in this file is named by its @id)
+sessions:
+  10_box           session 647 (1 instruction(s), 9 page(s))
+  20_group         session 648 (4 instruction(s), 11 page(s))
+  30_hunk_equis    session 649 (2 instruction(s), 14 page(s))
+  40_hunk_fixing   session 650 (1 instruction(s), 13 page(s))
+  50_moves         session 651 (5 instruction(s), 14 page(s))
+  51_moves_apply   session 652 (3 instruction(s), 13 page(s))
+  60_big           session 653 (8201 instruction(s), 744 page(s))
+  70_strings       session 654 (2 instruction(s), 19 page(s))
+  80_text          session 655 (2 instruction(s), 12 page(s))
+wrote: BOX 24384/26484 GPWL 16192/2 GROU 16192/3 EQUI 24384/26485 24384/26486 FIXING 24384/26487
+       moves: BOX A 24384/26488 B 24384/26489 C 24384/26490 under ZONE 2 24384/2498, A moved to ZONE 3 24384/22400; big ZONE 24384/26491 with 8200 BOXes
+       by name: EQUI 24384/34692, FIXING 24384/34693 (CREF = /1RX03-MSUP); last session 655
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-gate outcome=read_only
+﻿E3DIO-GATE-DONE see D:/e3dio-gate/logs/*.log
+
+PASS Q1  BOX geometry and owner (session 1)
+PASS Q2  GROU lists ZONE and BOX as reference members (session 2)
+PASS Q3a EQUI 1: DESC as a type-22 hunk
+PASS Q3b EQUI 1: DESP as a type-21 hunk (100 reals)
+PASS Q3c EQUI 1: UUIDIA as a type-20 hunk
+PASS Q3d EQUI 2: DESC as a type-22 hunk
+PASS Q3e EQUI 2: DESP as a type-21 hunk whose chain crosses a page
+PASS Q3f EQUI 2: UUIDIA as a type-20 hunk
+PASS Q4a FIXING: ROKEYS, a type-19 list stored inline
+PASS Q4b FIXING: ROVALS, the same list as a type-23 hunk
+PASS Q5  ZONE lists the four new members last
+PASS Q6  Q ATT walks every attribute of the EQUI and the FIXING
+PASS Q6b Q ATT of the FIXING
+PASS Q7  E3D reads the session page (user e3dio, our comment, in Chinese)
+PASS Q8a BOX: a Chinese NAME, record and table (last session)
+PASS Q8b ZONE: a Chinese DESC with an escaped run inside plain text
+     (text logs decoded as: 70_sessions.log=utf-8, 80_box_name.log=utf-8, 81_zone_desc.log=utf-8)
+PASS Q9a BOX A moved (move_to): Q OWNER is ZONE 3, OWNER navigates there
+PASS Q9b ZONE 2 (reorder): lists C before B, A no longer
+PASS Q9c ZONE 3: lists A as its last member
+PASS Q9d GROU (reference members): A added, B removed, old members kept
+PASS Q10 big ZONE: Q MEM lists all 8200 BOXes (format word count saturated)
+PASS Q11a EQUI set by name: DESC / POS / FUNC / PURP print back as typed
+PASS Q11b FIXING set by name: ROKEYS as a | list, BUIL true, NUMB 42, CREF from /NAME
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-gate outcome=Completed
+﻿E3DIO-GATE-DONE see D:/e3dio-gate/logs/e3d_saves.log
+
+       merge: E3D saved session 657 (EQUI 24384/34694, BOX 24384/34695); the transaction at base 655 merged onto 658 as session 659, its BOX 24384/34696, re-minted 24384/34694 -> 24384/34696
+       (E3D saved 1 more session(s) after its SAVEWORK, on quit; the merge went onto the newest, 658)
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-gate outcome=read_only
+﻿E3DIO-GATE-DONE see D:/e3dio-gate/logs/9*_merge*.log
+
+PASS Q12a the BOX E3D saved is still there after the merge, as E3D left it
+PASS Q12b the first ZONE lists E3D's EQUI (first, where NEW put it), the base's members, then the merged BOX after its anchor
+PASS Q12c the merged BOX: name, owner, the values set by name
+PASS Q12d the second ZONE's FUNC from the merged session
+PASS Q12e the newest session is the merge, by e3dio, one past E3D's
+  q13_control      session 661 (3 instruction(s), 14 page(s))
+  q13_boxes        session 662 (10 instruction(s), 21 page(s))
+PROBE {"intersects":true,"element":"16192/6","tag":"control","expected":true,"clearance":0,"b":{"max_mm":[328.73,8203.96,1650.0],"min_mm":[28.730000000000018,7803.96,1150.0]},"a":{"max_mm":[678.73,8503.96,1900.0],"min_mm":[-321.27,7503.96,900.0]},"probe":"16192/12"}
+PROBE control_scoring probe=True volume_error=True
+PROBE {"intersects":true,"element":"16192/8","tag":"move-old-before","expected":true,"clearance":0,"b":{"max_mm":[-2671.27,8203.96,1650.0],"min_mm":[-2971.27,7803.96,1150.0]},"a":{"max_mm":[-2771.27,8053.96,1450.0],"min_mm":[-2871.27,7953.96,1350.0]},"probe":"16192/13"}
+PROBE {"intersects":false,"element":"16192/8","tag":"move-new-before","expected":false,"clearance":0,"b":{"max_mm":[-2671.27,8203.96,1650.0],"min_mm":[-2971.27,7803.96,1150.0]},"a":{"max_mm":[7228.73,8053.96,1450.0],"min_mm":[7128.73,7953.96,1350.0]},"probe":"16192/14"}
+  q13_move         session 663 (1 instruction(s), 11 page(s))
+PROBE {"intersects":false,"element":"16192/8","tag":"move-old-after","expected":false,"clearance":0,"b":{"max_mm":[7328.73,8203.96,1650.0],"min_mm":[7028.73,7803.96,1150.0]},"a":{"max_mm":[-2771.27,8053.96,1450.0],"min_mm":[-2871.27,7953.96,1350.0]},"probe":"16192/13"}
+PROBE {"intersects":true,"element":"16192/8","tag":"move-new-after","expected":true,"clearance":0,"b":{"max_mm":[7328.73,8203.96,1650.0],"min_mm":[7028.73,7803.96,1150.0]},"a":{"max_mm":[7228.73,8053.96,1450.0],"min_mm":[7128.73,7953.96,1350.0]},"probe":"16192/14"}
+PROBE {"intersects":false,"element":"16192/9","tag":"grow-before","expected":false,"clearance":0,"b":{"max_mm":[-2671.27,8203.96,1650.0],"min_mm":[-2971.27,7803.96,1150.0]},"a":{"max_mm":[-2171.27,8053.96,1450.0],"min_mm":[-2271.27,7953.96,1350.0]},"probe":"16192/15"}
+  q13_xlen         session 664 (1 instruction(s), 12 page(s))
+PROBE {"intersects":true,"element":"16192/9","tag":"grow-after","expected":true,"clearance":0,"b":{"max_mm":[-2121.27,8203.96,1650.0],"min_mm":[-3521.27,7803.96,1150.0]},"a":{"max_mm":[-2171.27,8053.96,1450.0],"min_mm":[-2271.27,7953.96,1350.0]},"probe":"16192/15"}
+PROBE {"intersects":true,"element":"16192/10","tag":"delete-before","expected":true,"clearance":0,"b":{"max_mm":[-671.27,8203.96,1650.0],"min_mm":[-971.27,7803.96,1150.0]},"a":{"max_mm":[-771.27,8053.96,1450.0],"min_mm":[-871.27,7953.96,1350.0]},"probe":"16192/16"}
+  q13_delete       session 665 (1 instruction(s), 13 page(s))
+PROBE SAVEWORK session=666 refno=16192/7
+  q13_cyli_equi    session 668 (3 instruction(s), 17 page(s))
+PASS Q13
+PASS Q13a
+PASS Q13b
+PASS Q13c
+PASS Q13d
+PASS Q13e
+PASS Q13f
+PASS Q13g
+PASS Q13h
+TIME q13_seconds=161.8146313
+TIME total_seconds=199.5563017
+
+all PASS — E3D 3.1 read every session e3d-write wrote (logs in D:\e3dio-gate\logs)

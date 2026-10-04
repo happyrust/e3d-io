@@ -229,8 +229,11 @@ function Invoke-E3D([string]$template, [string]$macroName, [hashtable]$vars, [sw
     $out = Join-Path $Scratch ('driver-out-' + [IO.Path]::GetFileNameWithoutExtension($macroName))
     New-Item -ItemType Directory -Force $out | Out-Null
     $text = Get-Content (Join-Path $PSScriptRoot $template) -Raw
+    $sections = $text -split '-- Q13-TEMPLATE-BEGIN\r?\n', 2
+    if ($vars.ContainsKey('Q13')) { $text = $sections[1] } else { $text = $sections[0] }
     $text = $text.Replace('{{LOGDIR}}', (& $forward $logDir)).Replace('{{MACROLOG}}', (& $forward ([IO.Path]::ChangeExtension($macroPath, '.log'))))
     foreach ($key in $vars.Keys) { $text = $text.Replace("{{$key}}", $vars[$key]) }
+    if ($text -match '\{\{[^}]+\}\}') { throw "unresolved macro placeholder: $($Matches[0])" }
     Set-Content -Path $macroPath -Value $text -Encoding ASCII
 
     $driverArgs = @('--check-driver', $macroPath, '--project-dir', $copy, '--output', $out)

@@ -1,0 +1,63 @@
+e3d-write apply: 3 instruction(s) from C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_control.json onto C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  base session     : 646
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert SITE under 16192/0 -> 16192/2 /E3DIO-Q13-SITE [@site]
+  #1 insert ZONE under 16192/2 -> 16192/3 /E3DIO-Q13-ZONE [@zone]
+  #2 insert BOX under 16192/3 -> 16192/4 /E3DIO-Q13-CONTROL [@control]
+wrote session 647 to C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  previous session : 646
+  appended pages   : 14
+  report           : C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_control.report.json
+e3d-write apply: 10 instruction(s) from C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_boxes.json onto C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  base session     : 647
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert BOX under 16192/3 -> 16192/5 /E3DIO-Q13-MAIN [@main]
+  #1 insert BOX under 16192/3 -> 16192/6 /E3DIO-Q13-MOVING [@moving]
+  #2 insert BOX under 16192/3 -> 16192/7 /E3DIO-Q13-GROWING [@growing]
+  #3 insert BOX under 16192/3 -> 16192/8 /E3DIO-Q13-DELETING [@deleting]
+  #4 insert EQUI under 16192/3 -> 16192/9 /E3DIO-Q13-NEWOWNER [@newowner]
+  #5 insert BOX under 16192/3 -> 16192/10 /E3DIO-Q13-CONTROL-PROBE [@controlprobe]
+  #6 insert BOX under 16192/3 -> 16192/11 /E3DIO-Q13-OLD-PROBE [@oldprobe]
+  #7 insert BOX under 16192/3 -> 16192/12 /E3DIO-Q13-NEW-PROBE [@newprobe]
+  #8 insert BOX under 16192/3 -> 16192/13 /E3DIO-Q13-GROW-PROBE [@growprobe]
+  #9 insert BOX under 16192/3 -> 16192/14 /E3DIO-Q13-DELETE-PROBE [@deleteprobe]
+wrote session 648 to C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  previous session : 647
+  appended pages   : 20
+  report           : C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_boxes.report.json
+e3d-write apply: 1 instruction(s) from C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_move.json onto C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  base session     : 648
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 move 16192/6 under 16192/9 at "last"
+wrote session 649 to C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  previous session : 648
+  appended pages   : 11
+  report           : C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_move.report.json
+e3d-write apply: 1 instruction(s) from C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_xlen.json onto C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  base session     : 649
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 set 16192/7 XLEN
+wrote session 650 to C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  previous session : 649
+  appended pages   : 12
+  report           : C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_xlen.report.json
+e3d-write apply: 1 instruction(s) from C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_delete.json onto C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  base session     : 650
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 delete 16192/8
+wrote session 651 to C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  previous session : 650
+  appended pages   : 13
+  report           : C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_delete.report.json
+e3d-write apply: 3 instruction(s) from C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_cyli_equi.json onto C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  base session     : 651
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert CYLI under 16192/3 -> 16192/15 /E3DIO-Q13-CYLI [@cylinder]
+  #1 insert EQUI under 16192/3 -> 16192/16 /E3DIO-Q13-EQUI [@equipment]
+  #2 insert BOX under 16192/16 -> 16192/17 /E3DIO-Q13-TRANSFORMED [@transformed]
+wrote session 652 to C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\ams8000_0001
+  previous session : 651
+  appended pages   : 16
+  report           : C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f\q13_cyli_equi.report.json
+EVIDENCE C:\Users\dpc\AppData\Local\Temp\q13-3c0f5b8d-b427-456e-bb72-58329b53351f
+PASS Q13 offline checks=154

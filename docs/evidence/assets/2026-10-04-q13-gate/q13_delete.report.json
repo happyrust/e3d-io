@@ -1,0 +1,93 @@
+{
+  "base_sesno": 664,
+  "comment": "Q13f delete formerly visible box",
+  "commit": {
+    "appended_pages": [
+      17626,
+      17627,
+      17628,
+      17629,
+      17630,
+      17631,
+      17632,
+      17633,
+      17634,
+      17635,
+      17636,
+      17637,
+      17638
+    ],
+    "base_sesno": 664,
+    "merged_onto": null,
+    "previous": {
+      "end": 17625,
+      "page": 17625,
+      "sesno": 664
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 17638,
+      "page": 17638,
+      "sesno": 665
+    }
+  },
+  "database": "D:\\e3dio-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 664,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "index": 0,
+      "op": "delete",
+      "refno": "16192/10"
+    }
+  ],
+  "ops_file": "D:\\e3dio-gate\\ops\\q13_delete.json",
+  "spatial": {
+    "elements": {
+      "16192/10": {
+        "aabb": "None",
+        "causes": [
+          "Deleted"
+        ],
+        "given": null,
+        "registered": [],
+        "removed": [
+          {
+            "key": [
+              299990287,
+              16192,
+              10,
+              0
+            ],
+            "value": [
+              4294957583,
+              78040,
+              11500,
+              4294960583,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ]
+      }
+    },
+    "pages": [
+      17635,
+      17636,
+      17637
+    ],
+    "policy": "require",
+    "skipped": [],
+    "table": "Rewritten { root: 17637 }",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "require",
+  "staged": null,
+  "user": "e3dio"
+}

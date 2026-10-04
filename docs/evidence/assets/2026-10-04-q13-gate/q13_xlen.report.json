@@ -1,0 +1,115 @@
+{
+  "base_sesno": 663,
+  "comment": "Q13e new extent intersects fixed growth probe",
+  "commit": {
+    "appended_pages": [
+      17614,
+      17615,
+      17616,
+      17617,
+      17618,
+      17619,
+      17620,
+      17621,
+      17622,
+      17623,
+      17624,
+      17625
+    ],
+    "base_sesno": 663,
+    "merged_onto": null,
+    "previous": {
+      "end": 17613,
+      "page": 17613,
+      "sesno": 663
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 17625,
+      "page": 17625,
+      "sesno": 664
+    }
+  },
+  "database": "D:\\e3dio-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 663,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "XLEN"
+      ],
+      "index": 0,
+      "op": "set",
+      "refno": "16192/9"
+    }
+  ],
+  "ops_file": "D:\\e3dio-gate\\ops\\q13_xlen.json",
+  "spatial": {
+    "elements": {
+      "16192/9": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "OwnAttrs([810996])"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              900078040,
+              16192,
+              9,
+              0
+            ],
+            "value": [
+              4294932083,
+              78040,
+              11500,
+              4294946083,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ],
+        "removed": [
+          {
+            "key": [
+              299970287,
+              16192,
+              9,
+              0
+            ],
+            "value": [
+              4294937583,
+              78040,
+              11500,
+              4294940583,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ]
+      }
+    },
+    "pages": [
+      17620,
+      17621,
+      17622,
+      17623,
+      17624
+    ],
+    "policy": "require",
+    "skipped": [],
+    "table": "Rewritten { root: 17624 }",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "require",
+  "staged": null,
+  "user": "e3dio"
+}

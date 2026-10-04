@@ -1,0 +1,112 @@
+{
+  "base_sesno": 662,
+  "comment": "Q13d move without changing owner-relative pose",
+  "commit": {
+    "appended_pages": [
+      17603,
+      17604,
+      17605,
+      17606,
+      17607,
+      17608,
+      17609,
+      17610,
+      17611,
+      17612,
+      17613
+    ],
+    "base_sesno": 662,
+    "merged_onto": null,
+    "previous": {
+      "end": 17602,
+      "page": 17602,
+      "sesno": 662
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 17613,
+      "page": 17613,
+      "sesno": 663
+    }
+  },
+  "database": "D:\\e3dio-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 662,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "at": "last",
+      "index": 0,
+      "op": "move",
+      "owner": "16192/11",
+      "refno": "16192/8"
+    }
+  ],
+  "ops_file": "D:\\e3dio-gate\\ops\\q13_move.json",
+  "spatial": {
+    "elements": {
+      "16192/8": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "OwnerChanged"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              300070287,
+              16192,
+              8,
+              0
+            ],
+            "value": [
+              70287,
+              78040,
+              11500,
+              73287,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ],
+        "removed": [
+          {
+            "key": [
+              299970287,
+              16192,
+              8,
+              0
+            ],
+            "value": [
+              4294937583,
+              78040,
+              11500,
+              4294940583,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ]
+      }
+    },
+    "pages": [
+      17609,
+      17610,
+      17611,
+      17612
+    ],
+    "policy": "require",
+    "skipped": [],
+    "table": "Rewritten { root: 17612 }",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "require",
+  "staged": null,
+  "user": "e3dio"
+}

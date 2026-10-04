@@ -5,3 +5,6 @@
 
 # E3D schema 二进制字典：不做任何行尾 / 差异处理。
 *.dat binary
+
+# Q13 evidence manifest hashes the original driver/CLI bytes, including BOM/CRLF.
+docs/evidence/assets/2026-10-04-q13-gate/** -text whitespace=cr-at-eol

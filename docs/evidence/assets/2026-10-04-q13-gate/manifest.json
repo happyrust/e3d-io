@@ -1,0 +1,170 @@
+{
+  "alternate-gate.log": {
+    "bytes": 2454,
+    "sha256": "f8096921369586cfaf44a6d9c23bee2576f3e833bdd945eef250dfdea4f63a55"
+  },
+  "anchor-world-frame.json": {
+    "bytes": 1736,
+    "sha256": "16308aa59a13f9ecd478a4233e67d2b1896ef498a2dd2653cf39902ceaa3326f"
+  },
+  "format0-gate.log": {
+    "bytes": 1406,
+    "sha256": "93db096f39bc041cefda36dda814581a56916f4420d89d5a76de90670b3a1344"
+  },
+  "offline.log": {
+    "bytes": 5296,
+    "sha256": "db57d939020cd3d92f64a12e5b4d68771da6dae0b4007df011dc873f3c8ea760"
+  },
+  "probes.json": {
+    "bytes": 4215,
+    "sha256": "d8669283da1a9e0efff5a8a691f5558f504432b19cf644e27536e1e839d07aa4"
+  },
+  "Q13-control-probe.log": {
+    "bytes": 160,
+    "sha256": "743a73ce199b6a125e53f2c8dddaa702d23473847cf297e8230fbbb2a197ef89"
+  },
+  "Q13-control-volume.log": {
+    "bytes": 221,
+    "sha256": "83126708e45b982c541d48b6b2c5040d56b387dd3bcbcc3212bc3a2223e7f4a9"
+  },
+  "q13_boxes.json": {
+    "bytes": 1574,
+    "sha256": "7689e8fb94a40abaaf0dab6856223b10a61d89fbe4626249a0fe4cf63968116d"
+  },
+  "q13_boxes.report.json": {
+    "bytes": 8806,
+    "sha256": "6ad6d0a5534e2959daca0cd3754dd25e802650081bf01d8197d743c5674dd6d3"
+  },
+  "q13_control.json": {
+    "bytes": 402,
+    "sha256": "cde5279fda8ecda05f7c01190ecafb04b334437d7ff58d2c903d97111eabe920"
+  },
+  "q13_control.report.json": {
+    "bytes": 1805,
+    "sha256": "b3fee1040c25831f354151ae6665d68731c2c086d7285a6b9c0d3eefa3f9c7c6"
+  },
+  "q13_cyli_equi.json": {
+    "bytes": 525,
+    "sha256": "7ea44315e5ed66c0764afd2cbba4f267f4392f6d66c8f45f7957d1ea6403cf05"
+  },
+  "q13_cyli_equi.report.json": {
+    "bytes": 3053,
+    "sha256": "aeb68081496114a684865179aca59777096da14e9a953e7e62953f0936838599"
+  },
+  "q13_delete.json": {
+    "bytes": 91,
+    "sha256": "ee074698d5571f6805355d3e7fb6c92c984bd7f176dd1177e5227239058c87eb"
+  },
+  "q13_delete.report.json": {
+    "bytes": 1704,
+    "sha256": "1b0f525bfae9970821f4b71665772e55ed867c1bdc2f7468dd002de28c5c977f"
+  },
+  "q13_move.json": {
+    "bytes": 122,
+    "sha256": "86303a5953a2b19d34118f0c303dc0670be3efa1270c7d870e10937fd55ae290"
+  },
+  "q13_move.report.json": {
+    "bytes": 2080,
+    "sha256": "5a29d4c6dfed5a4f99c0954fa9377278173e046610976ca4700bf36b20bfb895"
+  },
+  "q13_xlen.json": {
+    "bytes": 124,
+    "sha256": "0000e7349b4b15b3b8c77c0c88abe605092700291008fe0b328137505305cdff"
+  },
+  "q13_xlen.report.json": {
+    "bytes": 2114,
+    "sha256": "5d3df4dbf33857a6e9ae708a61d2c134e215cce14e8dbd460b80a31ac33fb21b"
+  },
+  "Q13a.log": {
+    "bytes": 294,
+    "sha256": "4f114e701699ee5c7729bfb02c8cb5f798dd38c8ac72f48d7ed05c1409d63171"
+  },
+  "Q13b.log": {
+    "bytes": 448004,
+    "sha256": "b37c660f6e662b8dff59fb6d1342da4e45e48fed0ab69d3c1844e7e22a8c057d"
+  },
+  "Q13c.log": {
+    "bytes": 447,
+    "sha256": "69bdcacb0e801b308bf6e077ff3af9bc565a7f6ebea6bba83837d9a3b109ebe9"
+  },
+  "Q13d-new-after.log": {
+    "bytes": 177,
+    "sha256": "30d625693ffb5b337f1fe877d6cb167b3b54388bfb6d19d2403e71a63113b870"
+  },
+  "Q13d-new-before.log": {
+    "bytes": 152,
+    "sha256": "53251825255833c2ebceb7e72e3e9d4d8637d5126e59a2cc4aac35d4618a8b30"
+  },
+  "Q13d-old-after.log": {
+    "bytes": 305,
+    "sha256": "563ad431427192ab277fc2d3e49782085a6ee36329449a7a7929076ed88b911c"
+  },
+  "Q13d-old-before.log": {
+    "bytes": 338,
+    "sha256": "c9d720c9c65e9ea28285094b02027beba4cdb195906b4c521366f7157cf89227"
+  },
+  "Q13e-after.log": {
+    "bytes": 161,
+    "sha256": "fa3fd08c841a5a28f82e94909c41bb846074c8c39b88b11aa53d8dd38ed25f1f"
+  },
+  "Q13e-before.log": {
+    "bytes": 136,
+    "sha256": "9e521485a21e1decb91dd09d36e7bcd8c752c90544f3a5ef946a16a62543d498"
+  },
+  "Q13f-after.log": {
+    "bytes": 132,
+    "sha256": "9fbe3aad12aedb806355ea6eb954dae306980e9dc1c6c893e6a714bbb673ec92"
+  },
+  "Q13f-before.log": {
+    "bytes": 166,
+    "sha256": "bc047badf0fbbed4e99616cbc6b5d1b795aad315e69d82332ada3cba5dfdccc9"
+  },
+  "Q13g-check.json": {
+    "bytes": 1253,
+    "sha256": "50e6f541ab7d52982076249d900bf772d37e3fbc98625ef3246a6ad11b513c66"
+  },
+  "Q13g-spamap.json": {
+    "bytes": 351,
+    "sha256": "8132f5d8fa1df41f1eeb06c2858ee359db2f8354e08136931a6c6fc0b0a4b684"
+  },
+  "Q13g-world-frame.json": {
+    "bytes": 1519,
+    "sha256": "35b2f9dfdb3682d078700a5340cd774e294f8aec4879e13a2a16e302f681f63b"
+  },
+  "Q13g.log": {
+    "bytes": 200,
+    "sha256": "4383cf879ec71b904ce3107231f94a3542ee80ea744ebc21a5487e6266e8ef61"
+  },
+  "Q13h-box.log": {
+    "bytes": 448020,
+    "sha256": "4c4e28f267bb065a715a1ca87fe1e8c2bd392754aa63f37efc9d575a62582843"
+  },
+  "Q13h-cylinder-world-frame.json": {
+    "bytes": 1513,
+    "sha256": "0cbb8e8c9271a7446904585fe214a85e20657af29aa89d9d29b628b6f73faa92"
+  },
+  "Q13h-search.log": {
+    "bytes": 434806,
+    "sha256": "ce9b87016b78e7c597e78f799588a52130e7eec31d3dc1cfd1b65137a8ba1654"
+  },
+  "Q13h-transformed-world-frame.json": {
+    "bytes": 1730,
+    "sha256": "c9bcd4f95ac9a5718bfd544c76a809a4d83c1be256cbc5875408f2eca923f12e"
+  },
+  "Q13h.log": {
+    "bytes": 170,
+    "sha256": "bc8771ea2bbeb56f0d869d392a3a855f508282a833875250b09e9ac0c59e6499"
+  },
+  "refnos.json": {
+    "bytes": 427,
+    "sha256": "3ac8b3fe85df8aa85c8fae4132f891424705443d2435d3def1e1c9e2cf4bc209"
+  },
+  "summary.json": {
+    "bytes": 1988,
+    "sha256": "c070905cbc85ecf09b463dddce05768d843baeb78b7b890b09f452d78120931d"
+  },
+  "write-gate.log": {
+    "bytes": 7321,
+    "sha256": "086126815693d57c6e98c71ab68243d96e3bedae8c20445e06fdecd65e6459a0"
+  }
+}

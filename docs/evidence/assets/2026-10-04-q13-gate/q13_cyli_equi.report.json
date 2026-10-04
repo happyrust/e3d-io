@@ -1,0 +1,164 @@
+{
+  "base_sesno": 667,
+  "comment": "Q13h cylinder and transformed equipment box",
+  "commit": {
+    "appended_pages": [
+      17674,
+      17675,
+      17676,
+      17677,
+      17678,
+      17679,
+      17680,
+      17681,
+      17682,
+      17683,
+      17684,
+      17685,
+      17686,
+      17687,
+      17688,
+      17689,
+      17690
+    ],
+    "base_sesno": 667,
+    "merged_onto": null,
+    "previous": {
+      "end": 17673,
+      "page": 17671,
+      "sesno": 667
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 17690,
+      "page": 17690,
+      "sesno": 668
+    }
+  },
+  "database": "D:\\e3dio-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 667,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "DIAM",
+        "HEIG",
+        "POS"
+      ],
+      "given": "16192/17",
+      "id": "cylinder",
+      "index": 0,
+      "name": "/E3DIO-Q13-CYLI",
+      "noun": "CYLI",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/17"
+    },
+    {
+      "attrs": [
+        "ORI",
+        "POS"
+      ],
+      "given": "16192/18",
+      "id": "equipment",
+      "index": 1,
+      "name": "/E3DIO-Q13-EQUI",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/18"
+    },
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/19",
+      "id": "transformed",
+      "index": 2,
+      "name": "/E3DIO-Q13-TRANSFORMED",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/18",
+      "refno": "16192/19"
+    }
+  ],
+  "ops_file": "D:\\e3dio-gate\\ops\\q13_cyli_equi.json",
+  "spatial": {
+    "elements": {
+      "16192/17": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              900078040,
+              16192,
+              17,
+              0
+            ],
+            "value": [
+              19787,
+              78040,
+              11500,
+              23787,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      },
+      "16192/19": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              900119540,
+              16192,
+              19,
+              0
+            ],
+            "value": [
+              37787,
+              119540,
+              34500,
+              41787,
+              122540,
+              39500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      }
+    },
+    "pages": [
+      17687,
+      17688,
+      17689
+    ],
+    "policy": "require",
+    "skipped": [],
+    "table": "Rewritten { root: 17689 }",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "require",
+  "staged": null,
+  "user": "e3dio"
+}

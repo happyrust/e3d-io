@@ -1,5 +1,6 @@
 # Pure checks shared by the real driver and the offline self-check.
 function Get-Q13Block([string]$Text, [string]$Tag) {
+    $Text = $Text.TrimStart([char]0xFEFF)
     $begin = '(?m)^\s*\[' + [regex]::Escape($Tag) + '-BEGIN\]\s*$'
     $end = '(?m)^\s*\[' + [regex]::Escape($Tag) + '-END\]\s*$'
     $b = [regex]::Matches($Text, $begin); $e = [regex]::Matches($Text, $end)
@@ -8,13 +9,18 @@ function Get-Q13Block([string]$Text, [string]$Tag) {
 }
 function Test-Q13Search([string]$Text, [string]$Tag, [string[]]$Present = @(), [string[]]$Absent = @(), [switch]$VolumeError) {
     try { $block = Get-Q13Block $Text $Tag } catch { return $false }
-    if ($VolumeError) { return ($block -match '\(2,\s*536\)') }
+    if ($VolumeError) {
+        $errors13 = [regex]::Matches($block, '\(\d+,\s*\d+\)')
+        return ($errors13.Count -eq 1 -and $errors13[0].Value -match '^\(2,\s*536\)$')
+    }
     if ($block -match '\(\d+,\s*\d+\)|ERROR') { return $false }
     # Only the bracketed Q VAR result. Never match the echoed search command.
     try { $answer = Get-Q13Block $block "$Tag-RESULT" } catch { return $false }
-    if ($answer -notmatch '(?m)^\s*(?:\d+\s+)?(?:=\d+/\d+|/[A-Za-z0-9])|(?i)empty|unset|no values|array') { return $false }
-    foreach ($r in $Present) { if ($answer -notmatch ('(?<!\d)=' + [regex]::Escape($r) + '(?!\d)')) { return $false } }
-    foreach ($r in $Absent) { if ($answer -match ('(?<!\d)=' + [regex]::Escape($r) + '(?!\d)')) { return $false } }
+    if ($answer -notmatch '(?m)^\s*<ARRAY>(?: - Unset and Empty)?\s*$') { return $false }
+    $refs = @([regex]::Matches($answer, "(?m)^\s*\[\d+\]\s+<STRING>\s+'=(\d+/\d+)'\s*$") | ForEach-Object { $_.Groups[1].Value })
+    if (-not $refs.Count -and $answer -notmatch '<ARRAY> - Unset and Empty') { return $false }
+    foreach ($r in $Present) { if ($refs -notcontains $r) { return $false } }
+    foreach ($r in $Absent) { if ($refs -contains $r) { return $false } }
     return $true
 }
 function Test-Q13Intersection($A, $B, [double]$Clearance) {

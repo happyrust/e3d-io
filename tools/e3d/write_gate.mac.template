@@ -438,3 +438,12 @@ ALPHA LOG END
 ALPHA LOG "{{MACROLOG}}" OVER
 $P E3DIO-GATE-DONE see {{LOGDIR}}/*.log
 ALPHA LOG END
+
+-- Q13-TEMPLATE-BEGIN
+-- Independently rendered spatial questions, one fresh TTY snapshot per call.
+ALPHA LOG "{{LOGDIR}}/{{TAG}}.log" OVER
+{{BODY}}
+ALPHA LOG END
+ALPHA LOG "{{MACROLOG}}" OVER
+$P E3DIO-GATE-DONE
+ALPHA LOG END

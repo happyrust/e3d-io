@@ -12,16 +12,30 @@ foreach ($file in Get-ChildItem $PSScriptRoot -Filter '*.ps1') {
     $null=[Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$errors)
     Assert13 ($errors.Count -eq 0) "syntax $($file.Name): $errors"
 }
-$good="[T-BEGIN]`nVAR !q EVALUATE (REF) FOR ALL BOX WITHIN VOLUME =1/2 0`n[T-RESULT-BEGIN]`n 1 =1/3`n[T-RESULT-END]`n[T-END]"
+$good="[T-BEGIN]`nVAR !q EVALUATE (REF) FOR ALL BOX WITHIN VOLUME =1/2 0`n[T-RESULT-BEGIN]`n<ARRAY>`n [1] <STRING> '=1/3'`n[T-RESULT-END]`n[T-END]"
 Assert13 (Test-Q13Search $good 'T' @('1/3') @('1/2')) 'valid result / echo excluded'
+Assert13 (Test-Q13Search ([char]0xFEFF + $good) 'T' @('1/3')) 'E3D UTF-8 BOM'
 Assert13 (-not (Test-Q13Search $good 'T' @('1/2'))) 'echo cannot satisfy presence'
-Assert13 (-not (Test-Q13Search ($good.Replace(' 1 =1/3','')) 'T')) 'missing result'
+Assert13 (-not (Test-Q13Search ($good.Replace(" [1] <STRING> '=1/3'",'')) 'T')) 'missing result'
 Assert13 (-not (Test-Q13Search ($good.Replace('[T-END]','')) 'T')) 'missing marker'
 Assert13 (-not (Test-Q13Search ($good+"`n[T-END]") 'T')) 'duplicate marker'
-Assert13 (-not (Test-Q13Search ($good.Replace(' 1 =1/3','(2,536)')) 'T')) 'error rejected'
+Assert13 (-not (Test-Q13Search ($good.Replace('[T-BEGIN]','')) 'T')) 'missing begin'
+Assert13 (-not (Test-Q13Search ($good.Replace(" [1] <STRING> '=1/3'",'Q VAR !array =1/3')) 'T' @('1/3'))) 'echo inside result cannot satisfy presence'
+Assert13 (-not (Test-Q13Search $good 'T' @('1/30'))) 'refno exact match'
+Assert13 (Test-Q13Search ($good.Replace("<ARRAY>`n [1] <STRING> '=1/3'",'<ARRAY> - Unset and Empty')) 'T' @() @('1/3')) 'explicit empty result'
+Assert13 (-not (Test-Q13Search ($good.Replace(" [1] <STRING> '=1/3'",'(2,536)')) 'T')) 'error rejected'
 Assert13 (Test-Q13Search "[T-BEGIN]`n(2,536)`n[T-END]" 'T' -VolumeError) 'expected control error'
+Assert13 (-not (Test-Q13Search "[T-BEGIN]`n(2,537)`n[T-END]" 'T' -VolumeError)) 'wrong control error'
+Assert13 (-not (Test-Q13Search "[T-BEGIN]`n(2,536)`n(41,8)`n[T-END]" 'T' -VolumeError)) 'extra control error'
 $v=@(Get-Q13Verdicts @{Q13=$false;Q13a=$true;Q13h=$true})
 Assert13 (@($v | Where-Object { $_ -like 'PASS*' }).Count -eq 0) 'control failure propagation'
+foreach ($template in @('write_gate.mac.template','write_gate_e3d_saves.mac.template')) {
+    $parts=(Get-Content (Join-Path $PSScriptRoot $template) -Raw) -split '-- Q13-TEMPLATE-BEGIN\r?\n',2
+    Assert13 ($parts.Count -eq 2) "$template has independent Q13 section"
+    $render=$parts[1]
+    foreach ($k in @('LOGDIR','MACROLOG','TAG','BODY','MAIN')) { $render=$render.Replace("{{$k}}",'offline') }
+    Assert13 ($render -notmatch '\{\{') "$template Q13 placeholders rendered"
+}
 $vars=@{ORIGIN='0 0 0';QZONE='1/2';MOVING='1/3';NEWOWNER='1/4';GROWING='1/5';DELETING='1/6'}
 foreach ($file in Get-ChildItem (Join-Path $PSScriptRoot 'write_gate_ops') -Filter 'q13_*.json') {
     $text=Get-Content $file.FullName -Raw
@@ -57,6 +71,13 @@ if ($RealBatches) {
         $ops=$text | ConvertFrom-Json
         for ($i=0;$i -lt $ops.ops.Count;$i++) { if ($ops.ops[$i].id) { $ids[$ops.ops[$i].id]=$r.ops[$i].refno } }
         $vars.QZONE=$ids.zone;$vars.MOVING=$ids.moving;$vars.NEWOWNER=$ids.newowner;$vars.GROWING=$ids.growing;$vars.DELETING=$ids.deleting
+        foreach ($id in @('control','deleting')) {
+            if ($id -eq 'deleting' -and $name -notin @('q13_delete','q13_cyli_equi')) { continue }
+            $out=& $Descriptor spamap --db $db --refno $ids[$id]
+            Assert13 ($LASTEXITCODE -eq 0) "read absence $id"
+            $table=$out | ConvertFrom-Json
+            Assert13 ($table.entries.Count -eq 0) "no entry $id"
+        }
         if ($name -eq 'q13_boxes' -or $name -eq 'q13_move') {
             $old=Test-Q13Intersection (Frame13 $ids.oldprobe).aabb (Frame13 $ids.moving).aabb 0
             $new=Test-Q13Intersection (Frame13 $ids.newprobe).aabb (Frame13 $ids.moving).aabb 0
