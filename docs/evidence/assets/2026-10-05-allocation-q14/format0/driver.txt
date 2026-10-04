@@ -1,0 +1,33 @@
+MDS_SUPPORT_CONFIG_LOCATION set to E:\reverse\e3d\shadow_e3d31_gen_model_test\
+MDS_SUPPORT_HANGER_CONFIG_LOCATION set to E:\reverse\e3d\shadow_e3d31_gen_model_test\
+path set to E:\Program Files\PowerShell\7;E:\AppDataRelocated\Codex\.codex\tmp\arg0\codex-arg0bhYxHl;C:\Users\dpc\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\libheif\libheif\bin;C:\Users\dpc\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\jxrlib\jxrlib\bin;C:\Users\dpc\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\poppler\Library\bin;C:\Users\dpc\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\override;C:\tools\occt-7.8.0\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;E:\Program Files\Git\cmd;E:\Program Files\nodejs\;D:\Rust\.cargo\bin;E:\Program Files\PowerShell\7\;C:\Program Files\CMake\bin;C:\Program Files\dotnet\;C:\Program Files\GitHub CLI\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\Tailscale\;E:\cursor\resources\app\bin;C:\Users\dpc\.grok\bin;C:\Users\dpc\.local\bin;e:\cursor\resources\app\codeBin;C:\Users\dpc\AppData\Local\Programs\Python\Python312\Scripts\;C:\Users\dpc\AppData\Local\Programs\Python\Python312\;C:\Users\dpc\AppData\Local\Programs\Python\Launcher\;C:\Users\dpc\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell;C:\Users\dpc\AppData\Local\Microsoft\WindowsApps;C:\Users\dpc\AppData\Roaming\npm;C:\Users\dpc\bin;C:\Users\dpc\.dotnet\tools;C:\Users\dpc\AppData\Local\plannotator;C:\Users\dpc\AppData\Roaming\Python\Python312\Scripts;C:\Users\dpc\AppData\Local\Programs\Cua\cua-driver\bin;C:\tools\3rdparty-vc14-64\jemalloc-vc14-64\bin;C:\tools\3rdparty-vc14-64\freeimage-3.17.0-vc14-64\bin;C:\tools\3rdparty-vc14-64\freetype-2.5.5-vc14-64\bin;C:\tools\3rdparty-vc14-64\tbb2021.5-vc14-x64\bin;C:\tools\3rdparty-vc14-64\ffmpeg-3.3.4-64\bin;C:\tools\3rdparty-vc14-64\openvr-1.14.15-64\bin\win64;C:\tools\3rdparty-vc14-64\VTK-6.1.0-vc14-64\bin;C:\Users\dpc\AppData\Local\Microsoft\WinGet\Packages\zig.zig_Microsoft.Winget.Source_8wekyb3d8bbwe\zig-x86_64-windows-0.16.0;C:\Users\dpc\.agents\tools\ida-bridge\.venv\Scripts;C:\Users\dpc\AppData\Local\Microsoft\WinGet\Links;E:\Zed Preview\bin;C:\Users\dpc\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin;D:\Programs\Kiro\bin;C:\Users\dpc\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\fallback;C:\Users\dpc\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;C:\Users\dpc\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\git\cmd;C:\Users\dpc\AppData\Local\OpenAI\Codex\bin\6de5bf5fa8384f8d;C:\Users\dpc\AppData\Local\OpenAI\Codex\bin\f544b3844e0f14e9;E:\reverse\e3d\shadow_e3d31_gen_model_test\;E:\reverse\e3d\shadow_e3d31_gen_model_test\dars;E:\reverse\e3d\shadow_e3d31_gen_model_test\autodraftACAD;E:\reverse\e3d\shadow_e3d31_gen_model_test\PMLUI\plots\
+AVEVA_DESIGN_EXE set to E:\reverse\e3d\shadow_e3d31_gen_model_test\;
+pmllib set to E:\reverse\e3d\SH160F~1\PMLLIB\
+PMLUI set to E:\reverse\e3d\SH160F~1\PMLUI\
+AVEVA_DESIGN_REP_DIR set to E:\reverse\e3d\SH160F~1\PMLUI\reports\
+AVEVA_DESIGN_PLOTS set to E:\reverse\e3d\SH160F~1\PMLUI\plots\
+AVEVA_DESIGN_USER set to C:\Users\Public\DOCUME~1\AVEVA\USERDATA\
+AVEVA_DESIGN_DFLTS set to C:\Users\Public\DOCUME~1\AVEVA\EVERYT~1\Data\DFLTS3.1\
+AVEVA_DESIGN_WORK set to C:\Users\dpc\AppData\Local\Temp\
+AVEVA_DESIGN_HELP_DIR set to E:\reverse\e3d\SH160F~1\Documentation\
+plotcadc set to C:\Program Files (x86)\Common FilesAVEVA Shared\plot\plot.exe
+cadc_plot_dir set to C:\PROGRA~2\Common FilesAVEVA Shared\plot\plot.exe\
+cadc_ipcdir set to E:\reverse\e3d\shadow_e3d31_gen_model_test\null\
+mdsplots set to E:\reverse\e3d\SH160F~1\PMLUI\DES\mds\plot\
+licadmdsexe set to C:\ThirdParty\Licad\LICAD\LICAD_MDS.exe
+pslmdsexe set to C:\ThirdParty\PSL\PSLDesigner\PSDesigner.exe
+cplmdsexe set to C:\ThirdParty\WH4\WH4win.exe
+AVEVA_DESIGN_ABA_LOG set to C:\Users\Public\DOCUME~1\AVEVA\USERDATA\logFiles\
+AVEVA_DESIGN_ABA_HYPER set to C:\Users\Public\DOCUME~1\AVEVA\USERDATA\HYPERP~1\
+AVEVA_DESIGN_ABA_PLOT set to C:\Users\Public\DOCUME~1\AVEVA\USERDATA\PLOTFI~1\
+AVEVA_DESIGN_ABA_BATCH set to C:\Users\Public\DOCUME~1\AVEVA\USERDATA\BATCHF~1\
+AVEVA_DESIGN_ABA_REPORT set to C:\Users\Public\DOCUME~1\AVEVA\USERDATA\REPORT~1\
+AVEVA_DESIGN_ABA_DATA set to E:\reverse\e3d\SH160F~1\ASSO_P~1\aba\Data\
+AVEVA_DESIGN_LOG set to C:\Users\Public\DOCUME~1\AVEVA\USERDATA\AVEVAA~1.TXT\
+building_design set to E:\reverse\e3d\SH160F~1\PMLLIB\BUILDI~1\
+common_tools set to E:\reverse\e3d\SH160F~1\PMLLIB\COMMON~2\
+sampsi set to D:\E3F723~1\AvevaPlantSample\sampsi\
+=== E3D TTY project=TES mdb=/COMP macro=D:/e3dio-format0-f-20261005/format0_driver.mac ===
+detached pid=88736
+detached pid=88736 exit=0
+=== E3D TTY EXIT CODE: 0 ===

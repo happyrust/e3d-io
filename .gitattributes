@@ -11,3 +11,4 @@ docs/evidence/assets/2026-10-04-q13-gate/** -text whitespace=cr-at-eol
 
 # Allocation probe evidence retains the original IB/TTY output bytes.
 docs/evidence/assets/2026-10-05-allocation/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/evidence/assets/2026-10-05-allocation-q14/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof

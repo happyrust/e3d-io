@@ -1,0 +1,31 @@
+project copied to D:\e3dio-alt-f-20261005\AvevaMarineSample
+reset D:\e3dio-alt-f-20261005\AvevaMarineSample\ams000\ams8000_0001 from the original
+alternate-write gate: 5 round(s) on ZONE /1RX03-MSUP (24384/47), base session 646
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-alt-f-20261005 outcome=Completed
+﻿E3DIO-GATE-DONE alt E3D round 1, see D:/e3dio-alt-f-20261005/logs-alt/alt_e3d_1.log
+
+  R1: E3D SAVEWORK 647 on 646 (+1 quit-save) (EQUI 24384/26506 /E3DIO-ALT-E3D-1) -> e3d-io 649 on 648 (/E3DIO-ALT-IO-1)
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-alt-f-20261005 outcome=Completed
+﻿E3DIO-GATE-DONE alt E3D round 2, see D:/e3dio-alt-f-20261005/logs-alt/alt_e3d_2.log
+
+  R2: E3D SAVEWORK 650 on 649 (+1 quit-save) (EQUI 24384/26508 /E3DIO-ALT-E3D-2) -> e3d-io 652 on 651 (/E3DIO-ALT-IO-2)
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-alt-f-20261005 outcome=Completed
+﻿E3DIO-GATE-DONE alt E3D round 3, see D:/e3dio-alt-f-20261005/logs-alt/alt_e3d_3.log
+
+  R3: E3D SAVEWORK 653 on 652 (+1 quit-save) (EQUI 24384/26510 /E3DIO-ALT-E3D-3) -> e3d-io 655 on 654 (/E3DIO-ALT-IO-3)
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-alt-f-20261005 outcome=Completed
+﻿E3DIO-GATE-DONE alt E3D round 4, see D:/e3dio-alt-f-20261005/logs-alt/alt_e3d_4.log
+
+  R4: E3D SAVEWORK 656 on 655 (+1 quit-save) (EQUI 24384/26512 /E3DIO-ALT-E3D-4) -> e3d-io 658 on 657 (/E3DIO-ALT-IO-4)
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-alt-f-20261005 outcome=Completed
+﻿E3DIO-GATE-DONE alt E3D round 5, see D:/e3dio-alt-f-20261005/logs-alt/alt_e3d_5.log
+
+  R5: E3D SAVEWORK 659 on 658 (+1 quit-save) (EQUI 24384/26514 /E3DIO-ALT-E3D-5) -> e3d-io 661 on 660 (/E3DIO-ALT-IO-5)
+PASS T4a 5 rounds: E3D and e3d-io wrote in turn, each e3d-io session a straight append on the E3D session before it, and e3d-io read every E3D EQUI
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-alt-f-20261005 outcome=read_only
+﻿E3DIO-GATE-DONE alt readback, see D:/e3dio-alt-f-20261005/logs-alt/alt_readback.log
+
+PASS T4b E3D read back all 10 EQUIs (both sides) from the ZONE by name
+PASS T4c the 17 sessions 646..662 number contiguously, every BASESN back-references an existing session, and each e3d-io session is user e3dio based on the E3D session before it
+
+all PASS — E3D 3.1 and e3d-io alternated 5 rounds on one ZONE with an unbroken session chain (logs in D:\e3dio-alt-f-20261005\logs-alt)

@@ -1,0 +1,28 @@
+{
+  "open_gate_pass": true,
+  "open_median_ms": 0.1317,
+  "profile": "release",
+  "runs": [
+    {
+      "fast": true,
+      "first_allocation_ms": 0.1365,
+      "open_ms": 0.17980000000000002,
+      "refno": "15543/2"
+    },
+    {
+      "fast": true,
+      "first_allocation_ms": 0.0208,
+      "open_ms": 0.1317,
+      "refno": "15543/2"
+    },
+    {
+      "fast": true,
+      "first_allocation_ms": 0.0217,
+      "open_ms": 0.1317,
+      "refno": "15543/2"
+    }
+  ],
+  "source": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams7351_0001",
+  "source_len": 1238308864,
+  "source_sha256": "d7b0cecb020c0872f86e8d03b2eee7b38efdaf6be2035090af2a40c33b4061ac"
+}

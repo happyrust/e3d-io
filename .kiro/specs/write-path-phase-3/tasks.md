@@ -341,7 +341,8 @@
     - Q13g 借助 `e3d-descriptor spamap` 与 `spamap-check --refno`；Q13h 借助 `world-frame`（各轴之差 ≤ 0.1 mm）
     - 打印 Probe 预判的 `PROBE` 行与耗时的 `TIME` 行
     - _Requirements: 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9, 10.12, 10.13, 10.14, 10.15, 10.16, 10.17_
-  - [~] 10.4 跑门并记录
+  - [x] 10.4 跑门并记录
+    - 2026-10-05 F7：完整 TTY 39/0（含 Q14），alternate 5 轮、原样 FORMAT 0 全 PASS，源 AMS/TES 哈希/长度不变；证据 `docs/evidence/2026-10-05-allocation-q14-gate.md`。10.5/10.6 仍待人工图形门。
     - 2026-10-04 部分完成：Q0 + 既有 28 问 + Q13/Q13a–h、alternate 5 轮、原样 FORMAT 0 全 PASS。总 199.5563017 s / Q13 161.8146313 s。Q14 等第 11 组，不标整体完成；证据 `docs/evidence/2026-10-04-q13-spatial-gate.md`。
     - 在 SPAMAP 维护记为完成的提交上跑 E3D_Gate_Set：TTY_Gate（含 Q13 组与 Q14）、`alternate_write_gate.ps1` 5 轮（13.5 存在时含 Q15）、`format0_gate.ps1`（只跑不改），全数 PASS
     - 把 `PROBE` 预判、总耗时与 Q13 组耗时抄入 Spec_Ledger「Probe 预判与门耗时」；在「取证门槛核查」填各写侧能力的门问与记为完成的提交
@@ -353,7 +354,7 @@
   - [~] 10.6 Checkpoint - 第 10 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 11. 发号下界与 Open_Fast_Path（需求 11；与第 3–10 组并行）
+- [x] 11. 发号下界与 Open_Fast_Path（需求 11；与第 3–10 组并行）
   - [x] 11.1 取证 Counter_Semantics 与索引键序
     - 经 IB_Wrapper 读 `db_get_bucket` 等例程；Counter_Semantics 另以一次 E3D_Session 实测（探针脚本放 `tools/e3d/`，副本每轮从原件重置，会话 USER 为 `e3dio`）
     - 写 Phase_3_Evidence_Doc，经 `check_evidence.ps1` 机检；结论写入 `src/core_rules.rs` 的 `alloc.counter_semantics`、`alloc.index_order`
@@ -387,17 +388,20 @@
     - **Property 23: 字节中性能力逐字节相同**（Open_Fast_Path 部分）
     - **Validates: Requirements 2.7, 12.8**
     - _Requirements: 11.5, 11.6_
-  - [~] 11.6 测 `open` 耗时
+  - [x] 11.6 测 `open` 耗时
+    - F6：release 热缓存 3 次 0.1798/0.1317/0.1317 ms，中位 0.1317 ms；首次发号/草稿另报，源/副本不变；机器和存储见本次证据。
     - 用 Scale_Probe `--open-only` 在 `ams7351_0001` 上测 `Transaction::open`（release、热缓存、连续三次取中位数），另报首次发号耗时；连同机器与存储记入 Spec_Ledger「`open` 计时」
     - _Requirements: 11.1_
-  - [~] 11.7 加门问 Q14
+  - [x] 11.7 加门问 Q14
+    - F6 `0ea2655`，场景修正 `f008aa4`：SITE 下命名 ZONE 避免改变旧 Q5 的 EQUI 序号；精确会话 646，读侧 26484 < 桶下界 26506，CLI/E3D 均 24384/26506；完整 39 问重跑通过。
     - 新增 `tools/e3d/write_gate_ops/q14_named.json`（在扩展 24384 写一个带名字的元素）；在 `write_gate.ps1` 与 `write_gate.mac.template` 加 Q14：用 `next-word1` 算期望 word1，与 E3D `Q REF` 比对
     - _Requirements: 11.13_
   - [x] 11.8 适配因发号下界失败的既有测试
     - 既有语义断言无需更改。16 个动态发号金样键两遍验证后以锁旧哈希的精确退役清单迁移；原 Off 文件 SHA-256 未改，未受影响及预铸批次继续校验。明细 `docs/evidence/2026-10-05-allocation-floor-goldens.md`。
     - 按需求 15 第 7 条只改期望 refno，逐条记入 Spec_Ledger「测试适配清单」；与 11.4 的发号下界提交同一提交落地
     - _Requirements: 15.7_
-  - [~] 11.9 Checkpoint - 第 11 组：Ensure all tests pass
+  - [x] 11.9 Checkpoint - 第 11 组：Ensure all tests pass
+    - F7：766/0/30，Clippy/doc 63/25；39 问真门、alternate 5 轮及原样 FORMAT 0 全 PASS；新必需测试不 skip；原 17 条文件未改，动态发号键按 15.3 精确迁移；12/13/人工图形门未纳入。
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 12. staging 规模（需求 12）
@@ -598,7 +602,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | 写侧能力 | 首个写侧提交 | 父提交 | Evidence_Doc | 读侧解码与 Corpus 测试 | 门问 | 记为完成的提交 |
 |---|---|---|---|---|---|---|
 | SPAMAP 维护 | 8.1（里程碑 E 的 E1） | `474ea14`：E0 在其上重跑 SPAMAP 相关 9 个测试二进制，0 失败、无 skip（预核于 `d8fecb6` / `6811730`，其后只改文档） | 7.1 `docs/evidence/2026-10-03-spamap-encoding.md`、`…-spamap-branch-entries.md`、`…-spamap-flags.md`；7.2 `…-spamap-coverage.md`；7.3 `…-spamap-recompute.md`；7.4 `…-spamap-record-item.md`；7.5 `…-spamap-aabb.md`、`…-spamap-aabb-members.md`——结论都含例程地址与 Corpus 核对，`check_evidence` 全 PASS；第 7 组规则全部坐实（规则坐实状态总表） | 读侧解码：`src/index/spamap.rs`（SPAMAP_Reader）与 `src/spatial/`（codec、aabb、check、state），不在 `src/write/` 下、代码不引用 `src/write/`。以 Corpus 为输入的测试在 `d8fecb6` 的 Build_Checks 中 0 失败、未跳过：`spamap_reader_real`（3.4）、`spamap_codec_real`（5.5、7.2，含 4.20）、`spamap_aabb_real`（6.3）、`spamap_coverage_real`、`spamap_record_item_real`、`spamap_recompute_real`、`spamap_page_headers_real`、`spamap_census_real`；坐实集下各项 agree + waiting = total | Q13/Q13a–h 全 PASS；docs/evidence/2026-10-04-q13-spatial-gate.md | `fd9ed67` 库实现；`4939b8a` 门首提交 + 本次修正/验收提交（10.1–10.3）；10.4 整体待 Q14 |
-| 发号下界 | | | | | | |
+| 发号下界 | F5 `6c588d1` | `aacdcf9` | F1 `d4f5ab4` 的 `2026-10-05-allocation-counter-index.md` | F2 `6232c21` 的 Corpus/CLI；F5/F7 全套 766/0/30、无新增 skip；固定 base/latest、16 例历史/副本模型 | Q14 24384/26506；完整 39 问、alternate 5 轮、FORMAT 0 全 PASS | F5 库实现；F6 `0ea2655` + `f008aa4` 门修正；本 F7 验收提交 |
 | Open_Fast_Path（字节中性，按需求 2 第 7 条） | F4 | `718cf77`；在此准备提交上两遍重录，21 条 entries 与 F3 完全一致 | `docs/evidence/2026-10-05-allocation-counter-index.md#alloc.index_order`（F1 `d4f5ab4`） | F2 `6232c21` 的 `last_before` / 必需 Corpus；F4 独立 eager/lazy/scan 模型，完整 Cargo 755/0/30，金样全部通过，无新增 skip | 本优化仍 max+1；发号行为改变与 Q14 留 F5/F6 | F4（字节中性部分） |
 | staging 优化（字节中性，按需求 2 第 7 条） | | | | | | |
 | 页 1 桶表写侧（条件） | | | | | | |
@@ -610,6 +614,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `tests/golden/off_compat.json`（1.4；`write_stage6_{transaction,merge,set_by_name,spread,cli}`，留 17 条） | `d040f18` | `write_stage6_cli::` 下 5 条：`a_base_behind_the_newest_session_merges_and_reports_the_reminting#0`、`a_dry_run_makes_every_check_and_leaves_the_file_byte_identical#0`、`a_name_bound_earlier_in_the_file_resolves_before_the_commit#0`、`a_refused_instruction_names_itself_and_writes_nothing#0`、`an_instruction_file_is_applied_as_one_session_through_the_facade#0` | 两遍不同：`e3d-write` 提交用 `clock: None`（`src/bin/e3d-write.rs:711`），会话页带当时时间；五条都有一次真提交（dry run 与拒写两条也先做了一次） | — |
 | 同上 | `d040f18` | `write_stage6_spread::spread_inserts_read_back_across_many_owners#0` | 两遍不同：`SessionClock::now`（`tests/write_stage6_spread.rs:91`） | — |
 | `tests/golden/write_hashes.json`（F3；21 条，含固定时钟/预铸 32、128、257 BOX 批次） | F2 `6232c21` 上两遍，F3 准备提交紧接 F4 | 原 Off 录制的六个时间不稳定键，另 `write_stage6_cli::spatial_cli_writes_given_aabb_and_reports_readable_spatial_diff#0` | CLI / spread 使用当前时间，两遍末文件不同 | 原 Off 17 条未改；F4 前在直接父提交再录，只核对条目完全一致并更新录制元数据 |
+| 原 Off 17 / 优化 21 的动态发号键 | F5 `6c588d1`，父 `aacdcf9` | 16 个键各在两个原文件精确退役；32 条锁旧 SHA 的 retirement；见 `docs/evidence/2026-10-05-allocation-floor-goldens.md` 逐项表 | 需求 11 有意改变新 refno；需求 15.3 不把动态发号当字节兼容输入 | 两遍新下界结果一致，`allocation_floor.json` 校验新 16 条；原文件均未改；3 预铸批次/rename/拒写金样继续执行。F4 已完整通过未退役的原 17/21 |
 
 样本（备注）：17 条全部取自快照 `D:\e3dio-fixtures\phase3\ams8000_0001`，34 037 760 字节，SHA-256 `3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023`，即装机原件 2026-09-30 17:05:57 那一版（会话至 646）。
 
@@ -697,9 +702,13 @@ CLI：`src/bin/e3d-write.rs` 显式 Off 作为 E→F 过渡，不新增空间参
 
 #### `open` 计时（11.6）
 
+F7 自动门补记：`f008aa4` 上完整 TTY 39 PASS / 0 FAIL，195.2950907 s；Q13 151.8869362 s、Q14 8.6877227 s。Q14 在副本会话 646 由读侧诊断 26484 < 26506，CLI 与 E3D 都为 24384/26506。Q13 refno 与 Probe 和上一表相同，预判均成立；SAVEWORK 精确会话 667（不用退出 latest 668）。alternate 五轮 64.063 s，FORMAT 0 10.093 s，全 PASS；源 AMS/TES 哈希/长度不变。完整 Cargo 766/0/30，Clippy/doc 63/25，新必需测试无 skip；原始日志/报告/manifest 在 `docs/evidence/assets/2026-10-05-allocation-q14/`。首次 Q14 EQUI 干扰 Q5 序号的失败日志保留；改为 SITE 下命名 ZONE，原问/期望不改。
+
+F7 文档同步：README/CHANGELOG 明确发号下界及报告取号迁移；补此前未同步的 SPAMAP 默认策略/CLI AABB 和 MISSION/README 门问数。第 14 组最终文档/下游收尾仍待后续；本次仅关闭第 11 组和自动门 10.4。
+
 | 库 | 三次耗时 | 中位数 | 首次发号耗时 | 机器与存储 |
 |---|---|---|---|---|
-| | | | | |
+| `ams7351_0001`，release，热临时副本 | 0.1798 / 0.1317 / 0.1317 ms | 0.1317 ms ≤ 1 s | 0.1365 / 0.0208 / 0.0217 ms，含 insert 草稿，不提交 | Ryzen 9 7950X、约 63 GiB、Win11 26200，源 D:/临时 C: 均 WD_BLACK SN770 NVMe；源/副本字节不变；`docs/evidence/2026-10-05-allocation-q14-gate.md` |
 
 #### 剖析结论（12.2）
 

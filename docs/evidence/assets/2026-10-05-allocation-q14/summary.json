@@ -1,0 +1,115 @@
+{
+  "code_commit": "f008aa4",
+  "questions": [
+    "Q0",
+    "Q1",
+    "Q2",
+    "Q3a",
+    "Q3b",
+    "Q3c",
+    "Q3d",
+    "Q3e",
+    "Q3f",
+    "Q4a",
+    "Q4b",
+    "Q5",
+    "Q6",
+    "Q6b",
+    "Q7",
+    "Q8a",
+    "Q8b",
+    "Q9a",
+    "Q9b",
+    "Q9c",
+    "Q9d",
+    "Q10",
+    "Q11a",
+    "Q11b",
+    "Q12a",
+    "Q12b",
+    "Q12c",
+    "Q12d",
+    "Q12e",
+    "Q13",
+    "Q13a",
+    "Q13b",
+    "Q13c",
+    "Q13d",
+    "Q13e",
+    "Q13f",
+    "Q13g",
+    "Q13h",
+    "Q14"
+  ],
+  "tty_pass": 39,
+  "tty_fail": 0,
+  "times": [
+    "q13_seconds=151.8869362",
+    "Q14_seconds=8.6877227",
+    "total_seconds=195.2950907"
+  ],
+  "cargo": {
+    "passed": 766,
+    "failed": 0,
+    "ignored": 30
+  },
+  "clippy_warnings": 63,
+  "doc_warnings": 25,
+  "off_file_sha256": "1b2ac106e9a69a9a5fe677b439ae7c43ef190191dcd8d392b2375a6602e4e80a",
+  "regressions": {
+    "before": [
+      {
+        "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+        "len": 34037760,
+        "sha256": "3cab5d7d2b2c40fdf0829b91c555d19d55c530dd49860a4665560e5c553fe023"
+      },
+      {
+        "path": "D:\\AVEVA\\Projects\\E3D3.1\\TEST\\TES000\\TES023",
+        "len": 288768,
+        "sha256": "cdb87f444680019e4054bc03a0ab514d5bcda2805b719eb42d00a98b51ce3d6b"
+      }
+    ],
+    "after": [
+      {
+        "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+        "len": 34037760,
+        "sha256": "3cab5d7d2b2c40fdf0829b91c555d19d55c530dd49860a4665560e5c553fe023"
+      },
+      {
+        "path": "D:\\AVEVA\\Projects\\E3D3.1\\TEST\\TES000\\TES023",
+        "len": 288768,
+        "sha256": "cdb87f444680019e4054bc03a0ab514d5bcda2805b719eb42d00a98b51ce3d6b"
+      }
+    ],
+    "gates": [
+      {
+        "name": "alternate-f6",
+        "command": [
+          "pwsh",
+          "-NoProfile",
+          "-File",
+          "tools/e3d/alternate_write_gate.ps1",
+          "-Rounds",
+          "5",
+          "-Scratch",
+          "D:\\e3dio-alt-f-20261005"
+        ],
+        "exit": 0,
+        "seconds": 64.06300000008196
+      },
+      {
+        "name": "format0-f6",
+        "command": [
+          "pwsh",
+          "-NoProfile",
+          "-File",
+          "tools/e3d/format0_gate.ps1",
+          "-Scratch",
+          "D:\\e3dio-format0-f-20261005"
+        ],
+        "exit": 0,
+        "seconds": 10.092999999877065
+      }
+    ]
+  }
+}

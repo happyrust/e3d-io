@@ -23,12 +23,12 @@
 ## 写回（2026-09-20 起纳入）
 
 读侧的 map 做完整之后，同一份地基反过来用：`e3d_io::write` 往 E3D 3.1 库**追加一个会话**，
-写出的文件本 crate 的读侧原样读得回来，真 E3D 3.1 Design 也认（TTY 门 14 问 PASS，
-`docs/evidence/2026-09-21-e3d-tty-gate-write-path.md`）。口径与读侧一样只认二进制与 IDA 证据：
+写出的文件本 crate 的读侧原样读得回来，真 E3D 3.1 Design 也认（TTY 门 39 问 PASS：Q0、既有 28 问、Q13/Q13a–h 与 Q14，
+`docs/evidence/2026-10-05-allocation-q14-gate.md`）。口径与读侧一样只认二进制与 IDA 证据：
 每个写侧模块都是对应读侧的逆函数，读侧是它的验收方（`docs/plans/2026-09-20-dabacon-write-plan.md`
 §7 是逐步的账，`docs/plans/2026-09-21-write-path-next-steps.md` 是收口与下一步）。
 
 ## Out of scope
 
-- 几何求解、模型生成、下游渲染（写侧因此也不维护 `SPAMAP`——它的值要几何算）。
+- Built_In_AABB 之外的几何求解、模型生成、下游渲染。写侧维护 `SPAMAP`：优先调用方世界框，其次自算 BOX / CYLI 与已坐实成员聚合；默认 Require，缺框拒写，调用方可显式 Skip 或 Off。
 - E3D 2.10 及其他版本的常量差异；写侧只写 3.1 单 extent 文件。

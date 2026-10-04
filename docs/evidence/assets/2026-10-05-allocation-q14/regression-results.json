@@ -1,0 +1,56 @@
+{
+  "before": [
+    {
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "len": 34037760,
+      "sha256": "3cab5d7d2b2c40fdf0829b91c555d19d55c530dd49860a4665560e5c553fe023"
+    },
+    {
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\TEST\\TES000\\TES023",
+      "len": 288768,
+      "sha256": "cdb87f444680019e4054bc03a0ab514d5bcda2805b719eb42d00a98b51ce3d6b"
+    }
+  ],
+  "after": [
+    {
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "len": 34037760,
+      "sha256": "3cab5d7d2b2c40fdf0829b91c555d19d55c530dd49860a4665560e5c553fe023"
+    },
+    {
+      "path": "D:\\AVEVA\\Projects\\E3D3.1\\TEST\\TES000\\TES023",
+      "len": 288768,
+      "sha256": "cdb87f444680019e4054bc03a0ab514d5bcda2805b719eb42d00a98b51ce3d6b"
+    }
+  ],
+  "gates": [
+    {
+      "name": "alternate-f6",
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "tools/e3d/alternate_write_gate.ps1",
+        "-Rounds",
+        "5",
+        "-Scratch",
+        "D:\\e3dio-alt-f-20261005"
+      ],
+      "exit": 0,
+      "seconds": 64.06300000008196
+    },
+    {
+      "name": "format0-f6",
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "tools/e3d/format0_gate.ps1",
+        "-Scratch",
+        "D:\\e3dio-format0-f-20261005"
+      ],
+      "exit": 0,
+      "seconds": 10.092999999877065
+    }
+  ]
+}

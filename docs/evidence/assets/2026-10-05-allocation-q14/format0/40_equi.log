@@ -1,0 +1,9 @@
+﻿F0-40-BEGIN
+EQUIPMENT /E3DIO-锅炉设备
+Ref =17419/331
+Type EQUI
+Name /E3DIO-锅炉设备
+Description 锅炉岛设备 e3d-io 写入
+Owner /反应堆厂房-E3DIO
+Position E 1000mm N 2000mm U 3000mm
+F0-40-END

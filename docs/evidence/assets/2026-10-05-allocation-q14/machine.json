@@ -1,0 +1,23 @@
+{
+  "cpu": {
+    "Name": "AMD Ryzen 9 7950X 16-Core Processor            ",
+    "NumberOfCores": 16,
+    "NumberOfLogicalProcessors": 32
+  },
+  "os": {
+    "Caption": "Microsoft Windows 11 企业版",
+    "Version": "10.0.26200",
+    "TotalVisibleMemorySize": 66214672
+  },
+  "disk": {
+    "FriendlyName": "WD_BLACK SN770 1TB",
+    "BusType": "NVMe",
+    "Size": 1000204886016
+  },
+  "temp_path": "C:\\Users\\dpc\\AppData\\Local\\Temp\\",
+  "temp_disk": {
+    "FriendlyName": "WD_BLACK SN770 1TB",
+    "BusType": "NVMe",
+    "Size": 1000204886016
+  }
+}

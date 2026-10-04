@@ -24,14 +24,15 @@
 //! What it does for you, and what it does not:
 //!
 //! - **refno** — a new element is given `(owner.word0, next)`, where `next` is
-//!   one past the highest `word1` seen in that extent at open, handed out in
-//!   sequence within the transaction. `core.dll` keeps a per-extent counter on
-//!   page 1 (the bucket table) that sits above the live maximum because a
-//!   deleted number is never reused (`docs/evidence/2026-09-22-core-dll-refno-allocation.md`);
-//!   this crate does not maintain page 1 yet (that is A11 / S6b), so it hands
-//!   out `max + 1`, which never collides with a live element of the base. If
+//!   the greater of the pinned base index maximum plus one and the confirmed
+//!   page-1 NextAvailable counter read at open, handed out in sequence within
+//!   the transaction (`docs/evidence/2026-10-05-allocation-counter-index.md`).
+//!   Missing, malformed or unconfirmed counters fall back to the index;
+//!   [`Transaction::allocation_basis`] reports that choice. This crate reads
+//!   page 1 without maintaining it (S6b). If
 //!   the database moved on before the commit and the committed session took
-//!   that number, the insert is **re-minted** past the committed maximum at
+//!   that number, the insert is **re-minted** using the merge snapshot's index
+//!   and current page-1 floor at
 //!   commit — every owner word, member list, name key and reference in the
 //!   batch that named it following — and the mapping is reported
 //!   ([`TransactionCommit::reminted`]).
@@ -284,8 +285,9 @@ impl<'a> Transaction<'a> {
     /// read for its member list) comes from. A commit onto a database whose
     /// newest session is no longer the base is a merge (module docs).
     ///
-    /// Scans the base session's index once for the highest `word1` in each
-    /// extent, so a new element can be given the next one.
+    /// Pins the base index and reads page 1. Confirmed ordering defers each
+    /// extent's maximum lookup to its first allocation; pending ordering
+    /// preserves the eager scan. See [`Self::allocation_basis`].
     pub fn open_at(
         path: impl AsRef<Path>,
         at: impl Into<SessionSelector>,
@@ -1071,8 +1073,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Give every insert whose refno the newest session already indexes a
-    /// fresh one past that session's highest in the extent — what `core.dll`
-    /// gets for free by minting at save time from page 1 — and rewrite the
+    /// fresh one from the pinned merge index and its page-1 floor, and rewrite the
     /// batch to match: the record's own refno, every owner word and member
     /// list that named it, every `NAME` key filed for it, and every reference
     /// attribute in the batch (explicit type 4 / 8 / 16 / 17 fields, and the
@@ -1103,8 +1104,8 @@ impl<'a> Transaction<'a> {
         if taken.is_empty() {
             return Ok(());
         }
-        // The newest session's highest `word1` per extent, past which the fresh
-        // numbers go — skipping any the batch already uses.
+        // Fresh numbers use this exact latest snapshot and page-1 floor,
+        // skipping any the original batch already uses.
         let mut allocator = super::alloc::Allocator::open(latest)?;
         let mut used: HashSet<RefNo> = inserted.iter().copied().collect();
         for old in taken {
