@@ -51,6 +51,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$gateClock = [Diagnostics.Stopwatch]::StartNew()
+$sourceHash = (Get-FileHash (Join-Path $Project $DbRelative) -Algorithm SHA256).Hash
 # The driver is a gen-model bin; when the default build is not there (gen-model's main
 # worktree does not always compile against a neighbouring e3d-model WIP), take one built
 # from a scratch worktree into its own target dir (2026-09-23: `.scratch\wt-f47\gen-model`,
@@ -130,7 +132,8 @@ function Invoke-Apply([string]$name, [hashtable]$vars = @{}, [string[]]$extra = 
     if ($text -match '\{\{[A-Z0-9]+\}\}') { throw "$name still has a placeholder: $($Matches[0])" }
     [IO.File]::WriteAllText($rendered, $text, $utf8)
     Remove-Item $report -Force -ErrorAction SilentlyContinue
-    $run = Invoke-Native { & $exe apply --db $copyDb --ops $rendered --report $report @extra }
+    $policy = if ($name -like 'q13_*') { @() } else { @('--spatial', 'off') }
+    $run = Invoke-Native { & $exe apply --db $copyDb --ops $rendered --report $report @policy @extra }
     [IO.File]::WriteAllText($outFile, $run.Output, $utf8)
     $parsed = if (Test-Path $report) { [IO.File]::ReadAllText($report, $utf8) | ConvertFrom-Json } else { $null }
     [pscustomobject]@{ Name = $name; ExitCode = $run.ExitCode; Report = $parsed; Output = $run.Output }
@@ -416,6 +419,9 @@ if ($saves -notmatch 'E3DSAVE-SAVED') {
     }
 }
 
+. (Join-Path $PSScriptRoot 'q13_gate.ps1')
+if ((Get-FileHash (Join-Path $Project $DbRelative) -Algorithm SHA256).Hash -ne $sourceHash) { throw 'source database changed' }
+Write-Output "TIME total_seconds=$($gateClock.Elapsed.TotalSeconds)"
 Write-Output ''
 if ($failures) { Write-Output "$failures FAIL — logs in $logDir"; exit 1 }
 Write-Output "all PASS — E3D 3.1 read every session e3d-write wrote (logs in $logDir)"

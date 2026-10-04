@@ -1,0 +1,5 @@
+{"comment":"Q13 Off control","ops":[
+ {"op":"insert","id":"site","owner":"/*","noun":"SITE","name":"/E3DIO-Q13-SITE","attrs":{"POS":"{{ORIGIN}}"}},
+ {"op":"insert","id":"zone","owner":"@site","noun":"ZONE","name":"/E3DIO-Q13-ZONE"},
+ {"op":"insert","id":"control","owner":"@zone","noun":"BOX","name":"/E3DIO-Q13-CONTROL","attrs":{"POS":"3000 0 0","XLEN":"300","YLEN":"400","ZLEN":"500"}}
+]}

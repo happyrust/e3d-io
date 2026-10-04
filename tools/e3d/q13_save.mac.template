@@ -1,0 +1,15 @@
+-- SAVEWORK protocol from write_gate_e3d_saves.mac.template.
+ALPHA LOG "{{LOGDIR}}/Q13g.log" OVER
+$P [Q13g-BEGIN]
+={{MAIN}}
+XLEN 301
+SAVEWORK
+handle any
+  $P Q13-ERROR $!!error.text
+endhandle
+Q SESSION
+$P [Q13g-END]
+ALPHA LOG END
+ALPHA LOG "{{MACROLOG}}" OVER
+$P E3DIO-GATE-DONE
+ALPHA LOG END
