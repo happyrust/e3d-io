@@ -203,7 +203,7 @@
     - _Requirements: 2.4, 6.1, 6.16_
   - [x]* 7.6 写示例测试 4.20 与 6.17
     - 4.20：在 `tests/spamap_codec_real.rs` 中以 BOX `24384/26484` 在 E3D 为其写出条目那一会话的状态为输入（经 `ReadState`），断言 SPAMAP_Codec 恰得需求 4 第 20 条的那一条条目
-    - 4.20 已做（里程碑 D 的 D4）：探针 `tools/e3d/spamap_probes/selfcheck_e3dio_box_xlen.pml` 让 E3D 改该 BOX 的 `XLEN`，得到的会话 648 钉为 `D:\e3dio-fixtures\phase3\spamap-4-20\ams8000_0001`（输入记于 `docs/evidence/2026-10-03-spamap-aabb-members.md`）；`requirement_4_20s_box_encodes_to_exactly_its_entry` 在坐实集下恰得该条目，与盘上所存相同。6.17 已做（E2–E9，本次实现提交）：`write_stage8_spamap_examples::requirement_6_17_box_registers_its_exact_world_bounds` 只用读侧验证六个坐标字
+    - 4.20 已做（里程碑 D 的 D4）：探针 `tools/e3d/spamap_probes/selfcheck_e3dio_box_xlen.pml` 让 E3D 改该 BOX 的 `XLEN`，得到的会话 648 钉为 `D:\e3dio-fixtures\phase3\spamap-4-20\ams8000_0001`（输入记于 `docs/evidence/2026-10-03-spamap-aabb-members.md`）；`requirement_4_20s_box_encodes_to_exactly_its_entry` 在坐实集下恰得该条目，与盘上所存相同。6.17 已做（E2–E9，`fd9ed67`）：`write_stage8_spamap_examples::requirement_6_17_box_registers_its_exact_world_bounds` 只用读侧验证六个坐标字
     - 6.17：在 `tests/write_stage8_spamap_examples.rs` 中经 Transaction 插入需求 6 第 17 条的 BOX（不给 World_AABB）并提交，只用读侧读回，断言条目值前 6 字即该条的 World_AABB；此部分依赖 8.7
     - 所需规则未坐实时，测试断言 D7 回退（视同无可用 World_AABB），并把该示例作为待办记入 Spec_Ledger「规则坐实状态总表」备注
     - _Requirements: 4.20, 6.17_
@@ -301,7 +301,7 @@
     - _Requirements: 7.8_
   - [x] 8.18 Checkpoint - 第 8 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
-    - 已验收（2026-10-04，E2–E9，本次实现提交）：`cargo test --no-fail-fast -- --nocapture` 为 722 / 0 / 30（122 个测试二进制 + Doc-tests）；既有 skip 7 个（8 条提示，其中成员覆盖测试同时缺新、旧样本），新增 E 测试无 skip。`cargo clippy --all-targets` 63、`cargo doc` 25，与 E1 基线相同。17 条 Off 金样通过，未更新金样。CLI 显式 Off，完整空间 CLI 与真 E3D 门留到 F。
+    - 已验收（2026-10-04，E2–E9，`fd9ed67`）：`cargo test --no-fail-fast -- --nocapture` 为 722 / 0 / 30（122 个测试二进制 + Doc-tests）；既有 skip 7 个（8 条提示，其中成员覆盖测试同时缺新、旧样本），新增 E 测试无 skip。`cargo clippy --all-targets` 63、`cargo doc` 25，与 E1 基线相同。17 条 Off 金样通过，未更新金样。CLI 显式 Off，完整空间 CLI 与真 E3D 门留到 F。
 
 - [ ] 9. Write_CLI（需求 9）
   - [~] 9.1 扩展 `src/bin/e3d-write.rs`
@@ -606,23 +606,23 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 
 | 测试或 Gate_Ops | 原因（D3 默认 / 发号下界） | 改动（显式 Spatial_Policy / 期望 refno） | 提交 |
 |---|---|---|---|
-| `write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_transaction::a_facade_rename_moves_the_name_and_rewrites_the_record` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_transaction::reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_merge::a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_merge::a_writer_that_commits_between_staging_and_page_0_is_merged_over_once` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_set_by_name::every_shape_set_by_name_reads_back_as_the_value_it_names` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_set_by_name::the_dictionary_holds_a_set_to_what_e3d_allows` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_set_by_name::a_name_set_twice_in_one_transaction_files_the_last_one_only` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
-| `write_stage6_spread::spread_inserts_read_back_across_many_owners` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（本次实现提交） |
+| `write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_transaction::a_facade_rename_moves_the_name_and_rewrites_the_record` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_transaction::reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_merge::a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_merge::a_writer_that_commits_between_staging_and_page_0_is_merged_over_once` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_set_by_name::every_shape_set_by_name_reads_back_as_the_value_it_names` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_set_by_name::the_dictionary_holds_a_set_to_what_e3d_allows` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_set_by_name::a_name_set_twice_in_one_transaction_files_the_last_one_only` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_spread::spread_inserts_read_back_across_many_owners` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
 
 CLI：`src/bin/e3d-write.rs` 显式 Off 作为 E→F 过渡，不新增空间参数或报告；既有五个 CLI 测试期望不变。
 
