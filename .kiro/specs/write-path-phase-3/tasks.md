@@ -363,10 +363,11 @@
     - 在 Open_Fast_Path 首个写侧提交（11.4）的父提交上，用 `tools/golden/record.ps1` 录 `tests/golden/write_hashes.json`（固定时钟与预铸 refno）并入库；与 11.4 之间有别的提交时重录
     - 剔除的键记入 Spec_Ledger「Golden 剔除键」
     - _Requirements: 2.7_
-  - [~] 11.3 读侧：`IndexCursor::last_before(RefNo)` 与 `e3d-descriptor next-word1`
+  - [x] 11.3 读侧：`IndexCursor::last_before(RefNo)` 与 `e3d-descriptor next-word1`
     - `last_before` 放在读侧索引游标所在模块，不在 `src/write/`
     - `next-word1 --db <f> --extent <w0>` 在读侧算出「全索引 max + 1」与 Bucket_Floor，作为 Q14 与需求 11 第 5 条的期望值
     - _Requirements: 11.4, 11.5, 11.13_
+    - F2：前驱/CLI 定向 18 通过、0 失败、新增无 skip，既有 1 ignored；五库 15 会话独立扫描一致、冷读至多 4 页。完整 Cargo 751/0/30，随后桶表坏计数保护定向 5/0；Clippy 63、doc 25，Off 金样 SHA-256 未变。诊断先 seek 后 scan，缺桶与坏页 1 明确回退。
   - [~] 11.4 实现 `src/write/alloc.rs`
     - `Allocator`：惰性 seek（`alloc.index_order` 未坐实时不启用 Open_Fast_Path、`open` 全扫描），以 `max_word1_scan` 为朴素对照，记下 `AllocationBasis`（页 1 解析失败记 `CounterUse::Unavailable`；Counter_Semantics 未坐实记 `Unconfirmed`，发号 = base 索引 max + 1）
     - 发号逻辑从 `src/write/transaction.rs` 抽出，接入 `open`、`open_at(base)` 与重铸（重铸取提交时读到的页 1）；`RefnoExhausted` 照旧

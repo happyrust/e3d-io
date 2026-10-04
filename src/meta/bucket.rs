@@ -82,7 +82,14 @@ impl BucketTable {
         // Word 2 is `2 + 3·n`. Take the entry count from it, and stop early at a
         // zero extent word so a shorter-than-stated table is read, not overrun.
         let n = word(2)?;
-        let count = (n.saturating_sub(2) / ENTRY_WORDS as u32) as usize;
+        if n < 2 || !(n - 2).is_multiple_of(ENTRY_WORDS as u32) {
+            return Err(format!("bucket word count {n} is not 2 + 3*n"));
+        }
+        let count = ((n - 2) / ENTRY_WORDS as u32) as usize;
+        let available = (page.len() / 4).saturating_sub(HEADER_WORDS) / ENTRY_WORDS;
+        if count > available {
+            return Err(format!("bucket page claims {count} entries but holds at most {available}"));
+        }
         let mut entries = Vec::with_capacity(count);
         for index in 0..count {
             let base = HEADER_WORDS + index * ENTRY_WORDS;
@@ -152,5 +159,13 @@ mod tests {
         // Word 2 claims three entries, but the second is zeroed: read one.
         let table = BucketTable::parse(&page(&[1, 0xFFFF_FFFF, 11, 24_384, 26_496, 0, 0, 0, 0])).unwrap();
         assert_eq!(table.entries.len(), 1);
+    }
+
+    #[test]
+    fn malformed_count_is_refused_before_allocating_entries() {
+        for count in [0, 1, 3, 4, 6, u32::MAX] {
+            assert!(BucketTable::parse(&page(&[1, MARKER, count])).is_err(), "bad word count {count}");
+        }
+        assert!(BucketTable::parse(&[1u32, MARKER, 5].into_iter().flat_map(u32::to_be_bytes).collect::<Vec<_>>()).is_err());
     }
 }

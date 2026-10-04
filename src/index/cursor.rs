@@ -257,6 +257,63 @@ impl<'a> IndexCursor<'a> {
     pub fn walk(&mut self) -> IndexWalk<'_> {
         IndexWalk::new(self.pages, self.root, self.page_limit)
     }
+
+    /// The greatest indexed key strictly less than `target`.
+    ///
+    /// At a separator equal to the target, descends the preceding subtree:
+    /// separators are subtree minima, so equality cannot contain a predecessor.
+    /// No record pages are read. Malformed paths remain errors, never absence.
+    pub fn last_before(&mut self, target: RefNo) -> Result<Option<IndexedRecord>, IndexTreeError> {
+        self.last_bounded(Some(target))
+    }
+
+    /// The greatest indexed key, including a key with both words at u32::MAX.
+    pub fn last(&mut self) -> Result<Option<IndexedRecord>, IndexTreeError> {
+        self.last_bounded(None)
+    }
+
+    fn last_bounded(&mut self, bound: Option<RefNo>) -> Result<Option<IndexedRecord>, IndexTreeError> {
+        let mut visited = HashSet::new();
+        let mut pending = vec![(self.root, None)];
+        while let Some((page, parent)) = pending.pop() {
+            if !visited.insert(page) {
+                return Err(IndexTreeError::Cycle { revisited: page, after: visited.len() as u32 });
+            }
+            if visited.len() as u32 > self.page_limit {
+                return Err(IndexTreeError::TooManyPages { visited: visited.len() as u32, limit: self.page_limit });
+            }
+            let node = read_node(self.pages, page, parent)?;
+            let mut previous = None;
+            let mut eligible = Vec::new();
+            for entry in node.entries() {
+                if !entry.is_start_marker() {
+                    if let Some(previous) = previous {
+                        if entry.refno <= previous {
+                            return Err(IndexTreeError::KeyOutOfOrder { page, previous, found: entry.refno });
+                        }
+                    }
+                    previous = Some(entry.refno);
+                }
+                if (entry.is_start_marker() && !node.is_leaf())
+                    || (!entry.is_start_marker() && bound.is_none_or(|limit| entry.refno < limit)) {
+                    eligible.push(entry);
+                }
+            }
+            if node.is_leaf() {
+                if let Some(entry) = eligible.last() { return Ok(Some(located(*entry, page))); }
+            } else {
+                if node.entries().next().is_none() {
+                    return Err(IndexTreeError::NoChildren { page, level: node.level });
+                }
+                // Rightmost eligible child first; preceding children only matter
+                // if that subtree contains no records (an empty synthetic tree).
+                for entry in eligible {
+                    pending.push((PageId::new(page.ext, entry.page_no), Some((page, node.level))));
+                }
+            }
+        }
+        Ok(None)
+    }
 }
 
 /// Every indexed key of one tree, in key order.

@@ -26,6 +26,49 @@ use e3d_io::session::DbView;
 
 mod common;
 
+/// Mandatory allocation gate: compare original walk order and predecessor
+/// with an independent scan on latest, middle and oldest retained sessions.
+#[test]
+fn allocation_predecessor_and_order_on_required_corpus() {
+    use e3d_io::session::SessionSelector;
+    for path in common::corpus::CORPUS {
+        let mut latest = DbView::open(path).expect("required Corpus must be installed");
+        let chain = latest.walk_sessions().expect("retained session chain");
+        let mut sessions = vec![chain[0].sesno, chain[chain.len() / 2].sesno, chain.last().unwrap().sesno];
+        sessions.sort_unstable();
+        sessions.dedup();
+        for sesno in sessions {
+            let mut view = DbView::open_at(path, SessionSelector::Exact(sesno)).unwrap();
+            let records = walked(&mut view);
+            assert!(records.iter().all(|r| r.refno.word0 <= i32::MAX as u32 && r.refno.word1 <= i32::MAX as u32), "{path} session {sesno}: ordinary keys must be nonnegative native words");
+            for pair in records.windows(2) {
+                assert!(pair[0].refno < pair[1].refno, "{path} session {sesno}: {} >= {}", pair[0].refno, pair[1].refno);
+            }
+            let mut targets = BTreeSet::from([RefNo::new(0, 0), RefNo::new(u32::MAX, u32::MAX)]);
+            let step = (records.len() / 32).max(1);
+            for r in records.iter().step_by(step) {
+                targets.insert(r.refno);
+                if let Some(word1) = r.refno.word1.checked_add(1) { targets.insert(RefNo::new(r.refno.word0, word1)); }
+            }
+            for extent in records.iter().map(|r| r.refno.word0).collect::<BTreeSet<_>>() {
+                if let Some(next) = extent.checked_add(1) { targets.insert(RefNo::new(next, 0)); }
+            }
+            let mut worst = 0;
+            for target in targets {
+                let expected = records.iter().rev().find(|r| r.refno < target).copied();
+                let mut cold = DbView::open_at_with_cache(path, SessionSelector::Exact(sesno), 1).unwrap();
+                let before = cold.stats().pages_read;
+                let got = IndexCursor::new(&mut cold).last_before(target).unwrap();
+                let reads = cold.stats().pages_read - before;
+                assert_eq!(got, expected, "{path} session {sesno}, before {target}");
+                assert!(reads <= 6, "{path}: predecessor read {reads} pages");
+                worst = worst.max(reads);
+            }
+            println!("ALLOC-CORPUS {path} session={sesno} keys={} order_violations=0 max_predecessor_reads={worst}", records.len());
+        }
+    }
+}
+
 const AMS_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
 const AMS8000: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001";
 const AMS7329: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams7329_0001";
@@ -132,6 +175,100 @@ fn two_level_db(dir: &Path) -> PathBuf {
 
 fn key(word1: u32) -> RefNo {
     RefNo::new(0, word1)
+}
+
+#[test]
+fn strict_predecessor_matches_a_scan_across_leaf_separators() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = two_level_db(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    let all = walked(&mut view);
+    for n in 0..=250 {
+        let expected = all.iter().rev().find(|record| record.refno < key(n)).copied();
+        let mut cold = DbView::open_at_with_cache(&path, e3d_io::session::SessionSelector::Latest, 1).unwrap();
+        let before = cold.stats().pages_read;
+        assert_eq!(IndexCursor::new(&mut cold).last_before(key(n)).unwrap(), expected, "target {n}");
+        assert_eq!(cold.stats().pages_read - before, 2, "one page per level for target {n}");
+    }
+    assert_eq!(IndexCursor::new(&mut view).last().unwrap(), all.last().copied());
+}
+
+#[test]
+fn predecessor_handles_empty_leaves_sentinels_and_unsigned_extents() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut db = Db::new(7);
+    db.session(1, 7, 2);
+    db.index(2, 1, &[sentinel(3), [u32::MAX, 0, 4, 1]]);
+    db.index(3, 0, &[sentinel(6), [2, u32::MAX, 6, 1]]);
+    db.index(4, 0, &[[u32::MAX, 0, 6, 1], [u32::MAX, u32::MAX, 6, 1]]);
+    let path = db.write(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    let mut cursor = IndexCursor::new(&mut view);
+    assert!(cursor.last_before(RefNo::new(0, 0)).unwrap().is_none());
+    assert_eq!(cursor.last_before(RefNo::new(u32::MAX, 0)).unwrap().unwrap().refno, RefNo::new(2, u32::MAX));
+    assert_eq!(cursor.last().unwrap().unwrap().refno, RefNo::new(u32::MAX, u32::MAX));
+    db.index(4, 0, &[]);
+    let path = db.write(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    assert_eq!(IndexCursor::new(&mut view).last().unwrap().unwrap().refno, RefNo::new(2, u32::MAX));
+    db.index(3, 0, &[]);
+    let path = db.write(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    assert!(IndexCursor::new(&mut view).last().unwrap().is_none());
+}
+
+#[test]
+fn predecessor_rejects_bad_paths_and_unsorted_keys() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut db = Db::new(5);
+    db.session(1, 7, 2);
+    db.index(2, 1, &[sentinel(3)]);
+    db.index(3, 0, &[record(20, 4, 20), record(10, 4, 40)]);
+    let path = db.write(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    assert!(matches!(IndexCursor::new(&mut view).last_before(key(99)), Err(IndexTreeError::KeyOutOfOrder { .. })));
+    db.put(3, 0, 1);
+    let path = db.write(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    assert!(matches!(IndexCursor::new(&mut view).last(), Err(IndexTreeError::Malformed { .. })));
+    db.index(3, 1, &[sentinel(2)]);
+    let path = db.write(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    assert!(matches!(IndexCursor::new(&mut view).last(), Err(IndexTreeError::LevelNotDecreasing { .. })));
+    db.index(2, 2, &[sentinel(3)]);
+    db.index(3, 1, &[sentinel(2)]);
+    let path = db.write(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    assert!(matches!(IndexCursor::new(&mut view).last(), Err(IndexTreeError::Cycle { .. })));
+    db.index(2, 1, &[]);
+    let path = db.write(dir.path());
+    let mut view = DbView::open(&path).unwrap();
+    assert!(matches!(IndexCursor::new(&mut view).last(), Err(IndexTreeError::NoChildren { .. })));
+}
+
+proptest::proptest! {
+    #[test]
+    fn predecessor_matches_independent_model(
+        numbers in proptest::collection::btree_set(0u32..1000, 1..61),
+        target in 0u32..1100,
+    ) {
+        let dir = tempfile::tempdir().unwrap();
+        let keys: Vec<_> = numbers.iter().copied().collect();
+        let mut db = Db::new(10);
+        db.session(1, 7, 2);
+        let mut children = Vec::new();
+        for (i, chunk) in keys.chunks(10).enumerate() {
+            let page = 3 + i as u32;
+            children.push(if i == 0 { sentinel(page) } else { child(chunk[0], page) });
+            db.index(page, 0, &chunk.iter().map(|n| record(*n, 9, 20)).collect::<Vec<_>>());
+        }
+        db.index(2, 1, &children);
+        let path = db.write(dir.path());
+        let mut view = DbView::open(&path).unwrap();
+        let found = IndexCursor::new(&mut view).last_before(key(target)).unwrap().map(|r| r.refno.word1);
+        let expected = numbers.range(..target).next_back().copied();
+        proptest::prop_assert_eq!(found, expected);
+    }
 }
 
 fn walked(view: &mut DbView) -> Vec<IndexedRecord> {

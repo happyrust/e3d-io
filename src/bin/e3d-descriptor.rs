@@ -46,6 +46,11 @@ fn run() -> Result<(), String> {
     }
     let mut options = parse_options(args)?;
     apply_schema_pack(&command, &mut options)?;
+    if command == "next-word1" {
+        let summary = next_word1_command(&options)?;
+        println!("{}", serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?);
+        return Ok(());
+    }
     if command == "compile-metadata" {
         let summary = compile_metadata(&options)?;
         println!(
@@ -1442,6 +1447,56 @@ fn sessions_command(options: &HashMap<String, String>) -> Result<Value, String> 
         "retained": chain.len(),
         "sessions": chain.iter().map(session_json).collect::<Vec<_>>(),
     }))
+}
+
+/// Read-only allocation oracle. Until counter semantics is confirmed, the
+/// effective expectation remains the index maximum plus one.
+fn next_word1_command(options: &HashMap<String, String>) -> Result<Value, String> {
+    use e3d_io::index::IndexCursor;
+    use e3d_io::meta::bucket::BucketTable;
+    let db = required(options, "db")?;
+    let extent: u32 = required(options, "extent")?.parse().map_err(|e| format!("invalid --extent: {e}"))?;
+    let at = options.get("session").map(|n| n.parse::<u32>().map(SessionSelector::Exact))
+        .transpose().map_err(|e| format!("invalid --session: {e}"))?.unwrap_or(SessionSelector::Latest);
+    let mut view = DbView::open_at(db, at).map_err(|e| format!("open: {e}"))?;
+    let sesno = view.selected_session();
+    let before = view.stats().pages_read;
+    let mut cursor = IndexCursor::new(&mut view);
+    let found = match extent.checked_add(1) {
+        Some(next) => cursor.last_before(RefNo::new(next, 0)),
+        None => cursor.last(),
+    }.map_err(|e| e.to_string())?;
+    let seek_max = found.filter(|r| r.refno.word0 == extent).map(|r| r.refno.word1);
+    let seek_reads = view.stats().pages_read - before;
+    let mut cursor = IndexCursor::new(&mut view);
+    let mut scan_max: Option<u32> = None;
+    let mut previous = None;
+    let mut keys = 0u64;
+    for record in cursor.walk() {
+        let record = record.map_err(|e| e.to_string())?;
+        if previous.is_some_and(|p| p >= record.refno) { return Err(format!("index not strictly ordered at {}", record.refno)); }
+        previous = Some(record.refno);
+        keys += 1;
+        if record.refno.word0 == extent { scan_max = Some(scan_max.map_or(record.refno.word1, |m| m.max(record.refno.word1))); }
+    }
+    if seek_max != scan_max { return Err(format!("scan {scan_max:?} disagrees with seek {seek_max:?}")); }
+    let index_next = scan_max.unwrap_or(0).checked_add(1).ok_or_else(|| "word1 exhausted".to_string())?;
+    let bucket = view.pages_mut().get_page(1).map_err(|e| e.to_string()).and_then(BucketTable::parse);
+    let (counter_use, counter, floor, bucket_error) = match bucket {
+        Ok(table) => {
+            let counter = table.next_word1(extent);
+            match e3d_io::core_rules::RuleSet::confirmed().counter_semantics() {
+                Some(e3d_io::core_rules::CounterSemantics::NextAvailable) => ("next_available", counter, counter, None),
+                None => ("unconfirmed", counter, None, None),
+            }
+        }
+        Err(error) => ("unavailable", None, None, Some(error)),
+    };
+    let next = index_next.max(floor.unwrap_or(0));
+    Ok(json!({"db":db,"sesno":sesno,"extent":extent,"index_keys":keys,
+        "scan_max_word1":scan_max,"seek_max_word1":seek_max,"index_next_word1":index_next,
+        "seek_page_reads":seek_reads,"bucket_counter":counter,"counter_use":counter_use,
+        "bucket_error":bucket_error,"bucket_floor":floor,"next_word1":next}))
 }
 
 /// The database type (`DESI`, `CATA`, …): the db1 hash at +0x20 of page 0,
@@ -2923,7 +2978,7 @@ fn layout_name(layout: StorageLayout) -> &'static str {
 }
 
 fn usage() -> String {
-    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor spamap --db PATH [--session N] [--refno WORD0/WORD1]\n  e3d-descriptor spamap-census --input FILE_OR_DIR [--input ...] [--session FILE=N ...]\n  e3d-descriptor spamap-check --input FILE_OR_DIR [--input ...] [--session FILE=N ...] (--schema PACK_DIR | --desvir PATH --attlib PATH) [--rules confirmed|candidates] [--exclude FILE] [--refno WORD0/WORD1]\n  e3d-descriptor world-frame --db PATH --refno WORD0/WORD1 [--session N] (--schema PACK_DIR | --desvir PATH --attlib PATH) [--rules confirmed|candidates]\n  e3d-descriptor project-dab-tags --project-root PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
+    "usage:\n  any command below takes [--schema PACK_DIR | --schema-root DIR --e3d-version ID]\n  in place of --desvir/--attlib/--dicvir/--catalog-layout/--catalog-fields; automatic\n  schema selection is disabled until a durable database release field is proven.\n  An explicit file flag still wins. See schema/README.md.\n\n  e3d-descriptor sessions --db PATH\n  e3d-descriptor next-word1 --db PATH --extent WORD0 [--session N]\n  e3d-descriptor spamap --db PATH [--session N] [--refno WORD0/WORD1]\n  e3d-descriptor spamap-census --input FILE_OR_DIR [--input ...] [--session FILE=N ...]\n  e3d-descriptor spamap-check --input FILE_OR_DIR [--input ...] [--session FILE=N ...] (--schema PACK_DIR | --desvir PATH --attlib PATH) [--rules confirmed|candidates] [--exclude FILE] [--refno WORD0/WORD1]\n  e3d-descriptor world-frame --db PATH --refno WORD0/WORD1 [--session N] (--schema PACK_DIR | --desvir PATH --attlib PATH) [--rules confirmed|candidates]\n  e3d-descriptor project-dab-tags --project-root PATH\n  e3d-descriptor diff --db PATH --from N [--to N] [--at-or-before on] [--steps on] [--content on] [--limit N] [--desvir PATH --attlib PATH [--template-type TYPE]]\n  e3d-descriptor describe --desvir PATH --attlib PATH --noun NOUN [--template-type TYPE] [--catalog-layout PATH --catalog-fields PATH]\n  e3d-descriptor extract --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor extract-complete --db PATH [--desvir PATH --attlib PATH] --refno WORD0/WORD1 --tty-log PATH [--uda on] [--dictionary-db PATH | --dictionary-db-list PATH1;PATH2] [--reference-db-list PATH1;PATH2] [--dicvir PATH] [--template-type TYPE]\n  e3d-descriptor list-uda --db PATH [--desvir DICVIR --attlib PATH] --template-type DICT [--noun NOUN]\n  e3d-descriptor compile-metadata --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH\n  e3d-descriptor emit-attr-info --template-dir PATH --attlib PATH --catalog-layout PATH --catalog-fields PATH --output PATH [--legacy-attr-info PATH] [--flat-winner DESI] [--compat-output PATH]\n  e3d-descriptor emit-uda-table --attlib PATH --dicvir PATH --output PATH (--dictionary-db PATH | --dictionary-db-list PATH1;PATH2)"
         .into()
 }
 
