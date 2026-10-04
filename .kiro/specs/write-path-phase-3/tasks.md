@@ -359,7 +359,7 @@
     - 写 Phase_3_Evidence_Doc，经 `check_evidence.ps1` 机检；结论写入 `src/core_rules.rs` 的 `alloc.counter_semantics`、`alloc.index_order`
     - _Requirements: 2.4, 11.7, 11.10_
     - F1 验证：`docs/evidence/2026-10-05-allocation-counter-index.md`；机检 PASS，四库桶表、五库 15 会话次序门通过，0 反例。环境适配：原生 e3dio 登录失败，沿用既有 SYSTEM 登录，SAVEWORK User=dpc；日志与 CLI User=e3dio 分列，不改源项目帐号。两次 NEW / 中间删除及源哈希验证通过。
-  - [~] 11.2 录 Open_Fast_Path 的 Golden_Hashes
+  - [x] 11.2 录 Open_Fast_Path 的 Golden_Hashes
     - 在 Open_Fast_Path 首个写侧提交（11.4）的父提交上，用 `tools/golden/record.ps1` 录 `tests/golden/write_hashes.json`（固定时钟与预铸 refno）并入库；与 11.4 之间有别的提交时重录
     - 剔除的键记入 Spec_Ledger「Golden 剔除键」
     - _Requirements: 2.7_
@@ -605,6 +605,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 |---|---|---|---|---|
 | `tests/golden/off_compat.json`（1.4；`write_stage6_{transaction,merge,set_by_name,spread,cli}`，留 17 条） | `d040f18` | `write_stage6_cli::` 下 5 条：`a_base_behind_the_newest_session_merges_and_reports_the_reminting#0`、`a_dry_run_makes_every_check_and_leaves_the_file_byte_identical#0`、`a_name_bound_earlier_in_the_file_resolves_before_the_commit#0`、`a_refused_instruction_names_itself_and_writes_nothing#0`、`an_instruction_file_is_applied_as_one_session_through_the_facade#0` | 两遍不同：`e3d-write` 提交用 `clock: None`（`src/bin/e3d-write.rs:711`），会话页带当时时间；五条都有一次真提交（dry run 与拒写两条也先做了一次） | — |
 | 同上 | `d040f18` | `write_stage6_spread::spread_inserts_read_back_across_many_owners#0` | 两遍不同：`SessionClock::now`（`tests/write_stage6_spread.rs:91`） | — |
+| `tests/golden/write_hashes.json`（F3；21 条，含固定时钟/预铸 32、128、257 BOX 批次） | F2 `6232c21` 上两遍，F3 准备提交紧接 F4 | 原 Off 录制的六个时间不稳定键，另 `write_stage6_cli::spatial_cli_writes_given_aabb_and_reports_readable_spatial_diff#0` | CLI / spread 使用当前时间，两遍末文件不同 | 原 Off 17 条未改；F4 前在直接父提交再录，只核对条目完全一致并更新录制元数据 |
 
 样本（备注）：17 条全部取自快照 `D:\e3dio-fixtures\phase3\ams8000_0001`，34 037 760 字节，SHA-256 `3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023`，即装机原件 2026-09-30 17:05:57 那一版（会话至 646）。
 
