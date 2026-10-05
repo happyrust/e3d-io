@@ -783,7 +783,8 @@ E 验收沿用既有 7 个提前返回测试；另有 Rust harness 的 30 个 ig
 
 | crate | 方式（合并后 / 依赖覆盖） | 结果 | 与 e3d-io 无关的既有错误 |
 |---|---|---|---|
-| | | | |
+| `e3d-model` | path override 指向本工作树，`cargo check --offline` | 失败（既有下游错误） | `src/catalogue_point.rs:466` 调用缺失的 `DbElementParamEnv::with_derived` |
+| `e3d-model-{adr079,audit-verify,bisect,f29-verify,fix-verify,head-tmp,mintube,wall,wt-joint}` | 同上 | 9/9 通过 | — |
 
 #### D# 变更
 
