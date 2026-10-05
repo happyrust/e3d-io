@@ -29,7 +29,7 @@
 //!   the transaction (`docs/evidence/2026-10-05-allocation-counter-index.md`).
 //!   Missing, malformed or unconfirmed counters fall back to the index;
 //!   [`Transaction::allocation_basis`] reports that choice. This crate reads
-//!   page 1 without maintaining it (S6b). If
+//!   page 1 at open and raises its counters in place at commit (S6b). If
 //!   the database moved on before the commit and the committed session took
 //!   that number, the insert is **re-minted** using the merge snapshot's index
 //!   and current page-1 floor at

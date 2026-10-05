@@ -24,7 +24,7 @@
 
 读侧的 map 做完整之后，同一份地基反过来用：`e3d_io::write` 往 E3D 3.1 库**追加一个会话**，
 写出的文件本 crate 的读侧原样读得回来，真 E3D 3.1 Design 也认（TTY 门 39 问 PASS：Q0、既有 28 问、Q13/Q13a–h 与 Q14，
-`docs/evidence/2026-10-05-allocation-q14-gate.md`）。口径与读侧一样只认二进制与 IDA 证据：
+`docs/evidence/2026-10-05-allocation-q14-gate.md`；Q15 追加验证见 `docs/evidence/2026-10-06-s6b-q15-gate.md`）。另有交替写门 Q15 验证页 1 桶计数器推进后 E3D 不复用已删编号。Transaction 原地抬页 1 并同步，再由 page 0 提交会话；两者之间失败可能空掉一段编号，上一会话仍可读。口径与读侧一样只认二进制与 IDA 证据：
 每个写侧模块都是对应读侧的逆函数，读侧是它的验收方（`docs/plans/2026-09-20-dabacon-write-plan.md`
 §7 是逐步的账，`docs/plans/2026-09-21-write-path-next-steps.md` 是收口与下一步）。
 

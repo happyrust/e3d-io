@@ -467,20 +467,21 @@
     - 2026-10-06 收口复核：`q15_selfcheck.ps1` 11 个离线判例通过；`alternate_write_gate.ps1 -OnlyQ15` 实跑通过（24384/26506–26528 删除后页 1 抬至 26529，E3D NEW 取得 26529）；`cargo test --no-fail-fast -- --nocapture` 退出码 0。10.5、10.6 及第 14 组其余收尾仍待办。
 
 - [ ] 14. 文档、回归与收尾（需求 14、15、16）
-  - [~] 14.1 更新 `MISSION.md`
+  - [x] 14.1 更新 `MISSION.md`
     - 按 D1 推荐默认改范围表述：SPAMAP 纳入写侧，几何求解只做 SPAMAP 所需的 BOX / CYLI 包围盒；「写回」节的门问数改为该提交上 TTY_Gate 的实际门问数
     - _Requirements: 14.1, 14.2, 14.7_
-  - [~] 14.2 更新 `README.md`
+  - [x] 14.2 更新 `README.md`
     - Write path 节列出 SPAMAP（13.3 成立时另列页 1 桶表及其落盘方式）；`e3d-write apply` 旗标清单写 `--spatial require|skip|off`（默认 `require`）、`aabb` 的形状与可带它的指令；门描述改为实际门问数并列出新增问号；以仓内相对路径引用本期每份 Phase_3_Evidence_Doc
     - _Requirements: 14.3, 14.5, 14.6, 14.8, 14.9_
-  - [~] 14.3 更新 `CHANGELOG.md` 的 `Unreleased`
+  - [x] 14.3 更新 `CHANGELOG.md` 的 `Unreleased`
     - 写明公开面变化（`with_spatial`、`set_aabb`、`StagedSession::spatial`、`TransactionCommit.spatial`、`TransactionError::Spatial` 与 `#[non_exhaustive]`）及迁移方法（含下游结构体字面量）、D3 的默认拒写、发号下界
     - _Requirements: 14.4, 15.9_
-  - [~] 14.4 跑 Build_Checks 并与基线对照
+  - [x] 14.4 跑 Build_Checks 并与基线对照
     - `cargo test --no-fail-fast`、`cargo clippy --all-targets`、`cargo doc` 全绿，与 1.1 的基线对照；列出 skip 清单（skip 不计为通过），记入 Spec_Ledger「skip 清单」
     - _Requirements: 15.1, 15.2, 15.6, 15.8_
   - [~] 14.5 下游 `cargo check`
     - 合并到 `main` 后做，或用依赖覆盖（path 指向本工作树）做，覆盖全部 Downstream_Crates；与 e3d-io 无关的既有错误只记录；结果记入 Spec_Ledger「下游检查」
+    - 2026-10-06：对 `e3d-model` 及 9 个 verify 变体使用 path override 检查；9 个 verify 变体通过，`e3d-model` 在既有 `catalogue_point.rs:466` 的 `DbElementParamEnv::with_derived` 缺失处失败。错误不在本仓库写入改动，未修改下游；日志保存在本机 `.agents/tasks/phase3-final/e3d-model.log`（不入库）。
     - _Requirements: 15.4, 15.5_
   - [~] 14.6 Spec_Ledger 收尾
     - 不做项与触发条件定稿；实测数字、规则坐实状态与决策记录定稿；「D# 变更」写明有无改选
