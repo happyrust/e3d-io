@@ -1,0 +1,106 @@
+{
+  "tool": "native SuspendThread/GetThreadContext/StackWalk64/SymFromAddr",
+  "interval_seconds": 0.01,
+  "command": [
+    "D:\\Rust\\target\\e3dio-scale-profile\\release\\examples\\write_scale_probe.exe",
+    "--source",
+    "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+    "--n",
+    "10000,100000",
+    "--runs",
+    "3",
+    "--spatial",
+    "off"
+  ],
+  "elapsed_seconds": 18.936999999918044,
+  "exit_code": 0,
+  "failures": {
+    "suspend": 4
+  },
+  "stacks": [
+    {
+      "count": 633,
+      "stack": "ZwWaitForWorkViaWorkerFactory;ZwWaitForWorkViaWorkerFactory;RtlSetThreadSubProcessTag;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 122,
+      "stack": "e3d_io::write::index_cow::Cow::rewrite_node;e3d_io::write::index_cow::Cow::rewrite_node;e3d_io::write::index_cow::Cow::rewrite_node;e3d_io::write::index_cow::Cow::rewrite_node;e3d_io::write::index_cow::rewrite_index;e3d_io::write::stage_session_locked<ref$<std::path::Path> >;e3d_io::write::transaction::Transaction::stage_batch;e3d_io::write::transaction::Transaction::stage;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk"
+    },
+    {
+      "count": 69,
+      "stack": "e3d_io::write::transaction::Transaction::resolve_members;e3d_io::write::transaction::Transaction::resolve_members;e3d_io::write::transaction::Transaction::stage;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 2,
+      "stack": "sha2::sha256::x86::digest_blocks;sha2::sha256::x86::digest_blocks;write_scale_probe::scale::hash;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 2,
+      "stack": "RtlCreateUnicodeString;RtlCreateUnicodeString;RtlCreateUnicodeString;RtlAllocateHeap;alloc::str::impl$5::to_uppercase;e3d_attlib::hash::db1_hash;e3d_io::write::transaction::Transaction::insert<write_scale_probe::scale::run::closure_env$1>;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "RtlCreateUnicodeString;RtlCreateUnicodeString;RtlAllocateHeap;alloc::str::impl$5::to_uppercase;e3d_attlib::hash::db1_hash;e3d_io::write::transaction::Transaction::insert<write_scale_probe::scale::run::closure_env$1>;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "NtCopyFileChunk;NtCopyFileChunk;BasepNotifyTrackingService;BasepCopyFileExW;CopyFileExW;std::sys::fs::copy::closure$0;std::sys::fs::copy;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "e3d_io::write::plan_side_tables;e3d_io::write::plan_side_tables;e3d_io::write::stage_session_locked<ref$<std::path::Path> >;e3d_io::write::transaction::Transaction::stage_batch;e3d_io::write::transaction::Transaction::stage;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "RtlFreeHeap;RtlFreeHeap;core::ptr::drop_glue<e3d_io::write::record::RecordDraft>;core::ptr::drop_glue<enum2$<core::option::Option<e3d_io::write::SideTableWork> > >;e3d_io::write::stage_session_locked<ref$<std::path::Path> >;e3d_io::write::transaction::Transaction::stage_batch;e3d_io::write::transaction::Transaction::stage;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "hashbrown::raw::RawTableInner::fallible_with_capacity<alloc::alloc::Global>;hashbrown::raw::RawTableInner::fallible_with_capacity<alloc::alloc::Global>;hashbrown::raw::RawTable<tuple$<e3d_io::page::PageId,tuple$<> >,alloc::alloc::Global>::reserve_rehash<tuple$<e3d_io::page::PageId,tuple$<> >,alloc::alloc::Global,hashbrown::map::make_hasher::closure_env$0<e3d_io::page::PageId,tuple$<>,std::hash::random::RandomState> >;hashbrown::map::HashMap<e3d_io::page::PageId,tuple$<>,std::hash::random::RandomState,alloc::alloc::Global>::insert<e3d_io::page::PageId,tuple$<>,std::hash::random::RandomState,alloc::alloc::Global>;e3d_io::index::cursor::IndexCursor::seek;e3d_io::engine::ReadOnlyEngine::search_index;e3d_io::engine::ReadOnlyEngine::find_element;write_scale_probe::scale::verify;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "e3d_io::index::choose_child<core::iter::adapters::map::Map<core::ops::range::Range<usize>,e3d_io::index::impl$2::entries::closure_env$0> >;e3d_io::index::choose_child<core::iter::adapters::map::Map<core::ops::range::Range<usize>,e3d_io::index::impl$2::entries::closure_env$0> >;e3d_io::index::cursor::IndexCursor::seek;e3d_io::engine::ReadOnlyEngine::search_index;e3d_io::engine::ReadOnlyEngine::find_element;write_scale_probe::scale::verify;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "ZwClose;ZwClose;DeleteFileW;DeleteFileW;std::sys::fs::windows::unlink;std::sys::fs::remove_file;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "_NLG_Return2;_NLG_Return2;hashbrown::raw::RawTable<tuple$<e3d_io::refno::RefNo,enum2$<e3d_io::write::ElementWrite> >,alloc::alloc::Global>::reserve_rehash<tuple$<e3d_io::refno::RefNo,enum2$<e3d_io::write::ElementWrite> >,alloc::alloc::Global,hashbrown::map::make_hasher::closure_env$0<e3d_io::refno::RefNo,enum2$<e3d_io::write::ElementWrite>,std::hash::random::RandomState> >;hashbrown::map::HashMap<e3d_io::refno::RefNo,enum2$<e3d_io::write::ElementWrite>,std::hash::random::RandomState,alloc::alloc::Global>::insert<e3d_io::refno::RefNo,enum2$<e3d_io::write::ElementWrite>,std::hash::random::RandomState,alloc::alloc::Global>;e3d_io::write::transaction::Transaction::register;e3d_io::write::transaction::Transaction::insert<write_scale_probe::scale::run::closure_env$1>;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "e3d_io::record::template::TemplateProvider::template_for;e3d_io::record::template::TemplateProvider::template_for;e3d_io::write::plan_side_tables;e3d_io::write::stage_session_locked<ref$<std::path::Path> >;e3d_io::write::transaction::Transaction::stage_batch;e3d_io::write::transaction::Transaction::stage;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "ZwWriteFile;ZwWriteFile;std::sys::pal::windows::handle::Handle::synchronous_write;std::fs::impl$13::write;core::io::write::Write::write_all<std::fs::File>;e3d_io::write::stage_session_locked<ref$<std::path::Path> >;e3d_io::write::transaction::Transaction::stage_batch;e3d_io::write::transaction::Transaction::stage;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "e3d_io::index::IndexNode::entry;e3d_io::index::IndexNode::entry;e3d_io::index::choose_child<core::iter::adapters::map::Map<core::ops::range::Range<usize>,e3d_io::index::impl$2::entries::closure_env$0> >;e3d_io::index::cursor::IndexCursor::seek;e3d_io::engine::ReadOnlyEngine::search_index;e3d_io::engine::ReadOnlyEngine::find_element;write_scale_probe::scale::verify;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "RtlFreeHeap;RtlFreeHeap;e3d_io::index::cursor::IndexCursor::seek;e3d_io::engine::ReadOnlyEngine::search_index;e3d_io::engine::ReadOnlyEngine::find_element;write_scale_probe::scale::verify;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "e3d_io::write::place_record;e3d_io::write::place_record;e3d_io::write::stage_session_locked<ref$<std::path::Path> >;e3d_io::write::transaction::Transaction::stage_batch;e3d_io::write::transaction::Transaction::stage;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "ZwFlushBuffersFile;ZwFlushBuffersFile;FlushFileBuffers;std::fs::File::sync_all;e3d_io::write::pages::PageFile::sync;e3d_io::write::stage_session_locked<ref$<std::path::Path> >;e3d_io::write::transaction::Transaction::stage_batch;e3d_io::write::transaction::Transaction::stage;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "hashbrown::map::HashMap<e3d_io::page::PageId,tuple$<>,std::hash::random::RandomState,alloc::alloc::Global>::insert<e3d_io::page::PageId,tuple$<>,std::hash::random::RandomState,alloc::alloc::Global>;hashbrown::map::HashMap<e3d_io::page::PageId,tuple$<>,std::hash::random::RandomState,alloc::alloc::Global>::insert<e3d_io::page::PageId,tuple$<>,std::hash::random::RandomState,alloc::alloc::Global>;e3d_io::index::cursor::IndexCursor::seek;e3d_io::engine::ReadOnlyEngine::search_index;e3d_io::engine::ReadOnlyEngine::find_element;write_scale_probe::scale::verify;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "e3d_io::index::cursor::IndexCursor::seek;e3d_io::index::cursor::IndexCursor::seek;e3d_io::engine::ReadOnlyEngine::search_index;e3d_io::engine::ReadOnlyEngine::find_element;write_scale_probe::scale::verify;write_scale_probe::scale::run;write_scale_probe::main;std::sys::backtrace::__rust_begin_short_backtrace<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > (*)(),enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >;core::ops::function::FnOnce::call_once<std::rt::lang_start::closure_env$0<enum2$<core::result::Result<tuple$<>,alloc::boxed::Box<dyn$<core::error::Error>,alloc::alloc::Global> > > >,tuple$<> >;std::rt::lang_start_internal;main;__scrt_common_main_seh;BaseThreadInitThunk;RtlUserThreadStart"
+    }
+  ]
+}

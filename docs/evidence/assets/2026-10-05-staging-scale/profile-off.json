@@ -1,0 +1,198 @@
+{
+  "tool": "native SuspendThread/GetThreadContext/StackWalk64/SymFromAddr",
+  "interval_seconds": 0.01,
+  "command": [
+    "D:\\Rust\\target\\release\\examples\\write_scale_probe.exe",
+    "--source",
+    "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+    "--n",
+    "10000,100000",
+    "--runs",
+    "3",
+    "--spatial",
+    "off"
+  ],
+  "elapsed_seconds": 19.07799999974668,
+  "exit_code": 0,
+  "failures": {
+    "suspend": 4
+  },
+  "stacks": [
+    {
+      "count": 729,
+      "stack": "ZwWaitForWorkViaWorkerFactory;ZwWaitForWorkViaWorkerFactory;RtlSetThreadSubProcessTag;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 43,
+      "stack": "0x7ff7218dd34f;0x7ff7218dd34f;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 41,
+      "stack": "0x7ff7218e7a33;0x7ff7218e7a33;0x7ff7218e8146;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 36,
+      "stack": "0x7ff7218dd3e5;0x7ff7218dd3e5;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 21,
+      "stack": "0x7ff7218dd3f0;0x7ff7218dd3f0;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 19,
+      "stack": "0x7ff7218e7a40;0x7ff7218e7a40;0x7ff7218e8146;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 15,
+      "stack": "0x7ff7218dd35a;0x7ff7218dd35a;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 9,
+      "stack": "0x7ff7218e7a24;0x7ff7218e7a24;0x7ff7218e8146;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 9,
+      "stack": "0x7ff7218dd356;0x7ff7218dd356;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 7,
+      "stack": "0x7ff7218dd349;0x7ff7218dd349;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 5,
+      "stack": "0x7ff7218dd3fc;0x7ff7218dd3fc;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 3,
+      "stack": "0x7ff7218dc00e;0x7ff7218dc00e;0x7ff7218f3db8;0x7ff7218e2d0b;0x7ff7218e2a36;0x7ff7218a2649;0x7ff721897b43;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 2,
+      "stack": "0x7ff7218dd3ec;0x7ff7218dd3ec;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 2,
+      "stack": "RtlCreateUnicodeString;RtlCreateUnicodeString;RtlCreateUnicodeString;RtlAllocateHeap;0x7ff721936a2d;0x7ff72191ef51;0x7ff7219198b9;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800"
+    },
+    {
+      "count": 2,
+      "stack": "0x7ff7218e7a27;0x7ff7218e7a27;0x7ff7218e8146;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "NtWaitForSingleObject;NtWaitForSingleObject;BasepNotifyTrackingService;BasepCopyFileExW;CopyFileExW;0x7ff721994b6e;0x7ff72199b591;0x7ff721896e3a;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218d4446;0x7ff7218d4446;0x7ff7218a1efc;0x7ff72189816e;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218de409;0x7ff7218de409;0x7ff7218f3e8a;0x7ff7218e2d0b;0x7ff7218e2a36;0x7ff7218a2649;0x7ff721897b43;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "RtlFreeHeap;RtlFreeHeap;0x7ff72198fc82;0x7ff7218c0e12;0x7ff7218971ea;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218b9862;0x7ff7218b9862;0x7ff7218c08ec;0x7ff7218971ea;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "RtlUpcaseUnicodeString;RtlUpcaseUnicodeString;RtlCreateUnicodeString;RtlCreateUnicodeString;RtlAllocateHeap;0x7ff721936a2d;0x7ff72191ef51;0x7ff7219198b9;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218dd006;0x7ff7218dd006;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218dd3f9;0x7ff7218dd3f9;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218dd342;0x7ff7218dd342;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218dd346;0x7ff7218dd346;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "NtFreeVirtualMemory;NtFreeVirtualMemory;RtlDestroyHeap;RtlSetProcessPreferredUILanguages;RtlCreateUnicodeString;RtlFreeHeap;RtlTryEnterCriticalSection;RtlCreateUnicodeString;RtlFreeHeap;0x7ff7218b8517;0x7ff72191cd0a;0x7ff72191beb3;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218de3e2;0x7ff7218de3e2;0x7ff7218dbffe;0x7ff7218f3db8;0x7ff7218e2d0b;0x7ff7218e2a36;0x7ff7218a2649;0x7ff721897b43;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218de49c;0x7ff7218de49c;0x7ff7218dbffe;0x7ff7218f3db8;0x7ff7218e2d0b;0x7ff7218e2a36;0x7ff7218a2649;0x7ff721897b43;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff721943765;0x7ff721943765;0x7ff721947ab1;0x7ff7218c0e4e;0x7ff7218971ea;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff72193982d;0x7ff72193982d;0x7ff7218e9aea;0x7ff7218c12d0;0x7ff7218971ea;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218e7a3c;0x7ff7218e7a3c;0x7ff7218e8146;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218e7a30;0x7ff7218e7a30;0x7ff7218e8146;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218c3d11;0x7ff7218c3d11;0x7ff72193b0ed;0x7ff72192a90b;0x7ff721919aae;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "ZwWriteFile;ZwWriteFile;0x7ff721996496;0x7ff7219a1a52;0x7ff72193dff7;0x7ff72191bb23;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "NtFreeVirtualMemory;NtFreeVirtualMemory;RtlDestroyHeap;RtlCreateUnicodeString;RtlFreeHeap;0x7ff7218e59f5;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff72194166c;0x7ff72194166c;0x7ff721939ff2;0x7ff72191179b;0x7ff721911ee0;0x7ff7218e2aa4;0x7ff7218a2649;0x7ff721897b43;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218dc02f;0x7ff7218dc02f;0x7ff7218f3db8;0x7ff7218e2d0b;0x7ff7218e2a36;0x7ff7218a2649;0x7ff721897b43;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218d4640;0x7ff7218d4640;0x7ff7218a1efc;0x7ff72189816e;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "RtlAllocateHeap;RtlAllocateHeap;0x7ff7218b97db;0x7ff7218c08ec;0x7ff7218971ea;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218e9584;0x7ff7218e9584;0x7ff7218974d7;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff7218dd3f5;0x7ff7218dd3f5;0x7ff7218dd618;0x7ff7218dd618;0x7ff7218de9e5;0x7ff72191a029;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "NtSetInformationFile;NtSetInformationFile;SetFilePointerEx;0x7ff7219a1a91;0x7ff72191bafa;0x7ff7218e57cf;0x7ff7218e865a;0x7ff721897684;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "RtlCopyMemory;RtlCopyMemory;RtlCreateUnicodeString;RtlCreateUnicodeString;RtlReAllocateHeap;0x7ff7219b7aa5;0x7ff7219b79a3;0x7ff721911a16;0x7ff721911ee0;0x7ff7218e2aa4;0x7ff7218a2254;0x7ff721897b43;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7"
+    },
+    {
+      "count": 1,
+      "stack": "ZwReadFile;ZwReadFile;0x7ff721993059;0x7ff72199fb4e;0x7ff721898f52;0x7ff7218aa979;0x7ff7218c8e86;0x7ff7218cad3c;0x7ff7219991d7;0x7ff7218b09ec;0x7ff7219b6800;BaseThreadInitThunk;RtlUserThreadStart"
+    }
+  ]
+}

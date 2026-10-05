@@ -1,0 +1,9 @@
+Transcribed from tool output on 2026-10-05 (not a WPR trace).
+Command: wpr -status
+WPR is not recording
+Command: wpr -start CPU -filemode
+Exit code: 1
+Failed to enable the policy to profile system performance.
+Profile Id: CPU.Verbose.File
+Error code: 0xc5585011
+No existing recording was cancelled; native child-only sampling used instead.

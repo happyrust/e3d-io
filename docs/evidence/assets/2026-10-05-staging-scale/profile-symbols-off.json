@@ -1,0 +1,174 @@
+{
+  "tool": "native SuspendThread/GetThreadContext/StackWalk64/SymFromAddr",
+  "interval_seconds": 0.01,
+  "command": [
+    "D:\\Rust\\target\\e3dio-scale-profile\\release\\examples\\write_scale_probe.exe",
+    "--source",
+    "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+    "--n",
+    "10000,100000",
+    "--runs",
+    "3",
+    "--spatial",
+    "off"
+  ],
+  "elapsed_seconds": 19.016000000294298,
+  "exit_code": 0,
+  "failures": {
+    "suspend": 4
+  },
+  "stacks": [
+    {
+      "count": 717,
+      "stack": "ZwWaitForWorkViaWorkerFactory;ZwWaitForWorkViaWorkerFactory;RtlSetThreadSubProcessTag;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 47,
+      "stack": "0x7ff6c6da40d3;0x7ff6c6da40d3;0x7ff6c6da47e6;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 37,
+      "stack": "0x7ff6c6d99904;0x7ff6c6d99904;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 34,
+      "stack": "0x7ff6c6d998c4;0x7ff6c6d998c4;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 22,
+      "stack": "0x7ff6c6d9990f;0x7ff6c6d9990f;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 20,
+      "stack": "0x7ff6c6d998cf;0x7ff6c6d998cf;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 19,
+      "stack": "0x7ff6c6da40e0;0x7ff6c6da40e0;0x7ff6c6da47e6;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 9,
+      "stack": "0x7ff6c6d998cb;0x7ff6c6d998cb;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 7,
+      "stack": "0x7ff6c6d998ba;0x7ff6c6d998ba;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 6,
+      "stack": "0x7ff6c6d9990b;0x7ff6c6d9990b;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 4,
+      "stack": "0x7ff6c6d9991b;0x7ff6c6d9991b;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 3,
+      "stack": "0x7ff6c6d99918;0x7ff6c6d99918;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 2,
+      "stack": "NtCopyFileChunk;NtCopyFileChunk;BasepNotifyTrackingService;BasepCopyFileExW;CopyFileExW;0x7ff6c6e540be;0x7ff6c6e5aae1;0x7ff6c6d56e4a;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 2,
+      "stack": "0x7ff6c6da40c7;0x7ff6c6da40c7;0x7ff6c6da47e6;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 2,
+      "stack": "ZwReadFile;ZwReadFile;0x7ff6c6e558a7;0x7ff6c6e5f6e3;0x7ff6c6de324d;0x7ff6c6de6f68;0x7ff6c6d9761e;0x7ff6c6d9720a;0x7ff6c6de2adf;0x7ff6c6de1fb4;0x7ff6c6de2960;0x7ff6c6d9fb44;0x7ff6c6d62659;0x7ff6c6d57b58;0x7ff6c6d6a999;0x7ff6c6d8c546"
+    },
+    {
+      "count": 2,
+      "stack": "0x7ff6c6da40c4;0x7ff6c6da40c4;0x7ff6c6da47e6;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 2,
+      "stack": "0x7ff6c6da40d0;0x7ff6c6da40d0;0x7ff6c6da47e6;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "ZwReadFile;ZwReadFile;0x7ff6c6e525a9;0x7ff6c6e5f09e;0x7ff6c6d56e67;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6d943fd;0x7ff6c6d943fd;0x7ff6c6d61f0c;0x7ff6c6d58183;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "RtlFreeHeap;RtlFreeHeap;0x7ff6c6d7dd10;0x7ff6c6d86d97;0x7ff6c6d571ff;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6da680c;0x7ff6c6da680c;0x7ff6c6da4089;0x7ff6c6da47e6;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6d96997;0x7ff6c6d96997;0x7ff6c6e22ca1;0x7ff6c6da4b7e;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6dfe2f4;0x7ff6c6dfe2f4;0x7ff6c6ded9be;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "memmove;memmove;0x7ff6c6d999e8;0x7ff6c6d99dcd;0x7ff6c6d99dcd;0x7ff6c6d9b6c5;0x7ff6c6dedf39;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60"
+    },
+    {
+      "count": 1,
+      "stack": "RtlFreeHeap;RtlFreeHeap;0x7ff6c6d78537;0x7ff6c6df0bda;0x7ff6c6defd83;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6d9f87f;0x7ff6c6d9f87f;0x7ff6c6e0b80a;0x7ff6c6d9fdab;0x7ff6c6d9fad6;0x7ff6c6d62659;0x7ff6c6d57b58;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6e07a7b;0x7ff6c6e07a7b;0x7ff6c6d8658c;0x7ff6c6d571ff;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6dc2671;0x7ff6c6dc2671;0x7ff6c6dfe347;0x7ff6c6ded9be;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6d785aa;0x7ff6c6d785aa;0x7ff6c6df0bda;0x7ff6c6defd83;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6e0c58e;0x7ff6c6e0c58e;0x7ff6c6e0b6a2;0x7ff6c6d9fdab;0x7ff6c6d9fad6;0x7ff6c6d62659;0x7ff6c6d57b58;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6d9f8a0;0x7ff6c6d9f8a0;0x7ff6c6d9e11a;0x7ff6c6e0b738;0x7ff6c6d9fdab;0x7ff6c6d9fad6;0x7ff6c6d62659;0x7ff6c6d57b58;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "NtWaitForSingleObject;NtWaitForSingleObject;BasepNotifyTrackingService;BasepCopyFileExW;CopyFileExW;0x7ff6c6e540be;0x7ff6c6e5aae1;0x7ff6c6d56e4a;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6d898a5;0x7ff6c6d898a5;0x7ff6c6d8890a;0x7ff6c6e7a16f;0x7ff6c6e061dc;0x7ff6c6da618a;0x7ff6c6d86fd0;0x7ff6c6d571ff;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6da40e8;0x7ff6c6da40e8;0x7ff6c6da47e6;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6d896da;0x7ff6c6d896da;0x7ff6c6d88c02;0x7ff6c6e07e49;0x7ff6c6dfe30e;0x7ff6c6ded9be;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "ZwWriteFile;ZwWriteFile;0x7ff6c6e559e6;0x7ff6c6e60fa2;0x7ff6c6de9917;0x7ff6c6def9f3;0x7ff6c6da1e6f;0x7ff6c6da4cfa;0x7ff6c6d57699;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6d9e1a3;0x7ff6c6d9e1a3;0x7ff6c6e0b738;0x7ff6c6d9fdab;0x7ff6c6d9fad6;0x7ff6c6d62659;0x7ff6c6d57b58;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    },
+    {
+      "count": 1,
+      "stack": "0x7ff6c6d944d8;0x7ff6c6d944d8;0x7ff6c6d61f0c;0x7ff6c6d58183;0x7ff6c6d6a999;0x7ff6c6d8c546;0x7ff6c6d8ef8c;0x7ff6c6e58727;0x7ff6c6d70a0c;0x7ff6c6e75d60;BaseThreadInitThunk;RtlUserThreadStart"
+    }
+  ]
+}

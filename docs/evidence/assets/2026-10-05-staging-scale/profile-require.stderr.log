@@ -1,0 +1,18 @@
+PROBE n=10000 run=1 open
+PROBE n=10000 run=1 stage build_ms=16.308
+PROBE n=10000 run=1 verified stage_ms=1148.238 commit_ms=2.489
+PROBE n=10000 run=2 open
+PROBE n=10000 run=2 stage build_ms=16.297
+PROBE n=10000 run=2 verified stage_ms=1149.973 commit_ms=2.785
+PROBE n=10000 run=3 open
+PROBE n=10000 run=3 stage build_ms=17.600
+PROBE n=10000 run=3 verified stage_ms=1144.514 commit_ms=2.732
+PROBE n=100000 run=1 open
+PROBE n=100000 run=1 stage build_ms=149.980
+PROBE n=100000 run=1 verified stage_ms=36628.030 commit_ms=19.264
+PROBE n=100000 run=2 open
+PROBE n=100000 run=2 stage build_ms=152.053
+PROBE n=100000 run=2 verified stage_ms=36570.977 commit_ms=20.672
+PROBE n=100000 run=3 open
+PROBE n=100000 run=3 stage build_ms=147.141
+PROBE n=100000 run=3 verified stage_ms=37013.828 commit_ms=20.397

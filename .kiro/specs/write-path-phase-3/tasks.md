@@ -405,17 +405,18 @@
     - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 12. staging 规模（需求 12）
-  - [~] 12.1 写 Scale_Probe：`examples/write_scale_probe/`（`main.rs`、`batch.rs`）
+  - [x] 12.1 写 Scale_Probe：`examples/write_scale_probe/`（`main.rs`、`batch.rs`、`scale.rs`）
     - 一条命令 `cargo run --release --example write_scale_probe -- --source <ams8000_0001> --n 10000,100000 --runs 3 [--spatial require|off] [--open-only <库>]`；`--spatial` 在 8.7 落地后接入（见 12.5）
     - 只在临时副本上运行，原件运行前后比对 SHA-256；先整读一遍副本求得热缓存
     - 批次按第二期 T2「单会话 A」的形状构造；分阶段报 open / build / stage / commit 的墙钟中位数与峰值 RSS（`K32GetProcessMemoryInfo`，不加依赖）
     - 追加页按页头分为记录 / 索引 / claim / TYPEX / SPAMAP / 其他 / 会话页七类计数（D6：SPAMAP 单列）
     - 提交后用读侧逐个核对 owner 的成员；输出 JSON 与拟合的幂指数
     - _Requirements: 12.1, 12.5, 12.9, 12.10_
-  - [~] 12.2 基线测量与剖析
+  - [x] 12.2 基线测量与剖析
     - 以 `CARGO_PROFILE_RELEASE_DEBUG=true` 构建带符号的 release，用 WPR / WPA 或同类剖析器跑 n = 10 000 与 100 000
     - 在 Spec_Ledger「剖析结论」写明所用工具、基线数字与超线性的来源；写明之前不改 staging 代码
     - _Requirements: 12.2_
+    - e1425db 写侧基线：10k/100k 各三热轮 Off/Require，全量成员/属性/空间条目读回；WPR 被环境策略拒绝，改用原生子进程线程符号采样。源码无生产写侧改动；原始数据与采样局限见 `docs/evidence/2026-10-05-staging-scale-baseline.md`。收口探针 stage 比值 Off 61.7168、Require 32.3028 均失败，保留 12.4/12.5；金样混合测试已准备但 12.3 未录制。
   - [~] 12.3 录 staging 优化的 Golden_Hashes
     - 在 staging 优化首个写侧提交（12.4）的父提交上，用 `tools/golden/record.ps1` 录 `tests/golden/write_hashes.json`，含 Scale_Probe 批次（固定时钟、refno 按源文件预铸；Transaction 无显式 refno 入口时走原语路径）；与 12.4 之间有别的提交时重录
     - `tests/write_scale_golden.rs` 以 `#[path]` 复用 `batch.rs` 比对；剔除的键记入 Spec_Ledger「Golden 剔除键」
@@ -714,7 +715,7 @@ F7 文档同步：README/CHANGELOG 明确发号下界及报告取号迁移；补
 
 | 剖析工具 | n | 各阶段中位数 | 超线性来源 |
 |---|---|---|---|
-| | | | |
+| 原生 x64 线程采样（WPR 因 0xc5585011 无法启用）；release + PDB | 10k / 100k，各 3 热轮 | Off open/build/stage/commit：0.4058/14.6314/90.7039/0.3730 → 0.4954/114.4453/5680.7904/0.5153 ms；Require：0.2084/17.3473/1140.5584/3.0621 → 0.3043/148.1289/36437.9006/20.0276 ms | Off stage 栈 INDEX rewrite_node 122/197、成员解析 69/197；Require Snapshot::value 533、EndState::record 390（inclusive）。尾叶逐次扫描、成员 contains、owner 克隆及重复属性提取；生产写侧尚未改。见 docs/evidence/2026-10-05-staging-scale-baseline.md 与原始 profile JSON；比值 62.63/31.95 失败，12.4/12.5 未验收 |
 
 #### 规模复测（12.5）
 

@@ -1,4 +1,6 @@
-//! Milestone F measures open and the first allocation; staging remains group 12.
+//! Warm-cache open and mixed staging measurements on disposable copies.
+mod batch;
+mod scale;
 use std::{error::Error, fs, time::Instant};
 use e3d_io::index::IndexCursor;
 use e3d_io::session::DbView;
@@ -8,6 +10,9 @@ use e3d_io::write::Transaction;
 use sha2::{Digest, Sha256};
 
 fn main() -> Result<(), Box<dyn Error>> {
+    if std::env::args().nth(1).as_deref() != Some("--open-only") {
+        return scale::run();
+    }
     let mut args = std::env::args().skip(1);
     if args.next().as_deref() != Some("--open-only") {
         return Err("usage: write_scale_probe --open-only DB [--runs 3]".into());

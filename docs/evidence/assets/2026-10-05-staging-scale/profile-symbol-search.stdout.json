@@ -1,0 +1,158 @@
+{
+  "peak_rss_scope": "process high water including fixture and earlier runs",
+  "policy": "Off",
+  "profile": "release",
+  "sizes": [
+    {
+      "median_ms": {
+        "build": 14.1934,
+        "commit": 0.3773,
+        "open": 0.12999999999999998,
+        "stage": 92.3141
+      },
+      "n": 10000,
+      "runs": [
+        {
+          "build_ms": 14.1573,
+          "commit_ms": 0.3773,
+          "len": 36280320,
+          "members_verified": 11124,
+          "open_ms": 0.12999999999999998,
+          "pages": {
+            "claim": 2,
+            "index": 94,
+            "other": 0,
+            "record": 891,
+            "session": 1,
+            "spamap": 0,
+            "total": 988,
+            "typex": 0
+          },
+          "peak_rss_bytes": 75173888,
+          "sesno": 648,
+          "sha256": "57d61f3d91c4a2e9c24304d5390bb0449387ccb8131e5749b1d12e85cb440af9",
+          "stage_ms": 102.76870000000001
+        },
+        {
+          "build_ms": 14.5985,
+          "commit_ms": 0.3624,
+          "len": 36280320,
+          "members_verified": 11124,
+          "open_ms": 0.124,
+          "pages": {
+            "claim": 2,
+            "index": 94,
+            "other": 0,
+            "record": 891,
+            "session": 1,
+            "spamap": 0,
+            "total": 988,
+            "typex": 0
+          },
+          "peak_rss_bytes": 78016512,
+          "sesno": 648,
+          "sha256": "57d61f3d91c4a2e9c24304d5390bb0449387ccb8131e5749b1d12e85cb440af9",
+          "stage_ms": 92.3141
+        },
+        {
+          "build_ms": 14.1934,
+          "commit_ms": 0.4075,
+          "len": 36280320,
+          "members_verified": 11124,
+          "open_ms": 0.6039,
+          "pages": {
+            "claim": 2,
+            "index": 94,
+            "other": 0,
+            "record": 891,
+            "session": 1,
+            "spamap": 0,
+            "total": 988,
+            "typex": 0
+          },
+          "peak_rss_bytes": 78319616,
+          "sesno": 648,
+          "sha256": "57d61f3d91c4a2e9c24304d5390bb0449387ccb8131e5749b1d12e85cb440af9",
+          "stage_ms": 92.184
+        }
+      ]
+    },
+    {
+      "median_ms": {
+        "build": 115.81909999999999,
+        "commit": 0.4586,
+        "open": 0.46040000000000003,
+        "stage": 5742.095499999999
+      },
+      "n": 100000,
+      "runs": [
+        {
+          "build_ms": 117.7708,
+          "commit_ms": 0.5649000000000001,
+          "len": 52660224,
+          "members_verified": 101124,
+          "open_ms": 0.0997,
+          "pages": {
+            "claim": 2,
+            "index": 813,
+            "other": 0,
+            "record": 8170,
+            "session": 1,
+            "spamap": 0,
+            "total": 8986,
+            "typex": 0
+          },
+          "peak_rss_bytes": 210309120,
+          "sesno": 648,
+          "sha256": "18298b12f8393b79afde7fed72a53ad23ac64a89558b25a3ea5892c685f25431",
+          "stage_ms": 5742.095499999999
+        },
+        {
+          "build_ms": 115.81909999999999,
+          "commit_ms": 0.4531,
+          "len": 52660224,
+          "members_verified": 101124,
+          "open_ms": 0.46040000000000003,
+          "pages": {
+            "claim": 2,
+            "index": 813,
+            "other": 0,
+            "record": 8170,
+            "session": 1,
+            "spamap": 0,
+            "total": 8986,
+            "typex": 0
+          },
+          "peak_rss_bytes": 210616320,
+          "sesno": 648,
+          "sha256": "18298b12f8393b79afde7fed72a53ad23ac64a89558b25a3ea5892c685f25431",
+          "stage_ms": 5748.152
+        },
+        {
+          "build_ms": 115.6652,
+          "commit_ms": 0.4586,
+          "len": 52660224,
+          "members_verified": 101124,
+          "open_ms": 0.4782,
+          "pages": {
+            "claim": 2,
+            "index": 813,
+            "other": 0,
+            "record": 8170,
+            "session": 1,
+            "spamap": 0,
+            "total": 8986,
+            "typex": 0
+          },
+          "peak_rss_bytes": 210759680,
+          "sesno": 648,
+          "sha256": "18298b12f8393b79afde7fed72a53ad23ac64a89558b25a3ea5892c685f25431",
+          "stage_ms": 5715.047799999999
+        }
+      ]
+    }
+  ],
+  "source": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "source_len": 34037760,
+  "source_sha256": "3cab5d7d2b2c40fdf0829b91c555d19d55c530dd49860a4665560e5c553fe023"
+}
