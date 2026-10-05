@@ -141,6 +141,7 @@ proptest! {
     /// The committed counter is one past every `word1` the batch issued and
     /// never below where it started — whether the counter began behind the
     /// index (historical back-debt) or ahead of it.
+    // Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
     #[test]
     fn the_counter_ends_above_every_issued_word1(delta in -5i32..24, count in 1usize..5) {
         let copy = DbCopy::of(AMS8000);
@@ -172,6 +173,7 @@ proptest! {
     /// primary extent, which page 1 does not list, and a batch of renames,
     /// value edits and deletes raise nothing and leave page 1 byte-for-byte —
     /// as every batch does on the dictionary, whose page 1 lists no extent.
+    // Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
     #[test]
     fn property_27_holds_on_the_four_corpus_databases(
         db in 0usize..CORPUS.len(),
@@ -215,6 +217,7 @@ proptest! {
     }
 }
 
+// Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
 #[test]
 fn the_third_word_claim_is_kept_as_found() {
     let copy = DbCopy::of(AMS8000);
@@ -272,6 +275,7 @@ fn a_refused_batch_leaves_page_1_as_found() {
 /// writer's session in place leaves it alone: the observer sees page 1 as it
 /// was before each staging, and only the retried commit raises it — past the
 /// other writer's number and B's, re-minted beyond it.
+// Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
 #[test]
 fn a_moved_staging_leaves_page_1_until_the_retry_commits() {
     let copy = DbCopy::of(AMS8000);
@@ -309,6 +313,7 @@ fn a_moved_staging_leaves_page_1_until_the_retry_commits() {
 /// A merge commit counts the re-minted refno: A and B open at the same base of
 /// TES023 and are handed the same number in extent 17419; A commits it, B's
 /// merge re-mints its own past A's, and page 1 ends one past the re-minted one.
+// Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
 #[test]
 fn a_merge_commit_raises_page_1_past_the_reminted_refno() {
     let copy = DbCopy::of(TES023);
@@ -334,6 +339,7 @@ fn a_merge_commit_raises_page_1_past_the_reminted_refno() {
 /// Back debt left by a writer that did not raise page 1 — the low-level
 /// staging API, or an e3d-io before S6b — is paid off by the next Transaction,
 /// even one that issues nothing in that extent.
+// Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
 #[test]
 fn back_debt_from_the_low_level_path_is_paid_off_by_the_next_transaction() {
     let copy = DbCopy::of(AMS251142);

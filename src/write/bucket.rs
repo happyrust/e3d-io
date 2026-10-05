@@ -138,6 +138,7 @@ mod tests {
 
     const AMS8000: [u32; 9] = [1, 0xFFFF_FFFF, 8, 24_384, 26_506, 0, 32_576, 98, 0];
 
+    // Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
     #[test]
     fn a_counter_below_its_floor_rises_and_nothing_else_moves() {
         let before = page(&AMS8000);
@@ -146,6 +147,7 @@ mod tests {
         assert_eq!(after[36..], before[36..]);
     }
 
+    // Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
     #[test]
     fn a_counter_never_goes_down() {
         let before = page(&AMS8000);
@@ -153,6 +155,7 @@ mod tests {
         assert_eq!(raise(&before, &BTreeMap::from([(24_384, 26_506)])), None, "equal is not a raise");
     }
 
+    // Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
     #[test]
     fn the_third_word_is_kept_as_found() {
         let mut claimed = AMS8000;
@@ -161,6 +164,7 @@ mod tests {
         assert_eq!(words(&after, 9), [1, 0xFFFF_FFFF, 8, 24_384, 26_510, 4, 32_576, 120, 0]);
     }
 
+    // Feature: write-path-phase-3, Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
     #[test]
     fn an_extent_page_1_does_not_list_gets_no_entry() {
         assert_eq!(raise(&page(&AMS8000), &BTreeMap::from([(16_192, 900)])), None);
