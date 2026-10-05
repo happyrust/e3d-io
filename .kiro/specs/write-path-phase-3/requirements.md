@@ -396,7 +396,7 @@ e3d-io 写路径第三期——SPAMAP 写侧维护 · 性能 · 页 1 桶表
 3. IF Evidence_Doc 坐实 E3D 会发出 e3d-io 已用的 refno，THEN THE Transaction SHALL 在提交时把 Bucket_Table 中每个扩展的 Bucket_Counter 抬到使其 Bucket_Floor 大于新会话索引中该扩展的每一个 word1 与本批为该扩展发出过的每一个 word1，落盘方式与 E3D_Core 相同。
 4. IF Evidence_Doc 坐实 E3D_Core 原地重写页 1，THEN THE Phase_3_Workflow SHALL 在实现第 3 条之前，把「page 0 不再是唯一提交点」对崩溃一致性的影响写进 Spec_Ledger，并取得用户确认。
 5. IF Evidence_Doc 坐实 E3D 不会发出 e3d-io 已用的 refno，THEN THE Spec_Ledger SHALL 把 S6b 写侧记为留待，附证据与触发条件。
-6. WHERE Transaction 写 Bucket_Table，THE Transaction SHALL 写出能被 `BucketTable::parse` 解析、第 2 字等于 `2 + 3n`（n 为条目数）且每条第 3 字为 0 的页 1（四个 Corpus 库均如此）。
+6. WHERE Transaction 写 Bucket_Table，THE Transaction SHALL 写出能被 `BucketTable::parse` 解析、第 2 字等于 `2 + 3n`（n 为条目数）且每条第 3 字与写之前盘上的值相同的页 1（四个 Corpus 库均如此）。e3d-io 拿到独占锁时盘上的非零第三字只可能是崩溃的 E3D 会话留下的 claim，由 E3D 自己回收，Transaction 不清零。
 7. WHERE Transaction 写 Bucket_Table，THE Transaction SHALL 使 `alternate_write_gate.ps1` 5 轮全数通过。
 8. WHERE Transaction 写 Bucket_Table，THE E3D_Gate_Set SHALL 含一个在 `c61b097`（不写页 1）上输出 FAIL、在该能力记为完成的提交上输出 PASS 的门问：e3d-io 提交之后，E3D_Session `NEW` 一个该扩展的元素，所得 word1 等于 e3d-io 所写页 1 的 Bucket_Floor，且与 e3d-io 已发的每个 refno 都不同。
 9. WHERE Transaction 写 Bucket_Table，THE Transaction SHALL 保留上一会话 Bucket_Table 中的每个扩展条目，且使每个扩展写出的 Bucket_Counter 不低于上一会话的值。

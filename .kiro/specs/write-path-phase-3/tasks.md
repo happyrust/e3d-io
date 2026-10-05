@@ -450,7 +450,7 @@
     - 一致性影响见 Spec_Ledger「页 1 原地写的崩溃一致性影响」。回归（`docs/evidence/assets/2026-10-05-s6b/regression/`）：Cargo 769/0/30（131 个测试二进制 + Doc-tests，skip 7 不变）；Clippy/doc 63/25——`b8faf7a` 让规则全部坐实后 `unconfirmed` / `NO_CANDIDATE` 成了死代码（Clippy 65），已删去；真 TTY 39 PASS（212.227s，Q13 161.445s、Q14 9.087s，Q14 为 24384/26506），alternate 五轮 T4a–c 全 PASS（73.414s），原样 FORMAT0 11 行全 PASS（10.061s）；源 AMS/TES 哈希/长度不变。用户确认前 13.2 保持部分完成，不做 13.3–13.5。
     - _Requirements: 13.4, 13.5_
   - [~] 13.3 （条件）实现 `src/write/bucket.rs`
-    - 以上一会话（合并时为 Merge_Latest）的页 1 为起点，把每个扩展的 Bucket_Counter 抬到使 Bucket_Floor 大于新会话索引与本批发出的每个 word1（重铸后的号计入、原号不计）；保留全部条目，计数器只升不降；落盘方式与 E3D_Core 相同
+    - 以上一会话（合并时为 Merge_Latest）的页 1 为起点，把每个扩展的 Bucket_Counter 抬到使 Bucket_Floor 大于新会话索引与本批发出的每个 word1（重铸后的号计入、原号不计）；保留全部条目，计数器只升不降；落盘方式与 E3D_Core 相同（原地改写物理页 1：`StagedSession::commit` 内、`Moved` 复核之后先写页 1 并 sync、再写 page 0；只由 Transaction 维护，低层暂存 API 不维护；第三字原样保留）
     - 动手前按需求 2 第 1、2 条核对父提交，结果记入 Spec_Ledger「取证门槛核查」；对金样的影响按 11.4 的做法处理
     - _Requirements: 13.3, 13.6, 13.9, 13.10_
   - [~] 13.4 （条件）写页 1 测试：`tests/write_stage10_bucket.rs`
@@ -529,7 +529,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | 16.7 | D8 备选：owner 或祖先位姿改变时照样重算后代条目 | 用户 · Spec_Ledger「决策」 · 改选 D8 备选 |
 | 16.8 | HTTP 层、E3D 2.1 写、改动下游源码 | 用户 · 需求 · 提出明确需求 |
 | 16.8 | T4 Q17 活 E3D 持锁实测门（已由 `tests/write_stage7_lock.rs` 与 IDA 取证覆盖） | 一次 E3D_Session · 会话日志 · 持锁行为与该测试或取证结论不符 |
-| 13.5 | S6b 页 1 写侧（仅当 13.2 判定不撞号时列入） | 不适用：13.2 判定撞号（历史复用）且 E3D 原地写页 1，不按本条留待；做不做 13.3–13.5 看用户对「页 1 原地写的崩溃一致性影响」的确认（需求 13 第 4 条） |
+| 13.5 | S6b 页 1 写侧（仅当 13.2 判定不撞号时列入） | 不适用：13.2 判定撞号（历史复用）且 E3D 原地写页 1，不按本条留待；用户 2026-10-05 确认接受「页 1 原地写的崩溃一致性影响」，13.3–13.5 本期实施（需求 13 第 4 条） |
 
 ### 待填记录表
 
@@ -611,7 +611,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | 发号下界 | F5 `6c588d1` | `aacdcf9` | F1 `d4f5ab4` 的 `2026-10-05-allocation-counter-index.md` | F2 `6232c21` 的 Corpus/CLI；F5/F7 全套 766/0/30、无新增 skip；固定 base/latest、16 例历史/副本模型 | Q14 24384/26506；完整 39 问、alternate 5 轮、FORMAT 0 全 PASS | F5 库实现；F6 `0ea2655` + `f008aa4` 门修正；本 F7 验收提交 |
 | Open_Fast_Path（字节中性，按需求 2 第 7 条） | F4 | `718cf77`；在此准备提交上两遍重录，21 条 entries 与 F3 完全一致 | `docs/evidence/2026-10-05-allocation-counter-index.md#alloc.index_order`（F1 `d4f5ab4`） | F2 `6232c21` 的 `last_before` / 必需 Corpus；F4 独立 eager/lazy/scan 模型，完整 Cargo 755/0/30，金样全部通过，无新增 skip | 本优化仍 max+1；发号行为改变与 Q14 留 F5/F6 | F4（字节中性部分） |
 | staging 优化（字节中性，按需求 2 第 7 条） | | | | | | |
-| 页 1 桶表写侧（条件） | 未开工：13.2 判定「撞号 + 原地写」，等用户确认 | — | 13.1 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`） | 读侧 `BucketTable::parse`（`src/meta/bucket.rs`）；三例只用读侧核对页 1 与会话链 | 暂记 Q15，未写 | — |
+| 页 1 桶表写侧（条件） | 用户 2026-10-05 确认接受；首个写侧提交为第 13 组第二提交（待提交） | 第 13 组第一提交（docs(spec)，待提交） | 13.1 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`） | 读侧 `BucketTable::parse`（`src/meta/bucket.rs`）；三例只用读侧核对页 1 与会话链 | 暂记 Q15，未写 | — |
 
 #### Golden 剔除键（1.3、11.2、12.3）
 
@@ -732,27 +732,27 @@ F7 文档同步：README/CHANGELOG 明确发号下界及报告取号迁移；补
 | 12.3/12.4/12.6/12.7 | Require | 10k | 229.2385 ms；stage+commit231.7402 ms≤10s | 79290368 bytes | 891/94/2/0/250/0/1；非空间988≤1336.5；SPAMAP250≤493 | 0.940（10k→100k） | 同上；每BOX提供World_AABB，每条SPAMAP坐标读回 |
 | 12.3/12.6/12.7 | Require | 100k | 1998.8627 ms | 317100032 bytes | 8170/813/2/0/2274/0/1；非空间8986≤12255；SPAMAP2274≤4493 | 比值8.71958≤15 | 同上；12个完整文件及页数与基线相同。原始三轮/字节比较/回归见docs/evidence/2026-10-05-staging-scale-acceptance.md |
 
-#### 页 1 原地写的崩溃一致性影响（13.2，需用户确认）
+#### 页 1 原地写的崩溃一致性影响（13.2，用户 2026-10-05 确认接受）
 
-2026-10-05，依据 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`）。判定为「撞号且 E3D 原地重写页 1」：按需求 13 第 4 条先停下，13.3–13.5 未开工，等用户对本节确认。
+2026-10-05，依据 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`）。判定为「撞号且 E3D 原地重写页 1」：按需求 13 第 4 条先停下，13.3–13.5 未开工，等用户对本节确认。2026-10-05 22:22 用户确认接受；13.3–13.5 另立方案 `docs/plans/2026-10-05-write-path-group-13-s6b-write-plan.md`（23:18 审阅定稿，无修改），ADR `docs/adr/0003-page-1-in-place-bucket-write.md`。
 
 现状：e3d-io 的写只追加新页，盘上已有页零写入；唯一改写的已有页是最后写的 page 0（`LSPGNO`，`src/write/mod.rs` 模块头）。stage 之后、commit 之前崩溃，读侧仍见上一会话；`rollback`、`Moved`、拒写与 dry run 都不需要撤销任何字节。
 
-E3D 的做法（取证）：页 1 是物理页，不属于任何会话，也没有历史版本。NEW 时切 QXMO 独占、原地写第三字领桶；SAVEWORK 原地推进计数器；退出时原地清第三字。三步都不经过 page 0。E3D 在 SAVEWORK 内先写页 1 还是先写 page 0、崩溃后残留的非零第三字由谁回收，本轮未取证。
+E3D 的做法（取证，含 Evidence 补采回合）：页 1 是物理页，不属于任何会话，也没有历史版本。NEW 时切 QXMO 独占、原地写第三字领桶并立即落盘（此时 LSPGNO 未变）；SAVEWORK 原地推进计数器，再提交会话；退出时原地清第三字，同时追加一个 Saving Meta Data 会话并给 page 0 的 HCCNT（word 96）加一。三步改页 1 都不经过 LSPGNO 这个提交字。SAVEWORK 内逻辑上先抬计数器、后写会话与 page 0，两页由离开写模式时的同一次 FlushFileBuffers 落盘，中间不单独刷盘。崩溃残留的非零第三字很可能在下次登录时由 EXPUNGE 回收（强旁证）；回收之前同一用户号再 NEW 会报 657。
 
 E3D 发号读的是物理页 1，「新页 1 由 page 0 指向」对 E3D 不起作用；需求 13 第 3 条的「落盘方式与 E3D_Core 相同」只能是 e3d-io 也原地改写页 1。于是 page 0 不再是 e3d-io 唯一改写的已有页：
 
 | 情形 | 后果 | 判断 |
 |---|---|---|
-| 先抬页 1 并 sync、再写 page 0，中间崩溃；或抬页 1 后 `rollback` / `Moved` / 合并重试 | 计数器已抬、会话未提交，只空掉一段 word1；读侧仍见上一会话；计数器只升不降（需求 13 第 9 条），无需修复。合并重试以 Merge_Latest 时的页 1 为起点，已抬的值只会再被抬高 | 安全；建议采用此顺序 |
+| 先抬页 1 并 sync、再写 page 0，中间崩溃或 page 0 写失败 | 计数器已抬、会话未提交，只空掉一段 word1；读侧仍见上一会话；计数器只升不降（需求 13 第 9 条），无需修复。页 1 在 `StagedSession::commit` 内、`Moved` 复核之后写，`rollback`、`Moved` 及其重试走不到这一步 | 安全；采用此顺序。E3D 逻辑序相同；两次写之间的 sync 是 e3d-io 的加固——E3D 靠离开写模式时一次刷盘，e3d-io 每次提交重开文件，靠不了这个 |
 | 先写 page 0、再抬页 1，中间崩溃 | 会话已提交而计数器没抬，等于今天的状态：E3D 之后 NEW 复用 e3d-io 发过又删掉的号（Deleted / Gap 实测）；存活号由 `BCREAT` 的 529 重试逐号跳过（Live 实测），不会存活重复 | 有窗口；不采用 |
 | 页 1 只写了一部分（断电） | 页 1 的有效内容是页头 3 字加每扩展 3 字（`ams8000_0001` 两条共 9 字、36 字节），都在页首同一扇区；E3D 自己的原地写有同样的暴露 | 与 E3D 相同 |
 | 页 1 没有历史版本 | `open_at(旧会话)` 读到的是当前页 1；退回旧会话不会退回计数器 | 与 E3D 相同；发号下界（第 11 组）本来就按打开时读到的页 1 计 |
-| 失败的写不再逐字节不变 | 抬页 1 之后再拒写或 `rollback`，文件除页 1 计数器外不变；dry run 不写页 1。有插入的批次中，「失败的写一字不改」类测试与 stage 后按崩溃读文件、断言已有页不变的测试要改口径 | 改口径，逐条记入「测试适配清单」 |
-| 金样 | 在页 1 列出的扩展里插入元素的批次都会改页 1：`off_compat`、`write_hashes`、`allocation_floor`、`staging_scale` 中这类键按 11.4 的做法重录或退役 | 记入「Golden 剔除键」 |
-| 第三字（claim） | 按 `docs/evidence/2026-09-20-core-dll-dabacon-write-path-algorithms.md` A9（`FHSWIT` 除 QXMO 外都取哨兵字节共享锁），E3D 以写模式开着库时 e3d-io 拿不到独占锁；拿得到时盘上的非零第三字只可能是崩溃的 E3D 会话留下的。需求 13 第 6 条要求「每条第 3 字为 0」，照做等于替 E3D 清掉残留 claim | 建议原样保留第三字、只抬计数器；第 6 条措辞随 13.3–13.5 方案修改 |
+| 失败的写不再逐字节不变 | 页 1 在 commit 内、`Moved` 复核之后写，拒写、`rollback`、dry run、`Moved` 及其重试都不碰页 1，暂存后按崩溃读文件也看不到页 1 变化；只有 commit 内页 1 已写、page 0 未写成时计数器已抬 | 只这一个窗口要改口径，逐条记入「测试适配清单」 |
+| 金样 | 经 Transaction 在页 1 列出的扩展里插入元素的批次、以及库本身有历史欠账的批次会改页 1；只走低层暂存 API 的键不变。`off_compat`、`write_hashes`、`allocation_floor`、`staging_scale` 中受影响的键按 11.4 的做法退役并另录 | 记入「Golden 剔除键」 |
+| 第三字（claim） | 按 `docs/evidence/2026-09-20-core-dll-dabacon-write-path-algorithms.md` A9（`FHSWIT` 除 QXMO 外都取哨兵字节共享锁），E3D 以写模式开着库时 e3d-io 拿不到独占锁；拿得到时盘上的非零第三字只可能是崩溃的 E3D 会话留下的。需求 13 原第 6 条要求「每条第 3 字为 0」，照做等于替 E3D 清掉残留 claim；E3D 自己的残留由 EXPUNGE 回收（Evidence 补采回合） | 采用：原样保留第三字、只抬计数器；需求 13 第 6 条已改为「与写之前相同」 |
 
-用户确认接受后另立 13.3–13.5 方案（需求 13 第 3、6–10 条；Q15 放 `alternate_write_gate.ps1`，须在 `c61b097` 上 FAIL）。不接受时，S6b 写侧改记入「本期不做与触发条件」，触发条件按需求 16 第 9 条另写。
+用户已确认接受，13.3–13.5 按上述方案实施（需求 13 第 3、6–10 条；Q15 放 `alternate_write_gate.ps1`，须在 `c61b097` 上 FAIL）。
 
 #### skip 清单（14.4）
 

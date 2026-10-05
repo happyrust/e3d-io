@@ -329,7 +329,10 @@ fn max_word1_scan(index: &mut IndexCursor) -> BTreeMap<u32, u32>;      // 朴素
 - 取证：经 IB_Wrapper 读 `DB_DB::updateBucketList`、`DB_DB::getRefBuckets`、`db_get_bucket`、`db_add_bucket`，坐实 `bucket.persist`；再由 `tools/e3d/s6b_probe.ps1` 驱动一次 E3D_Session，坐实 `bucket.collision`：比对 `NEW` 前后的页 1 字节与会话链（需求 13 第 11 条），并分测「已发且仍存在」与「已发后删去」的 word1（需求 13 第 12 条）。
 - 不撞号：在 Spec_Ledger 把 S6b 写侧记为留待，附证据与触发条件（需求 13 第 5 条），不建 `bucket.rs`。
 - 撞号，且页 1 写时复制、由 page 0 指向：`src/write/bucket.rs` 以上一会话（合并时为 Merge_Latest）的页 1 为起点，把每个扩展的计数器抬高，使其 Bucket_Floor 大于新索引与本批发出的每个 word1（重铸后的号计入，原号不计）；保留全部条目，计数器不降。新页 1 作为追加页写出，由最后写入的 page 0 指向，提交点不变。
-- 撞号，且 E3D 原地重写页 1：先停下。把「page 0 不再是唯一提交点」对崩溃一致性的影响写进 Spec_Ledger，取得用户确认后才实现（需求 13 第 4 条）。
+- 撞号，且 E3D 原地重写页 1（13.2 坐实）：先停下，把「page 0 不再是唯一提交点」对崩溃一致性的影响写进 Spec_Ledger，取得用户确认后才实现（需求 13 第 4 条）。用户已于 2026-10-05 确认接受（ADR 0003），按下面实现：
+  - `src/write/bucket.rs` 在 `Transaction::stage_batch` 的哨兵锁内读物理页 1，逐条把计数器抬到 `max(原值, required)`，`required` = 1 + max(pinned 索引中该扩展的最大 word1, 本批最终插入该扩展的每个 word1)；pinned 为 base 或 Merge_Latest，重铸后的号计入、原号不计。只改计数器字，条目、第 2 字、第三字与页内其余字节原样保留；页 1 未列出的扩展不新增条目；页 1 不变就不写。
+  - 新字节随 `StagedSession` 带到 `commit`：`Moved` 复核之后先写页 1 并 sync，再写 page 0 并 sync。拒写、rollback、dry run、`Moved` 及其重试都不碰页 1，只剩「页 1 已写、page 0 未写成」这一个空号窗口。E3D 的 SAVEWORK 也是先抬计数器、后写会话与 page 0，但两页同一次刷盘；两次写之间的 sync 是 e3d-io 的加固。
+  - 只有 Transaction 维护页 1，自己铸号的低层暂存 API 不维护。`bucket.collision`、`bucket.persist`、`alloc.counter_semantics` 任一未坐实时走 D7「不写页 1」。
 - 对应的门问放在 `alternate_write_gate.ps1`，暂记 Q15，要求在 `c61b097` 上 FAIL（需求 13 第 8 条）。
 
 ### 门（`tools/e3d/`）
@@ -644,7 +647,7 @@ Write_CLI 的 JSON 增量：`insert`、`set`、`move` 指令可以带 `"aabb": [
 
 ### Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）
 
-*For any* 写 Bucket_Table 的提交（含 Merge_Commit），写出的页 1 可被 `BucketTable::parse` 解析，第 2 字 = 2 + 3n，每条第 3 字为 0；上一会话（合并时为 Merge_Latest）的每个扩展条目都保留，每个 Bucket_Counter 不低于上一会话的值；每个扩展的 Bucket_Floor 大于新会话索引中该扩展的每个 word1 与本批为该扩展发出的每个 word1（重铸后的号计入、原号不计）。
+*For any* 写 Bucket_Table 的提交（含 Merge_Commit），写出的页 1 可被 `BucketTable::parse` 解析，第 2 字 = 2 + 3n，每条第 3 字与提交前盘上的值相同；上一会话（合并时为 Merge_Latest）的每个扩展条目都保留，每个 Bucket_Counter 不低于上一会话的值；每个扩展的 Bucket_Floor 大于新会话索引中该扩展的每个 word1 与本批为该扩展发出的每个 word1（重铸后的号计入、原号不计）。
 
 **Validates: Requirements 13.3, 13.6, 13.9, 13.10**
 
