@@ -1,0 +1,10 @@
+e3d-write apply: 3 instruction(s) from D:\e3dio-s6b-gate\ops\q13_control.json onto D:\e3dio-s6b-gate\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 661
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert SITE under 16192/0 -> 16192/4 /E3DIO-Q13-SITE [@site]
+  #1 insert ZONE under 16192/4 -> 16192/5 /E3DIO-Q13-ZONE [@zone]
+  #2 insert BOX under 16192/5 -> 16192/6 /E3DIO-Q13-CONTROL [@control]
+wrote session 662 to D:\e3dio-s6b-gate\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 661
+  appended pages   : 14
+  report           : D:\e3dio-s6b-gate\ops\q13_control.report.json

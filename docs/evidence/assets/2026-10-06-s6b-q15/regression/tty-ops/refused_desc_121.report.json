@@ -1,0 +1,17 @@
+{
+  "base_sesno": 646,
+  "comment": "refused: the dictionary allows DESC 120 characters",
+  "database": "D:\\e3dio-s6b-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": {
+    "message": "op #0 (insert EQUI under /1RX03-MSUP: DESC): DESC: 121 characters, the dictionary allows 120",
+    "op": 0
+  },
+  "latest_before": 646,
+  "on_clash": "refuse",
+  "ops": [],
+  "ops_file": "D:\\e3dio-s6b-gate\\ops\\refused_desc_121.json",
+  "spatial_policy": "off",
+  "user": "e3dio"
+}

@@ -1,0 +1,5 @@
+{"comment":"Q13h cylinder and transformed equipment box","ops":[
+ {"op":"insert","id":"cylinder","owner":"=16192/5","noun":"CYLI","name":"/E3DIO-Q13-CYLI","attrs":{"POS":"5000 0 0","DIAM":"400","HEIG":"500"}},
+ {"op":"insert","id":"equipment","owner":"=16192/5","noun":"EQUI","name":"/E3DIO-Q13-EQUI","attrs":{"POS":"7000 4000 2000","ORI":"0 0 90"}},
+ {"op":"insert","id":"transformed","owner":"@equipment","noun":"BOX","name":"/E3DIO-Q13-TRANSFORMED","attrs":{"POS":"100 200 300","XLEN":"300","YLEN":"400","ZLEN":"500"}}
+]}

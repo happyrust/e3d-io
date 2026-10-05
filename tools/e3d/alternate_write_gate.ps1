@@ -20,12 +20,23 @@
   tail BASESN chain is unbroken from the pre-run session to the newest, and that the
   e3d-io sessions carry user e3dio on top of an E3D session each.
 
+  Q15 (requirement 13, S6b; q15_checks.ps1) follows the rounds, on the DB reset from the
+  original: e3d-io inserts K = C - M EQUIs under the ZONE in one session (M the ZONE
+  extent's index maximum, C its page-1 Bucket_Counter) and deletes them all in the next;
+  then E3D NEWs an EQUI there and SAVEWORKs. E3D must be handed page 1's counter after the
+  insert, none of the numbers e3d-io issued and deleted. -OnlyQ15 runs Q15 alone;
+  -WriteExe runs the e3d-io side with another build of e3d-write (an older one without
+  --spatial is called without it), e.g. c61b097's, on which Q15 must FAIL.
+
   Shares the driver contract with write_gate.ps1 (l3_suite --check-driver, detached des.exe
   via run_ams_c_entrymacro.bat) but is self-contained. Other E3D sessions are tolerated
   (L3_ALLOW_EXISTING_E3D_SESSION=1).
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File tools/e3d/alternate_write_gate.ps1 -Rounds 5
+
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File tools/e3d/alternate_write_gate.ps1 -OnlyQ15 -WriteExe D:\Rust\target-c61b097\debug\e3d-write.exe
 #>
 [CmdletBinding()]
 param(
@@ -36,7 +47,9 @@ param(
     [string]$L3Exe = 'D:\Rust\target\debug\l3_suite.exe',
     [string]$DbRelative = 'ams000\ams8000_0001',
     [string]$ZoneName = '/1RX03-MSUP',
-    [switch]$RefreshCopy
+    [switch]$RefreshCopy,
+    [switch]$OnlyQ15,
+    [string]$WriteExe = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,10 +86,13 @@ try {
     try { $metaJson = & cargo metadata --format-version 1 --no-deps 2>$null | Out-String } finally { $ErrorActionPreference = $eap }
     $targetDir = ($metaJson | ConvertFrom-Json).target_directory
 } finally { Pop-Location }
-$writeExe = Join-Path $targetDir 'debug\e3d-write.exe'
+$builtWriteExe = Join-Path $targetDir 'debug\e3d-write.exe'
+$writeExe = if ($WriteExe) { $WriteExe } else { $builtWriteExe }
 $descExe = Join-Path $targetDir 'debug\e3d-descriptor.exe'
 $schema = Join-Path $crate 'schema\e3d31'
-foreach ($required in @($writeExe, $descExe)) { if (-not (Test-Path $required)) { throw "built bin missing: $required" } }
+foreach ($required in @($builtWriteExe, $writeExe, $descExe)) { if (-not (Test-Path $required)) { throw "bin missing: $required" } }
+# An e3d-write from before the spatial policy (c61b097) has no --spatial and refuses it.
+$spatialOff = if ((Invoke-Native { & $writeExe --help }).Output -match '--spatial') { @('--spatial', 'off') } else { @() }
 
 # 1. The project copy (evars + ams000 + small folders; reset the one DB each run).
 if ($RefreshCopy -or -not (Test-Path (Join-Path $copy 'ams000\amssys'))) {
@@ -132,14 +148,84 @@ function NameOf([string]$refno) {
     $x = $json | ConvertFrom-Json
     ($x.attributes | Where-Object { $_.name -eq 'NAME' }).value
 }
+function NextWord1([int]$extent) {
+    $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $json = & $descExe next-word1 --db $copyDb --extent $extent 2>$null | Out-String } finally { $ErrorActionPreference = $eap }
+    $json | ConvertFrom-Json
+}
+# One e3d-io session from an instruction file: its report, or why there is none.
+function Invoke-Apply([string]$name, [string]$opsJson) {
+    $opsPath = Join-Path $Scratch "$name.json"
+    $reportPath = Join-Path $Scratch "$name.report.json"
+    [IO.File]::WriteAllText($opsPath, $opsJson, $utf8)
+    $run = Invoke-Native { & $writeExe apply --db $copyDb --ops $opsPath --schema $schema @spatialOff --report $reportPath }
+    if ($run.ExitCode) { return [pscustomobject]@{ report = $null; error = "e3d-write $name failed ($($run.ExitCode)): $($run.Output)" } }
+    [pscustomobject]@{ report = ([IO.File]::ReadAllText($reportPath, $utf8) | ConvertFrom-Json); error = $null }
+}
+
+. (Join-Path $PSScriptRoot 'q15_checks.ps1')
+function Invoke-Q15 {
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    Copy-Item (Join-Path $Project $DbRelative) $copyDb -Force
+    $extent = [int](($zoneRef -split '/')[0])
+    $before = NextWord1 $extent
+    $run = [ordered]@{
+        write_exe = $writeExe; extent = $extent; index_max = [int64]$before.scan_max_word1; counter_before = [int64]$before.bucket_counter
+        issued = @(); floor_after_insert = $null; counter_after_delete = $null; e3d_saved = $false; e3d_ref = ''
+    }
+    $k = $run.counter_before - $run.index_max
+    if ($k -gt 0) {
+        $inserts = @(1..$k | ForEach-Object { "{`"op`":`"insert`",`"owner`":`"$ZoneName`",`"noun`":`"EQUI`",`"name`":`"/E3DIO-Q15-$_`"}" })
+        $insert = Invoke-Apply 'q15_insert' "{`"comment`":`"e3d-io Q15 insert K = $k`",`"ops`":[$($inserts -join ',')]}"
+        if ($insert.error) { Write-Output "     $($insert.error)" }
+        else {
+            $run.issued = @($insert.report.ops | ForEach-Object { [string]$_.refno })
+            $run.floor_after_insert = [int64](NextWord1 $extent).bucket_counter
+            $deletes = @($run.issued | ForEach-Object { "{`"op`":`"delete`",`"refno`":`"$_`"}" })
+            $delete = Invoke-Apply 'q15_delete' "{`"comment`":`"e3d-io Q15 delete all $k`",`"ops`":[$($deletes -join ',')]}"
+            if ($delete.error) { Write-Output "     $($delete.error)" }
+            else {
+                $run.counter_after_delete = [int64](NextWord1 $extent).bucket_counter
+                try {
+                    Invoke-E3D 'alternate_write_e3d.mac.template' 'alt_e3d_q15.mac' @{ ZONE = $zoneRef; E3DNAME = 'E3DIO-Q15-E3D'; ROUND = 'q15'; POS = 0 } -stateful
+                } catch {
+                    Write-Output "     (E3D Q15: $($_.Exception.Message))"
+                }
+                $log = Read-LogText (Join-Path $logDir 'alt_e3d_q15.log')
+                $run.e3d_saved = $log -match 'ALT-E3D-SAVED'
+                $run.e3d_ref = [regex]::Match($log, 'Ref =(\d+/\d+)').Groups[1].Value
+            }
+        }
+    }
+    $verdict = Get-Q15Verdict ([pscustomobject]$run)
+    $run.verdict = $verdict.verdict
+    $run.reasons = @($verdict.reasons)
+    $run.elapsed_seconds = $timer.Elapsed.TotalSeconds
+    [IO.File]::WriteAllText((Join-Path $logDir 'q15.json'), ($run | ConvertTo-Json -Depth 4), $utf8)
+    if ($verdict.verdict -eq 'pass') {
+        Write-Output ("PASS Q15 extent {0}: e3d-io issued and deleted K = {1} ({2}..{3}), page 1 {4} -> {5}, and E3D's NEW took {6}, none of them ({7:N1} s)" -f $extent, $k, $run.issued[0], $run.issued[-1], $run.counter_before, $run.floor_after_insert, $run.e3d_ref, $run.elapsed_seconds)
+    } else {
+        Write-Output ("FAIL Q15 ({0}) extent {1}: M {2}, C {3}, issued {4}, page 1 after the insert {5}, E3D took '{6}' ({7:N1} s)" -f $verdict.verdict, $extent, $run.index_max, $run.counter_before, $(if ($run.issued.Count) { "$($run.issued[0])..$($run.issued[-1])" } else { 'none' }), $run.floor_after_insert, $run.e3d_ref, $run.elapsed_seconds)
+        foreach ($reason in $verdict.reasons) { Write-Output "     $reason" }
+        $script:failures++
+    }
+}
 
 # Resolve the first ZONE's refno once, through a dry-run that references it by name.
 $probeOps = Join-Path $Scratch 'alt_probe.json'
 [IO.File]::WriteAllText($probeOps, "[{`"op`":`"insert`",`"owner`":`"$ZoneName`",`"noun`":`"EQUI`"}]", $utf8)
-$probe = Invoke-Native { & $writeExe apply --db $copyDb --ops $probeOps --schema $schema --spatial off --dry-run --report (Join-Path $Scratch 'alt_probe.report.json') }
+$probe = Invoke-Native { & $builtWriteExe apply --db $copyDb --ops $probeOps --schema $schema --spatial off --dry-run --report (Join-Path $Scratch 'alt_probe.report.json') }
 if ($probe.ExitCode) { Write-Output $probe.Output; throw "cannot resolve $ZoneName" }
 $zoneRef = ([IO.File]::ReadAllText((Join-Path $Scratch 'alt_probe.report.json'), $utf8) | ConvertFrom-Json).ops[0].owner
 $baseBefore = [int]((Sessions)[0].sesno)
+if ($OnlyQ15) {
+    Write-Output "alternate-write gate: Q15 alone on ZONE $ZoneName ($zoneRef), e3d-write $writeExe"
+    Invoke-Q15
+    Write-Output ''
+    if ($failures) { Write-Output "$failures FAIL — logs in $logDir"; exit 1 }
+    Write-Output "all PASS — Q15 on ZONE $ZoneName (logs in $logDir)"
+    exit 0
+}
 Write-Output "alternate-write gate: $Rounds round(s) on ZONE $ZoneName ($zoneRef), base session $baseBefore"
 
 # The rounds.
@@ -189,7 +275,7 @@ for ($r = 1; $r -le $Rounds; $r++) {
     $ioOps = Join-Path $Scratch "alt_io_$r.json"
     [IO.File]::WriteAllText($ioOps, "{`"comment`":`"e3d-io T4 alternate round $r`",`"ops`":[{`"op`":`"insert`",`"owner`":`"$ZoneName`",`"noun`":`"EQUI`",`"name`":`"$ioName`",`"attrs`":{`"POS`":`"$($r * 100) 0 0`",`"FUNC`":`"ALT-IO-$r`"}}]}", $utf8)
     $ioReport = Join-Path $Scratch "alt_io_$r.report.json"
-    $io = Invoke-Native { & $writeExe apply --db $copyDb --ops $ioOps --schema $schema --spatial off --report $ioReport }
+    $io = Invoke-Native { & $writeExe apply --db $copyDb --ops $ioOps --schema $schema @spatialOff --report $ioReport }
     if ($io.ExitCode) { Write-Output "FAIL R$r  e3d-write round $r failed"; Write-Output $io.Output; $failures++; break }
     $rep = [IO.File]::ReadAllText($ioReport, $utf8) | ConvertFrom-Json
     $ioSes = [int]$rep.commit.written.sesno
@@ -247,6 +333,9 @@ if ($failures -eq 0) {
     }
 }
 
+# Q15 resets the DB from the original: the rounds' copy has been checked and is not reused.
+Invoke-Q15
+
 Write-Output ''
 if ($failures) { Write-Output "$failures FAIL — logs in $logDir"; exit 1 }
-Write-Output "all PASS — E3D 3.1 and e3d-io alternated $Rounds rounds on one ZONE with an unbroken session chain (logs in $logDir)"
+Write-Output "all PASS — E3D 3.1 and e3d-io alternated $Rounds rounds on one ZONE with an unbroken session chain, and Q15 held (logs in $logDir)"

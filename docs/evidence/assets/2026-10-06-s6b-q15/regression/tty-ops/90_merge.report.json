@@ -1,0 +1,83 @@
+{
+  "base_sesno": 656,
+  "comment": "e3d-io write-path gate: merged onto a session E3D saved after this transaction's base",
+  "commit": {
+    "appended_pages": [
+      17547,
+      17548,
+      17549,
+      17550,
+      17551,
+      17552,
+      17553,
+      17554,
+      17555,
+      17556,
+      17557,
+      17558,
+      17559,
+      17560,
+      17561
+    ],
+    "base_sesno": 656,
+    "merged_onto": 659,
+    "previous": {
+      "end": 17546,
+      "page": 17544,
+      "sesno": 659
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 17561,
+      "page": 17561,
+      "sesno": 660
+    }
+  },
+  "database": "D:\\e3dio-s6b-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 659,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "24384/34719",
+      "id": "merge-box",
+      "index": 0,
+      "name": "/E3DIO-MERGE-BOX",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/34719",
+      "taken_in_latest": false
+    },
+    {
+      "attrs": [
+        "FUNC"
+      ],
+      "index": 1,
+      "op": "set",
+      "refno": "24384/2498"
+    }
+  ],
+  "ops_file": "D:\\e3dio-s6b-gate\\ops\\90_merge.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

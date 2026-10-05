@@ -1,0 +1,7 @@
+{
+  "comment": "e3d-io 写路径门：中文 NAME / DESC / 会话注释",
+  "ops": [
+    {"op": "rename", "refno": "=24384/26507", "name": "/E3DIO-盒子"},
+    {"op": "set", "refno": "/1RX03-MSUP", "attrs": {"DESC": "反应堆厂房 -3.320m~±0.00m"}}
+  ]
+}

@@ -1,0 +1,4 @@
+gates start 2026-10-06T00:07:17.8610189+08:00 HEAD 42448fd7e67136c7ab42ef5c0095d7b8b868c5ec + worktree
+tty-gate exit=0 elapsed_s=211.7919331 end=2026-10-06T00:10:49.6574594+08:00
+alternate-gate exit=0 elapsed_s=82.0335216 end=2026-10-06T00:12:11.6937707+08:00
+format0-gate exit=0 elapsed_s=8.0342126 end=2026-10-06T00:12:19.7299597+08:00

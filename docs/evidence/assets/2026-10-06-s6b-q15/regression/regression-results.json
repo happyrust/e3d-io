@@ -1,0 +1,97 @@
+{
+  "head": "42448fd7e67136c7ab42ef5c0095d7b8b868c5ec + third-commit worktree (Q15: tools/e3d/q15_*.ps1, alternate_write_gate.ps1, tests/write_stage10_s6b_gate.rs)",
+  "cargo": {
+    "result_lines": 133,
+    "doc_tests": 1,
+    "passed": 788,
+    "failed": 0,
+    "ignored": 30,
+    "skip_messages": 8
+  },
+  "warnings": {
+    "clippy": 63,
+    "doc": 25
+  },
+  "tty": {
+    "exit_code": 0,
+    "elapsed_seconds": 211.7919331,
+    "total_seconds": 211.6019102,
+    "q13_seconds": 164.792163,
+    "q14_seconds": 9.8728,
+    "pass_lines": 39,
+    "fail_lines": 0
+  },
+  "alternate": {
+    "exit_code": 0,
+    "elapsed_seconds": 82.0335216,
+    "pass_lines": 4,
+    "fail_lines": 0,
+    "q15": {
+      "write_exe": "D:\\Rust\\target\\debug\\e3d-write.exe",
+      "extent": 24384,
+      "index_max": 26483,
+      "counter_before": 26506,
+      "issued": [
+        "24384/26506",
+        "24384/26507",
+        "24384/26508",
+        "24384/26509",
+        "24384/26510",
+        "24384/26511",
+        "24384/26512",
+        "24384/26513",
+        "24384/26514",
+        "24384/26515",
+        "24384/26516",
+        "24384/26517",
+        "24384/26518",
+        "24384/26519",
+        "24384/26520",
+        "24384/26521",
+        "24384/26522",
+        "24384/26523",
+        "24384/26524",
+        "24384/26525",
+        "24384/26526",
+        "24384/26527",
+        "24384/26528"
+      ],
+      "floor_after_insert": 26529,
+      "counter_after_delete": 26529,
+      "e3d_saved": true,
+      "e3d_ref": "24384/26529",
+      "verdict": "pass",
+      "reasons": [],
+      "elapsed_seconds": 11.9591018
+    }
+  },
+  "format0": {
+    "exit_code": 0,
+    "elapsed_seconds": 8.0342126,
+    "pass_lines": 11,
+    "fail_lines": 0
+  },
+  "sources": {
+    "before": {
+      "ams8000_0001": {
+        "bytes": 34037760,
+        "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023"
+      },
+      "TES023": {
+        "bytes": 288768,
+        "sha256": "CDB87F444680019E4054BC03A0AB514D5BCDA2805B719EB42D00A98B51CE3D6B"
+      }
+    },
+    "after": {
+      "ams8000_0001": {
+        "bytes": 34037760,
+        "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023"
+      },
+      "TES023": {
+        "bytes": 288768,
+        "sha256": "CDB87F444680019E4054BC03A0AB514D5BCDA2805B719EB42D00A98B51CE3D6B"
+      }
+    },
+    "unchanged": true
+  }
+}

@@ -1,0 +1,7 @@
+﻿F0-50-BEGIN
+ZONE /反应堆厂房-E3DIO
+Members
+ 1 EQUI 1 /10HDE10
+ 2 EQUI 2 /E3DIO-锅炉设备
+
+F0-50-END

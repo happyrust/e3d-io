@@ -1,0 +1,284 @@
+{
+  "base_sesno": 646,
+  "comment": "e3d-io Q15 insert K = 23",
+  "commit": {
+    "appended_pages": [
+      16620,
+      16621,
+      16622,
+      16623,
+      16624,
+      16625,
+      16626,
+      16627,
+      16628,
+      16629,
+      16630,
+      16631,
+      16632,
+      16633,
+      16634,
+      16635,
+      16636,
+      16637,
+      16638,
+      16639,
+      16640
+    ],
+    "base_sesno": 646,
+    "merged_onto": null,
+    "previous": {
+      "end": 16619,
+      "page": 16617,
+      "sesno": 646
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 16640,
+      "page": 16640,
+      "sesno": 647
+    }
+  },
+  "database": "D:\\e3dio-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 646,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [],
+      "given": "24384/26484",
+      "index": 0,
+      "name": "/E3DIO-Q15-1",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26484"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26485",
+      "index": 1,
+      "name": "/E3DIO-Q15-2",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26485"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26486",
+      "index": 2,
+      "name": "/E3DIO-Q15-3",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26486"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26487",
+      "index": 3,
+      "name": "/E3DIO-Q15-4",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26487"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26488",
+      "index": 4,
+      "name": "/E3DIO-Q15-5",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26488"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26489",
+      "index": 5,
+      "name": "/E3DIO-Q15-6",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26489"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26490",
+      "index": 6,
+      "name": "/E3DIO-Q15-7",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26490"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26491",
+      "index": 7,
+      "name": "/E3DIO-Q15-8",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26491"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26492",
+      "index": 8,
+      "name": "/E3DIO-Q15-9",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26492"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26493",
+      "index": 9,
+      "name": "/E3DIO-Q15-10",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26493"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26494",
+      "index": 10,
+      "name": "/E3DIO-Q15-11",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26494"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26495",
+      "index": 11,
+      "name": "/E3DIO-Q15-12",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26495"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26496",
+      "index": 12,
+      "name": "/E3DIO-Q15-13",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26496"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26497",
+      "index": 13,
+      "name": "/E3DIO-Q15-14",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26497"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26498",
+      "index": 14,
+      "name": "/E3DIO-Q15-15",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26498"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26499",
+      "index": 15,
+      "name": "/E3DIO-Q15-16",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26499"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26500",
+      "index": 16,
+      "name": "/E3DIO-Q15-17",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26500"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26501",
+      "index": 17,
+      "name": "/E3DIO-Q15-18",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26501"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26502",
+      "index": 18,
+      "name": "/E3DIO-Q15-19",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26502"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26503",
+      "index": 19,
+      "name": "/E3DIO-Q15-20",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26503"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26504",
+      "index": 20,
+      "name": "/E3DIO-Q15-21",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26504"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26505",
+      "index": 21,
+      "name": "/E3DIO-Q15-22",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26505"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26506",
+      "index": 22,
+      "name": "/E3DIO-Q15-23",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26506"
+    }
+  ],
+  "ops_file": "D:\\e3dio-gate\\q15_insert.json",
+  "staged": null,
+  "user": "e3dio"
+}

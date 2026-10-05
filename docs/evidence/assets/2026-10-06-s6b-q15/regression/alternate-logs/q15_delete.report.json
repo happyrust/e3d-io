@@ -1,0 +1,174 @@
+{
+  "base_sesno": 647,
+  "comment": "e3d-io Q15 delete all 23",
+  "commit": {
+    "appended_pages": [
+      16641,
+      16642,
+      16643,
+      16644,
+      16645,
+      16646,
+      16647,
+      16648,
+      16649,
+      16650,
+      16651,
+      16652,
+      16653,
+      16654,
+      16655,
+      16656
+    ],
+    "base_sesno": 647,
+    "merged_onto": null,
+    "previous": {
+      "end": 16640,
+      "page": 16640,
+      "sesno": 647
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 16656,
+      "page": 16656,
+      "sesno": 648
+    }
+  },
+  "database": "D:\\e3dio-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 647,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "index": 0,
+      "op": "delete",
+      "refno": "24384/26506"
+    },
+    {
+      "index": 1,
+      "op": "delete",
+      "refno": "24384/26507"
+    },
+    {
+      "index": 2,
+      "op": "delete",
+      "refno": "24384/26508"
+    },
+    {
+      "index": 3,
+      "op": "delete",
+      "refno": "24384/26509"
+    },
+    {
+      "index": 4,
+      "op": "delete",
+      "refno": "24384/26510"
+    },
+    {
+      "index": 5,
+      "op": "delete",
+      "refno": "24384/26511"
+    },
+    {
+      "index": 6,
+      "op": "delete",
+      "refno": "24384/26512"
+    },
+    {
+      "index": 7,
+      "op": "delete",
+      "refno": "24384/26513"
+    },
+    {
+      "index": 8,
+      "op": "delete",
+      "refno": "24384/26514"
+    },
+    {
+      "index": 9,
+      "op": "delete",
+      "refno": "24384/26515"
+    },
+    {
+      "index": 10,
+      "op": "delete",
+      "refno": "24384/26516"
+    },
+    {
+      "index": 11,
+      "op": "delete",
+      "refno": "24384/26517"
+    },
+    {
+      "index": 12,
+      "op": "delete",
+      "refno": "24384/26518"
+    },
+    {
+      "index": 13,
+      "op": "delete",
+      "refno": "24384/26519"
+    },
+    {
+      "index": 14,
+      "op": "delete",
+      "refno": "24384/26520"
+    },
+    {
+      "index": 15,
+      "op": "delete",
+      "refno": "24384/26521"
+    },
+    {
+      "index": 16,
+      "op": "delete",
+      "refno": "24384/26522"
+    },
+    {
+      "index": 17,
+      "op": "delete",
+      "refno": "24384/26523"
+    },
+    {
+      "index": 18,
+      "op": "delete",
+      "refno": "24384/26524"
+    },
+    {
+      "index": 19,
+      "op": "delete",
+      "refno": "24384/26525"
+    },
+    {
+      "index": 20,
+      "op": "delete",
+      "refno": "24384/26526"
+    },
+    {
+      "index": 21,
+      "op": "delete",
+      "refno": "24384/26527"
+    },
+    {
+      "index": 22,
+      "op": "delete",
+      "refno": "24384/26528"
+    }
+  ],
+  "ops_file": "D:\\e3dio-gate\\q15_delete.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

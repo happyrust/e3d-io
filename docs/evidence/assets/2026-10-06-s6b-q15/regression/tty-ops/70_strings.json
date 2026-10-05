@@ -1,0 +1,10 @@
+{
+  "comment": "e3d-io write-path gate: an EQUI and a FIXING set by attribute name from text (Transaction::set)",
+  "ops": [
+    {"op": "insert", "id": "equi", "owner": "/1RX03-MSUP", "noun": "EQUI", "name": "/E3DIO-STR-EQUI",
+     "attrs": {"DESC": "e3d-io T1b: DESC typed as text and set by name through Transaction::set",
+               "POS": "1234 2345 3456", "FUNC": "STRING-PATH", "PURP": "PIPE"}},
+    {"op": "insert", "id": "fixing", "owner": "/1RX03-MSUP", "noun": "FIXING", "name": "/E3DIO-STR-FIXING",
+     "attrs": {"ROKEYS": "S1|S2|S3", "BUIL": "true", "NUMB": "42", "CREF": "/1RX03-MSUP"}}
+  ]
+}

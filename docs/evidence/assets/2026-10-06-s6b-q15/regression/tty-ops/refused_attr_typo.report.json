@@ -1,0 +1,17 @@
+{
+  "base_sesno": 646,
+  "comment": "refused: no attribute is named DESCR",
+  "database": "D:\\e3dio-s6b-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": {
+    "message": "op #0 (set 24384/47 DESCR): DESCR = \"a typo\": noun 0x9c5ed has no attribute named DESCR",
+    "op": 0
+  },
+  "latest_before": 646,
+  "on_clash": "refuse",
+  "ops": [],
+  "ops_file": "D:\\e3dio-s6b-gate\\ops\\refused_attr_typo.json",
+  "spatial_policy": "off",
+  "user": "e3dio"
+}

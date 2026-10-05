@@ -1,0 +1,9 @@
+reset D:\e3dio-gate\AvevaMarineSample\ams000\ams8000_0001 from the original
+alternate-write gate: Q15 alone on ZONE /1RX03-MSUP (24384/47), e3d-write D:\Rust\target-c61b097\debug\e3d-write.exe
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-gate outcome=Completed
+﻿E3DIO-GATE-DONE alt E3D round q15, see D:/e3dio-gate/logs-alt/alt_e3d_q15.log
+
+FAIL Q15 (fail) extent 24384: M 26483, C 26506, issued 24384/26484..24384/26506, page 1 after the insert 26506, E3D took '24384/26506' (11.0 s)
+     E3D was handed 24384/26506, a number e3d-io issued and deleted
+
+1 FAIL — logs in D:\e3dio-gate\logs-alt

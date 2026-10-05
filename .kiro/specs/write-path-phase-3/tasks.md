@@ -442,23 +442,27 @@
     - 写 Phase_3_Evidence_Doc，经 `check_evidence.ps1` 机检；结论写入 `src/core_rules.rs`
     - Evidence 文档通过机检；Live 为 fresh，Deleted/Gap 复用已删除编号；page 1 在 NEW 时原地 claim，保存时推进计数器，退出时释放。
     - _Requirements: 2.4, 13.1, 13.2, 13.11, 13.12_
-  - [~] 13.2 按取证结果判定分支
+  - [x] 13.2 按取证结果判定分支
     - 不撞号 → 在 Spec_Ledger 把 S6b 写侧记为留待并附证据与触发条件，13.3–13.5 不做
     - 撞号且 E3D 原地重写页 1 → 停下，把「page 0 不再是唯一提交点」对崩溃一致性的影响写进 Spec_Ledger，取得用户确认后才做 13.3–13.5（需用户）
     - 撞号且页 1 写时复制、由 page 0 指向 → 做 13.3–13.5
-    - 判定结果填入「规则坐实状态总表」`bucket.*` 行；当前为“撞号且 E3D 原地重写页 1”，已记录一致性影响，13.3–13.5 等待用户确认。
-    - 一致性影响见 Spec_Ledger「页 1 原地写的崩溃一致性影响」。回归（`docs/evidence/assets/2026-10-05-s6b/regression/`）：Cargo 769/0/30（131 个测试二进制 + Doc-tests，skip 7 不变）；Clippy/doc 63/25——`b8faf7a` 让规则全部坐实后 `unconfirmed` / `NO_CANDIDATE` 成了死代码（Clippy 65），已删去；真 TTY 39 PASS（212.227s，Q13 161.445s、Q14 9.087s，Q14 为 24384/26506），alternate 五轮 T4a–c 全 PASS（73.414s），原样 FORMAT0 11 行全 PASS（10.061s）；源 AMS/TES 哈希/长度不变。用户确认前 13.2 保持部分完成，不做 13.3–13.5。
+    - 判定结果填入「规则坐实状态总表」`bucket.*` 行；判定为“撞号且 E3D 原地重写页 1”，已记录一致性影响；2026-10-05 22:22 用户确认接受，13.3–13.5 按 `docs/plans/2026-10-05-write-path-group-13-s6b-write-plan.md` 实施。
+    - 一致性影响见 Spec_Ledger「页 1 原地写的崩溃一致性影响」。回归（`docs/evidence/assets/2026-10-05-s6b/regression/`）：Cargo 769/0/30（131 个测试二进制 + Doc-tests，skip 7 不变）；Clippy/doc 63/25——`b8faf7a` 让规则全部坐实后 `unconfirmed` / `NO_CANDIDATE` 成了死代码（Clippy 65），已删去；真 TTY 39 PASS（212.227s，Q13 161.445s、Q14 9.087s，Q14 为 24384/26506），alternate 五轮 T4a–c 全 PASS（73.414s），原样 FORMAT0 11 行全 PASS（10.061s）；源 AMS/TES 哈希/长度不变。用户确认前 13.2 保持部分完成；确认后记为完成。
     - _Requirements: 13.4, 13.5_
-  - [~] 13.3 （条件）实现 `src/write/bucket.rs`
+  - [x] 13.3 （条件）实现 `src/write/bucket.rs`
     - 以上一会话（合并时为 Merge_Latest）的页 1 为起点，把每个扩展的 Bucket_Counter 抬到使 Bucket_Floor 大于新会话索引与本批发出的每个 word1（重铸后的号计入、原号不计）；保留全部条目，计数器只升不降；落盘方式与 E3D_Core 相同（原地改写物理页 1：`StagedSession::commit` 内、`Moved` 复核之后先写页 1 并 sync、再写 page 0；只由 Transaction 维护，低层暂存 API 不维护；第三字原样保留）
     - 动手前按需求 2 第 1、2 条核对父提交，结果记入 Spec_Ledger「取证门槛核查」；对金样的影响按 11.4 的做法处理
+    - `42448fd`：`src/write/bucket.rs`（`raised_page1` / `raise`）、`StagedSession` 的页 1 字段与 commit 写序、Transaction 直接提交与 Merge_Commit 两路在锁内填入；低层暂存 API 文档写明不维护页 1；门槛核查、Golden 剔除键（`bucket_write.json` 退役 `allocation_floor.json` 15 键）、测试适配清单 4 条见 Spec_Ledger
     - _Requirements: 13.3, 13.6, 13.9, 13.10_
-  - [~] 13.4 （条件）写页 1 测试：`tests/write_stage10_bucket.rs`
+  - [x] 13.4 （条件）写页 1 测试：`tests/write_stage10_bucket.rs`
     - 库副本 proptest，只用读侧（`BucketTable::parse`）读回
     - **Property 27: 页 1 桶表写侧（仅当需求 13 第 3 条成立）**
     - **Validates: Requirements 13.3, 13.6, 13.9, 13.10**
-  - [~] 13.5 （条件）加门问 Q15
+    - `42448fd`：11 个测试——四库 proptest（插列出扩展 / 只插主扩展 / 只改名改值删除）、计数器起点落后或领先、第三字非零、rollback、拒写、`Moved` 重试（回调内页 1 未变）、Merge_Commit 重铸、低层路径留下的历史欠账、「页 1 已写、page 0 未写」窗口、无条目字典
+  - [x] 13.5 （条件）加门问 Q15
     - 放在 `tools/e3d/alternate_write_gate.ps1`，须在 `c61b097` 上 FAIL；`alternate_write_gate.ps1` 5 轮不回归
+    - 判分 `tools/e3d/q15_checks.ps1`、离线自检 `q15_selfcheck.ps1`（`tests/write_stage10_s6b_gate.rs`）；门加 `-OnlyQ15` / `-WriteExe`。AMS8000 扩展 24384：M 26483、C 26506、K 23。当前构建 PASS（发 26506–26528，页 1 抬到 26529，E3D NEW 24384/26529）；`c61b097` FAIL（发 26484–26506，页 1 不动，E3D NEW 24384/26506 为已删号）。证据 `docs/evidence/2026-10-06-s6b-q15-gate.md`
+    - 回归（`docs/evidence/assets/2026-10-06-s6b-q15/regression/`）：Cargo 788/0/30（132 个测试二进制 + Doc-tests，skip 提示 8 条不变）；Clippy/doc 63/25；真 TTY 39 PASS（211.602s，Q13 164.792s、Q14 9.873s，Q14 为 24384/26506）；alternate 五轮 T4a–c + Q15 全 PASS（82.034s，Q15 11.959s）；原样 FORMAT0 11 行全 PASS（8.034s）；源 AMS/TES 哈希/长度不变。多一次 sync 的耗时与 13.2 回归相当（TTY −0.6s，五轮约 70s 对 73.4s）
     - _Requirements: 13.7, 13.8_
 
 - [ ] 14. 文档、回归与收尾（需求 14、15、16）
@@ -611,7 +615,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | 发号下界 | F5 `6c588d1` | `aacdcf9` | F1 `d4f5ab4` 的 `2026-10-05-allocation-counter-index.md` | F2 `6232c21` 的 Corpus/CLI；F5/F7 全套 766/0/30、无新增 skip；固定 base/latest、16 例历史/副本模型 | Q14 24384/26506；完整 39 问、alternate 5 轮、FORMAT 0 全 PASS | F5 库实现；F6 `0ea2655` + `f008aa4` 门修正；本 F7 验收提交 |
 | Open_Fast_Path（字节中性，按需求 2 第 7 条） | F4 | `718cf77`；在此准备提交上两遍重录，21 条 entries 与 F3 完全一致 | `docs/evidence/2026-10-05-allocation-counter-index.md#alloc.index_order`（F1 `d4f5ab4`） | F2 `6232c21` 的 `last_before` / 必需 Corpus；F4 独立 eager/lazy/scan 模型，完整 Cargo 755/0/30，金样全部通过，无新增 skip | 本优化仍 max+1；发号行为改变与 Q14 留 F5/F6 | F4（字节中性部分） |
 | staging 优化（字节中性，按需求 2 第 7 条） | | | | | | |
-| 页 1 桶表写侧（条件） | 用户 2026-10-05 确认接受；第 13 组第二提交 `feat(write): 13.3-13.4 maintain page-1 bucket counters in place` | `10ac134`（第一提交 docs(spec)）：相对 `24cc0e8` 不改 `src/`、`tests/`；`24cc0e8` 的回归中 `bucket_table_real` 2 个测试通过、未跳过 | 13.1 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`；`10ac134` 补采 SAVEWORK 写序与 claim 生命周期） | 读侧 `BucketTable::parse`（`src/meta/bucket.rs`，不在 `src/write/` 下、不引用 `src/write/`）；以 Corpus 为输入的 `tests/bucket_table_real.rs`（四库：计数器高于活最大、第三字为 0、字典无条目）；三例只用读侧核对页 1 与会话链 | Q15（13.5，第三提交） | 待第三提交（Q15 与真实门回归） |
+| 页 1 桶表写侧（条件） | 用户 2026-10-05 确认接受；第 13 组第二提交 `feat(write): 13.3-13.4 maintain page-1 bucket counters in place` | `10ac134`（第一提交 docs(spec)）：相对 `24cc0e8` 不改 `src/`、`tests/`；`24cc0e8` 的回归中 `bucket_table_real` 2 个测试通过、未跳过 | 13.1 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`；`10ac134` 补采 SAVEWORK 写序与 claim 生命周期） | 读侧 `BucketTable::parse`（`src/meta/bucket.rs`，不在 `src/write/` 下、不引用 `src/write/`）；以 Corpus 为输入的 `tests/bucket_table_real.rs`（四库：计数器高于活最大、第三字为 0、字典无条目）；三例只用读侧核对页 1 与会话链 | Q15 PASS，`c61b097` 上 FAIL；`docs/evidence/2026-10-06-s6b-q15-gate.md` | `42448fd` 库实现与 Property 27；第 13 组第三提交 Q15 与真实门回归 |
 
 #### Golden 剔除键（1.3、11.2、12.3）
 

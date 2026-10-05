@@ -1,0 +1,88 @@
+{
+  "base_sesno": 648,
+  "comment": "e3d-io write-path gate: GPWL + GROU with reference members",
+  "commit": {
+    "appended_pages": [
+      16645,
+      16646,
+      16647,
+      16648,
+      16649,
+      16650,
+      16651,
+      16652,
+      16653,
+      16654,
+      16655
+    ],
+    "base_sesno": 648,
+    "merged_onto": null,
+    "previous": {
+      "end": 16644,
+      "page": 16644,
+      "sesno": 648
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 16655,
+      "page": 16655,
+      "sesno": 649
+    }
+  },
+  "database": "D:\\e3dio-s6b-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 648,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [],
+      "given": "16192/2",
+      "id": "gpwl",
+      "index": 0,
+      "noun": "GPWL",
+      "op": "insert",
+      "owner": "16192/0",
+      "refno": "16192/2"
+    },
+    {
+      "attrs": [],
+      "given": "16192/3",
+      "id": "grou",
+      "index": 1,
+      "noun": "GROU",
+      "op": "insert",
+      "owner": "16192/2",
+      "refno": "16192/3"
+    },
+    {
+      "at": "last",
+      "group": "16192/3",
+      "index": 2,
+      "member": "24384/47",
+      "op": "reference"
+    },
+    {
+      "at": "last",
+      "group": "16192/3",
+      "index": 3,
+      "member": "24384/26507",
+      "op": "reference"
+    }
+  ],
+  "ops_file": "D:\\e3dio-s6b-gate\\ops\\20_group.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

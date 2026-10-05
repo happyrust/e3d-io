@@ -1,0 +1,6 @@
+worktree D:\work\plant-code\old\vendor\e3d-io-c61b097 HEAD c61b097feefcf1cd68cb1177911a9b1000419910
+e3d-attlib (path dependency ../e3d-attlib) HEAD f37be2ebe74c21c35842b5b8c5f59d7eb8b85e81 dirty=True
+CARGO_TARGET_DIR=D:\Rust\target-c61b097; cargo build --bin e3d-write
+e3d-write.exe 2830848 bytes SHA-256 33CEBF69C76946F25B0AA4D3A1E85FFB306A4F2C408F96868F5238109E4B6E47
+gate: powershell -NoProfile -ExecutionPolicy Bypass -File tools\e3d\alternate_write_gate.ps1 -OnlyQ15 -WriteExe D:\Rust\target-c61b097\debug\e3d-write.exe (exit 1), gate HEAD 42448fd7e67136c7ab42ef5c0095d7b8b868c5ec + worktree
+source ams8000_0001 34037760 bytes SHA-256 3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023
