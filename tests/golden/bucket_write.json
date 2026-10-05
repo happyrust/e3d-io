@@ -1,0 +1,187 @@
+{
+  "parent": "10ac134",
+  "entries": {
+    "write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "E1E54909542DA2685AB033678E96D89521D59395960B8A99C8A1BCBA8BB69165",
+      "len": 34111488
+    },
+    "write_stage6_merge::a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "67A0D7A33F42129D3E951684E047B6E02D051CD70A1D03D432661995CC3E3136",
+      "len": 34099200
+    },
+    "write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "7B48D646B9D78190687FCBA56FB085C654BBA874A6E71CF46878CEF4D2DEA061",
+      "len": 34111488
+    },
+    "write_stage6_merge::a_writer_that_commits_between_staging_and_page_0_is_merged_over_once#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "9F6435BA323D44A64BC099EFC6EF235DA678C03C313F3C13A29C88C8E4A03B3B",
+      "len": 34086912
+    },
+    "write_stage6_set_by_name::a_name_set_twice_in_one_transaction_files_the_last_one_only#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "85F853A42C074CBDF54EEF7FA87D49F1BE40ED07D426348D8B20B69141E290AE",
+      "len": 34162688
+    },
+    "write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "7AB6618C74EA428F9B5CF00400FCF7F0B60DEF76C7D37DF2A1DC1E266CB38BC4",
+      "len": 34076672
+    },
+    "write_stage6_set_by_name::every_shape_set_by_name_reads_back_as_the_value_it_names#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "FC39E1470CA08CF26FA7519651A03A3300AFC3EA606571D8F6820DE5E2A78D2E",
+      "len": 34097152
+    },
+    "write_stage6_set_by_name::the_dictionary_holds_a_set_to_what_e3d_allows#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "4F66A65445B41464690D36966EA371B984F678364AE502115536D0DA5925BFFC",
+      "len": 34093056
+    },
+    "write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "582AB8B72433405D1CB669A46076129B83B8FB0F881D7E946A533C4BF0B27EE0",
+      "len": 34062336
+    },
+    "write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "920BBE6DC6B40E9D96D49F09CC48676ED6EC6BD65810EC126A18964309BFF572",
+      "len": 34074624
+    },
+    "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "691C96D91CFAC97C36A2258F2DC5AF88F3033340255696B4BE4B0ABA8F57D79E",
+      "len": 34056192
+    },
+    "write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "9303A3D6BFB58FA55C2215472F850C164191EFF62BA64D2D517ED5AF3EA1FDB9",
+      "len": 34074624
+    },
+    "write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "3E177E37030694C02DB8742973954304E2E9140B455F2068AA551A92B89CEEA3",
+      "len": 34101248
+    },
+    "write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "368D6BE5661EF27AF211AB49C1F4C312500739DA5E431CB85A036D635CD4300A",
+      "len": 34078720
+    },
+    "write_stage6_transaction::reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner#0": {
+      "source": "ams8000_0001",
+      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "sha256": "B7FCA14248D4CD21CF4A78B81CA75B9A3A8D76FC9EF2CAB9074E33A8C0B92836",
+      "len": 34113536
+    }
+  },
+  "retired": [
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused#0",
+      "sha256": "5DDE06BB57C0D1CDB863090DF80815BDA859813BC6C23BB351F3F59F755B56E5",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_merge::a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins#0",
+      "sha256": "D1F45E0FC6851164FE64F5EEDB46DBD893EBD17AE54D5615386972268D3F2414",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile#0",
+      "sha256": "C69D52F07B0980C915E45320E18B95E3CC6CBE5CEC9F1519E6F3C0457B326734",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_merge::a_writer_that_commits_between_staging_and_page_0_is_merged_over_once#0",
+      "sha256": "B8BBE7A17C139B9CE61EA16F798DB1E0675E1B5333B178FBE080C29056267E9E",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_set_by_name::a_name_set_twice_in_one_transaction_files_the_last_one_only#0",
+      "sha256": "FD10F815FC6E4DD714767945A82F0E7F92D0F92AA3422C37E76066E518A1A1FB",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back#0",
+      "sha256": "D41CB987C6E42084EA09AEB913ABBB341B4ED1954C96EA5507AC821DFAECF77F",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_set_by_name::every_shape_set_by_name_reads_back_as_the_value_it_names#0",
+      "sha256": "EFF053112046550085C5EBEF2EF6BE7E51DA90ECBE6E7F49ED5B5B759A4C273B",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_set_by_name::the_dictionary_holds_a_set_to_what_e3d_allows#0",
+      "sha256": "19476A5EDED10EB2DB1851F622187D7A8F30F912034266A448CC8450E6D2E339",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing#0",
+      "sha256": "A96A95BD927CB684500F39A6B5F6FA1610C3946D37088DCBB498758A07DF0DA6",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership#0",
+      "sha256": "EA97053F05FBA7E33DB9ED91CB36E5FF5DBBD3C137EB5724BA218C472A16B98E",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#0",
+      "sha256": "36D839AFF179D31BF29E6B3811FEF5AAE2A4E4F4C4E7612758EB439602A82ADA",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner#0",
+      "sha256": "47ED670132D4D81BC7D1ADD214353CE9999DF3571CD873BDDA3601D1E4BBE380",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners#0",
+      "sha256": "6F553DF8665320A4327F03A8DEC3661079B94D70F9DB4F5F53B306B75F4A7CB5",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else#0",
+      "sha256": "DBC5440E2D6A3C05D73887C8DBDA61153039A906AAEC89AC5797C842DC127875",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    },
+    {
+      "file": "allocation_floor.json",
+      "key": "write_stage6_transaction::reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner#0",
+      "sha256": "B95576107F947BE6C8A6AF7A03691B7498DF3B8AC1E9F7712F0A4E693216C8A0",
+      "reason": "Requirement 13 (S6b, ADR 0003): a Transaction raises the page-1 bucket counters in place; the file differs from the retired recording only in page 1."
+    }
+  ]
+}

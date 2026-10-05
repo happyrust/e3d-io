@@ -16,6 +16,7 @@ use common::write_fixture::{DbCopy, AMS8000};
 use common::{ATTLIB, DESVIR};
 use e3d_attlib::{db1_hash, AttlibData};
 use e3d_io::engine::ScanTier;
+use e3d_io::meta::bucket::BucketTable;
 use e3d_io::record::descriptor::{DescriptorValue, ElementExtraction};
 use e3d_io::record::element::ParsedElement;
 use e3d_io::record::template::TemplateProvider;
@@ -194,10 +195,19 @@ fn a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile() {
     assert_eq!(named(&copy.path, "/E3DIO-MERGE-A"), Some(box_a));
     assert_eq!(named(&copy.path, "/E3DIO-MERGE-B"), Some(box_b), "the NAME key followed the re-minted refno");
     assert_eq!(text(&copy.path, box_b, "NAME").as_deref(), Some("/E3DIO-MERGE-B"));
-    // A's committed pages were not touched by B's merge (page 0 aside).
+    // A's committed pages were not touched by B's merge — page 0 aside, and
+    // page 1, whose bucket counter B's commit raised past its re-minted box.
     let bytes = copy.current_bytes();
     let page_bytes = 4 * u32::from_be_bytes(copy.original[52..56].try_into().unwrap()) as usize;
-    assert_eq!(&bytes[page_bytes..after_a.len()], &after_a[page_bytes..], "every page A wrote stands");
+    assert_eq!(&bytes[2 * page_bytes..after_a.len()], &after_a[2 * page_bytes..], "every page A wrote stands");
+    let a_page1 = BucketTable::parse(&after_a[page_bytes..2 * page_bytes]).unwrap();
+    let b_page1 = BucketTable::parse(&bytes[page_bytes..2 * page_bytes]).unwrap();
+    assert_eq!(b_page1.next_word1(box_b.word0), Some(box_b.word1 + 1), "B's commit raised the counter past its box");
+    assert_eq!(a_page1.entries.len(), b_page1.entries.len());
+    for (a_entry, b_entry) in a_page1.entries.iter().zip(&b_page1.entries) {
+        assert_eq!((a_entry.extent_word0, a_entry.extra), (b_entry.extent_word0, b_entry.extra), "entries and claims kept");
+        assert!(b_entry.next_word1 >= a_entry.next_word1, "a counter never goes down");
+    }
 
     // --- a transaction opened explicitly at S, after both, merges the same way ---
     let (zone_c_box, commit) = {
@@ -209,8 +219,12 @@ fn a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile() {
         (the_box, c.commit_reporting(&request("C", "e3d-io T1c: opened at S")).expect("C merges"))
     };
     assert_eq!(commit.merged_onto, Some(s + 2));
-    assert_eq!(commit.reminted, vec![(zone_c_box, RefNo::new(box_b.word0, box_b.word1 + 1))], "past both boxes");
-    let box_c = commit.reminted[0].1;
+    // Page 1, raised past both boxes by B's commit, gives C that number at
+    // once: nothing is taken, nothing re-minted (S6b). B above is the
+    // re-minting case.
+    assert_eq!(zone_c_box, RefNo::new(box_b.word0, box_b.word1 + 1), "past both boxes");
+    assert!(commit.reminted.is_empty(), "nothing re-minted: {:?}", commit.reminted);
+    let box_c = zone_c_box;
     assert_eq!(base_of(&copy.path, s + 3), s);
     assert_eq!(tally(&copy.path, s + 2, s + 3), (0, 1, 1));
     assert_eq!(text(&copy.path, zone_a, "DESC").as_deref(), Some("A described this zone"), "A's DESC stands");

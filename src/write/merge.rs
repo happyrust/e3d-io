@@ -259,7 +259,11 @@ impl WorkingChanges {
 /// This is [`write_merge_session_with`] at [`MergeOptions::default`]: every
 /// noun's member list merges member by member.
 ///
+/// As with [`write_element_session`], the refnos are the caller's and page 1's
+/// bucket counters are left as they are; a [`Transaction`] raises them.
+///
 /// [`write_element_session`]: super::write_element_session
+/// [`Transaction`]: super::Transaction
 pub fn write_merge_session(
     path: impl AsRef<std::path::Path>,
     request: &SessionRequest<'_>,
@@ -310,7 +314,7 @@ pub fn stage_merge_session_with(
     let mut options = options;
     let rebased = prepare_merge(path.as_ref(), base_sesno, latest.sesno, elements, name_edits, &mut options)?;
     super::stage_session_locked(path, request, &rebased, name_edits, Some(base_sesno),
-        options.templates, None, file, Some(latest.page.page))
+        options.templates, None, file, Some(latest.page.page), None)
 }
 
 /// Scan and rebase against the same session fixed by the caller's write lock.

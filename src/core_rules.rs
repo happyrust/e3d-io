@@ -940,6 +940,22 @@ impl RuleSet {
         }
     }
 
+    /// Confirmed collision behaviour, or None to leave page 1 unwritten.
+    pub fn bucket_collision(&self) -> Option<BucketCollision> {
+        match self.bucket_collision {
+            Slot::Confirmed(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Confirmed page-1 persistence, or None to leave page 1 unwritten.
+    pub fn bucket_persist(&self) -> Option<BucketPersist> {
+        match self.bucket_persist {
+            Slot::Confirmed(value) => Some(value),
+            _ => None,
+        }
+    }
+
     /// The rules the evidence has confirmed: the only rule set the write side uses.
     pub fn confirmed() -> &'static RuleSet {
         &CONFIRMED_SET

@@ -611,7 +611,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | 发号下界 | F5 `6c588d1` | `aacdcf9` | F1 `d4f5ab4` 的 `2026-10-05-allocation-counter-index.md` | F2 `6232c21` 的 Corpus/CLI；F5/F7 全套 766/0/30、无新增 skip；固定 base/latest、16 例历史/副本模型 | Q14 24384/26506；完整 39 问、alternate 5 轮、FORMAT 0 全 PASS | F5 库实现；F6 `0ea2655` + `f008aa4` 门修正；本 F7 验收提交 |
 | Open_Fast_Path（字节中性，按需求 2 第 7 条） | F4 | `718cf77`；在此准备提交上两遍重录，21 条 entries 与 F3 完全一致 | `docs/evidence/2026-10-05-allocation-counter-index.md#alloc.index_order`（F1 `d4f5ab4`） | F2 `6232c21` 的 `last_before` / 必需 Corpus；F4 独立 eager/lazy/scan 模型，完整 Cargo 755/0/30，金样全部通过，无新增 skip | 本优化仍 max+1；发号行为改变与 Q14 留 F5/F6 | F4（字节中性部分） |
 | staging 优化（字节中性，按需求 2 第 7 条） | | | | | | |
-| 页 1 桶表写侧（条件） | 用户 2026-10-05 确认接受；首个写侧提交为第 13 组第二提交（待提交） | 第 13 组第一提交（docs(spec)，待提交） | 13.1 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`） | 读侧 `BucketTable::parse`（`src/meta/bucket.rs`）；三例只用读侧核对页 1 与会话链 | 暂记 Q15，未写 | — |
+| 页 1 桶表写侧（条件） | 用户 2026-10-05 确认接受；第 13 组第二提交 `feat(write): 13.3-13.4 maintain page-1 bucket counters in place` | `10ac134`（第一提交 docs(spec)）：相对 `24cc0e8` 不改 `src/`、`tests/`；`24cc0e8` 的回归中 `bucket_table_real` 2 个测试通过、未跳过 | 13.1 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`；`10ac134` 补采 SAVEWORK 写序与 claim 生命周期） | 读侧 `BucketTable::parse`（`src/meta/bucket.rs`，不在 `src/write/` 下、不引用 `src/write/`）；以 Corpus 为输入的 `tests/bucket_table_real.rs`（四库：计数器高于活最大、第三字为 0、字典无条目）；三例只用读侧核对页 1 与会话链 | Q15（13.5，第三提交） | 待第三提交（Q15 与真实门回归） |
 
 #### Golden 剔除键（1.3、11.2、12.3）
 
@@ -622,6 +622,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `tests/golden/write_hashes.json`（F3；21 条，含固定时钟/预铸 32、128、257 BOX 批次） | F2 `6232c21` 上两遍，F3 准备提交紧接 F4 | 原 Off 录制的六个时间不稳定键，另 `write_stage6_cli::spatial_cli_writes_given_aabb_and_reports_readable_spatial_diff#0` | CLI / spread 使用当前时间，两遍末文件不同 | 原 Off 17 条未改；F4 前在直接父提交再录，只核对条目完全一致并更新录制元数据 |
 | 原 Off 17 / 优化 21 的动态发号键 | F5 `6c588d1`，父 `aacdcf9` | 16 个键各在两个原文件精确退役；32 条锁旧 SHA 的 retirement；见 `docs/evidence/2026-10-05-allocation-floor-goldens.md` 逐项表 | 需求 11 有意改变新 refno；需求 15.3 不把动态发号当字节兼容输入 | 两遍新下界结果一致，`allocation_floor.json` 校验新 16 条；原文件均未改；3 预铸批次/rename/拒写金样继续执行。F4 已完整通过未退役的原 17/21 |
 | `tests/golden/staging_scale.json`（12.3；5条，预铸32/128/257及混合10k/100k） | `5548ad0` 两遍，首staging优化提交直接父 | 无，0剔除 | 全部固定时钟、固定refno，两遍一致 | 新文件保存录制来源，不重录原21/17条或已有退役关系；优化后完整Cargo核对通过 |
+| `tests/golden/bucket_write.json`（13.3；15 条） | 第 13 组第二提交，父 `10ac134`；`tools/golden/record.ps1` 两遍（`write_stage6_{merge,set_by_name,transaction}`） | `allocation_floor.json` 的 15 个键精确退役、锁旧 SHA：`write_stage6_merge::` 4 条、`write_stage6_set_by_name::` 5 条、`write_stage6_transaction::` 6 条，键名见该文件 `retired` | 需求 13（S6b，ADR 0003）：Transaction 原地抬页 1 计数器。先全量跑金样按实际失配清点：15 条全部是末文件与旧录制只差页 1（把页 1 换回原样后 SHA 与旧录制相同，`tests/common/golden.rs` 失配时据此提示） | 两遍一致，新值录进新文件；`allocation_floor`、`off_compat`、`write_hashes`、`staging_scale` 原文件一字未改；其余键（低层 API、预铸批次、`staging_scale` 5 条等）照常校验通过 |
 
 样本（备注）：17 条全部取自快照 `D:\e3dio-fixtures\phase3\ams8000_0001`，34 037 760 字节，SHA-256 `3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023`，即装机原件 2026-09-30 17:05:57 那一版（会话至 646）。
 
@@ -658,6 +659,10 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
 | `write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
 | `write_stage6_spread::spread_inserts_read_back_across_many_owners` | E 默认 Require；保留原测试及逐字节兼容语义 | 所有 Transaction 显式 `SpatialPolicy::Off`；期望不改 | E2–E9（`fd9ed67`） |
+| `write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte` | S6b：Transaction 原地抬页 1，低层原语路径不抬（需求 13 第 3 条） | 逐字节比对改为 page 0 与第 2 页起相同；页 1 只差 BOX 所在扩展的计数器，等于 BOX 的 word1 + 1 | 第 13 组第二提交 |
+| `write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile` | S6b：B 的合并提交把页 1 抬过重铸后的 BOX，此后开在 S 的 C 从页 1 直接领到两 BOX 之后的号 | 「A 写过的页不变」改从第 2 页起比对，另断言页 1 条目与第三字不变、计数器不降、等于 B 的重铸号 + 1；C 的期望由「重铸到两 BOX 之后」改为「直接领到该号、不重铸」，重铸场景仍由 B 覆盖 | 第 13 组第二提交 |
+| `write_stage6_cli::a_base_behind_the_newest_session_merges_and_reports_the_reminting` | S6b：A 提交后页 1 已抬，B 在 base 上发号会越过 A 的 BOX，不再撞号 | A 提交后把页 1 换回原样（模拟 S6b 之前的 e3d-io），保留重铸场景；另断言 B 的合并提交把页 1 抬过重铸后的 BOX | 第 13 组第二提交 |
+| `write_stage6_cli::a_dry_run_makes_every_check_and_leaves_the_file_byte_identical` | S6b：真提交后页 1 已抬，base 落后时的 dry run 不再遇到被占的号 | 真提交后把页 1 换回提交前（同上），保留「base 落后时 dry run 也做合并扫描并报被占的号」；dry run 逐字节不变的断言不改 | 第 13 组第二提交 |
 
 CLI：`src/bin/e3d-write.rs` 显式 Off 作为 E→F 过渡，不新增空间参数或报告；既有五个 CLI 测试期望不变。
 

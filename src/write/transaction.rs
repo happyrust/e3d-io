@@ -882,8 +882,9 @@ impl<'a> Transaction<'a> {
         Ok(())
     }
 
-    /// Stage the batch: everything but page 0 is written and synced, and a
-    /// [`StagedSession`] is returned for the commit. Owner member-list updates
+    /// Stage the batch: everything but page 0 (and page 1, when the batch raises
+    /// a bucket counter) is written and synced, and a [`StagedSession`] is
+    /// returned for the commit. Owner member-list updates
     /// are resolved here and go out after the child inserts that name them — the
     /// order the primitive path writes in. On a database that moved on since
     /// the base this is the merge staging (module docs); a refno the committed
@@ -896,6 +897,7 @@ impl<'a> Transaction<'a> {
         self.resolve_members()?;
         let Transaction {
             path,
+            mut engine,
             templates,
             names,
             order,
@@ -929,6 +931,7 @@ impl<'a> Transaction<'a> {
             &mut elements,
             &mut names,
             &mut reminted,
+            &mut engine,
         )
     }
 
@@ -963,6 +966,7 @@ impl<'a> Transaction<'a> {
         self.resolve_members()?;
         let Transaction {
             path,
+            mut engine,
             templates,
             names,
             order,
@@ -1003,6 +1007,7 @@ impl<'a> Transaction<'a> {
                 &mut elements,
                 &mut names,
                 &mut reminted,
+                &mut engine,
             )?;
             let latest = staged.previous().sesno;
             observe(&staged);
@@ -1046,14 +1051,20 @@ impl<'a> Transaction<'a> {
         elements: &mut Vec<ElementWrite>,
         names: &mut Vec<NamedEdit>,
         reminted: &mut Vec<(RefNo, RefNo)>,
+        base_engine: &mut ReadOnlyEngine,
     ) -> Result<StagedSession, TransactionError> {
         let mut file = super::PageFile::open(path)?;
         file.lock_for_write()?;
         let (_, _, _, pinned) = super::read_base(&mut file)?;
         let latest = pinned.sesno;
+        // Under the sentinel lock no other writer moves page 1 before this
+        // staging commits or rolls back. One that cannot be read stays as it
+        // is, as the allocator leaves it.
+        let page1 = file.read_page(1).ok();
+        let mut snapshot = None;
         if latest != base_sesno {
-            let mut snapshot = ReadOnlyEngine::open_at(path, latest)?;
-            Self::remint_taken_refnos(&mut snapshot, templates, elements.as_mut_slice(), names.as_mut_slice(), reminted)?;
+            let latest_engine = snapshot.insert(ReadOnlyEngine::open_at(path, latest)?);
+            Self::remint_taken_refnos(latest_engine, templates, elements.as_mut_slice(), names.as_mut_slice(), reminted)?;
         }
         let rebased = if latest != base_sesno {
             let mut options = MergeOptions { templates: Some(&mut *templates), extract_flush: false, on_clash };
@@ -1064,12 +1075,27 @@ impl<'a> Transaction<'a> {
                     error => error.into(),
                 })?
         } else { elements.clone() };
+        let inserted: Vec<RefNo> = rebased
+            .iter()
+            .filter_map(|element| match element {
+                ElementWrite::Insert(draft) => Some(draft.refno),
+                _ => None,
+            })
+            .collect();
+        let pinned_engine = match snapshot.as_mut() {
+            Some(latest_engine) => latest_engine,
+            None => base_engine,
+        };
+        let page1 = match page1 {
+            Some(page) => super::bucket::raised_page1(crate::core_rules::RuleSet::confirmed(), pinned_engine, &page, &inserted)?,
+            None => None,
+        };
         let spatial_stage = super::spamap::SpatialStage {
             policy: spatial_policy, given: spatial_given.clone(), reminted: reminted.clone(), base_sesno,
         };
         Ok(super::stage_session_locked(path, request, &rebased, names,
             (latest != base_sesno).then_some(base_sesno), Some(templates),
-            Some(&spatial_stage), file, Some(pinned.page.page))?)
+            Some(&spatial_stage), file, Some(pinned.page.page), page1)?)
     }
 
     /// Give every insert whose refno the newest session already indexes a

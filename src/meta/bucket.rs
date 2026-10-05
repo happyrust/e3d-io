@@ -3,11 +3,14 @@
 //!
 //! Physical page 1 of a dabacon file is a **bucket page** (its first word is the
 //! page type 1, as page 0 is 0, a session page 3 and an index page 5). It holds,
-//! for each extent that has grown, the next `word1` to hand out there — the
-//! counter `DB_DB::updateBucketList` rebuilds from the live elements at save
-//! (`db_get_bucket` / `db_add_bucket`, routine 360). A new element takes its
-//! `word1` from this counter, which is why a database that has deleted elements
-//! keeps allocating past the highest live `word1`: the number is not reused.
+//! for each extent that has grown, the next `word1` to hand out there. E3D
+//! claims the extent's entry at NEW and advances the counter in place at
+//! SAVEWORK (`2GNE` / `2UP1UOR`); `DB_DB::updateBucketList` rebuilds the table
+//! from the live elements only under the ADMIN reconfigurer
+//! (`docs/evidence/2026-10-05-s6b-bucket-evidence.md`). A new element takes its
+//! `word1` from this counter, which is why a database keeps allocating past the
+//! highest live `word1` after E3D's own deletes — and why a number issued
+//! without advancing the counter is handed out again.
 //!
 //! Layout (big-endian words), read off four installed databases:
 //!
@@ -22,13 +25,13 @@
 //! into. The primary extent (`primary_extent_ref`) holds the bootstrap `WORLD`
 //! and `MNUM` and does not grow, so it has no entry; a database whose elements
 //! are all in the primary extent (a small dictionary) has no entries at all.
-//! `ams8000_0001`: `(24384, 26496)` `(32576, 98)`; `ams251142_0001`:
+//! `ams8000_0001`: `(24384, 26506)` `(32576, 98)`; `ams251142_0001`:
 //! `(2013287686, 947)`; `TES023`: `(17419, 331)`; `ams5100_0001`: none.
 //!
-//! This crate reads the table (to know what the next number would be) but does
-//! not maintain it on write yet: Transaction takes the greater of the pinned
-//! index maximum plus one and this confirmed NextAvailable counter. Allocation
-//! leaves page 1 alone; maintaining it on write remains S6b in the plan.
+//! Transaction allocates from the greater of the pinned index maximum plus one
+//! and this NextAvailable counter, and on commit raises each listed counter
+//! above every `word1` it issued, rewriting page 1 in place
+//! (`docs/adr/0003-page-1-in-place-bucket-write.md`).
 
 /// One extent's next-`word1` counter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,10 +39,11 @@ pub struct BucketEntry {
     /// The extent's `RefNo::word0` prefix — `primary_extent_ref + 0x2000·(ext-1)`.
     pub extent_word0: u32,
     /// The next `word1` E3D would hand out in this extent: above every live
-    /// `word1` there (a deleted number is not reused).
+    /// `word1` there (a number E3D deleted is not reused).
     pub next_word1: u32,
-    /// The entry's third word. Zero on every installed database; carried so a
-    /// round-trip is exact and a non-zero value is not silently dropped.
+    /// The entry's third word: E3D's claim, the number of the user holding the
+    /// bucket from NEW until leaving. Zero on every installed database at rest;
+    /// carried so a round-trip is exact and the write side keeps it as found.
     pub extra: u32,
 }
 
@@ -54,9 +58,9 @@ pub const BUCKET_PAGE_TYPE: u32 = 1;
 /// The marker at word 1.
 const MARKER: u32 = 0xFFFF_FFFF;
 /// Words of the fixed header before the entries.
-const HEADER_WORDS: usize = 3;
+pub(crate) const HEADER_WORDS: usize = 3;
 /// Words per entry.
-const ENTRY_WORDS: usize = 3;
+pub(crate) const ENTRY_WORDS: usize = 3;
 
 impl BucketTable {
     /// Parse physical page 1. `None`-shaped errors are returned as `Err(String)`

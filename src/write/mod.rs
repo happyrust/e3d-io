@@ -1,11 +1,19 @@
 //! Writing to a dabacon file: append a session, commit it through page 0.
 //!
 //! The shape is `core.dll`'s (`docs/evidence/2026-09-20-core-dll-dabacon-write-path-algorithms.md`,
-//! A4–A7): pages already on disk are never modified, new pages take the page
-//! numbers after the last one the newest session wrote and are appended in
-//! order, and the only word that turns them into "the database" is page 0's
-//! `LSPGNO` (+0x28/+0x2C), written last. A crash anywhere before that write
-//! leaves a file every reader still sees as the previous session.
+//! A4–A7): pages already on disk are never modified (page 1 aside, below), new
+//! pages take the page numbers after the last one the newest session wrote and
+//! are appended in order, and the only word that turns them into "the
+//! database" is page 0's `LSPGNO` (+0x28/+0x2C), written last. A crash anywhere
+//! before that write leaves a file every reader still sees as the previous
+//! session.
+//!
+//! Physical page 1, `core.dll`'s bucket table, is the one other page on disk
+//! this crate rewrites: E3D reads it in place, not through page 0, so a
+//! [`Transaction`] whose batch needs a counter raised writes it there
+//! (`bucket.rs`, `docs/adr/0003-page-1-in-place-bucket-write.md`) — at the
+//! commit, synced on its own just before page 0. A crash between the two
+//! leaves the previous session readable and only skips the numbers between.
 //!
 //! Stage 1 (`docs/plans/2026-09-20-dabacon-write-plan.md` §2) is the smallest
 //! closed loop over that shape: a session that changes nothing — same index
@@ -33,6 +41,7 @@
 
 pub mod attr;
 pub(crate) mod alloc;
+pub(crate) mod bucket;
 pub use alloc::{AllocationBasis, CounterUse, ExtentAllocationBasis};
 // The copy-on-write mechanics of the tree tables and the claim plan are the
 // write path's internals — a caller drives the three steps (open a transaction
@@ -276,13 +285,17 @@ pub struct SessionRequest<'a> {
 /// Dropping this without committing leaves the file exactly as readable as
 /// before: the appended pages are past the newest session's `end` and no
 /// pointer reaches them, which is what a crash between the two syncs would
-/// leave. [`StagedSession::rollback`] trims them off again.
+/// leave. [`StagedSession::rollback`] trims them off again. Page 1 is not
+/// touched either: a raised bucket table waits for the commit.
 #[derive(Debug)]
 pub struct StagedSession {
     file: PageFile,
     previous: SessionSummary,
     written: SessionSummary,
     page0: Vec<u8>,
+    /// Page 1 with the batch's bucket counters raised, read under the
+    /// sentinel lock this staging holds; `None` leaves page 1 as it is.
+    page1: Option<Vec<u8>>,
     old_len_bytes: u64,
     appended_pages: Vec<u32>,
     spatial: crate::spatial::SpatialReport,
@@ -302,8 +315,8 @@ pub struct CommitReport {
     pub path: PathBuf,
     pub previous: SessionSummary,
     pub written: SessionSummary,
-    /// Pages this commit appended, in the order they were written; page 0 is
-    /// rewritten in place and not listed.
+    /// Pages this commit appended, in the order they were written; page 0, and
+    /// page 1 when a bucket counter rose, are rewritten in place and not listed.
     pub appended_pages: Vec<u32>,
 }
 
@@ -380,12 +393,15 @@ impl StagedSession {
         &self.spatial
     }
 
-    /// Write page 0 and sync: the commit point.
+    /// Write page 1 if the batch raised a bucket counter and sync, then page 0
+    /// and sync: page 0 is the commit point.
     ///
     /// Page 0 is re-read first; if its `LSPGNO` no longer names the session
     /// this write was staged on, another writer got there and nothing is
     /// written ([`WriteError::Moved`]). The staged pages stay on disk,
-    /// unreachable, exactly as a crashed `core.dll` would leave them.
+    /// unreachable, exactly as a crashed `core.dll` would leave them. A failure
+    /// after page 1 and before page 0 leaves the counters raised and the
+    /// previous session readable: numbers skipped, none reused.
     pub fn commit(mut self) -> Result<CommitReport, WriteError> {
         let current = self.file.read_page(0)?;
         let found = pages::be_word(&current, page0::LATEST_SES_PGNO);
@@ -400,6 +416,11 @@ impl StagedSession {
             PageType::from_raw(pages::be_word(&self.page0, page0::PAGE_TYPE)),
             PageType::Descriptor
         );
+        // Synced on its own: page 0 must not reach the disk before page 1.
+        if let Some(page1) = &self.page1 {
+            self.file.write_page(1, page1)?;
+            self.file.sync()?;
+        }
         self.file.write_page(0, &self.page0)?;
         self.file.sync()?;
         Ok(CommitReport {
@@ -411,8 +432,8 @@ impl StagedSession {
     }
 
     /// Give the appended bytes back: truncate the file to its length before
-    /// staging. Page 0 was never touched, so the file is byte-identical to
-    /// what it was.
+    /// staging. Page 0 and page 1 were never touched, so the file is
+    /// byte-identical to what it was.
     pub fn rollback(self) -> Result<(), WriteError> {
         let path = self.file.path().to_path_buf();
         drop(self.file);
@@ -462,6 +483,12 @@ pub enum ElementWrite {
 /// This is [`write_element_session_with`] at [`WriteOptions::default`]: the
 /// keyed tables (`TYPEX`, the reverse-reference tables) are carried over
 /// untouched.
+///
+/// The refnos in `elements` are the caller's, and page 1's bucket counters are
+/// left as they are: only a [`Transaction`] raises them
+/// (`docs/adr/0003-page-1-in-place-bucket-write.md`). A number written here
+/// that the counter does not pass can be handed out again by E3D once it is
+/// deleted; keeping the counters ahead is the caller's to do.
 pub fn write_element_session(
     path: impl AsRef<Path>,
     request: &SessionRequest<'_>,
@@ -945,7 +972,7 @@ pub(crate) fn stage_session_with_base(
 ) -> Result<StagedSession, WriteError> {
     let mut file = PageFile::open(path.as_ref())?;
     file.lock_for_write()?;
-    stage_session_locked(path, request, elements, name_edits, base_sesno, templates, spatial, file, None)
+    stage_session_locked(path, request, elements, name_edits, base_sesno, templates, spatial, file, None, None)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -953,6 +980,7 @@ pub(crate) fn stage_session_locked(
     path: impl AsRef<Path>, request: &SessionRequest<'_>, elements: &[ElementWrite],
     name_edits: &[NamedEdit], base_sesno: Option<u32>, mut templates: Option<&mut TemplateProvider>,
     spatial: Option<&crate::write::spamap::SpatialStage>, mut file: PageFile, expected: Option<u32>,
+    page1: Option<Vec<u8>>,
 ) -> Result<StagedSession, WriteError> {
     let (mut page0, descriptor, previous_bytes, previous) = read_base(&mut file)?;
     if let Some(expected) = expected {
@@ -1277,6 +1305,7 @@ pub(crate) fn stage_session_locked(
             end: session_page,
         },
         page0,
+        page1,
         old_len_bytes,
         appended_pages,
         spatial: spatial_report,

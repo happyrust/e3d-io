@@ -17,6 +17,7 @@ use common::write_fixture::{DbCopy, AMS8000};
 use common::{ATTLIB, DESVIR};
 use e3d_attlib::{db1_hash, AttlibData};
 use e3d_io::engine::ScanTier;
+use e3d_io::meta::bucket::BucketTable;
 use e3d_io::record::descriptor::{DescriptorValue, ElementExtraction};
 use e3d_io::record::element::ParsedElement;
 use e3d_io::record::hunk::HunkRef;
@@ -35,6 +36,16 @@ const DICTIONARY: &str = concat!(
     "/schema/e3d31/catalog/noun_attr_fields.json"
 );
 const EXE: &str = env!("CARGO_BIN_EXE_e3d-write");
+
+/// Page 1 put back as `original` had it: the file as an e3d-io that did not
+/// maintain page 1 (before S6b) leaves it after its commits — the case where a
+/// batch on a base behind the newest session can still be given a taken refno.
+fn rewind_page1(copy: &DbCopy, original: &[u8]) {
+    let page_bytes = 4 * u32::from_be_bytes(original[52..56].try_into().unwrap()) as usize;
+    let mut bytes = copy.current_bytes();
+    bytes[page_bytes..2 * page_bytes].copy_from_slice(&original[page_bytes..2 * page_bytes]);
+    fs::write(&copy.path, bytes).unwrap();
+}
 
 /// The base session number of `path`'s newest session.
 fn latest(path: &Path) -> u32 {
@@ -672,6 +683,9 @@ fn a_dry_run_makes_every_check_and_leaves_the_file_byte_identical() {
         dry.op(0)["refno"],
         "the dry run showed the refnos the commit minted"
     );
+    // With page 1 raised by the commit, the base's allocation would step past
+    // what the session in between took; rewound, the given refno is taken.
+    rewind_page1(&copy, &before);
     let after_real = copy.current_bytes();
 
     // On a base the file has moved past, the dry run makes the merge's scan too
@@ -961,6 +975,9 @@ fn a_base_behind_the_newest_session_merges_and_reports_the_reminting() {
     let a_box = refno(&a.op(0)["refno"]);
     let s1 = latest(&copy.path);
     assert_eq!(s1, s0 + 1);
+    // With page 1 raised by A, B's allocation on the base would step past A's
+    // box; rewound, both mint the same max + 1 and B is re-minted.
+    rewind_page1(&copy, &copy.original);
 
     // B: opened at S, commits after A — a merge onto S+1, its BOX re-minted
     // past A's, its own attribute (PURP) composing with A's on ZONE 2.
@@ -1001,6 +1018,13 @@ fn a_base_behind_the_newest_session_merges_and_reports_the_reminting() {
             .contains(&format!("re-minted        : {a_box} -> {b_box}")),
         "stdout:\n{}",
         b.stdout()
+    );
+    let page_bytes = 4 * u32::from_be_bytes(copy.original[52..56].try_into().unwrap()) as usize;
+    let page1 = BucketTable::parse(&copy.current_bytes()[page_bytes..2 * page_bytes]).unwrap();
+    assert_eq!(
+        page1.next_word1(b_box.word0),
+        Some(b_box.word1 + 1),
+        "the merge commit raised page 1 past the re-minted box"
     );
     assert_eq!(named(&copy.path, "/E3DIO-A"), Some(a_box));
     assert_eq!(

@@ -111,18 +111,33 @@ pub fn verify(recorded: &[(String, Recorded)], copy: &Finished<'_>) -> Result<()
             ));
         }
         if sha256 != want.sha256 || bytes.len() as u64 != want.len {
+            let page1_only = page1_restored_sha256(&bytes, copy.original).is_some_and(|restored| restored == want.sha256);
             return Err(format!(
                 "golden {file} [{}]: the copy made at {} ends as {} bytes with SHA-256 {sha256}; \
-                 recorded {} bytes with SHA-256 {}",
+                 recorded {} bytes with SHA-256 {}{}",
                 copy.key,
                 copy.made_at,
                 bytes.len(),
                 want.len,
                 want.sha256,
+                if page1_only { " — the recorded file but for page 1, the bucket counters (S6b)" } else { "" },
             ));
         }
     }
     Ok(())
+}
+
+/// The SHA-256 of `bytes` with page 1 as `original` had it. A recording made
+/// before S6b never saw page 1 change, so a copy that matches it this way
+/// differs only by the bucket counters a Transaction now raises.
+fn page1_restored_sha256(bytes: &[u8], original: &[u8]) -> Option<String> {
+    let page = 4 * u32::from_be_bytes(original.get(52..56)?.try_into().ok()?) as usize;
+    if page == 0 || bytes.len() < 2 * page || original.len() < 2 * page {
+        return None;
+    }
+    let mut restored = bytes.to_vec();
+    restored[page..2 * page].copy_from_slice(&original[page..2 * page]);
+    Some(sha256_hex(&restored))
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {

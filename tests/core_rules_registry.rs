@@ -6,9 +6,22 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-use e3d_io::core_rules::{RuleStatus, RULES};
+use e3d_io::core_rules::{BucketCollision, BucketPersist, CandidatePick, RuleSet, RuleStatus, RULES};
 
 const REPO: &str = env!("CARGO_MANIFEST_DIR");
+
+/// The write side touches page 1 only when both bucket rules (and the counter
+/// meaning) are confirmed; a pending slot reads as None and keeps it unwritten.
+#[test]
+fn the_page_1_rules_read_as_none_until_confirmed() {
+    let confirmed = RuleSet::confirmed();
+    assert_eq!(confirmed.bucket_collision(), Some(BucketCollision::HistoricalReuse));
+    assert_eq!(confirmed.bucket_persist(), Some(BucketPersist::InPlace));
+    let pending = RuleSet::candidates_alone(&CandidatePick::default());
+    assert_eq!(pending.bucket_collision(), None);
+    assert_eq!(pending.bucket_persist(), None);
+    assert_eq!(pending.counter_semantics(), None);
+}
 
 #[test]
 fn rule_names_are_unique() {

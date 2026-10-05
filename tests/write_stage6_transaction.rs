@@ -16,6 +16,7 @@ use common::{ATTLIB, DESVIR};
 use e3d_attlib::{db1_dehash, db1_hash, AttlibData};
 use e3d_io::engine::ScanTier;
 use e3d_io::index::ClaimTable;
+use e3d_io::meta::bucket::BucketTable;
 use e3d_io::record::descriptor::{DescriptorValue, ElementExtraction};
 use e3d_io::record::element::ParsedElement;
 use e3d_io::record::template::{MemberListKind, NounTemplate, TemplateProvider};
@@ -134,11 +135,27 @@ fn a_facade_insert_equals_the_primitive_path_byte_for_byte() {
         .expect("primitive write");
     }
 
+    // One chore the primitive path does not do: page 1's counter for the box's
+    // extent rises past the box (S6b). Every other byte is the same.
+    let (facade, primitive) = (facade_copy.current_bytes(), primitive_copy.current_bytes());
+    let page_bytes = 4 * u32::from_be_bytes(facade[52..56].try_into().unwrap()) as usize;
+    assert_eq!(facade.len(), primitive.len());
+    assert_eq!(&facade[..page_bytes], &primitive[..page_bytes], "page 0");
     assert_eq!(
-        facade_copy.current_bytes(),
-        primitive_copy.current_bytes(),
+        &facade[2 * page_bytes..],
+        &primitive[2 * page_bytes..],
         "the facade must add only the chores, not change a byte of the record, index or session page"
     );
+    let mut expected_page1 = primitive[page_bytes..2 * page_bytes].to_vec();
+    let entry = BucketTable::parse(&expected_page1)
+        .unwrap()
+        .entries
+        .iter()
+        .position(|e| e.extent_word0 == box_refno.word0)
+        .expect("the box's extent is on page 1");
+    let at = (3 + 3 * entry + 1) * 4;
+    expected_page1[at..at + 4].copy_from_slice(&(box_refno.word1 + 1).to_be_bytes());
+    assert_eq!(&facade[page_bytes..2 * page_bytes], &expected_page1[..], "page 1 differs only in that counter");
 
     // --- and the box reads back with its owner, membership and geometry ---
     let attlib = AttlibData::parse_file(ATTLIB).expect("attlib");
