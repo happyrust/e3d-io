@@ -47,7 +47,8 @@ impl SpatialStage {
             None
         };
         let end = EndState::new(&previous, base.as_ref(), &elements);
-        let old = if plan::recompute_set(&end).is_empty() {
+        let recompute_set = plan::recompute_set(&end);
+        let old = if recompute_set.is_empty() {
             None
         } else {
             let mut view = crate::session::DbView::open_at(path, latest)?;
@@ -58,7 +59,7 @@ impl SpatialStage {
                 crate::index::SpamapRead::Table { table, .. } => Some(table.entries().to_vec()),
             }
         };
-        let plan = self.plan(&end, &self.reminted, old.as_deref())?;
+        let plan = plan::plan(self, &end, &self.reminted, old.as_deref(), recompute_set)?;
         let text = crate::ReadOnlyEngine::open_at(path, latest)?.text_format();
         let patches = if matches!(
             crate::core_rules::RuleSet::confirmed().record_item,
@@ -68,13 +69,12 @@ impl SpatialStage {
         } else {
             &[]
         };
+        let mut positions: HashMap<_, _> = elements.iter().enumerate().rev().filter_map(|(i, e)| match e {
+            super::ElementWrite::Insert(d) | super::ElementWrite::Update(d) => Some((d.refno, i)),
+            super::ElementWrite::Delete(_) => None,
+        }).collect();
         for patch in patches {
-            let position = elements.iter().position(|e| match e {
-                super::ElementWrite::Insert(d) | super::ElementWrite::Update(d) => {
-                    d.refno == patch.refno
-                }
-                super::ElementWrite::Delete(_) => false,
-            });
+            let position = positions.get(&patch.refno).copied();
             let position = match position {
                 Some(position) => position,
                 None => {
@@ -89,6 +89,7 @@ impl SpatialStage {
                             source: std::io::Error::other("missing record for SPAMAP patch"),
                         })?;
                     elements.push(super::ElementWrite::Update(draft));
+                    positions.insert(patch.refno, elements.len() - 1);
                     elements.len() - 1
                 }
             };
@@ -157,12 +158,4 @@ impl SpatialStage {
         }
     }
 
-    pub(crate) fn plan(
-        &self,
-        end: &EndState<'_, '_>,
-        remint: &[(RefNo, RefNo)],
-        previous_entries: Option<&[crate::index::SpamapEntry]>,
-    ) -> Result<SpamapPlan, crate::spatial::SpatialError> {
-        plan::plan(self, end, remint, previous_entries)
-    }
 }

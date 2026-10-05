@@ -1,0 +1,21 @@
+   Compiling e3d-io v0.4.0 (D:\work\plant-code\old\vendor\e3d-io-write)
+    Finished `release` profile [optimized] target(s) in 8.38s
+     Running `D:\Rust\target\release\examples\write_scale_probe.exe --source D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\ams8000_0001 --n 10000,100000 --runs 3 --spatial require`
+PROBE n=10000 run=1 open
+PROBE n=10000 run=1 stage build_ms=16.625
+PROBE n=10000 run=1 verified stage_ms=223.827 commit_ms=2.836
+PROBE n=10000 run=2 open
+PROBE n=10000 run=2 stage build_ms=17.733
+PROBE n=10000 run=2 verified stage_ms=229.239 commit_ms=2.502
+PROBE n=10000 run=3 open
+PROBE n=10000 run=3 stage build_ms=17.105
+PROBE n=10000 run=3 verified stage_ms=230.094 commit_ms=3.856
+PROBE n=100000 run=1 open
+PROBE n=100000 run=1 stage build_ms=151.988
+PROBE n=100000 run=1 verified stage_ms=2039.619 commit_ms=20.451
+PROBE n=100000 run=2 open
+PROBE n=100000 run=2 stage build_ms=145.423
+PROBE n=100000 run=2 verified stage_ms=1998.863 commit_ms=19.977
+PROBE n=100000 run=3 open
+PROBE n=100000 run=3 stage build_ms=146.296
+PROBE n=100000 run=3 verified stage_ms=1987.135 commit_ms=20.628

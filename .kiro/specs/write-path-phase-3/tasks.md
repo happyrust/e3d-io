@@ -404,7 +404,7 @@
     - F7：766/0/30，Clippy/doc 63/25；39 问真门、alternate 5 轮及原样 FORMAT 0 全 PASS；新必需测试不 skip；原 17 条文件未改，动态发号键按 15.3 精确迁移；12/13/人工图形门未纳入。
     - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. staging 规模（需求 12）
+- [x] 12. staging 规模（需求 12）
   - [x] 12.1 写 Scale_Probe：`examples/write_scale_probe/`（`main.rs`、`batch.rs`、`scale.rs`）
     - 一条命令 `cargo run --release --example write_scale_probe -- --source <ams8000_0001> --n 10000,100000 --runs 3 [--spatial require|off] [--open-only <库>]`；`--spatial` 在 8.7 落地后接入（见 12.5）
     - 只在临时副本上运行，原件运行前后比对 SHA-256；先整读一遍副本求得热缓存
@@ -417,20 +417,23 @@
     - 在 Spec_Ledger「剖析结论」写明所用工具、基线数字与超线性的来源；写明之前不改 staging 代码
     - _Requirements: 12.2_
     - e1425db 写侧基线：10k/100k 各三热轮 Off/Require，全量成员/属性/空间条目读回；WPR 被环境策略拒绝，改用原生子进程线程符号采样。源码无生产写侧改动；原始数据与采样局限见 `docs/evidence/2026-10-05-staging-scale-baseline.md`。收口探针 stage 比值 Off 61.7168、Require 32.3028 均失败，保留 12.4/12.5；金样混合测试已准备但 12.3 未录制。
-  - [~] 12.3 录 staging 优化的 Golden_Hashes
+  - [x] 12.3 录 staging 优化的 Golden_Hashes
     - 在 staging 优化首个写侧提交（12.4）的父提交上，用 `tools/golden/record.ps1` 录 `tests/golden/write_hashes.json`，含 Scale_Probe 批次（固定时钟、refno 按源文件预铸；Transaction 无显式 refno 入口时走原语路径）；与 12.4 之间有别的提交时重录
     - `tests/write_scale_golden.rs` 以 `#[path]` 复用 `batch.rs` 比对；剔除的键记入 Spec_Ledger「Golden 剔除键」
     - **Property 23: 字节中性能力逐字节相同**
     - **Validates: Requirements 2.7, 12.8**
     - _Requirements: 12.11_
-  - [~] 12.4 按剖析结论优化 staging
+    - `5548ad0` 干净写侧两遍录制 53.33/52.87s，5 键一致、0 剔除（旧32/128/257及混合10k/100k）。新记录独立保存 `tests/golden/staging_scale.json`，保留 `write_hashes.json` 的历史21键/来源及 allocation_floor 精确退役关系；首优化提交直接父为5548ad0，无中间提交。
+  - [x] 12.4 按剖析结论优化 staging
     - 只改 12.2 指明的热点，保持字节中性：`cargo test --no-fail-fast` 下金样比对 0 失败且未跳过
     - **Property 23: 字节中性能力逐字节相同**
     - **Validates: Requirements 2.7, 12.8**
     - _Requirements: 12.3, 12.4, 12.8_
-  - [~] 12.5 复测并记录
+    - 尾叶BTreeMap保持原编辑/拒绝次序及页面分裂；Last成员集合只加速缺席成员；Snapshot Rc、old/new各提取一次、版本隔离属性缓存、owner子索引、单次重算及记录项位置索引。独立顺序算法proptest、原/新增金样、空间模型、合并/重试/拒写全部通过；Cargo768/0/30，Clippy/doc63/25。证据：`docs/evidence/2026-10-05-staging-scale-acceptance.md`。
+  - [x] 12.5 复测并记录
     - 在 Scale_Probe 接上 `--spatial`（依赖第 8 组），复测需求 12 第 3、4 条（含 SPAMAP 开启时）与第 6、7 条（D6：SPAMAP 页单列、上界按半满叶计），连同机器与存储记入 Spec_Ledger「规模复测」
     - _Requirements: 12.3, 12.4, 12.6, 12.7, 12.9_
+    - 优化复测三热轮Off/Require比例7.23/8.72；Require10k stage+commit231.74ms；七类页数满足D6。真TTY39PASS（207.410s）、alternate五轮全PASS（68.285s）、原样FORMAT0全PASS（10.209s），源AMS/TES哈希/长度不变；10.5/10.6/第13组保持待办。
 
 - [ ] 13. S6b 页 1 桶表（需求 13，条件分支）
   - [~] 13.1 取证页 1 桶表
@@ -616,6 +619,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | 同上 | `d040f18` | `write_stage6_spread::spread_inserts_read_back_across_many_owners#0` | 两遍不同：`SessionClock::now`（`tests/write_stage6_spread.rs:91`） | — |
 | `tests/golden/write_hashes.json`（F3；21 条，含固定时钟/预铸 32、128、257 BOX 批次） | F2 `6232c21` 上两遍，F3 准备提交紧接 F4 | 原 Off 录制的六个时间不稳定键，另 `write_stage6_cli::spatial_cli_writes_given_aabb_and_reports_readable_spatial_diff#0` | CLI / spread 使用当前时间，两遍末文件不同 | 原 Off 17 条未改；F4 前在直接父提交再录，只核对条目完全一致并更新录制元数据 |
 | 原 Off 17 / 优化 21 的动态发号键 | F5 `6c588d1`，父 `aacdcf9` | 16 个键各在两个原文件精确退役；32 条锁旧 SHA 的 retirement；见 `docs/evidence/2026-10-05-allocation-floor-goldens.md` 逐项表 | 需求 11 有意改变新 refno；需求 15.3 不把动态发号当字节兼容输入 | 两遍新下界结果一致，`allocation_floor.json` 校验新 16 条；原文件均未改；3 预铸批次/rename/拒写金样继续执行。F4 已完整通过未退役的原 17/21 |
+| `tests/golden/staging_scale.json`（12.3；5条，预铸32/128/257及混合10k/100k） | `5548ad0` 两遍，首staging优化提交直接父 | 无，0剔除 | 全部固定时钟、固定refno，两遍一致 | 新文件保存录制来源，不重录原21/17条或已有退役关系；优化后完整Cargo核对通过 |
 
 样本（备注）：17 条全部取自快照 `D:\e3dio-fixtures\phase3\ams8000_0001`，34 037 760 字节，SHA-256 `3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023`，即装机原件 2026-09-30 17:05:57 那一版（会话至 646）。
 
@@ -721,7 +725,10 @@ F7 文档同步：README/CHANGELOG 明确发号下界及报告取号迁移；补
 
 | 条款 | `--spatial` | n | Staging_Time 中位数 | 峰值 RSS | 追加页七类计数 | 幂指数 | 机器与存储 |
 |---|---|---|---|---|---|---|---|
-| | | | | | | | |
+| 12.3/12.6 | Off | 10k | 31.7405 ms | 78692352 bytes | 891/94/2/0/0/0/1（record/index/claim/TYPEX/SPAMAP/other/session） | 0.859（10k→100k） | Ryzen9 7950X，约63GiB，Win11 26200，WD_BLACK SN770；3热轮，进程峰值包含准备 |
+| 12.3/12.6 | Off | 100k | 229.6060 ms | 213983232 bytes | 8170/813/2/0/0/0/1 | 比值7.23385≤15 | 同上；完整101124成员及次序读回，文件SHA/长度与父基线相同 |
+| 12.3/12.4/12.6/12.7 | Require | 10k | 229.2385 ms；stage+commit231.7402 ms≤10s | 79290368 bytes | 891/94/2/0/250/0/1；非空间988≤1336.5；SPAMAP250≤493 | 0.940（10k→100k） | 同上；每BOX提供World_AABB，每条SPAMAP坐标读回 |
+| 12.3/12.6/12.7 | Require | 100k | 1998.8627 ms | 317100032 bytes | 8170/813/2/0/2274/0/1；非空间8986≤12255；SPAMAP2274≤4493 | 比值8.71958≤15 | 同上；12个完整文件及页数与基线相同。原始三轮/字节比较/回归见docs/evidence/2026-10-05-staging-scale-acceptance.md |
 
 #### skip 清单（14.4）
 

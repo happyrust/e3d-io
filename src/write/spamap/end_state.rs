@@ -1,5 +1,5 @@
 use super::super::{ElementWrite, RecordDraft, WriteError};
-use crate::record::descriptor::{AttributeExtractionStatus, DescriptorValue};
+use crate::record::descriptor::{AttributeExtractionStatus, DescriptorValue, ElementExtraction};
 use crate::record::element::ParsedElement;
 use crate::record::template::TemplateProvider;
 use crate::refno::RefNo;
@@ -11,13 +11,15 @@ use std::path::Path;
 use std::rc::Rc;
 
 pub(crate) type Templates<'a> = Rc<RefCell<&'a mut TemplateProvider>>;
-type Records = HashMap<RefNo, Result<Option<RecordDraft>, String>>;
+type Records = HashMap<RefNo, Result<Option<Rc<RecordDraft>>, String>>;
+type Values = RefCell<HashMap<(RefNo, u32), Result<Option<DescriptorValue>, UndecodableAttr>>>;
 
 /// Lazy exact-session view; merge views share the caller's schema.
 pub(crate) struct Snapshot<'a> {
     engine: RefCell<ReadOnlyEngine>,
     templates: Templates<'a>,
     records: RefCell<Records>,
+    values: Values,
 }
 impl<'a> Snapshot<'a> {
     pub(crate) fn open(
@@ -29,9 +31,13 @@ impl<'a> Snapshot<'a> {
             engine: RefCell::new(ReadOnlyEngine::open_at(path, sesno)?),
             templates,
             records: RefCell::new(HashMap::new()),
+            values: RefCell::default(),
         })
     }
     pub(crate) fn record(&self, r: RefNo) -> Result<Option<RecordDraft>, String> {
+        self.shared_record(r).map(|d| d.map(|d| (*d).clone()))
+    }
+    fn shared_record(&self, r: RefNo) -> Result<Option<Rc<RecordDraft>>, String> {
         if let Some(record) = self.records.borrow().get(&r) {
             return record.clone();
         }
@@ -41,8 +47,11 @@ impl<'a> Snapshot<'a> {
             .find_element(r)
             .map_err(|e| e.to_string())
             .and_then(|v| {
-                v.map(|v| RecordDraft::from_record_bytes(&v.raw_bytes).map_err(|e| e.to_string()))
-                    .transpose()
+                v.map(|v| {
+                    RecordDraft::from_record_bytes(&v.raw_bytes)
+                        .map(Rc::new)
+                        .map_err(|e| e.to_string())
+                }).transpose()
             });
         self.records.borrow_mut().insert(r, record.clone());
         record
@@ -74,6 +83,21 @@ impl<'a> Snapshot<'a> {
                 .map(str::to_owned)
                 .unwrap_or_else(|| format!("{hash:#x}")),
         };
+        let extraction = self.extract(draft).map_err(|_| error())?;
+        Self::extracted_value(&extraction, hash).map_err(|_| error())
+    }
+    fn extracted_value(extraction: &ElementExtraction, hash: u32) -> Result<Option<DescriptorValue>, ()> {
+        let Some(row) = extraction.attributes.iter().find(|a| a.hash == hash) else {
+            return Ok(None);
+        };
+        match (&row.value, &row.status) {
+            (Some(v), _) => Ok(Some(v.clone())),
+            (None, AttributeExtractionStatus::NonImplicit) => Ok(None),
+            _ => Err(()),
+        }
+    }
+    fn extract(&self, draft: &RecordDraft) -> Result<ElementExtraction, ()> {
+        let error = || ();
         let text = self.engine.borrow().text_format();
         let mut parsed =
             ParsedElement::parse_as(&draft.encode(0, 0, 0).bytes, text).map_err(|_| error())?;
@@ -100,21 +124,13 @@ impl<'a> Snapshot<'a> {
             .template_for(draft.noun_hash)
             .map_err(|_| error())?
             .ok_or_else(error)?;
-        let extraction = crate::engine::extract_parsed_with_optional_dictionary(
+        crate::engine::extract_parsed_with_optional_dictionary(
             draft.refno,
             &parsed,
             None,
             template,
         )
-        .map_err(|_| error())?;
-        let Some(row) = extraction.attributes.iter().find(|a| a.hash == hash) else {
-            return Ok(None);
-        };
-        match (&row.value, &row.status) {
-            (Some(v), _) => Ok(Some(v.clone())),
-            (None, AttributeExtractionStatus::NonImplicit) => Ok(None),
-            _ => Err(error()),
-        }
+        .map_err(|_| error())
     }
     pub(crate) fn changed_attrs(&self, old: &RecordDraft, new: &RecordDraft) -> Vec<u32> {
         let hashes: Vec<u32> = self
@@ -125,9 +141,16 @@ impl<'a> Snapshot<'a> {
             .flatten()
             .map(|t| t.attrs.iter().map(|a| a.hash).collect())
             .unwrap_or_default();
+        // These are two immutable versions. Extract each once; comparing each
+        // descriptor used to re-encode and re-extract the entire record.
+        let old_values = self.extract(old);
+        let new_values = self.extract(new);
         hashes
             .into_iter()
-            .filter(|h| match (self.value(old, *h), self.value(new, *h)) {
+            .filter(|h| match (
+                old_values.as_ref().map_err(|_| ()).and_then(|e| Self::extracted_value(e, *h)),
+                new_values.as_ref().map_err(|_| ()).and_then(|e| Self::extracted_value(e, *h)),
+            ) {
                 (Ok(a), Ok(b)) => a != b,
                 _ => {
                     let mut templates = self.templates.borrow_mut();
@@ -163,20 +186,23 @@ impl<'a> Snapshot<'a> {
 }
 impl SpatialState for Snapshot<'_> {
     fn noun(&self, r: RefNo) -> Option<u32> {
-        self.record(r).ok().flatten().map(|d| d.noun_hash)
+        self.shared_record(r).ok().flatten().map(|d| d.noun_hash)
     }
     fn owner(&self, r: RefNo) -> Option<RefNo> {
-        self.record(r)
+        self.shared_record(r)
             .ok()
             .flatten()
             .map(|d| d.owner)
             .filter(|r| r.is_valid())
     }
     fn members(&self, r: RefNo) -> Option<Vec<RefNo>> {
-        self.record(r).ok().flatten().map(|d| d.members().to_vec())
+        self.shared_record(r).ok().flatten().map(|d| d.members().to_vec())
     }
     fn attr(&self, r: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr> {
-        match self.record(r) {
+        if let Some(value) = self.values.borrow().get(&(r, hash)) {
+            return value.clone();
+        }
+        let value = match self.shared_record(r) {
             Ok(Some(d)) => self.value(&d, hash),
             Ok(None) => Ok(None),
             Err(_) => Err(UndecodableAttr {
@@ -184,7 +210,9 @@ impl SpatialState for Snapshot<'_> {
                 hash,
                 name: format!("{hash:#x}"),
             }),
-        }
+        };
+        self.values.borrow_mut().insert((r, hash), value.clone());
+        value
     }
 }
 
@@ -194,6 +222,8 @@ pub(crate) struct EndState<'a, 't> {
     pub(crate) base: Option<&'a Snapshot<'t>>,
     pub(crate) drafts: BTreeMap<RefNo, Option<RecordDraft>>,
     pub(crate) inserted: HashSet<RefNo>,
+    values: Values,
+    children_by_owner: BTreeMap<RefNo, Vec<RefNo>>,
 }
 impl<'a, 't> EndState<'a, 't> {
     pub(crate) fn new(
@@ -217,11 +247,19 @@ impl<'a, 't> EndState<'a, 't> {
                 }
             }
         }
+        let mut children_by_owner: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for (&child, draft) in &drafts {
+            if let Some(draft) = draft {
+                children_by_owner.entry(draft.owner).or_default().push(child);
+            }
+        }
         Self {
             previous,
             base,
             drafts,
             inserted,
+            values: RefCell::default(),
+            children_by_owner,
         }
     }
     pub(crate) fn record(&self, r: RefNo) -> Result<Option<RecordDraft>, String> {
@@ -240,8 +278,9 @@ impl<'a, 't> EndState<'a, 't> {
         members.retain(|m| {
             self.owner(*m) == Some(r) || (deleted && matches!(self.drafts.get(m), Some(None)))
         });
-        for (&child, draft) in &self.drafts {
-            if draft.as_ref().is_some_and(|d| d.owner == r) && !members.contains(&child) {
+        let mut present: HashSet<_> = members.iter().copied().collect();
+        for &child in self.children_by_owner.get(&r).into_iter().flatten() {
+            if present.insert(child) {
                 members.push(child);
             }
         }
@@ -309,28 +348,36 @@ impl<'a, 't> EndState<'a, 't> {
 }
 impl SpatialState for EndState<'_, '_> {
     fn noun(&self, r: RefNo) -> Option<u32> {
-        self.record(r).ok().flatten().map(|d| d.noun_hash)
+        match self.drafts.get(&r) {
+            Some(draft) => draft.as_ref().map(|d| d.noun_hash),
+            None => self.previous.noun(r),
+        }
     }
     fn owner(&self, r: RefNo) -> Option<RefNo> {
-        self.record(r)
-            .ok()
-            .flatten()
-            .map(|d| d.owner)
-            .filter(|r| r.is_valid())
+        match self.drafts.get(&r) {
+            Some(draft) => draft.as_ref().map(|d| d.owner).filter(|r| r.is_valid()),
+            None => self.previous.owner(r),
+        }
     }
     fn members(&self, r: RefNo) -> Option<Vec<RefNo>> {
-        self.record(r).ok().flatten().map(|d| d.members().to_vec())
+        match self.drafts.get(&r) {
+            Some(draft) => draft.as_ref().map(|d| d.members().to_vec()),
+            None => self.previous.members(r),
+        }
     }
     fn attr(&self, r: RefNo, hash: u32) -> Result<Option<DescriptorValue>, UndecodableAttr> {
-        match self.record(r) {
-            Ok(Some(d)) => self.previous.value(&d, hash),
-            Ok(None) => Ok(None),
-            Err(_) => Err(UndecodableAttr {
-                refno: r,
-                hash,
-                name: format!("{hash:#x}"),
-            }),
+        let Some(draft) = self.drafts.get(&r) else {
+            return self.previous.attr(r, hash);
+        };
+        if let Some(value) = self.values.borrow().get(&(r, hash)) {
+            return value.clone();
         }
+        let value = match draft {
+            Some(d) => self.previous.value(d, hash),
+            None => Ok(None),
+        };
+        self.values.borrow_mut().insert((r, hash), value.clone());
+        value
     }
 }
 
@@ -360,12 +407,16 @@ mod tests {
             let shared = Rc::new(RefCell::new(&mut provider));
             let snapshot = Snapshot::open(&path, sesno, shared).unwrap();
             let mut draft = snapshot.record(r).unwrap().unwrap();
+            let original = snapshot.attr(r, desc).unwrap();
+            assert_eq!(snapshot.attr(r, desc).unwrap(), original);
             draft.set_text_hunk(desc, "a pending hunk", text).unwrap();
             let end = EndState::new(&snapshot, None, &[ElementWrite::Update(draft)]);
             assert_eq!(
                 end.attr(r, desc).unwrap(),
                 Some(DescriptorValue::Text("a pending hunk".into()))
             );
+            assert_eq!(end.attr(r, desc).unwrap(), Some(DescriptorValue::Text("a pending hunk".into())));
+            assert_eq!(snapshot.attr(r, desc).unwrap(), original, "draft cache must not replace the committed snapshot value");
         }
         let mut tx = super::super::super::Transaction::open(&path, &mut provider)
             .unwrap()

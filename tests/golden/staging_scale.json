@@ -1,0 +1,15 @@
+{
+  "recorded_on": "5548ad0fb6eff70e79cbe09ca8ad75c0b09f898c",
+  "uncommitted_changes_under_src_or_tests": false,
+  "tests": ["write_scale_golden"],
+  "samples": {
+    "ams8000_0001": { "len": 34037760, "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "installed": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001", "installed_last_write": "2026-09-30 17:05:57" }
+  },
+  "entries": {
+    "write_scale_golden::deterministic_pre_minted_batches_read_back#0": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "3877E09E772BAB7434D21B00D86C9AEC2C52212737676DCCB36B47805BF0C014", "len": 34062336 },
+    "write_scale_golden::deterministic_pre_minted_batches_read_back#1": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "8A06D6C7327501DE94897A7BEFADD389C93BE5238D88331DFD55D4F1464DD278", "len": 34078720 },
+    "write_scale_golden::deterministic_pre_minted_batches_read_back#2": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "6F091E0E4C10AF53920F3C7D18BEAFB79DB7AA600A593FCECC71B20E5A792AAA", "len": 34103296 },
+    "write_scale_golden::mixed_pre_minted_scale_batches_read_complete_member_order#0": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "57D61F3D91C4A2E9C24304D5390BB0449387CCB8131E5749B1D12E85CB440AF9", "len": 36280320 },
+    "write_scale_golden::mixed_pre_minted_scale_batches_read_complete_member_order#1": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "18298B12F8393B79AFDE7FED72A53AD23AC64A89558B25A3EA5892C685F25431", "len": 52660224 }
+  }
+}

@@ -1,0 +1,755 @@
+    Blocking waiting for file lock on build directory
+    Checking e3d-io v0.4.0 (D:\work\plant-code\old\vendor\e3d-io-write)
+warning: empty line after doc comment
+  --> src\meta\constants.rs:8:1
+   |
+ 8 | / /// validates the RefNo index without opening a schema pack.
+ 9 | |
+   | |_^
+...
+27 |   pub const DATA_PAGE_MAIN: u32 = 7_618_377;
+   |   ------------------------ the comment documents this constant item
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#empty_line_after_doc_comments
+   = note: `#[warn(clippy::empty_line_after_doc_comments)]` on by default
+   = help: if the empty line is unintentional, remove it
+help: if the comment should document the parent module use an inner doc comment
+   |
+ 1 ~ //! Dabacon constants recovered from the E3D 3.1 IDA decompile and checked
+ 2 ~ //! against the installed E3D 2.1 and 3.1 project corpora.
+ 3 ~ //!
+ 4 ~ //! These tree identities do **not** distinguish E3D 2.1 from 3.1: all 828
+ 5 ~ //! primary extents under the installed 2.1 project and all 1002 under the 3.1
+ 6 ~ //! project use the same pair. Release selection belongs to
+ 7 ~ //! [`crate::schema`]; the values live here because the structural read path
+ 8 ~ //! validates the RefNo index without opening a schema pack.
+   |
+help: if the documentation should include the empty line include it in the comment
+   |
+ 9 | ///
+   |
+
+warning: using `contains()` instead of `iter().any()` is more efficient
+   --> src\engine.rs:680:16
+    |
+680 |             if visited.iter().any(|r| *r == current) {
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `visited.contains(&current)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_contains
+    = note: `#[warn(clippy::manual_contains)]` on by default
+
+warning: useless use of `format!`
+   --> src\engine.rs:690:56
+    |
+690 |                 .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
+    |                                                        ^^^^^^^^^^^^^^ help: consider using `.to_string()`: `e.to_string()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#useless_format
+    = note: `#[warn(clippy::useless_format)]` on by default
+
+warning: useless use of `format!`
+   --> src\engine.rs:747:52
+    |
+747 |             .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
+    |                                                    ^^^^^^^^^^^^^^ help: consider using `.to_string()`: `e.to_string()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#useless_format
+
+warning: useless use of `format!`
+   --> src\engine.rs:878:52
+    |
+878 |             .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
+    |                                                    ^^^^^^^^^^^^^^ help: consider using `.to_string()`: `e.to_string()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#useless_format
+
+warning: useless use of `format!`
+    --> src\engine.rs:1041:52
+     |
+1041 |             .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
+     |                                                    ^^^^^^^^^^^^^^ help: consider using `.to_string()`: `e.to_string()`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#useless_format
+
+warning: useless use of `format!`
+    --> src\engine.rs:1057:52
+     |
+1057 |             .map_err(|e| ResolveError::ParseFailed(format!("{e}")))?;
+     |                                                    ^^^^^^^^^^^^^^ help: consider using `.to_string()`: `e.to_string()`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#useless_format
+
+warning: this loop could be written as a `for` loop
+   --> src\index\diff.rs:241:9
+    |
+241 |         while let Some(change) = self.next() {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `for change in self.by_ref()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#while_let_on_iterator
+    = note: `#[warn(clippy::while_let_on_iterator)]` on by default
+
+warning: manual implementation of `.is_multiple_of()`
+  --> src\index\keyed.rs:69:8
+   |
+69 |     if data.len() % DWORD != 0 {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^ help: replace with: `!data.len().is_multiple_of(DWORD)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+   = note: `#[warn(clippy::manual_is_multiple_of)]` on by default
+
+warning: manual implementation of `.is_multiple_of()`
+   --> src\index\keyed.rs:102:8
+    |
+102 |     if used_dwords % stride_dwords != 0 {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace with: `!used_dwords.is_multiple_of(stride_dwords)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+
+warning: manual implementation of `.is_multiple_of()`
+   --> src\index\mod.rs:219:12
+    |
+219 |         if page.len() % DWORD != 0 {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^ help: replace with: `!page.len().is_multiple_of(DWORD)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+
+warning: manual implementation of `.is_multiple_of()`
+   --> src\index\mod.rs:273:12
+    |
+273 |         if used_dwords % stride_dwords != 0 {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace with: `!used_dwords.is_multiple_of(stride_dwords)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+
+warning: this `map_or` can be simplified
+   --> src\index\mod.rs:428:16
+    |
+428 |             if leftmost.map_or(true, |left| !left.is_start_marker()) {
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#unnecessary_map_or
+    = note: `#[warn(clippy::unnecessary_map_or)]` on by default
+help: use `is_none_or` instead
+    |
+428 -             if leftmost.map_or(true, |left| !left.is_start_marker()) {
+428 +             if leftmost.is_none_or(|left| !left.is_start_marker()) {
+    |
+
+warning: this `map_or` can be simplified
+   --> src\index\mod.rs:439:12
+    |
+439 |           if best.map_or(true, |b| {
+    |  ____________^
+440 | |             cmp_refno(entry.refno, b.refno) == Ordering::Greater
+441 | |         }) {
+    | |__________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#unnecessary_map_or
+help: use `is_none_or` instead
+    |
+439 -         if best.map_or(true, |b| {
+439 +         if best.is_none_or(|b| {
+    |
+
+warning: the loop variable `i` is used to index `arr`
+   --> src\record\atnlog.rs:202:22
+    |
+202 |             for i in 0..9 {
+    |                      ^^^^
+    |
+note: for this index operation
+   --> src\record\atnlog.rs:203:17
+    |
+203 |                 arr[i] = attrs::read_f64(&parsed.implicit_data, word_off_u32 + i as u32 * 2)?;
+    |                 ^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and `.enumerate()`
+    |
+202 -             for i in 0..9 {
+202 +             for (i, <item>) in arr.iter_mut().enumerate() {
+    |
+
+warning: this `map_or` can be simplified
+   --> src\record\template_file.rs:143:9
+    |
+143 |         self.chunks.get(i).map_or(false, |(_, sz)| *sz > 0)
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#unnecessary_map_or
+help: use `is_some_and` instead
+    |
+143 -         self.chunks.get(i).map_or(false, |(_, sz)| *sz > 0)
+143 +         self.chunks.get(i).is_some_and(|(_, sz)| *sz > 0)
+    |
+
+warning: using `chunks_exact` with a constant chunk size
+   --> src\record\template_file.rs:213:31
+    |
+213 |         for (i, chunk) in buf.chunks_exact(4).enumerate() {
+    |                               ^^^^^^^^^^^^^^^ help: consider using `as_chunks` instead: `as_chunks::<4>().0.iter()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#chunks_exact_to_as_chunks
+    = note: `#[warn(clippy::chunks_exact_to_as_chunks)]` on by default
+
+warning: using `chunks_exact` with a constant chunk size
+   --> src\record\template_file.rs:287:24
+    |
+287 |         for c in words.chunks_exact(7) {
+    |                        ^^^^^^^^^^^^^^^ help: consider using `as_chunks` instead: `as_chunks::<7>().0`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#chunks_exact_to_as_chunks
+
+warning: the following explicit lifetimes could be elided: 'a
+   --> src\record\template_file.rs:297:23
+    |
+297 |     pub fn find_child<'a>(children: &'a [TemplateChild], hash: u32) -> Option<&'a TemplateChild> {
+    |                       ^^             ^^                                        ^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#needless_lifetimes
+    = note: `#[warn(clippy::needless_lifetimes)]` on by default
+help: elide the lifetimes
+    |
+297 -     pub fn find_child<'a>(children: &'a [TemplateChild], hash: u32) -> Option<&'a TemplateChild> {
+297 +     pub fn find_child(children: &[TemplateChild], hash: u32) -> Option<&TemplateChild> {
+    |
+
+warning: using `chunks_exact` with a constant chunk size
+   --> src\tty.rs:749:24
+    |
+749 |     for pair in tokens.chunks_exact(2) {
+    |                        ^^^^^^^^^^^^^^^ help: consider using `as_chunks` instead: `as_chunks::<2>().0`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#chunks_exact_to_as_chunks
+
+warning: this `let...else` may be rewritten with the `?` operator
+   --> src\tty.rs:785:5
+    |
+785 | /     let Some(start) = tokens.first() else {
+786 | |         return None;
+787 | |     };
+    | |______^ help: replace it with: `let start = tokens.first()?;`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#question_mark
+    = note: `#[warn(clippy::question_mark)]` on by default
+
+warning: using `chunks_exact` with a constant chunk size
+   --> src\tty.rs:794:29
+    |
+794 |     for pair in tokens[1..].chunks_exact(2) {
+    |                             ^^^^^^^^^^^^^^^ help: consider using `as_chunks` instead: `as_chunks::<2>().0`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#chunks_exact_to_as_chunks
+
+warning: `e3d-io` (lib) generated 22 warnings (run `cargo clippy --fix --lib -p e3d-io -- ` to apply 19 suggestions)
+warning: field assignment outside of initializer for an instance created with Default::default()
+   --> examples\data_page_header_probe.rs:126:5
+    |
+126 |     total.session_slots = vec![BTreeSet::new(); SESSION_WORDS];
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: consider initializing the variable with `Tally { session_slots: vec![BTreeSet::new(); SESSION_WORDS], element_w1_lo_min: u32::MAX, ..Default::default() }` and removing relevant reassignments
+   --> examples\data_page_header_probe.rs:125:5
+    |
+125 |     let mut total = Tally::default();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#field_reassign_with_default
+    = note: `#[warn(clippy::field_reassign_with_default)]` on by default
+
+warning: the loop variable `slot` is used to index `total.session_slots`
+   --> examples\data_page_header_probe.rs:253:25
+    |
+253 |             for slot in 0..SESSION_WORDS {
+    |                         ^^^^^^^^^^^^^^^^
+    |
+note: for this index operation
+   --> examples\data_page_header_probe.rs:255:21
+    |
+255 |                     total.session_slots[slot].insert(value);
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and `.enumerate()`
+    |
+253 -             for slot in 0..SESSION_WORDS {
+253 +             for (slot, <item>) in total.session_slots.iter_mut().enumerate().take(SESSION_WORDS) {
+    |
+
+warning: `e3d-io` (example "data_page_header_probe") generated 2 warnings
+warning: used consecutive `str::replace` call
+   --> examples\genmodel_expr_dialect_probe.rs:265:22
+    |
+265 |                 text.replace('\t', " ").replace('\n', " ")
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace with: `replace(['\t', '\n'], " ")`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#collapsible_str_replace
+    = note: `#[warn(clippy::collapsible_str_replace)]` on by default
+
+warning: doc list item without indentation
+ --> tests\atnlog_high_level_api.rs:5:5
+  |
+5 | //! many attributes on a real fixture element resolve directly vs via
+  |     ^
+  |
+  = help: if this is supposed to be its own paragraph, add a blank line
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#doc_lazy_continuation
+  = note: `#[warn(clippy::doc_lazy_continuation)]` on by default
+help: indent this line
+  |
+5 | //!   many attributes on a real fixture element resolve directly vs via
+  |     ++
+
+warning: doc list item without indentation
+ --> tests\atnlog_high_level_api.rs:6:5
+  |
+6 | //! the SYNO chain pointer.
+  |     ^
+  |
+  = help: if this is supposed to be its own paragraph, add a blank line
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#doc_lazy_continuation
+help: indent this line
+  |
+6 | //!   the SYNO chain pointer.
+  |     ++
+
+warning: used `assert_eq!` with a literal bool
+    --> src\db_element.rs:1645:9
+     |
+1645 |         assert_eq!(element.exists().unwrap(), false);
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#bool_assert_comparison
+     = note: `#[warn(clippy::bool_assert_comparison)]` on by default
+help: replace it with `assert!(..)`
+     |
+1645 -         assert_eq!(element.exists().unwrap(), false);
+1645 +         assert!(!element.exists().unwrap());
+     |
+
+warning: `e3d-io` (example "genmodel_expr_dialect_probe") generated 1 warning (run `cargo clippy --fix --example "genmodel_expr_dialect_probe" -p e3d-io -- ` to apply 1 suggestion)
+warning: very complex type used. Consider factoring parts into `type` definitions
+   --> examples\record_l3_value_delta_probe.rs:404:21
+    |
+404 |     let mut blocks: Vec<(u32, usize, u16, usize, Option<(u32, usize)>)> = Vec::new();
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#type_complexity
+    = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+  --> tests\session_index_names_every_live_element.rs:61:76
+   |
+61 |         .extract_parsed_element_with_descriptors(target, &parsed, &attlib, &template)
+   |                                                                            ^^^^^^^^^ help: change this to: `template`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#needless_borrow
+   = note: `#[warn(clippy::needless_borrow)]` on by default
+
+warning: `e3d-io` (test "atnlog_high_level_api") generated 2 warnings
+warning: this operation has no effect
+   --> src\page\io.rs:491:15
+    |
+491 |         bytes[1 * 128] = 0xCD;
+    |               ^^^^^^^ help: consider reducing it to: `128`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#identity_op
+    = note: `#[warn(clippy::identity_op)]` on by default
+
+warning: `e3d-io` (example "record_l3_value_delta_probe") generated 1 warning
+warning: `e3d-io` (test "session_index_names_every_live_element") generated 1 warning (run `cargo clippy --fix --test "session_index_names_every_live_element" -p e3d-io -- ` to apply 1 suggestion)
+warning: the loop variable `i` is only used to index `page`
+   --> src\record\template_file.rs:382:18
+    |
+382 |         for i in (words.len() * 4)..PAGE_BYTES {
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: for this index operation
+   --> src\record\template_file.rs:383:13
+    |
+383 |             page[i] = 0xFF;
+    |             ^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#needless_range_loop
+help: consider using an iterator
+    |
+382 -         for i in (words.len() * 4)..PAGE_BYTES {
+382 +         for <item> in page.iter_mut().take(PAGE_BYTES).skip((words.len() * 4)) {
+    |
+
+warning: used `assert_eq!` with a literal bool
+  --> tests\db_element_facade.rs:72:5
+   |
+72 |     assert_eq!(element.exists().unwrap(), true);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#bool_assert_comparison
+   = note: `#[warn(clippy::bool_assert_comparison)]` on by default
+help: replace it with `assert!(..)`
+   |
+72 -     assert_eq!(element.exists().unwrap(), true);
+72 +     assert!(element.exists().unwrap());
+   |
+
+warning: used `assert_eq!` with a literal bool
+   --> tests\db_element_facade.rs:247:5
+    |
+247 |     assert_eq!(element.has_attribute("ZZZZNOPE").unwrap(), false);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#bool_assert_comparison
+help: replace it with `assert!(..)`
+    |
+247 -     assert_eq!(element.has_attribute("ZZZZNOPE").unwrap(), false);
+247 +     assert!(!element.has_attribute("ZZZZNOPE").unwrap());
+    |
+
+warning: used `assert_eq!` with a literal bool
+   --> tests\db_element_facade.rs:339:5
+    |
+339 |     assert_eq!(target.exists().unwrap(), true, "跨库目标在 5052 的索引里");
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#bool_assert_comparison
+help: replace it with `assert!(..)`
+    |
+339 -     assert_eq!(target.exists().unwrap(), true, "跨库目标在 5052 的索引里");
+339 +     assert!(target.exists().unwrap(), "跨库目标在 5052 的索引里");
+    |
+
+warning: used `assert_eq!` with a literal bool
+   --> tests\db_element_facade.rs:346:5
+    |
+346 |     assert_eq!(set.pinned_sesno(5052).is_some(), true);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#bool_assert_comparison
+help: replace it with `assert!(..)`
+    |
+346 -     assert_eq!(set.pinned_sesno(5052).is_some(), true);
+346 +     assert!(set.pinned_sesno(5052).is_some());
+    |
+
+warning: consider using `sort_by_key`
+   --> tests\noun_coverage_analysis.rs:115:5
+    |
+115 |     rows.sort_by(|a, b| b.2.cmp(&a.2));
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#unnecessary_sort_by
+    = note: `#[warn(clippy::unnecessary_sort_by)]` on by default
+help: try
+    |
+115 -     rows.sort_by(|a, b| b.2.cmp(&a.2));
+115 +     rows.sort_by_key(|a| std::cmp::Reverse(a.2));
+    |
+
+warning: `e3d-io` (test "db_element_facade") generated 4 warnings (run `cargo clippy --fix --test "db_element_facade" -p e3d-io -- ` to apply 4 suggestions)
+warning: consider using `sort_by_key`
+  --> tests\find_atgtdf_pages.rs:88:5
+   |
+88 |     candidate_pages.sort_by(|a, b| b.1.cmp(&a.1));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#unnecessary_sort_by
+   = note: `#[warn(clippy::unnecessary_sort_by)]` on by default
+help: try
+   |
+88 -     candidate_pages.sort_by(|a, b| b.1.cmp(&a.1));
+88 +     candidate_pages.sort_by_key(|a| std::cmp::Reverse(a.1));
+   |
+
+warning: `e3d-io` (test "noun_coverage_analysis") generated 1 warning
+warning: `e3d-io` (test "find_atgtdf_pages") generated 1 warning
+warning: this loop could be written as a `while let` loop
+   --> examples\record_header_address_probe.rs:173:9
+    |
+173 | /         loop {
+174 | |             let Ok(data) = pages.get(cursor.0) else { break };
+175 | |             let Some(block) = block_at(data, cursor.1, refno) else {
+176 | |                 break;
+...   |
+191 | |         }
+    | |_________^ help: try: `while let Ok(data) = pages.get(cursor.0) { .. }`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#while_let_loop
+    = note: `#[warn(clippy::while_let_loop)]` on by default
+
+warning: using `chunks_exact` with a constant chunk size
+   --> examples\genmodel_gap_probe.rs:222:48
+    |
+222 |         for pair in parsed.implicit_data[24..].chunks_exact(8) {
+    |                                                ^^^^^^^^^^^^^^^ help: consider using `as_chunks` instead: `as_chunks::<8>().0`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#chunks_exact_to_as_chunks
+    = note: `#[warn(clippy::chunks_exact_to_as_chunks)]` on by default
+
+warning: `e3d-io` (example "record_header_address_probe") generated 1 warning
+warning: manual implementation of `.is_multiple_of()`
+   --> tests\index_page_decode.rs:496:20
+    |
+496 |                 if start % 4 != 0 {
+    |                    ^^^^^^^^^^^^^^ help: replace with: `!start.is_multiple_of(4)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+    = note: `#[warn(clippy::manual_is_multiple_of)]` on by default
+
+warning: very complex type used. Consider factoring parts into `type` definitions
+   --> tests\record_layout_census.rs:142:26
+    |
+142 |     let mut split_nouns: Vec<(String, u32, &BTreeMap<(bool, i32), usize>)> = census
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#type_complexity
+    = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: manual implementation of `.is_multiple_of()`
+  --> tests\dump_header.rs:37:12
+   |
+37 |         if file_size % ps == 0 {
+   |            ^^^^^^^^^^^^^^^^^^^ help: replace with: `file_size.is_multiple_of(ps)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+   = note: `#[warn(clippy::manual_is_multiple_of)]` on by default
+
+warning: `e3d-io` (example "genmodel_gap_probe") generated 1 warning (run `cargo clippy --fix --example "genmodel_gap_probe" -p e3d-io -- ` to apply 1 suggestion)
+warning: `e3d-io` (test "record_layout_census") generated 1 warning
+warning: `e3d-io` (test "index_page_decode") generated 1 warning (run `cargo clippy --fix --test "index_page_decode" -p e3d-io -- ` to apply 1 suggestion)
+warning: consider using `sort_by_key`
+  --> tests\find_covered_noun.rs:67:5
+   |
+67 |     covered_nouns.sort_by(|a, b| b.2.cmp(&a.2));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#unnecessary_sort_by
+   = note: `#[warn(clippy::unnecessary_sort_by)]` on by default
+help: try
+   |
+67 -     covered_nouns.sort_by(|a, b| b.2.cmp(&a.2));
+67 +     covered_nouns.sort_by_key(|a| std::cmp::Reverse(a.2));
+   |
+
+warning: `e3d-io` (test "dump_header") generated 1 warning (run `cargo clippy --fix --test "dump_header" -p e3d-io -- ` to apply 1 suggestion)
+warning: called `unwrap` on `def.default_value` after checking its variant with `is_some`
+   --> tests\atnlog_default_pool.rs:180:48
+    |
+179 |             if raw == RAW_USE_DEFAULT && def.default_value.is_some() {
+    |                                          --------------------------- the check is happening here
+180 |                 found = Some((refno, def.hash, def.default_value.unwrap(), parsed));
+    |                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: try using `match`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#unnecessary_unwrap
+    = note: `#[warn(clippy::unnecessary_unwrap)]` on by default
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+  --> tests\dbmdat_descriptor_real.rs:72:75
+   |
+72 |         .extract_parsed_element_with_descriptors(refno, &parsed, &attlib, &template)
+   |                                                                           ^^^^^^^^^ help: change this to: `template`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#needless_borrow
+   = note: `#[warn(clippy::needless_borrow)]` on by default
+
+warning: `e3d-io` (test "find_covered_noun") generated 1 warning
+warning: `e3d-io` (test "dbmdat_descriptor_real") generated 1 warning (run `cargo clippy --fix --test "dbmdat_descriptor_real" -p e3d-io -- ` to apply 1 suggestion)
+warning: `e3d-io` (test "atnlog_default_pool") generated 1 warning
+warning: field `key_values` is never read
+   --> examples\data_table_tree_probe.rs:501:5
+    |
+495 | struct Tree {
+    |        ---- field in this struct
+...
+501 |     key_values: Vec<((u32, u32), u32)>,
+    |     ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field assignment outside of initializer for an instance created with Default::default()
+   --> examples\data_table_tree_probe.rs:147:5
+    |
+147 |     total.session_word_hits = vec![0; PROBE_WORDS];
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: consider initializing the variable with `Tally { session_word_hits: vec![0; PROBE_WORDS], descriptor_word_hits: vec![0; PROBE_WORDS], live_height_min: u32::MAX, ..Default::default() }` and removing relevant reassignments
+   --> examples\data_table_tree_probe.rs:146:5
+    |
+146 |     let mut total = Tally::default();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#field_reassign_with_default
+    = note: `#[warn(clippy::field_reassign_with_default)]` on by default
+
+warning: the loop variable `slot` is used to index `total.session_word_hits`
+   --> examples\data_table_tree_probe.rs:383:21
+    |
+383 |         for slot in 0..PROBE_WORDS {
+    |                     ^^^^^^^^^^^^^^
+    |
+note: for this index operation
+   --> examples\data_table_tree_probe.rs:386:21
+    |
+386 |                     total.session_word_hits[slot] += 1;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and `.enumerate()`
+    |
+383 -         for slot in 0..PROBE_WORDS {
+383 +         for (slot, <item>) in total.session_word_hits.iter_mut().enumerate().take(PROBE_WORDS) {
+    |
+
+warning: the loop variable `slot` is used to index `total.descriptor_word_hits`
+   --> examples\data_table_tree_probe.rs:392:21
+    |
+392 |         for slot in 0..PROBE_WORDS {
+    |                     ^^^^^^^^^^^^^^
+    |
+note: for this index operation
+   --> examples\data_table_tree_probe.rs:395:21
+    |
+395 |                     total.descriptor_word_hits[slot] += 1;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#needless_range_loop
+help: consider using an iterator and `.enumerate()`
+    |
+392 -         for slot in 0..PROBE_WORDS {
+392 +         for (slot, <item>) in total.descriptor_word_hits.iter_mut().enumerate().take(PROBE_WORDS) {
+    |
+
+warning: manual implementation of `.is_multiple_of()`
+   --> examples\data_table_tree_probe.rs:583:42
+    |
+583 |     if page.len() < HEADER_DWORDS * 4 || page.len() % 4 != 0 {
+    |                                          ^^^^^^^^^^^^^^^^^^^ help: replace with: `!page.len().is_multiple_of(4)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+    = note: `#[warn(clippy::manual_is_multiple_of)]` on by default
+
+warning: manual implementation of `.is_multiple_of()`
+   --> examples\data_table_tree_probe.rs:602:23
+    |
+602 |     if stride == 0 || used % stride != 0 {
+    |                       ^^^^^^^^^^^^^^^^^^ help: replace with: `!used.is_multiple_of(stride)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+
+warning: `e3d-io` (example "data_table_tree_probe") generated 6 warnings (run `cargo clippy --fix --example "data_table_tree_probe" -p e3d-io -- ` to apply 2 suggestions)
+warning: this loop could be written as a `while let` loop
+   --> examples\record_continuation_probe.rs:164:9
+    |
+164 | /         loop {
+165 | |             let Ok(page) = pages.get(at.0) else { break };
+166 | |             let Some(header) = word(page, at.1) else {
+167 | |                 break;
+...   |
+236 | |             at = (target, target_byte);
+237 | |         }
+    | |_________^ help: try: `while let Ok(page) = pages.get(at.0) { .. }`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#while_let_loop
+    = note: `#[warn(clippy::while_let_loop)]` on by default
+
+warning: `e3d-io` (example "record_continuation_probe") generated 1 warning
+warning: `e3d-io` (lib test) generated 25 warnings (22 duplicates) (run `cargo clippy --fix --lib -p e3d-io --tests -- ` to apply 2 suggestions)
+warning: field `packed` is never read
+  --> examples\index_layout_probe.rs:50:5
+   |
+47 | struct Entry {
+   |        ----- field in this struct
+...
+50 |     packed: u32,
+   |     ^^^^^^
+   |
+   = note: `Entry` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: manual implementation of `.is_multiple_of()`
+   --> examples\index_layout_probe.rs:370:16
+    |
+370 |             if (usable - value) % ENTRY_DWORDS == 0 {
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace with: `(usable - value).is_multiple_of(ENTRY_DWORDS)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+    = note: `#[warn(clippy::manual_is_multiple_of)]` on by default
+
+warning: very complex type used. Consider factoring parts into `type` definitions
+  --> tests\tty_sample_pick.rs:93:21
+   |
+93 |     let mut picked: BTreeMap<(u32, bool), Vec<(u32, u32, i32)>> = BTreeMap::new();
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#type_complexity
+   = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: very complex type used. Consider factoring parts into `type` definitions
+  --> examples\data_table_tree_dump.rs:33:20
+   |
+33 |     let mut facts: BTreeMap<(u32, u32), (u32, (u32, u32), bool)> = BTreeMap::new();
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#type_complexity
+   = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: manual implementation of `.is_multiple_of()`
+   --> examples\data_table_tree_dump.rs:251:42
+    |
+251 |     if page.len() < HEADER_DWORDS * 4 || page.len() % 4 != 0 {
+    |                                          ^^^^^^^^^^^^^^^^^^^ help: replace with: `!page.len().is_multiple_of(4)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+    = note: `#[warn(clippy::manual_is_multiple_of)]` on by default
+
+warning: manual implementation of `.is_multiple_of()`
+   --> examples\data_table_tree_dump.rs:270:23
+    |
+270 |     if stride == 0 || used % stride != 0 {
+    |                       ^^^^^^^^^^^^^^^^^^ help: replace with: `!used.is_multiple_of(stride)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_is_multiple_of
+
+warning: `e3d-io` (example "index_layout_probe") generated 2 warnings (run `cargo clippy --fix --example "index_layout_probe" -p e3d-io -- ` to apply 1 suggestion)
+warning: `e3d-io` (test "tty_sample_pick") generated 1 warning
+warning: `e3d-io` (example "data_table_tree_dump") generated 3 warnings (run `cargo clippy --fix --example "data_table_tree_dump" -p e3d-io -- ` to apply 2 suggestions)
+warning: literal with an empty format string
+  --> tests\decode_attributes_e2e.rs:94:13
+   |
+94 |             "byte_offset_guess"
+   |             ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#print_literal
+   = note: `#[warn(clippy::print_literal)]` on by default
+help: try
+   |
+87 ~             "    {:>3}  {:<8} {:<6} {:>4} {:<14} {:<26} byte_offset_guess",
+88 |             "#",
+...
+92 |             "type(code→label)",
+93 ~             "system_lookup_name"
+   |
+
+warning: manual `Range::contains` implementation
+  --> tests\attlib_scan.rs:38:12
+   |
+38 |         if ch >= 32 && ch < 127 {
+   |            ^^^^^^^^^^^^^^^^^^^^ help: use: `(32..127).contains(&ch)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_range_contains
+   = note: `#[warn(clippy::manual_range_contains)]` on by default
+
+warning: manual `Range::contains` implementation
+  --> tests\attlib_scan.rs:63:20
+   |
+63 |                 if ch >= 32 && ch < 127 {
+   |                    ^^^^^^^^^^^^^^^^^^^^ help: use: `(32..127).contains(&ch)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_range_contains
+
+warning: manual `Range::contains` implementation
+  --> tests\attlib_scan.rs:90:16
+   |
+90 |             if ch >= 32 && ch < 127 {
+   |                ^^^^^^^^^^^^^^^^^^^^ help: use: `(32..127).contains(&ch)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/main/index.html#manual_range_contains
+
+warning: `e3d-io` (test "decode_attributes_e2e") generated 1 warning (run `cargo clippy --fix --test "decode_attributes_e2e" -p e3d-io -- ` to apply 1 suggestion)
+warning: `e3d-io` (test "attlib_scan") generated 3 warnings (run `cargo clippy --fix --test "attlib_scan" -p e3d-io -- ` to apply 3 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 16.47s

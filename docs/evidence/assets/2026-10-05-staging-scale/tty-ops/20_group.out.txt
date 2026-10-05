@@ -1,0 +1,11 @@
+e3d-write apply: 4 instruction(s) from D:\e3dio-scale-gate\ops\20_group.json onto D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 648
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert GPWL under 16192/0 -> 16192/2 [@gpwl]
+  #1 insert GROU under 16192/2 -> 16192/3 [@grou]
+  #2 reference 24384/47 in 16192/3 at "last"
+  #3 reference 24384/26507 in 16192/3 at "last"
+wrote session 649 to D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 648
+  appended pages   : 11
+  report           : D:\e3dio-scale-gate\ops\20_group.report.json

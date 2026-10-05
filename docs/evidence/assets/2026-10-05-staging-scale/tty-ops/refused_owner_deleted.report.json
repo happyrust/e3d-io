@@ -1,0 +1,23 @@
+{
+  "base_sesno": 646,
+  "comment": "refused: the owner is deleted earlier in the same file",
+  "database": "D:\\e3dio-scale-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": {
+    "message": "op #1 (insert BOX under /1RX03-LCT): owner 24384/22400 is deleted in this transaction",
+    "op": 1
+  },
+  "latest_before": 646,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "index": 0,
+      "op": "delete",
+      "refno": "24384/22400"
+    }
+  ],
+  "ops_file": "D:\\e3dio-scale-gate\\ops\\refused_owner_deleted.json",
+  "spatial_policy": "off",
+  "user": "e3dio"
+}

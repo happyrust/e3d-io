@@ -1,0 +1,85 @@
+{
+  "base_sesno": 649,
+  "comment": "e3d-io write-path gate: two EQUIs with DESC/DESP/UUIDIA as hunks (types 22/21/20)",
+  "commit": {
+    "appended_pages": [
+      16656,
+      16657,
+      16658,
+      16659,
+      16660,
+      16661,
+      16662,
+      16663,
+      16664,
+      16665,
+      16666,
+      16667,
+      16668,
+      16669
+    ],
+    "base_sesno": 649,
+    "merged_onto": null,
+    "previous": {
+      "end": 16655,
+      "page": 16655,
+      "sesno": 649
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 16669,
+      "page": 16669,
+      "sesno": 650
+    }
+  },
+  "database": "D:\\e3dio-scale-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 649,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "DESC",
+        "DESP",
+        "UUIDIA"
+      ],
+      "given": "24384/26508",
+      "id": "equi1",
+      "index": 0,
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26508"
+    },
+    {
+      "attrs": [
+        "DESC",
+        "DESP",
+        "UUIDIA"
+      ],
+      "given": "24384/26509",
+      "id": "equi2",
+      "index": 1,
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26509"
+    }
+  ],
+  "ops_file": "D:\\e3dio-scale-gate\\ops\\30_hunk_equis.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

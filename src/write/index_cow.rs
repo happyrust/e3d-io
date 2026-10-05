@@ -197,9 +197,30 @@ impl Cow<'_> {
 
     fn rewrite_leaf(
         &mut self,
-        mut entries: Vec<IndexEntry>,
+        entries: Vec<IndexEntry>,
         edits: &[LeafEdit],
     ) -> Result<Vec<IndexEntry>, IndexCowError> {
+        // Keep the original path for small edits and noncanonical input. A
+        // large tail batch otherwise scans its growing leaf for every insert.
+        if edits.len() <= self.max_entries || !entries.windows(2).all(|w| cmp_refno(w[0].refno, w[1].refno).is_lt()) {
+            return self.rewrite_leaf_linear(entries, edits);
+        }
+        let mut entries: std::collections::BTreeMap<_, _> = entries.into_iter().map(|e| (e.refno, e)).collect();
+        for edit in edits {
+            use std::collections::btree_map::Entry;
+            match (edit.kind, entries.entry(edit.refno)) {
+                (EditKind::Insert, Entry::Occupied(_)) => return Err(IndexCowError::DuplicateInsert { refno: edit.refno }),
+                (EditKind::Update, Entry::Vacant(_)) => return Err(IndexCowError::UpdateMissing { refno: edit.refno }),
+                (EditKind::Delete, Entry::Vacant(_)) => return Err(IndexCowError::DeleteMissing { refno: edit.refno }),
+                (EditKind::Update, Entry::Occupied(mut entry)) => { entry.insert(leaf_entry(edit.refno, edit.page_no, edit.packed)); }
+                (EditKind::Delete, Entry::Occupied(entry)) => { entry.remove(); }
+                (EditKind::Insert, Entry::Vacant(entry)) => { entry.insert(leaf_entry(edit.refno, edit.page_no, edit.packed)); }
+            }
+        }
+        Ok(entries.into_values().collect())
+    }
+
+    fn rewrite_leaf_linear(&mut self, mut entries: Vec<IndexEntry>, edits: &[LeafEdit]) -> Result<Vec<IndexEntry>, IndexCowError> {
         for edit in edits {
             let position = entries.iter().position(|e| e.refno == edit.refno);
             match (edit.kind, position) {
@@ -339,6 +360,29 @@ mod tests {
     use std::collections::HashMap;
 
     const PAGE_WORDS: usize = 32;
+
+    // Feature: write-path-phase-3, Property 23: indexed leaf edits preserve
+    // the sequential reference's result and its first rejection.
+    proptest::proptest! {
+        #[test]
+        fn indexed_leaf_matches_sequential_reference(ops in proptest::collection::vec((0u32..100, 0u8..3, proptest::num::u32::ANY), 7..180)) {
+            let initial: Vec<_> = (0..40).map(|i| leaf_entry(RefNo::new(10, i*2), i+1, 1)).collect();
+            let edits: Vec<_> = ops.into_iter().map(|(key, kind, page)| LeafEdit {
+                refno: RefNo::new(10, key), page_no: page, packed: page,
+                kind: match kind { 0 => EditKind::Insert, 1 => EditKind::Update, _ => EditKind::Delete },
+            }).collect();
+            let mut read = |_| Err("no I/O expected".to_owned());
+            let mut alloc = || panic!("no allocation expected");
+            let mut cow = Cow { ext: 1, page_words: PAGE_WORDS, max_entries: 6, read_page: &mut read, alloc: &mut alloc, pages: Vec::new(), depth: 0, page_limit: 1 };
+            let reference = cow.rewrite_leaf_linear(initial.clone(), &edits);
+            let indexed = cow.rewrite_leaf(initial, &edits);
+            match (reference, indexed) {
+                (Ok(a), Ok(b)) => proptest::prop_assert_eq!(a, b),
+                (Err(a), Err(b)) => proptest::prop_assert_eq!(a.to_string(), b.to_string()),
+                (a, b) => proptest::prop_assert!(false, "reference {a:?}, indexed {b:?}"),
+            }
+        }
+    }
 
     /// A tiny tree store keyed by page number, so a rewrite can be read back.
     struct Store {

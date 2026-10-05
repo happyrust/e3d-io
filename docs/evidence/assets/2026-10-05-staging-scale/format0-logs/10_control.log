@@ -1,0 +1,7 @@
+﻿F0-10-BEGIN
+ZONE /反应堆厂房-E3DIO
+Ref =17419/107
+Type ZONE
+Owner /锅炉岛设备
+Dbname EQUIB/DESI_COMP
+F0-10-END

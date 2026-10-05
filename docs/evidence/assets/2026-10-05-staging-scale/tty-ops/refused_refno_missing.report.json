@@ -1,0 +1,17 @@
+{
+  "base_sesno": 646,
+  "comment": "refused: no element has this refno",
+  "database": "D:\\e3dio-scale-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": {
+    "message": "op #0 (set =24384/2147483000): =24384/2147483000 is not indexed in the base session (an element inserted in this file is named by its @id)",
+    "op": 0
+  },
+  "latest_before": 646,
+  "on_clash": "refuse",
+  "ops": [],
+  "ops_file": "D:\\e3dio-scale-gate\\ops\\refused_refno_missing.json",
+  "spatial_policy": "off",
+  "user": "e3dio"
+}

@@ -1209,19 +1209,41 @@ impl<'a> Transaction<'a> {
     /// for membership becomes an update appended after the explicit writes.
     fn resolve_members(&mut self) -> Result<(), TransactionError> {
         let ops = std::mem::take(&mut self.member_ops);
+        let mut membership: HashMap<RefNo, HashSet<RefNo>> = HashMap::new();
         for op in ops {
             match op {
+                MemberOp::Add { owner, member, at: MemberPosition::Last, reference } => {
+                    if !owner.is_valid() { continue; }
+                    if matches!(self.writes.get(&owner), Some(ElementWrite::Delete(_))) {
+                        return Err(TransactionError::OwnerDeleted { owner });
+                    }
+                    let noun = self.draft_noun(owner, "an owner")?;
+                    if !reference && self.member_list_is_referenced(noun)? { continue; }
+                    let draft = self.draft_mut(owner, "an owner")?;
+                    let members = membership.entry(owner).or_insert_with(|| draft.members().iter().copied().collect());
+                    if members.insert(member) {
+                        draft.push_member(member);
+                    } else {
+                        Self::place_member(draft, owner, member, MemberPosition::Last)?;
+                    }
+                }
                 MemberOp::Add {
                     owner,
                     member,
                     at,
                     reference,
-                } => self.add_to_owner(owner, member, at, reference)?,
+                } => {
+                    membership.remove(&owner);
+                    self.add_to_owner(owner, member, at, reference)?;
+                }
                 MemberOp::Remove {
                     owner,
                     member,
                     reference,
-                } => self.remove_from_owner(owner, member, reference)?,
+                } => {
+                    membership.remove(&owner);
+                    self.remove_from_owner(owner, member, reference)?;
+                }
             }
         }
         Ok(())

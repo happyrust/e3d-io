@@ -1,0 +1,9 @@
+e3d-write apply: 2 instruction(s) from D:\e3dio-scale-gate\ops\30_hunk_equis.json onto D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 649
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert EQUI under 24384/47 -> 24384/26508 [@equi1]
+  #1 insert EQUI under 24384/47 -> 24384/26509 [@equi2]
+wrote session 650 to D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 649
+  appended pages   : 14
+  report           : D:\e3dio-scale-gate\ops\30_hunk_equis.report.json

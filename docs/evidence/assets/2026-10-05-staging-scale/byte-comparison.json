@@ -1,0 +1,62 @@
+{
+  "golden_parent": "5548ad0fb6eff70e79cbe09ca8ad75c0b09f898c",
+  "golden_sha256": "041093d8dfa1335511340d71c39d7178c012c1be864842a5edd3e0eae1a61bdb",
+  "policies": {
+    "off": {
+      "comparisons": [
+        {
+          "n": 10000,
+          "hash_length_equal": true,
+          "pages_equal": true
+        },
+        {
+          "n": 100000,
+          "hash_length_equal": true,
+          "pages_equal": true
+        }
+      ],
+      "gates": {
+        "page_bounds_10k": true,
+        "ratio_le_15": true,
+        "require_10k_le_10s": null,
+        "stage_100k_over_10k": 7.233849498275075
+      }
+    },
+    "require": {
+      "comparisons": [
+        {
+          "n": 10000,
+          "hash_length_equal": true,
+          "pages_equal": true
+        },
+        {
+          "n": 100000,
+          "hash_length_equal": true,
+          "pages_equal": true
+        }
+      ],
+      "gates": {
+        "page_bounds_10k": true,
+        "ratio_le_15": true,
+        "require_10k_le_10s": true,
+        "stage_100k_over_10k": 8.719576772662533
+      }
+    }
+  },
+  "golden_files": {
+    "allocation_floor.json": "878ba765a4855d85fb0261db601f7f0bedb1b188e167f6757d1821eb2131e62c",
+    "off_compat.json": "1b2ac106e9a69a9a5fe677b439ae7c43ef190191dcd8d392b2375a6602e4e80a",
+    "staging_scale.json": "041093d8dfa1335511340d71c39d7178c012c1be864842a5edd3e0eae1a61bdb",
+    "write_hashes.json": "a42ada523eddd3ebb57d4fd27e855b253968e8f0b54dcd2c9afa9bc12ebc9e25"
+  },
+  "sources": {
+    "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001": {
+      "sha256": "3cab5d7d2b2c40fdf0829b91c555d19d55c530dd49860a4665560e5c553fe023",
+      "length": 34037760
+    },
+    "D:\\AVEVA\\Projects\\E3D3.1\\TEST\\TES000\\TES023": {
+      "sha256": "cdb87f444680019e4054bc03a0ab514d5bcda2805b719eb42d00a98b51ce3d6b",
+      "length": 288768
+    }
+  }
+}

@@ -1,0 +1,68 @@
+project copied to D:\e3dio-scale-gate\AvevaMarineSample
+reset D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001 from the original
+PASS Q0  e3d-write refused 6 bad instruction files with a reason each, --dry-run staged session 647 and rolled it back; the database is byte-identical
+         attr_typo: op #0 (set 24384/47 DESCR): DESCR = "a typo": noun 0x9c5ed has no attribute named DESCR
+         desc_121: op #0 (insert EQUI under /1RX03-MSUP: DESC): DESC: 121 characters, the dictionary allows 120
+         owner_deleted: op #1 (insert BOX under /1RX03-LCT): owner 24384/22400 is deleted in this transaction
+         pos_4: op #0 (insert EQUI under /1RX03-MSUP: POS): POS: 4 elements, the dictionary allows 3
+         ratm: op #0 (insert EQUI under /1RX03-MSUP: RATM): RATM is not an attribute in E3D's dictionary (E3D: "does not have attribute")
+         refno_missing: op #0 (set =24384/2147483000): =24384/2147483000 is not indexed in the base session (an element inserted in this file is named by its @id)
+sessions:
+wrote: BOX 24384/26507 GPWL 16192/2 GROU 16192/3 EQUI 24384/26508 24384/26509 FIXING 24384/26510
+       moves: BOX A 24384/26511 B 24384/26512 C 24384/26513 under ZONE 2 24384/2498, A moved to ZONE 3 24384/22400; big ZONE 24384/26514 with 8200 BOXes
+       by name: EQUI 24384/34715, FIXING 24384/34716 (CREF = /1RX03-MSUP); last session 656
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-scale-gate outcome=read_only
+﻿E3DIO-GATE-DONE see D:/e3dio-scale-gate/logs/*.log
+
+PASS Q1  BOX geometry and owner (session 1)
+PASS Q2  GROU lists ZONE and BOX as reference members (session 2)
+PASS Q3a EQUI 1: DESC as a type-22 hunk
+PASS Q3b EQUI 1: DESP as a type-21 hunk (100 reals)
+PASS Q3c EQUI 1: UUIDIA as a type-20 hunk
+PASS Q3d EQUI 2: DESC as a type-22 hunk
+PASS Q3e EQUI 2: DESP as a type-21 hunk whose chain crosses a page
+PASS Q3f EQUI 2: UUIDIA as a type-20 hunk
+PASS Q4a FIXING: ROKEYS, a type-19 list stored inline
+PASS Q4b FIXING: ROVALS, the same list as a type-23 hunk
+PASS Q5  ZONE lists the four new members last
+PASS Q6  Q ATT walks every attribute of the EQUI and the FIXING
+PASS Q6b Q ATT of the FIXING
+PASS Q7  E3D reads the session page (user e3dio, our comment, in Chinese)
+PASS Q8a BOX: a Chinese NAME, record and table (last session)
+PASS Q8b ZONE: a Chinese DESC with an escaped run inside plain text
+     (text logs decoded as: 70_sessions.log=utf-8, 80_box_name.log=utf-8, 81_zone_desc.log=utf-8)
+PASS Q9a BOX A moved (move_to): Q OWNER is ZONE 3, OWNER navigates there
+PASS Q9b ZONE 2 (reorder): lists C before B, A no longer
+PASS Q9c ZONE 3: lists A as its last member
+PASS Q9d GROU (reference members): A added, B removed, old members kept
+PASS Q10 big ZONE: Q MEM lists all 8200 BOXes (format word count saturated)
+PASS Q11a EQUI set by name: DESC / POS / FUNC / PURP print back as typed
+PASS Q11b FIXING set by name: ROKEYS as a | list, BUIL true, NUMB 42, CREF from /NAME
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-scale-gate outcome=Completed
+﻿E3DIO-GATE-DONE see D:/e3dio-scale-gate/logs/e3d_saves.log
+
+       merge: E3D saved session 658 (EQUI 24384/34717, BOX 24384/34718); the transaction at base 656 merged onto 659 as session 660, its BOX 24384/34719, re-minted none
+       (E3D saved 1 more session(s) after its SAVEWORK, on quit; the merge went onto the newest, 659)
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-scale-gate outcome=read_only
+﻿E3DIO-GATE-DONE see D:/e3dio-scale-gate/logs/9*_merge*.log
+
+PASS Q12a the BOX E3D saved is still there after the merge, as E3D left it
+PASS Q12b the first ZONE lists E3D's EQUI (first, where NEW put it), the base's members, then the merged BOX after its anchor
+PASS Q12c the merged BOX: name, owner, the values set by name
+PASS Q12d the second ZONE's FUNC from the merged session
+PASS Q12e the newest session is the merge, by e3dio, one past E3D's
+PASS Q13
+PASS Q13a
+PASS Q13b
+PASS Q13c
+PASS Q13d
+PASS Q13e
+PASS Q13f
+PASS Q13g
+PASS Q13h
+TIME q13_seconds=157.3568293
+PASS Q14  expected=24384/26506 base=646 bucket=26506 index_next=26484
+TIME Q14_seconds=9.0608649
+TIME total_seconds=207.4104754
+
+all PASS — E3D 3.1 read every session e3d-write wrote (logs in D:\e3dio-scale-gate\logs)

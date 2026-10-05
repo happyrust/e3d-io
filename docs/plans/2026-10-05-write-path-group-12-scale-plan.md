@@ -8,4 +8,4 @@
 4. 只优化有剖析证据的热点；记录顺序、合并/重试、错误及页面字节不变。运行原金样、空间参考模型和混合批次读侧检查。
 5. 三次复测 Off/Require：100k/10k stage 比值 ≤15，Require 10k stage+commit ≤10s，非空间页 ≤1.5×record，空间页满足规格界限。运行完整 Cargo、clippy/doc，保留源库哈希；验收后才勾任务。
 
-状态：已补齐探针、10k/100k 三轮 Off/Require 基线和原生符号剖析，见 `docs/evidence/2026-10-05-staging-scale-baseline.md`。首次 stage 比值 62.63 / 31.95，均失败。完整 Cargo exit 0、Clippy/doc 63/25；预铸混合金样测试已准备并通过，尚未录制。生产写侧未改；下一步先固定基线提交、两遍录金样，再仅优化已剖析热点。基线和优化不通过时保留实际失败，不改金样或降低门槛。
+状态：基线提交5548ad0，首次stage比例62.63/31.95失败的原始数据与剖析保留在`docs/evidence/2026-10-05-staging-scale-baseline.md`。在该提交两遍录金样（5键、0剔除，旧文件不动），随后只修改已剖析的INDEX/成员/空间热点；首优化提交直接父仍为5548ad0。三热轮Off/Require的stage比例7.23/8.72，通过≤15；Require10k stage+commit231.74ms，通过≤10s，页数界限全部通过。12个完整文件及页数与基线相同；Cargo768/0/30、Clippy/doc63/25，真TTY39PASS。详细数据与限制见`docs/evidence/2026-10-05-staging-scale-acceptance.md`。12.1–12.5验收后勾选；10.5/10.6与第13组仍待办。

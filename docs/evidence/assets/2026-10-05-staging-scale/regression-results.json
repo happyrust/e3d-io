@@ -1,0 +1,30 @@
+{
+  "tty": {
+    "elapsed_seconds": 207.5556205,
+    "exit_code": 0,
+    "pass_lines": 39,
+    "fail_lines": 0
+  },
+  "alternate": {
+    "elapsed_seconds": 68.2851095,
+    "exit_code": 0,
+    "pass_lines": 3,
+    "fail_lines": 0
+  },
+  "format0": {
+    "elapsed_seconds": 10.2091583,
+    "exit_code": 0,
+    "pass_lines": 11,
+    "fail_lines": 0
+  },
+  "cargo": {
+    "passed": 768,
+    "failed": 0,
+    "ignored": 30
+  },
+  "warnings": {
+    "clippy": 63,
+    "doc": 25
+  },
+  "source_unchanged": true
+}

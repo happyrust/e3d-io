@@ -1,0 +1,7 @@
+{
+  "comment": "refused: the owner is deleted earlier in the same file",
+  "ops": [
+    {"op": "delete", "refno": "/1RX03-LCT"},
+    {"op": "insert", "owner": "/1RX03-LCT", "noun": "BOX", "attrs": {"XLEN": "1"}}
+  ]
+}

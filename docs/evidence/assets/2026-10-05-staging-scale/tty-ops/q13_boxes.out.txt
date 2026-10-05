@@ -1,0 +1,17 @@
+e3d-write apply: 10 instruction(s) from D:\e3dio-scale-gate\ops\q13_boxes.json onto D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 662
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert BOX under 16192/5 -> 16192/7 /E3DIO-Q13-MAIN [@main]
+  #1 insert BOX under 16192/5 -> 16192/8 /E3DIO-Q13-MOVING [@moving]
+  #2 insert BOX under 16192/5 -> 16192/9 /E3DIO-Q13-GROWING [@growing]
+  #3 insert BOX under 16192/5 -> 16192/10 /E3DIO-Q13-DELETING [@deleting]
+  #4 insert EQUI under 16192/5 -> 16192/11 /E3DIO-Q13-NEWOWNER [@newowner]
+  #5 insert BOX under 16192/5 -> 16192/12 /E3DIO-Q13-CONTROL-PROBE [@controlprobe]
+  #6 insert BOX under 16192/5 -> 16192/13 /E3DIO-Q13-OLD-PROBE [@oldprobe]
+  #7 insert BOX under 16192/5 -> 16192/14 /E3DIO-Q13-NEW-PROBE [@newprobe]
+  #8 insert BOX under 16192/5 -> 16192/15 /E3DIO-Q13-GROW-PROBE [@growprobe]
+  #9 insert BOX under 16192/5 -> 16192/16 /E3DIO-Q13-DELETE-PROBE [@deleteprobe]
+wrote session 663 to D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 662
+  appended pages   : 21
+  report           : D:\e3dio-scale-gate\ops\q13_boxes.report.json

@@ -1,0 +1,12 @@
+e3d-write apply: 5 instruction(s) from D:\e3dio-scale-gate\ops\50_moves.json onto D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 651
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert BOX under 24384/2498 -> 24384/26511 /E3DIO-MOVE-A [@a]
+  #1 insert BOX under 24384/2498 -> 24384/26512 /E3DIO-MOVE-B [@b]
+  #2 insert BOX under 24384/2498 -> 24384/26513 /E3DIO-MOVE-C [@c]
+  #3 reference 24384/26511 in 16192/3 at "last"
+  #4 reference 24384/26512 in 16192/3 at "last"
+wrote session 652 to D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 651
+  appended pages   : 14
+  report           : D:\e3dio-scale-gate\ops\50_moves.report.json

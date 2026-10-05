@@ -142,11 +142,12 @@ fn collect_recompute_set(end: &impl RecomputeView) -> BTreeMap<RefNo, Vec<Recomp
     let mut reordered = BTreeSet::new();
     for (&r, draft) in end.drafts() {
         if let (Some(draft), Some(old)) = (draft, end.old_record(r)) {
+            let members: HashSet<_> = draft.members().iter().copied().collect();
             let shared: HashSet<_> = old
                 .members()
                 .iter()
                 .copied()
-                .filter(|m| draft.members().contains(m))
+                .filter(|m| members.contains(m))
                 .collect();
             let before: Vec<_> = old
                 .members()
@@ -283,6 +284,7 @@ pub(crate) fn plan(
     end: &EndState<'_, '_>,
     remint: &[(RefNo, RefNo)],
     previous_entries: Option<&[SpamapEntry]>,
+    set: BTreeMap<RefNo, Vec<RecomputeCause>>,
 ) -> Result<SpamapPlan, SpatialError> {
     let mut result = SpamapPlan {
         report: stage.report(),
@@ -292,7 +294,6 @@ pub(crate) fn plan(
         return Ok(result);
     }
     let remint: HashMap<_, _> = remint.iter().copied().collect();
-    let set = recompute_set(end);
     for &given in stage.given.keys() {
         if !set.contains_key(remint.get(&given).unwrap_or(&given)) {
             result.report.unused_aabb.push(given);

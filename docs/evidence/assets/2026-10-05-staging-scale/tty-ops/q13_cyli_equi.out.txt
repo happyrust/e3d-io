@@ -1,0 +1,10 @@
+e3d-write apply: 3 instruction(s) from D:\e3dio-scale-gate\ops\q13_cyli_equi.json onto D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 668
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert CYLI under 16192/5 -> 16192/17 /E3DIO-Q13-CYLI [@cylinder]
+  #1 insert EQUI under 16192/5 -> 16192/18 /E3DIO-Q13-EQUI [@equipment]
+  #2 insert BOX under 16192/18 -> 16192/19 /E3DIO-Q13-TRANSFORMED [@transformed]
+wrote session 669 to D:\e3dio-scale-gate\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 668
+  appended pages   : 17
+  report           : D:\e3dio-scale-gate\ops\q13_cyli_equi.report.json
