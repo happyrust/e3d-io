@@ -1,0 +1,2 @@
+start 2026-10-05T21:45:00.4887616+08:00 HEAD b8faf7ae9f3add039fc9da630ec0a15fbd98315b + worktree (core_rules dead code removed) CARGO_TARGET_DIR=D:\Rust\target
+end 2026-10-05T21:47:16.5875604+08:00 exit=0 elapsed_s=136.1049001

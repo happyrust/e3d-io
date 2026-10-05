@@ -128,12 +128,6 @@ impl RuleStatus {
     }
 }
 
-const NO_CANDIDATE: &str = "no candidate yet";
-
-const fn unconfirmed(inputs: &'static str, evidence: Option<&'static str>) -> RuleStatus {
-    RuleStatus::Unconfirmed { assumption: NO_CANDIDATE, inputs, evidence }
-}
-
 const fn confirmed(evidence: &'static str) -> RuleStatus {
     RuleStatus::Confirmed { evidence }
 }

@@ -1,0 +1,10 @@
+﻿GATE-10-BEGIN
+BOX /E3DIO-盒子
+Ref =24384/26507
+Type BOX
+Owner /1RX03-MSUP
+Position E 1000mm N 2000mm U 3000mm
+Xlength 300mm
+Ylength 400mm
+Zlength 500mm
+GATE-10-END

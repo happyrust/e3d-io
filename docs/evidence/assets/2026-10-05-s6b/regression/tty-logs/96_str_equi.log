@@ -1,0 +1,9 @@
+﻿GATE-96-BEGIN
+EQUIPMENT /E3DIO-STR-EQUI
+Ref =24384/34715
+Name /E3DIO-STR-EQUI
+Description e3d-io T1b: DESC typed as text and set by name through Transaction::set
+Position E 1234mm N 2345mm U 3456mm
+Function STRING-PATH
+Purpose PIPE
+GATE-96-END

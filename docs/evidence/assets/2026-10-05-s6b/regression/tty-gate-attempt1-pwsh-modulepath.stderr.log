@@ -1,0 +1,6 @@
+D:\work\plant-code\old\vendor\e3d-io-write\tools\e3d\write_gate.ps1 : The term 'Get-FileHash' is not recognized as the 
+name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included
+, verify that the path is correct and try again.
+    + CategoryInfo          : ObjectNotFound: (Get-FileHash:String) [write_gate.ps1], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException,write_gate.ps1
+ 

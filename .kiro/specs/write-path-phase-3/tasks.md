@@ -447,6 +447,7 @@
     - 撞号且 E3D 原地重写页 1 → 停下，把「page 0 不再是唯一提交点」对崩溃一致性的影响写进 Spec_Ledger，取得用户确认后才做 13.3–13.5（需用户）
     - 撞号且页 1 写时复制、由 page 0 指向 → 做 13.3–13.5
     - 判定结果填入「规则坐实状态总表」`bucket.*` 行；当前为“撞号且 E3D 原地重写页 1”，已记录一致性影响，13.3–13.5 等待用户确认。
+    - 一致性影响见 Spec_Ledger「页 1 原地写的崩溃一致性影响」。回归（`docs/evidence/assets/2026-10-05-s6b/regression/`）：Cargo 769/0/30（131 个测试二进制 + Doc-tests，skip 7 不变）；Clippy/doc 63/25——`b8faf7a` 让规则全部坐实后 `unconfirmed` / `NO_CANDIDATE` 成了死代码（Clippy 65），已删去；真 TTY 39 PASS（212.227s，Q13 161.445s、Q14 9.087s，Q14 为 24384/26506），alternate 五轮 T4a–c 全 PASS（73.414s），原样 FORMAT0 11 行全 PASS（10.061s）；源 AMS/TES 哈希/长度不变。用户确认前 13.2 保持部分完成，不做 13.3–13.5。
     - _Requirements: 13.4, 13.5_
   - [~] 13.3 （条件）实现 `src/write/bucket.rs`
     - 以上一会话（合并时为 Merge_Latest）的页 1 为起点，把每个扩展的 Bucket_Counter 抬到使 Bucket_Floor 大于新会话索引与本批发出的每个 word1（重铸后的号计入、原号不计）；保留全部条目，计数器只升不降；落盘方式与 E3D_Core 相同
@@ -528,7 +529,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | 16.7 | D8 备选：owner 或祖先位姿改变时照样重算后代条目 | 用户 · Spec_Ledger「决策」 · 改选 D8 备选 |
 | 16.8 | HTTP 层、E3D 2.1 写、改动下游源码 | 用户 · 需求 · 提出明确需求 |
 | 16.8 | T4 Q17 活 E3D 持锁实测门（已由 `tests/write_stage7_lock.rs` 与 IDA 取证覆盖） | 一次 E3D_Session · 会话日志 · 持锁行为与该测试或取证结论不符 |
-| 13.5 | S6b 页 1 写侧（仅当 13.2 判定不撞号时列入） | 由 13.2 填写证据与触发条件 |
+| 13.5 | S6b 页 1 写侧（仅当 13.2 判定不撞号时列入） | 不适用：13.2 判定撞号（历史复用）且 E3D 原地写页 1，不按本条留待；做不做 13.3–13.5 看用户对「页 1 原地写的崩溃一致性影响」的确认（需求 13 第 4 条） |
 
 ### 待填记录表
 
@@ -599,8 +600,8 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | `aabb.arithmetic` | 7.5 | 坐实 | `docs/evidence/2026-10-03-spamap-aabb-members.md` | D3 | ① 上列例程全 double（含 `MBXPYR`、`MBXPOI`、`TRAVEC`、`MVMULT`）；`rules::double_precision`；1 590 / 1 590 逐字，需求 6 第 16 条的放宽判据不需要 |
 | `alloc.counter_semantics` | 11.1 | 坐实 | `docs/evidence/2026-10-05-allocation-counter-index.md` | F1 | NextAvailable：页 1 直接返回、缓存随后 +1；SYSTEM NEW 26506、删除后 NEW 26507；源库不变，原生 User=dpc 分列 |
 | `alloc.index_order` | 11.1 | 坐实 | `docs/evidence/2026-10-05-allocation-counter-index.md` | F1 | 固定宽有符号词典序，native 普通两字非负；五库 15 个最新/保留会话原始次序 0 反例 |
-| `bucket.collision` | 13.1 | | | | |
-| `bucket.persist` | 13.1 | | | | |
+| `bucket.collision` | 13.1 | 坐实 | `docs/evidence/2026-10-05-s6b-bucket-evidence.md` | `b8faf7a` | HistoricalReuse：「已发」含 e3d-io 发出后又删去的号。三例 NEW 前最新会话与页 1 `24384:26506` 相同（低于本批已发最高 26508）：Live（26506–26508 存活）→ E3D NEW 26509；Deleted（三号全删）、Gap（删 26506、26507，留 26508）→ 26506。存活号逐号跳过（`BCREAT` 遇 529 重试），已删号复用：存活重复 0 例、历史复用 2 例 |
+| `bucket.persist` | 13.1 | 坐实 | `docs/evidence/2026-10-05-s6b-bucket-evidence.md` | `b8faf7a` | InPlace：NEW 时切 QXMO 独占、`2GNE` 原地写页 1 第三字（0 → 用户号）；SAVEWORK 原地推进计数器（26506 → 26510 / 26507）；退出时 `2UP1UOR` 清第三字。三步都不经 page 0（NEW 前后最新会话号与 page 0 第 6、12、96 字不变）。重建 `updateBucketList` 只由 ADMIN 重配置器（`MDUPDB` ← `RCFGO`）调用。崩溃一致性影响见下「页 1 原地写的崩溃一致性影响」 |
 
 #### 取证门槛核查（7.7；另见 11.4、13.3、10.4）
 
@@ -610,7 +611,7 @@ D1–D8 全部按推荐默认，「细化时采用的默认」照用；用户未
 | 发号下界 | F5 `6c588d1` | `aacdcf9` | F1 `d4f5ab4` 的 `2026-10-05-allocation-counter-index.md` | F2 `6232c21` 的 Corpus/CLI；F5/F7 全套 766/0/30、无新增 skip；固定 base/latest、16 例历史/副本模型 | Q14 24384/26506；完整 39 问、alternate 5 轮、FORMAT 0 全 PASS | F5 库实现；F6 `0ea2655` + `f008aa4` 门修正；本 F7 验收提交 |
 | Open_Fast_Path（字节中性，按需求 2 第 7 条） | F4 | `718cf77`；在此准备提交上两遍重录，21 条 entries 与 F3 完全一致 | `docs/evidence/2026-10-05-allocation-counter-index.md#alloc.index_order`（F1 `d4f5ab4`） | F2 `6232c21` 的 `last_before` / 必需 Corpus；F4 独立 eager/lazy/scan 模型，完整 Cargo 755/0/30，金样全部通过，无新增 skip | 本优化仍 max+1；发号行为改变与 Q14 留 F5/F6 | F4（字节中性部分） |
 | staging 优化（字节中性，按需求 2 第 7 条） | | | | | | |
-| 页 1 桶表写侧（条件） | | | | | | |
+| 页 1 桶表写侧（条件） | 未开工：13.2 判定「撞号 + 原地写」，等用户确认 | — | 13.1 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`） | 读侧 `BucketTable::parse`（`src/meta/bucket.rs`）；三例只用读侧核对页 1 与会话链 | 暂记 Q15，未写 | — |
 
 #### Golden 剔除键（1.3、11.2、12.3）
 
@@ -730,6 +731,28 @@ F7 文档同步：README/CHANGELOG 明确发号下界及报告取号迁移；补
 | 12.3/12.6 | Off | 100k | 229.6060 ms | 213983232 bytes | 8170/813/2/0/0/0/1 | 比值7.23385≤15 | 同上；完整101124成员及次序读回，文件SHA/长度与父基线相同 |
 | 12.3/12.4/12.6/12.7 | Require | 10k | 229.2385 ms；stage+commit231.7402 ms≤10s | 79290368 bytes | 891/94/2/0/250/0/1；非空间988≤1336.5；SPAMAP250≤493 | 0.940（10k→100k） | 同上；每BOX提供World_AABB，每条SPAMAP坐标读回 |
 | 12.3/12.6/12.7 | Require | 100k | 1998.8627 ms | 317100032 bytes | 8170/813/2/0/2274/0/1；非空间8986≤12255；SPAMAP2274≤4493 | 比值8.71958≤15 | 同上；12个完整文件及页数与基线相同。原始三轮/字节比较/回归见docs/evidence/2026-10-05-staging-scale-acceptance.md |
+
+#### 页 1 原地写的崩溃一致性影响（13.2，需用户确认）
+
+2026-10-05，依据 `docs/evidence/2026-10-05-s6b-bucket-evidence.md`（`b8faf7a`）。判定为「撞号且 E3D 原地重写页 1」：按需求 13 第 4 条先停下，13.3–13.5 未开工，等用户对本节确认。
+
+现状：e3d-io 的写只追加新页，盘上已有页零写入；唯一改写的已有页是最后写的 page 0（`LSPGNO`，`src/write/mod.rs` 模块头）。stage 之后、commit 之前崩溃，读侧仍见上一会话；`rollback`、`Moved`、拒写与 dry run 都不需要撤销任何字节。
+
+E3D 的做法（取证）：页 1 是物理页，不属于任何会话，也没有历史版本。NEW 时切 QXMO 独占、原地写第三字领桶；SAVEWORK 原地推进计数器；退出时原地清第三字。三步都不经过 page 0。E3D 在 SAVEWORK 内先写页 1 还是先写 page 0、崩溃后残留的非零第三字由谁回收，本轮未取证。
+
+E3D 发号读的是物理页 1，「新页 1 由 page 0 指向」对 E3D 不起作用；需求 13 第 3 条的「落盘方式与 E3D_Core 相同」只能是 e3d-io 也原地改写页 1。于是 page 0 不再是 e3d-io 唯一改写的已有页：
+
+| 情形 | 后果 | 判断 |
+|---|---|---|
+| 先抬页 1 并 sync、再写 page 0，中间崩溃；或抬页 1 后 `rollback` / `Moved` / 合并重试 | 计数器已抬、会话未提交，只空掉一段 word1；读侧仍见上一会话；计数器只升不降（需求 13 第 9 条），无需修复。合并重试以 Merge_Latest 时的页 1 为起点，已抬的值只会再被抬高 | 安全；建议采用此顺序 |
+| 先写 page 0、再抬页 1，中间崩溃 | 会话已提交而计数器没抬，等于今天的状态：E3D 之后 NEW 复用 e3d-io 发过又删掉的号（Deleted / Gap 实测）；存活号由 `BCREAT` 的 529 重试逐号跳过（Live 实测），不会存活重复 | 有窗口；不采用 |
+| 页 1 只写了一部分（断电） | 页 1 的有效内容是页头 3 字加每扩展 3 字（`ams8000_0001` 两条共 9 字、36 字节），都在页首同一扇区；E3D 自己的原地写有同样的暴露 | 与 E3D 相同 |
+| 页 1 没有历史版本 | `open_at(旧会话)` 读到的是当前页 1；退回旧会话不会退回计数器 | 与 E3D 相同；发号下界（第 11 组）本来就按打开时读到的页 1 计 |
+| 失败的写不再逐字节不变 | 抬页 1 之后再拒写或 `rollback`，文件除页 1 计数器外不变；dry run 不写页 1。有插入的批次中，「失败的写一字不改」类测试与 stage 后按崩溃读文件、断言已有页不变的测试要改口径 | 改口径，逐条记入「测试适配清单」 |
+| 金样 | 在页 1 列出的扩展里插入元素的批次都会改页 1：`off_compat`、`write_hashes`、`allocation_floor`、`staging_scale` 中这类键按 11.4 的做法重录或退役 | 记入「Golden 剔除键」 |
+| 第三字（claim） | 按 `docs/evidence/2026-09-20-core-dll-dabacon-write-path-algorithms.md` A9（`FHSWIT` 除 QXMO 外都取哨兵字节共享锁），E3D 以写模式开着库时 e3d-io 拿不到独占锁；拿得到时盘上的非零第三字只可能是崩溃的 E3D 会话留下的。需求 13 第 6 条要求「每条第 3 字为 0」，照做等于替 E3D 清掉残留 claim | 建议原样保留第三字、只抬计数器；第 6 条措辞随 13.3–13.5 方案修改 |
+
+用户确认接受后另立 13.3–13.5 方案（需求 13 第 3、6–10 条；Q15 放 `alternate_write_gate.ps1`，须在 `c61b097` 上 FAIL）。不接受时，S6b 写侧改记入「本期不做与触发条件」，触发条件按需求 16 第 9 条另写。
 
 #### skip 清单（14.4）
 

@@ -1,0 +1,102 @@
+{
+  "base_sesno": 647,
+  "comment": "e3d-io S6b probe Deleted delete",
+  "commit": {
+    "appended_pages": [
+      16636,
+      16637,
+      16638,
+      16639,
+      16640,
+      16641,
+      16642,
+      16643,
+      16644,
+      16645,
+      16646,
+      16647,
+      16648,
+      16649,
+      16650,
+      16651
+    ],
+    "base_sesno": 647,
+    "merged_onto": null,
+    "previous": {
+      "end": 16635,
+      "page": 16635,
+      "sesno": 647
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 16651,
+      "page": 16651,
+      "sesno": 648
+    }
+  },
+  "database": "D:\\e3dio-s6b-probe\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 647,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "index": 0,
+      "op": "delete",
+      "refno": "24384/26506"
+    },
+    {
+      "index": 1,
+      "op": "delete",
+      "refno": "24384/26507"
+    },
+    {
+      "index": 2,
+      "op": "delete",
+      "refno": "24384/26508"
+    }
+  ],
+  "ops_file": "D:\\e3dio-s6b-probe\\s6b\\deleted\\io-delete.json",
+  "spatial": {
+    "elements": {
+      "24384/26506": {
+        "aabb": "None",
+        "causes": [
+          "Deleted"
+        ],
+        "given": null,
+        "registered": [],
+        "removed": []
+      },
+      "24384/26507": {
+        "aabb": "None",
+        "causes": [
+          "Deleted"
+        ],
+        "given": null,
+        "registered": [],
+        "removed": []
+      },
+      "24384/26508": {
+        "aabb": "None",
+        "causes": [
+          "Deleted"
+        ],
+        "given": null,
+        "registered": [],
+        "removed": []
+      }
+    },
+    "pages": [],
+    "policy": "require",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "require",
+  "staged": null,
+  "user": "e3dio"
+}

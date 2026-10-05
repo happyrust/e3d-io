@@ -1,0 +1,92 @@
+{
+  "base_sesno": 646,
+  "comment": "e3d-io S6b probe Deleted insert",
+  "commit": {
+    "appended_pages": [
+      16620,
+      16621,
+      16622,
+      16623,
+      16624,
+      16625,
+      16626,
+      16627,
+      16628,
+      16629,
+      16630,
+      16631,
+      16632,
+      16633,
+      16634,
+      16635
+    ],
+    "base_sesno": 646,
+    "merged_onto": null,
+    "previous": {
+      "end": 16619,
+      "page": 16617,
+      "sesno": 646
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 16635,
+      "page": 16635,
+      "sesno": 647
+    }
+  },
+  "database": "D:\\e3dio-s6b-probe\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 646,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [],
+      "given": "24384/26506",
+      "id": "z1",
+      "index": 0,
+      "name": "/E3DIO-S6B-D1",
+      "noun": "ZONE",
+      "op": "insert",
+      "owner": "24384/46",
+      "refno": "24384/26506"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26507",
+      "id": "z2",
+      "index": 1,
+      "name": "/E3DIO-S6B-D2",
+      "noun": "ZONE",
+      "op": "insert",
+      "owner": "24384/46",
+      "refno": "24384/26507"
+    },
+    {
+      "attrs": [],
+      "given": "24384/26508",
+      "id": "z3",
+      "index": 2,
+      "name": "/E3DIO-S6B-D3",
+      "noun": "ZONE",
+      "op": "insert",
+      "owner": "24384/46",
+      "refno": "24384/26508"
+    }
+  ],
+  "ops_file": "D:\\e3dio-s6b-probe\\s6b\\deleted\\io-insert.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "require",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "require",
+  "staged": null,
+  "user": "e3dio"
+}

@@ -1,0 +1,28 @@
+ALPHA LOG "D:/e3dio-s6b-probe/s6b/deleted/body.log" OVER
+$P S6B-BEGIN
+Q USER
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\s6b\deleted\before-new.db"'
+/1RX03-MSUP
+NEW EQUI /E3DIO-S6B-E3D-D
+handle any
+  $P S6B-NEW-ERROR $!!error.text
+elsehandle none
+  $P S6B-NEW-BEGIN
+  Q REF
+  $P S6B-NEW-END
+endhandle
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\s6b\deleted\after-new.db"'
+SAVEWORK 'e3d-io S6b probe Deleted'
+handle any
+  $P S6B-SAVE-ERROR $!!error.text
+elsehandle none
+  $P S6B-SAVED
+  Q SESSION
+endhandle
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\s6b\deleted\after-save.db"'
+$P S6B-END
+ALPHA LOG END
+ALPHA LOG "D:/e3dio-s6b-probe/s6b/deleted/s6b-deleted.log" OVER
+$P S6B-DONE
+ALPHA LOG END
+

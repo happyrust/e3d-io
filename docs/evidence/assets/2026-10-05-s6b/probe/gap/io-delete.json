@@ -1,0 +1,13 @@
+{
+    "comment":  "e3d-io S6b probe Gap delete",
+    "ops":  [
+                {
+                    "op":  "delete",
+                    "refno":  "=24384/26506"
+                },
+                {
+                    "op":  "delete",
+                    "refno":  "=24384/26507"
+                }
+            ]
+}

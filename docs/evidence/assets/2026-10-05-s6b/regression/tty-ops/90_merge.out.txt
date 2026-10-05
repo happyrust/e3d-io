@@ -1,0 +1,10 @@
+e3d-write apply: 2 instruction(s) from D:\e3dio-s6b-gate\ops\90_merge.json onto D:\e3dio-s6b-gate\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 656 (the newest is 659: the commit is a merge)
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert BOX under 24384/47 -> 24384/34719 /E3DIO-MERGE-BOX [@merge-box]
+  #1 set 24384/2498 FUNC
+wrote session 660 to D:\e3dio-s6b-gate\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 659
+  merged onto      : 659 (base 656)
+  appended pages   : 15
+  report           : D:\e3dio-s6b-gate\ops\90_merge.report.json

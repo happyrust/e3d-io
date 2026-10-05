@@ -1,0 +1,8 @@
+e3d-write apply: 1 instruction(s) from D:\e3dio-s6b-gate\ops\q13_delete.json onto D:\e3dio-s6b-gate\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 665
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 delete 16192/10
+wrote session 666 to D:\e3dio-s6b-gate\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 665
+  appended pages   : 13
+  report           : D:\e3dio-s6b-gate\ops\q13_delete.report.json

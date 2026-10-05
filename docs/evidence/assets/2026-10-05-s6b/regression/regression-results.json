@@ -1,0 +1,50 @@
+{
+  "head": "b8faf7ae9f3add039fc9da630ec0a15fbd98315b + second-commit worktree (src/core_rules.rs drops unconfirmed/NO_CANDIDATE; docs)",
+  "cargo": {
+    "test_binaries": 131,
+    "doc_tests": 1,
+    "passed": 769,
+    "failed": 0,
+    "ignored": 30,
+    "skipped_tests": 7,
+    "skip_messages": 8
+  },
+  "warnings": {
+    "clippy": 63,
+    "doc": 25,
+    "clippy_at_b8faf7a": 65
+  },
+  "tty": {
+    "elapsed_seconds": 212.4219671,
+    "total_seconds": 212.2272289,
+    "q13_seconds": 161.4451866,
+    "q14_seconds": 9.0865521,
+    "exit_code": 0,
+    "pass_lines": 39,
+    "fail_lines": 0,
+    "first_attempt": "exit 1 at startup: Get-FileHash not recognized because Windows PowerShell started from pwsh 7 inherited its PSModulePath; rerun with the Windows PowerShell module path only, script unchanged"
+  },
+  "alternate": {
+    "elapsed_seconds": 73.4135424,
+    "exit_code": 0,
+    "pass_lines": 3,
+    "fail_lines": 0
+  },
+  "format0": {
+    "elapsed_seconds": 10.0605809,
+    "exit_code": 0,
+    "pass_lines": 11,
+    "fail_lines": 0
+  },
+  "sources": {
+    "ams8000_0001": {
+      "bytes": 34037760,
+      "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023"
+    },
+    "TES023": {
+      "bytes": 288768,
+      "sha256": "CDB87F444680019E4054BC03A0AB514D5BCDA2805B719EB42D00A98B51CE3D6B"
+    },
+    "unchanged": true
+  }
+}

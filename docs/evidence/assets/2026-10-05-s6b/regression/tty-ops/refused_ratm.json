@@ -1,0 +1,6 @@
+{
+  "comment": "refused: RATM is in the template but not in E3D's dictionary",
+  "ops": [
+    {"op": "insert", "owner": "/1RX03-MSUP", "noun": "EQUI", "attrs": {"RATM": "1"}}
+  ]
+}

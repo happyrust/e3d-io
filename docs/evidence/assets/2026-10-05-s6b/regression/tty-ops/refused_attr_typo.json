@@ -1,0 +1,6 @@
+{
+  "comment": "refused: no attribute is named DESCR",
+  "ops": [
+    {"op": "set", "refno": "/1RX03-MSUP", "attrs": {"DESCR": "a typo"}}
+  ]
+}

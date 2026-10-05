@@ -1,0 +1,3575 @@
+0x5199255 1: int __usercall BCREAT@<eax>(int a1@<ebp>, int a2, int *a3, int *a4)
+0x5199255 2: {
+0x5199255 3:   int result; // eax
+0x5199255 4:   int v5; // [esp+18h] [ebp-CCh] BYREF
+0x5199255 5:   int v6; // [esp+1Ch] [ebp-C8h] BYREF
+0x5199255 6:   int v7; // [esp+20h] [ebp-C4h]
+0x5199255 7:   int v8; // [esp+24h] [ebp-C0h] BYREF
+0x5199255 8:   int v9; // [esp+28h] [ebp-BCh]
+0x5199255 9:   int v10; // [esp+2Ch] [ebp-B8h]
+0x5199255 10:   int v11; // [esp+30h] [ebp-B4h] BYREF
+0x5199255 11:   int v12; // [esp+34h] [ebp-B0h] BYREF
+0x5199255 12:   int v13; // [esp+38h] [ebp-ACh] BYREF
+0x5199255 13:   int v14; // [esp+3Ch] [ebp-A8h]
+0x5199255 14:   int v15; // [esp+40h] [ebp-A4h]
+0x5199255 15:   int v16; // [esp+44h] [ebp-A0h] BYREF
+0x5199255 16:   _BYTE v17[4]; // [esp+48h] [ebp-9Ch] BYREF
+0x5199255 17:   int i; // [esp+4Ch] [ebp-98h]
+0x5199255 18:   int v19; // [esp+50h] [ebp-94h]
+0x5199255 19:   int v20; // [esp+54h] [ebp-90h]
+0x5199255 20:   int v21; // [esp+58h] [ebp-8Ch] BYREF
+0x5199255 21:   int v22; // [esp+5Ch] [ebp-88h]
+0x5199255 22:   int v23; // [esp+68h] [ebp-7Ch] BYREF
+0x5199255 23:   int v24; // [esp+78h] [ebp-6Ch] BYREF
+0x5199255 24:   int v25; // [esp+88h] [ebp-5Ch] BYREF
+0x5199255 25:   int v26; // [esp+98h] [ebp-4Ch] BYREF
+0x5199255 26:   int v27; // [esp+9Ch] [ebp-48h]
+0x5199255 27:   int v28[4]; // [esp+A8h] [ebp-3Ch] BYREF
+0x5199255 28:   _DWORD v29[4]; // [esp+B8h] [ebp-2Ch] BYREF
+0x5199255 29:   int v30; // [esp+C8h] [ebp-1Ch] BYREF
+0x5199255 30:   int _D8[5]; // [esp+D8h] [ebp-Ch] BYREF
+0x5199255 31:   int retaddr; // [esp+ECh] [ebp+8h]
+0x5199255 32: 
+0x5199255 33:   _D8[2] = a1;
+0x5199255 34:   _D8[3] = retaddr;
+0x5199255 35:   if ( HIDWORD(xmmword_6B44BE0) )
+0x5199255 36:     MTRENT("dbmodlib/BCREAT", 0xFu, (int)&unk_5D1F02C);
+0x5199255 37:   *a4 = 0;
+0x5199255 38:   if ( *a3 <= 387951929 )
+0x5199255 39:   {
+0x5199255 40:     v6 = *a3;
+0x5199255 41:   }
+0x5199255 42:   else
+0x5199255 43:   {
+0x5199255 44:     v7 = UDETBT(a3, &v6);
+0x5199255 45:     if ( (v7 & 1) == 0 )
+0x5199255 46:     {
+0x5199255 47:       *a4 = 166;
+0x5199255 48:       goto LABEL_44;
+0x5199255 49:     }
+0x5199255 50:   }
+0x5199255 51:   while ( 1 )
+0x5199255 52:   {
+0x5199255 53: LABEL_7:
+0x5199255 54:     sub_5AAFCE0(a2, &v6);
+0x5199255 55:     if ( dword_6B30380 == 601 )
+0x5199255 56:     {
+0x5199255 57:       DCLERR(v5, v6);
+0x5199255 58:       DGETNO(&v8);
+0x5199255 59:       v9 = sub_5A06250(&v8);
+0x5199255 60:       if ( (v9 & 1) == 0 )
+0x5199255 61:       {
+0x5199255 62:         *a4 = 166;
+0x5199255 63:         MRSINT(&unk_5D1F030, &unk_5D1F034);
+0x5199255 64:         goto LABEL_44;
+0x5199255 65:       }
+0x5199255 66:       sub_5AAFCA0(a2, &v6);
+0x5199255 67:     }
+0x5199255 68:     if ( dword_6B30380 == 601 )
+0x5199255 69:       break;
+0x5199255 70:     if ( dword_6B30380 != 529 )
+0x5199255 71:     {
+0x5199255 72:       if ( !dword_6B30380 )
+0x5199255 73:       {
+0x5199255 74:         v11 = 1;
+0x5199255 75:         v12 = 0;
+0x5199255 76:         v23 = *a3;
+0x5199255 77:         DPUTIT(&unk_5D1F05C, &unk_5D1F030, &v23, &v11, &v24, &v12);
+0x5199255 78:         DCLERR(v5, v6);
+0x5199255 79:       }
+0x5199255 80:       goto LABEL_44;
+0x5199255 81:     }
+0x5199255 82:     DCLERR(v5, v6);
+0x5199255 83:   }
+0x5199255 84:   DCLERR(v5, v6);
+0x5199255 85:   DGETNO(&v8);
+0x5199255 86:   v10 = sub_53A3284();
+0x5199255 87:   if ( (v10 & 1) != 0 )
+0x5199255 88:     sub_53A3504(&v5, 3, &v25);
+0x5199255 89:   sub_59EFD20(&v8, &v26);
+0x5199255 90:   v28[0] = v26;
+0x5199255 91:   v28[1] = v27;
+0x5199255 92:   GATIN1(&v26, &unk_5D1F038, &unk_5D1F03C, &v13, a4);
+0x5199255 93:   GATRF1(&v26, &unk_5D1F038, &unk_5D1F040, v29, a4);
+0x5199255 94:   v26 = v29[0];
+0x5199255 95:   v27 = v29[1];
+0x5199255 96:   while ( 1 )
+0x5199255 97:   {
+0x5199255 98:     v14 = NULREF(&v26);
+0x5199255 99:     if ( (v14 & 1) != 0 )
+0x5199255 100:     {
+0x5199255 101:       *a4 = 166;
+0x5199255 102:       MRSINT(&unk_5D1F030, &unk_5D1F044);
+0x5199255 103:       goto LABEL_44;
+0x5199255 104:     }
+0x5199255 105:     GATRF1(&v26, &unk_5D1F038, &unk_5D1F040, v29, a4);
+0x5199255 106:     if ( *a4 )
+0x5199255 107:     {
+0x5199255 108:       sub_5AAFCA0(a2, &v6);
+0x5199255 109:       goto LABEL_44;
+0x5199255 110:     }
+0x5199255 111:     v15 = sub_53A3284();
+0x5199255 112:     if ( (v15 & 1) == 0 )
+0x5199255 113:       break;
+0x5199255 114:     DSAVE(&v16);
+0x5199255 115:     DGOTO(&v26);
+0x5199255 116:     DFINDI(&unk_5D1F048, &unk_5D1F04C, &unk_5D1F050, &unk_5D1F050);
+0x5199255 117:     if ( dword_6B30380 )
+0x5199255 118:     {
+0x5199255 119:       DCLERR(v5, v6);
+0x5199255 120:       sub_53A36AC(&v5, 3, _D8);
+0x5199255 121:     }
+0x5199255 122:     else
+0x5199255 123:     {
+0x5199255 124:       DGETF(&unk_5D1F054, _D8);
+0x5199255 125:     }
+0x5199255 126:     DRESTO(&v16);
+0x5199255 127:     v19 = EQREF(&v25, _D8);
+0x5199255 128:     if ( (v19 & 1) != 0 )
+0x5199255 129:       break;
+0x5199255 130:     v20 = NULREF(v29);
+0x5199255 131:     if ( (v20 & 1) != 0 )
+0x5199255 132:     {
+0x5199255 133:       sub_5A40C70(v28, &v26, (int)&unk_5D1F030, (int)&v21);
+0x5199255 134:       if ( v21 )
+0x5199255 135:       {
+0x5199255 136:         v22 = sub_587EA20(&unk_5D1F030, &v21);
+0x5199255 137:         *a4 = v22;
+0x5199255 138:       }
+0x5199255 139:       else
+0x5199255 140:       {
+0x5199255 141:         *a4 = 624;
+0x5199255 142:       }
+0x5199255 143:       MRSREF((int)&unk_5D1F030, &v26);
+0x5199255 144:       MRSREF((int)&unk_5D1F058, _D8);
+0x5199255 145:       sub_5AAFCA0(a2, &v6);
+0x5199255 146:       goto LABEL_44;
+0x5199255 147:     }
+0x5199255 148: LABEL_37:
+0x5199255 149:     for ( i = 1; i <= 2; ++i )
+0x5199255 150:       *(&v26 + i - 1) = v29[i - 1];
+0x5199255 151:   }
+0x5199255 152:   GATIN1(&v26, &unk_5D1F038, &unk_5D1F03C, v17, a4);
+0x5199255 153:   sub_5AB0050(&v8, v17, &v30);
+0x5199255 154:   if ( dword_6B30380 == 600 )
+0x5199255 155:   {
+0x5199255 156:     DCLERR(v5, v6);
+0x5199255 157:     goto LABEL_37;
+0x5199255 158:   }
+0x5199255 159:   if ( dword_6B30380 )
+0x5199255 160:   {
+0x5199255 161:     *a4 = 166;
+0x5199255 162:     if ( dword_6B30380 == 504 )
+0x5199255 163:       *a4 = 861;
+0x5199255 164:     MRSINT(&unk_5D1F030, &dword_6B30380);
+0x5199255 165:   }
+0x5199255 166:   else
+0x5199255 167:   {
+0x5199255 168:     sub_5AAF8D0(&v8, &v13, &v30);
+0x5199255 169:     if ( !dword_6B30380 )
+0x5199255 170:       goto LABEL_7;
+0x5199255 171:     *a4 = 166;
+0x5199255 172:     MRSINT(&unk_5D1F030, &dword_6B30380);
+0x5199255 173:   }
+0x5199255 174: LABEL_44:
+0x5199255 175:   result = HIDWORD(xmmword_6B44BE0);
+0x5199255 176:   if ( result )
+0x5199255 177:     return MTREX(&unk_5D1F02C);
+0x5199255 178:   return result;
+0x5199255 179: }
+0x53e4d58 1: int __usercall sub_53E4D58@<eax>(int a1@<ebp>)
+0x53e4d58 2: {
+0x53e4d58 3:   int result; // eax
+0x53e4d58 4:   int v2; // [esp+14h] [ebp-6Ch]
+0x53e4d58 5:   int v3; // [esp+18h] [ebp-68h]
+0x53e4d58 6:   int v4; // [esp+1Ch] [ebp-64h] BYREF
+0x53e4d58 7:   int v5; // [esp+20h] [ebp-60h]
+0x53e4d58 8:   int v6; // [esp+24h] [ebp-5Ch]
+0x53e4d58 9:   int v7; // [esp+28h] [ebp-58h] BYREF
+0x53e4d58 10:   int v8; // [esp+2Ch] [ebp-54h] BYREF
+0x53e4d58 11:   int v9; // [esp+30h] [ebp-50h]
+0x53e4d58 12:   int v10; // [esp+34h] [ebp-4Ch] BYREF
+0x53e4d58 13:   int v11; // [esp+38h] [ebp-48h] BYREF
+0x53e4d58 14:   int v12; // [esp+3Ch] [ebp-44h]
+0x53e4d58 15:   int v13; // [esp+40h] [ebp-40h]
+0x53e4d58 16:   int v14; // [esp+44h] [ebp-3Ch] BYREF
+0x53e4d58 17:   int v15; // [esp+48h] [ebp-38h]
+0x53e4d58 18:   int v16; // [esp+4Ch] [ebp-34h] BYREF
+0x53e4d58 19:   int v17; // [esp+50h] [ebp-30h] BYREF
+0x53e4d58 20:   int v18; // [esp+54h] [ebp-2Ch] BYREF
+0x53e4d58 21:   int v19; // [esp+58h] [ebp-28h]
+0x53e4d58 22:   int v20; // [esp+5Ch] [ebp-24h]
+0x53e4d58 23:   int v21; // [esp+60h] [ebp-20h] BYREF
+0x53e4d58 24:   int v22; // [esp+64h] [ebp-1Ch]
+0x53e4d58 25:   _DWORD _74[5]; // [esp+74h] [ebp-Ch] BYREF
+0x53e4d58 26:   _UNKNOWN *retaddr; // [esp+88h] [ebp+8h]
+0x53e4d58 27: 
+0x53e4d58 28:   _74[2] = a1;
+0x53e4d58 29:   _74[3] = retaddr;
+0x53e4d58 30:   if ( DWORD1(xmmword_6B44BF0) )
+0x53e4d58 31:     MTRENT("rcf1/RCFGO", 0xAu, (int)&unk_5D6C5D4);
+0x53e4d58 32:   if ( !dword_71A3D00 )
+0x53e4d58 33:   {
+0x53e4d58 34:     sub_53E8B2B(&unk_5D6C624, &unk_5D6C5D8);
+0x53e4d58 35:     goto LABEL_71;
+0x53e4d58 36:   }
+0x53e4d58 37:   if ( !dword_71A3D04 )
+0x53e4d58 38:   {
+0x53e4d58 39:     sub_53E8B2B(&unk_5D6C62C, &unk_5D6C5D8);
+0x53e4d58 40:     goto LABEL_71;
+0x53e4d58 41:   }
+0x53e4d58 42:   dword_70A1C80 = 0;
+0x53e4d58 43:   dword_70A1C84 = 0;
+0x53e4d58 44:   dword_70A1C8C = 0;
+0x53e4d58 45:   dword_70A1C90 = 0;
+0x53e4d58 46:   dword_70A1C88 = 0;
+0x53e4d58 47:   v2 = sub_53A78C4(&unk_5D6C5D8, "Save and release all for Reconfigurer", 37, &unk_5D6C5DC);
+0x53e4d58 48:   if ( (v2 & 1) == 0 )
+0x53e4d58 49:   {
+0x53e4d58 50:     MRSINT(&unk_5D6C5E0, &dword_6B30380);
+0x53e4d58 51:     YRTERO(&unk_5D6C5E4, &unk_5D6C5E8);
+0x53e4d58 52:     goto LABEL_11;
+0x53e4d58 53:   }
+0x53e4d58 54:   sub_5AB1A40(&unk_5D6C5EC);
+0x53e4d58 55:   v3 = sub_53A3284(v2);
+0x53e4d58 56:   v5 = sub_53A500C(&v4);
+0x53e4d58 57:   if ( (v3 & 1) != 0 && (v5 & 1) != 0 )
+0x53e4d58 58:     sub_5AB1A40(&unk_5D6C5F0);
+0x53e4d58 59:   v6 = BTSELE(&dword_5D6C5F4, &dword_5D6C5F4);
+0x53e4d58 60:   if ( (v6 & 1) != 0 )
+0x53e4d58 61:   {
+0x53e4d58 62: LABEL_11:
+0x53e4d58 63:     if ( dword_71A3D00 != 2 )
+0x53e4d58 64:     {
+0x53e4d58 65:       if ( !dword_71A3D08 )
+0x53e4d58 66:       {
+0x53e4d58 67:         sub_53E8B2B(&unk_5D6C630, &unk_5D6C5D8);
+0x53e4d58 68:         goto LABEL_71;
+0x53e4d58 69:       }
+0x53e4d58 70:       if ( dword_71A3D04 != 2 )
+0x53e4d58 71:         sub_53E88DF();
+0x53e4d58 72:       YRTERO(&unk_5D6C5F8, &unk_5D6C5FC);
+0x53e4d58 73:       if ( dword_6B44C0C[0] > 0 )
+0x53e4d58 74:         sub_53E2AF1(dword_6B44C0C);
+0x53e4d58 75:       v9 = sub_53E9F27();
+0x53e4d58 76:       if ( (v9 & 1) == 0 )
+0x53e4d58 77:         goto LABEL_63;
+0x53e4d58 78:       sub_5441881(&dword_71A3CE0);
+0x53e4d58 79:       sub_5441881(&dword_71A3CE4);
+0x53e4d58 80:       YRTERO(&unk_5D6C5F8, &unk_5D6C600);
+0x53e4d58 81:       if ( dword_71A3D04 == 2 )
+0x53e4d58 82:         goto LABEL_63;
+0x53e4d58 83:       FISWIT(&dword_71A3CE0, &unk_5D6C5E0, &v14);
+0x53e4d58 84:       FISWIT(&dword_71A3CE4, &unk_5D6C5E0, &v14);
+0x53e4d58 85:     }
+0x53e4d58 86:     sub_5440D78(&dword_71A3CE0);
+0x53e4d58 87:     sub_5440D78(&dword_71A3CE4);
+0x53e4d58 88:     sub_5440D96(&v7, &dword_71A3CE0);
+0x53e4d58 89:     if ( v7 > 2 )
+0x53e4d58 90:     {
+0x53e4d58 91:       sub_53E8B2B(&unk_5D6C604, &unk_5D6C5D8);
+0x53e4d58 92: LABEL_63:
+0x53e4d58 93:       if ( dword_71A3CF0 )
+0x53e4d58 94:         sub_59EC490(&dword_71A3CF0, &v11);
+0x53e4d58 95:       if ( dword_71A3CF4 )
+0x53e4d58 96:         sub_59EC490(&dword_71A3CF4, &v11);
+0x53e4d58 97:       dword_71A3CF4 = 0;
+0x53e4d58 98:       dword_71A3CF0 = 0;
+0x53e4d58 99:       sub_53E79A8();
+0x53e4d58 100:       goto LABEL_71;
+0x53e4d58 101:     }
+0x53e4d58 102:     sub_5440D96(&v8, &dword_71A3CE0);
+0x53e4d58 103:     sub_5440D96(&v10, &dword_71A3CE0);
+0x53e4d58 104:     if ( v7 > 0 )
+0x53e4d58 105:       sub_5440D96(&dword_71A3CF8, &dword_71A3CE0);
+0x53e4d58 106:     if ( v7 >= 2 )
+0x53e4d58 107:     {
+0x53e4d58 108:       v12 = sub_5A7E920(&dword_71A3CE0, &dword_71A3CF0);
+0x53e4d58 109:       if ( (v12 & 1) == 0 )
+0x53e4d58 110:         goto LABEL_31;
+0x53e4d58 111:     }
+0x53e4d58 112:     else
+0x53e4d58 113:     {
+0x53e4d58 114:       v13 = sub_5A7E9C0(&dword_71A3CF0);
+0x53e4d58 115:       if ( (v13 & 1) == 0 )
+0x53e4d58 116:       {
+0x53e4d58 117: LABEL_31:
+0x53e4d58 118:         LABORT();
+0x53e4d58 119:         goto LABEL_63;
+0x53e4d58 120:       }
+0x53e4d58 121:     }
+0x53e4d58 122:     if ( v7 )
+0x53e4d58 123:       v15 = 0;
+0x53e4d58 124:     else
+0x53e4d58 125:       v15 = -1;
+0x53e4d58 126:     dword_71A3CFC = v15;
+0x53e4d58 127:     if ( v10 <= 0 )
+0x53e4d58 128:     {
+0x53e4d58 129:       sub_54418E4(&dword_71A3CE0);
+0x53e4d58 130:       sub_54418E4(&dword_71A3CE4);
+0x53e4d58 131:       v10 = -v10;
+0x53e4d58 132:     }
+0x53e4d58 133:     else
+0x53e4d58 134:     {
+0x53e4d58 135:       sub_54418C6(&dword_71A3CE0);
+0x53e4d58 136:       sub_54418C6(&dword_71A3CE4);
+0x53e4d58 137:     }
+0x53e4d58 138:     YRTERO(&unk_5D6C5F8, &unk_5D6C608);
+0x53e4d58 139:     if ( dword_6B44C0C[0] > 0 )
+0x53e4d58 140:       sub_53E2AF1(dword_6B44C0C);
+0x53e4d58 141:     if ( dword_71A3CF0 == 0x1FFF )
+0x53e4d58 142:     {
+0x53e4d58 143:       sub_53E5645(&v10, &unk_5D6C5EC, &v4);
+0x53e4d58 144:       if ( !v4 )
+0x53e4d58 145:         goto LABEL_71;
+0x53e4d58 146:       goto LABEL_42;
+0x53e4d58 147:     }
+0x53e4d58 148:     if ( dword_71A3CF0 == 8188 )
+0x53e4d58 149:     {
+0x53e4d58 150:       sub_53E5645(&v10, &unk_5D6C5F0, &v4);
+0x53e4d58 151:       if ( !v4 )
+0x53e4d58 152:         goto LABEL_71;
+0x53e4d58 153: LABEL_42:
+0x53e4d58 154:       LABORT();
+0x53e4d58 155:       goto LABEL_71;
+0x53e4d58 156:     }
+0x53e4d58 157:     sub_53EA5D4(&v8, &v10, &v16);
+0x53e4d58 158:     MQDB(&dword_71A3CF0, &unk_5D6C60C, &v17, &v4);
+0x53e4d58 159:     if ( v17 == 613132 && (dword_71A1CA4 & 1) == 0 )
+0x53e4d58 160:     {
+0x53e4d58 161:       DNTGTS(&unk_5D6C5D8, &unk_5D6C610, "/*", 2, _74);
+0x53e4d58 162:       DGOTO(_74);
+0x53e4d58 163:       sub_543F1D4(_74, &unk_5D6C614);
+0x53e4d58 164:     }
+0x53e4d58 165:     YRTERO(&unk_5D6C5F8, &unk_5D6C618);
+0x53e4d58 166:     if ( dword_6B44C0C[0] > 0 )
+0x53e4d58 167:       sub_53E2AF1(dword_6B44C0C);
+0x53e4d58 168:     MSSAGE(&unk_5D6C5E0, &unk_5D6C61C, &dword_5D6C5F4);
+0x53e4d58 169:     MQDB(&dword_71A3CF0, &unk_5D6C620, &v18, &v4);
+0x53e4d58 170:     v19 = sub_53A78C4(&dword_71A3CF0, "Db modified by Reconfigurer", 27, &unk_5D6C624);
+0x53e4d58 171:     if ( (v19 & 1) != 0 )
+0x53e4d58 172:     {
+0x53e4d58 173:       if ( v18 == 2 )
+0x53e4d58 174:         goto LABEL_57;
+0x53e4d58 175:       v20 = sub_53A78C4(&unk_5D6C5D8, "Db modified by Reconfigurer", 27, &unk_5D6C624);
+0x53e4d58 176:       if ( (v20 & 1) != 0 )
+0x53e4d58 177:       {
+0x53e4d58 178:         sub_5AB1CC0(&dword_5D6C5F4, "Db modified by Reconfigurer", 27, &unk_5D6C5D8);
+0x53e4d58 179:         if ( dword_6B30380 )
+0x53e4d58 180:         {
+0x53e4d58 181:           MRSINT(&unk_5D6C5E0, &dword_6B30380);
+0x53e4d58 182:           DCLERR(v2, v3);
+0x53e4d58 183:           YRTERO(&unk_5D6C5E4, &unk_5D6C5E8);
+0x53e4d58 184:         }
+0x53e4d58 185:         goto LABEL_57;
+0x53e4d58 186:       }
+0x53e4d58 187:     }
+0x53e4d58 188:     MRSINT(&unk_5D6C5E0, &dword_6B30380);
+0x53e4d58 189:     YRTERO(&unk_5D6C5E4, &unk_5D6C5E8);
+0x53e4d58 190: LABEL_57:
+0x53e4d58 191:     MQDB(&dword_71A3CF0, &unk_5D6C628, &v21, &v4);
+0x53e4d58 192:     if ( ((dword_71A1CA4 & 1) != 0 || v21 == 1) && (v16 & 1) == 0 )
+0x53e4d58 193:     {
+0x53e4d58 194:       v22 = sub_59EF020(&dword_71A3CF0);
+0x53e4d58 195:       if ( (v22 & 1) == 0 )
+0x53e4d58 196:         MDERR();
+0x53e4d58 197:     }
+0x53e4d58 198:     sub_53E89CF();
+0x53e4d58 199:     dword_71A3D0C = 1;
+0x53e4d58 200:     goto LABEL_63;
+0x53e4d58 201:   }
+0x53e4d58 202: LABEL_71:
+0x53e4d58 203:   result = DWORD1(xmmword_6B44BF0);
+0x53e4d58 204:   if ( DWORD1(xmmword_6B44BF0) )
+0x53e4d58 205:     return MTREX(&unk_5D6C5D4);
+0x53e4d58 206:   return result;
+0x53e4d58 207: }
+0x5904cd0 1: char __thiscall DB_DB::getRefBuckets(int *this, int a2, int a3)
+0x5904cd0 2: {
+0x5904cd0 3:   int v4; // ebx
+0x5904cd0 4:   char result; // al
+0x5904cd0 5:   int error; // eax
+0x5904cd0 6:   void *v7[10]; // [esp-18h] [ebp-44h] BYREF
+0x5904cd0 7:   _BYTE v8[4]; // [esp+10h] [ebp-1Ch] BYREF
+0x5904cd0 8:   _BYTE v9[4]; // [esp+14h] [ebp-18h] BYREF
+0x5904cd0 9:   int v10; // [esp+18h] [ebp-14h]
+0x5904cd0 10:   char v11; // [esp+1Fh] [ebp-Dh]
+0x5904cd0 11:   int v12; // [esp+28h] [ebp-4h]
+0x5904cd0 12: 
+0x5904cd0 13:   v10 = 4;
+0x5904cd0 14:   if ( dword_61EBF7C )
+0x5904cd0 15:     sub_588CD00(4, "DB_DB::getRefBuckets");
+0x5904cd0 16:   v4 = a3;
+0x5904cd0 17:   result = 0;
+0x5904cd0 18:   v12 = 0;
+0x5904cd0 19:   v11 = 0;
+0x5904cd0 20:   if ( a3 > 0 )
+0x5904cd0 21:   {
+0x5904cd0 22:     v11 = 1;
+0x5904cd0 23:     do
+0x5904cd0 24:     {
+0x5904cd0 25:       if ( !db_get_bucket(*(this + 27), *(this + 34), *(this + 75), (int)v8) )
+0x5904cd0 26:       {
+0x5904cd0 27:         MR_Message::Reset((MR_Message *)(this + 1), 43, 442);
+0x5904cd0 28:         error = db_get_error();
+0x5904cd0 29:         MR_Message::Int((MR_Message *)(this + 1), (void *)1, error);
+0x5904cd0 30:         db_clear_error();
+0x5904cd0 31:         DB_DB::printName(v7);
+0x5904cd0 32:         MR_Message::Name(1, v7[0], (int)v7[1], (int)v7[2], (int)v7[3], (size_t)v7[4], (int)v7[5]);
+0x5904cd0 33:       }
+0x5904cd0 34:       sub_59FCED0(v8);
+0x5904cd0 35:       sub_59FCED0(v9);
+0x5904cd0 36:       --v4;
+0x5904cd0 37:     }
+0x5904cd0 38:     while ( v4 );
+0x5904cd0 39:     result = v11;
+0x5904cd0 40:   }
+0x5904cd0 41:   if ( dword_61EBF7C )
+0x5904cd0 42:   {
+0x5904cd0 43:     sub_588CD30(4);
+0x5904cd0 44:     return v11;
+0x5904cd0 45:   }
+0x5904cd0 46:   return result;
+0x5904cd0 47: }
+0x5912b60 1: char __thiscall DB_DB::setMetaData(DB_DB *this, int a2, _DWORD *a3)
+0x5912b60 2: {
+0x5912b60 3:   _DWORD *v4; // esi
+0x5912b60 4:   int v5; // eax
+0x5912b60 5:   bool isNull; // al
+0x5912b60 6:   int v7; // esi
+0x5912b60 7:   int Null; // esi
+0x5912b60 8:   int v9; // esi
+0x5912b60 9:   DB_Element *v10; // ecx
+0x5912b60 10:   const struct MR_Message *v11; // eax
+0x5912b60 11:   char v12; // bl
+0x5912b60 12:   int Member; // esi
+0x5912b60 13:   int v14; // esi
+0x5912b60 14:   const struct MR_Message *v15; // eax
+0x5912b60 15:   char v16; // al
+0x5912b60 16:   struct MR_Message *v17; // eax
+0x5912b60 17:   bool v18; // zf
+0x5912b60 18:   PMLTypeString *v19; // ecx
+0x5912b60 19:   PMLTypeString *heap; // eax
+0x5912b60 20:   void *v22; // [esp-18h] [ebp-ACh] BYREF
+0x5912b60 21:   int v23; // [esp-14h] [ebp-A8h]
+0x5912b60 22:   int v24; // [esp-10h] [ebp-A4h]
+0x5912b60 23:   int v25; // [esp-Ch] [ebp-A0h]
+0x5912b60 24:   size_t v26; // [esp-8h] [ebp-9Ch]
+0x5912b60 25:   int v27; // [esp-4h] [ebp-98h]
+0x5912b60 26:   int v28; // [esp+10h] [ebp-84h]
+0x5912b60 27:   size_t v29[3]; // [esp+14h] [ebp-80h] BYREF
+0x5912b60 28:   size_t Size; // [esp+20h] [ebp-74h] BYREF
+0x5912b60 29:   int v31; // [esp+24h] [ebp-70h]
+0x5912b60 30:   int v32; // [esp+28h] [ebp-6Ch]
+0x5912b60 31:   int v33; // [esp+2Ch] [ebp-68h] BYREF
+0x5912b60 32:   _BYTE v34[8]; // [esp+30h] [ebp-64h] BYREF
+0x5912b60 33:   int v35[3]; // [esp+38h] [ebp-5Ch] BYREF
+0x5912b60 34:   PMLTypeString v36; // [esp+44h] [ebp-50h] BYREF
+0x5912b60 35:   _BYTE v37[12]; // [esp+5Ch] [ebp-38h] BYREF
+0x5912b60 36:   int v38; // [esp+68h] [ebp-2Ch]
+0x5912b60 37:   int v39; // [esp+6Ch] [ebp-28h]
+0x5912b60 38:   _BYTE v40[12]; // [esp+70h] [ebp-24h] BYREF
+0x5912b60 39:   int v41; // [esp+7Ch] [ebp-18h]
+0x5912b60 40:   int v42; // [esp+80h] [ebp-14h]
+0x5912b60 41:   int v43; // [esp+90h] [ebp-4h]
+0x5912b60 42: 
+0x5912b60 43:   v4 = a3;
+0x5912b60 44:   v28 = 4;
+0x5912b60 45:   if ( dword_61EBF7C )
+0x5912b60 46:     sub_588CD00(4, "DB_DB::setMetaData");
+0x5912b60 47:   v43 = 1;
+0x5912b60 48:   memset(v29, 0, sizeof(v29));
+0x5912b60 49:   sub_59220F0(a3[4], v29);
+0x5912b60 50:   v5 = a3[4];
+0x5912b60 51:   if ( a3[5] >= 0x10u )
+0x5912b60 52:     v4 = (_DWORD *)*a3;
+0x5912b60 53:   v33 = a3[4];
+0x5912b60 54:   CHTOA(v4, v5, v29[0], &v33);
+0x5912b60 55:   DB_DB::findElement(this, (DB_Ref *)v37, (int)DB_DB::dbMetaBlobName_, 1);
+0x5912b60 56:   DB_Element::DB_Element((DB_Element *)v40);
+0x5912b60 57:   isNull = DB_Element::isNull((DB_Element *)v37);
+0x5912b60 58:   v7 = *((_DWORD *)this + 27);
+0x5912b60 59:   if ( isNull )
+0x5912b60 60:   {
+0x5912b60 61:     Null = DB_Element::dabCreateNull(v34, v7, DB_DB::dbMetaHv_);
+0x5912b60 62:     DB_Ref::operator=(Null);
+0x5912b60 63:     v38 = *(_DWORD *)(Null + 12);
+0x5912b60 64:     v39 = *(_DWORD *)(Null + 16);
+0x5912b60 65:     if ( DB_Element::isNull((DB_Element *)v37)
+0x5912b60 66:       || !(unsigned __int8)DB_Element::dabPutAttName((DLL_GlobalInterface *)v37, (int)DB_DB::dbMetaBlobName_)
+0x5912b60 67:       || (v9 = DB_Element::dabCreate(v37, v34, 1, DB_DB::dbMDatHv_),
+0x5912b60 68:           DB_Ref::operator=(v9),
+0x5912b60 69:           v41 = *(_DWORD *)(v9 + 12),
+0x5912b60 70:           v42 = *(_DWORD *)(v9 + 16),
+0x5912b60 71:           DB_Element::isNull((DB_Element *)v40)) )
+0x5912b60 72:     {
+0x5912b60 73:       v10 = (DB_Element *)v37;
+0x5912b60 74: LABEL_18:
+0x5912b60 75:       v17 = DB_Element::returnError(v10);
+0x5912b60 76:       MR_Message::operator=((DB_DB *)((char *)this + 4), v17);
+0x5912b60 77:       db_clear_error();
+0x5912b60 78:       v12 = 0;
+0x5912b60 79:       goto LABEL_34;
+0x5912b60 80:     }
+0x5912b60 81:   }
+0x5912b60 82:   else
+0x5912b60 83:   {
+0x5912b60 84:     v11 = DB_Element::asPointer((DB_Element *)v37);
+0x5912b60 85:     if ( !db_claim_element(v7, v11, 1)
+0x5912b60 86:       || (Member = DB_Element::dabFindMember(v37, v34, 11547609, 1),
+0x5912b60 87:           DB_Ref::operator=(Member),
+0x5912b60 88:           v41 = *(_DWORD *)(Member + 12),
+0x5912b60 89:           v42 = *(_DWORD *)(Member + 16),
+0x5912b60 90:           !DB_Element::isNull((DB_Element *)v40))
+0x5912b60 91:       && (v14 = *((_DWORD *)this + 27), v15 = DB_Element::asPointer((DB_Element *)v40), !db_claim_element(v14, v15, 1)) )
+0x5912b60 92:     {
+0x5912b60 93:       db_get_error();
+0x5912b60 94:       db_clear_error();
+0x5912b60 95:       v12 = 0;
+0x5912b60 96:       goto LABEL_34;
+0x5912b60 97:     }
+0x5912b60 98:   }
+0x5912b60 99:   if ( !DB_Element::isNull((DB_Element *)v40) )
+0x5912b60 100:   {
+0x5912b60 101:     v16 = DB_Element::dabPutAtt((DB_Element *)v40, DB_DB::dbMValHv_, v29);
+0x5912b60 102:     v10 = (DB_Element *)v40;
+0x5912b60 103:     if ( !v16 )
+0x5912b60 104:       goto LABEL_18;
+0x5912b60 105:     if ( !DB_Element::dabPutAtt((DB_Element *)v40, DB_DB::dbMExtHv_, a2) )
+0x5912b60 106:     {
+0x5912b60 107:       v10 = (DB_Element *)v40;
+0x5912b60 108:       goto LABEL_18;
+0x5912b60 109:     }
+0x5912b60 110:   }
+0x5912b60 111:   v36.len = 0;
+0x5912b60 112:   v36.cap = 15;
+0x5912b60 113:   v36.u.sso[0] = 0;
+0x5912b60 114:   PMLTypeString_Assign(&v36, "Saving Meta Data.", 0x11u);
+0x5912b60 115:   v18 = *((_DWORD *)this + 29) == 1;
+0x5912b60 116:   LOBYTE(v43) = 2;
+0x5912b60 117:   if ( !v18 )
+0x5912b60 118:   {
+0x5912b60 119:     heap = &v36;
+0x5912b60 120:     v27 = 0;
+0x5912b60 121:     if ( v36.cap >= 0x10 )
+0x5912b60 122:       heap = (PMLTypeString *)v36.u.heap;
+0x5912b60 123:     if ( !db_save_work(*((_DWORD *)this + 27), (int)heap, v36.len, 1, v27) )
+0x5912b60 124:     {
+0x5912b60 125:       DB_DB::printName(&v22);
+0x5912b60 126:       MR_Message::Name(1, v22, v23, v24, v25, v26, v27);
+0x5912b60 127:       db_clear_error();
+0x5912b60 128:       v12 = 0;
+0x5912b60 129:       goto LABEL_33;
+0x5912b60 130:     }
+0x5912b60 131:     DB_DB::dorelease(this, 1);
+0x5912b60 132:     goto LABEL_32;
+0x5912b60 133:   }
+0x5912b60 134:   Size = 0;
+0x5912b60 135:   v31 = 0;
+0x5912b60 136:   v32 = 0;
+0x5912b60 137:   LOBYTE(v43) = 3;
+0x5912b60 138:   sub_58F13C0((struct DB_Ref *)v37);
+0x5912b60 139:   sub_58F13C0((struct DB_Ref *)v40);
+0x5912b60 140:   DB_Utils::vectorToInt(v35, &Size, 0);
+0x5912b60 141:   v19 = &v36;
+0x5912b60 142:   LOBYTE(v43) = 4;
+0x5912b60 143:   v24 = (int)(v31 - Size) / 20;
+0x5912b60 144:   v23 = v35[0];
+0x5912b60 145:   if ( v36.cap >= 0x10 )
+0x5912b60 146:     v19 = (PMLTypeString *)v36.u.heap;
+0x5912b60 147:   if ( sub_5AAEB10(*((_DWORD *)this + 27), v19, v36.len, 1, v23, v24) )
+0x5912b60 148:   {
+0x5912b60 149:     DB_Element::release((DB_Element *)v37);
+0x5912b60 150:     if ( !DB_Element::release((DB_Element *)v40) )
+0x5912b60 151:       goto LABEL_25;
+0x5912b60 152:     G2L_BooleanEngine::~G2L_BooleanEngine((G2L_BooleanEngine *)v35);
+0x5912b60 153:     sub_582C710(&Size);
+0x5912b60 154: LABEL_32:
+0x5912b60 155:     v12 = 1;
+0x5912b60 156:     goto LABEL_33;
+0x5912b60 157:   }
+0x5912b60 158:   DB_DB::printName(&v22);
+0x5912b60 159:   MR_Message::Name(1, v22, v23, v24, v25, v26, v27);
+0x5912b60 160:   db_clear_error();
+0x5912b60 161: LABEL_25:
+0x5912b60 162:   G2L_BooleanEngine::~G2L_BooleanEngine((G2L_BooleanEngine *)v35);
+0x5912b60 163:   sub_582C710(&Size);
+0x5912b60 164:   v12 = 0;
+0x5912b60 165: LABEL_33:
+0x5912b60 166:   PMLTypeString::~PMLTypeString(&v36);
+0x5912b60 167: LABEL_34:
+0x5912b60 168:   G2L_BooleanEngine::~G2L_BooleanEngine((G2L_BooleanEngine *)v29);
+0x5912b60 169:   if ( dword_61EBF7C )
+0x5912b60 170:     sub_588CD30(4);
+0x5912b60 171:   return v12;
+0x5912b60 172: }
+0x59144e0 1: char __thiscall DB_DB::updateBucketList(DB_DB *this)
+0x59144e0 2: {
+0x59144e0 3:   DB_DB *v1; // edi
+0x59144e0 4:   DB_Element *v2; // eax
+0x59144e0 5:   const struct MR_Message *v3; // eax
+0x59144e0 6:   _DWORD *v4; // edx
+0x59144e0 7:   const struct MR_Message *v5; // edi
+0x59144e0 8:   _DWORD *v6; // esi
+0x59144e0 9:   int *v7; // eax
+0x59144e0 10:   int v8; // ecx
+0x59144e0 11:   void *v9; // eax
+0x59144e0 12:   int v10; // eax
+0x59144e0 13:   int v11; // esi
+0x59144e0 14:   int v12; // ecx
+0x59144e0 15:   void *v13; // eax
+0x59144e0 16:   char v14; // al
+0x59144e0 17:   char v15; // bl
+0x59144e0 18:   const struct DB_Ref *v16; // ebx
+0x59144e0 19:   struct DB_Element *v17; // esi
+0x59144e0 20:   struct DB_DB *v18; // edi
+0x59144e0 21:   const struct MR_Message *v19; // eax
+0x59144e0 22:   struct DB_DB *v20; // ebx
+0x59144e0 23:   int *v21; // esi
+0x59144e0 24:   int error; // edi
+0x59144e0 25:   int **v23; // eax
+0x59144e0 26:   int *j; // ecx
+0x59144e0 27:   int *i; // eax
+0x59144e0 28:   char v26; // bl
+0x59144e0 29:   char v27; // bl
+0x59144e0 30:   _DWORD *v28; // ecx
+0x59144e0 31:   MR_Message *v29; // esi
+0x59144e0 32:   MR_Message *v30; // edi
+0x59144e0 33:   MR_Message *v31; // eax
+0x59144e0 34:   unsigned int v32; // ecx
+0x59144e0 35:   unsigned int v33; // ecx
+0x59144e0 36:   unsigned int v34; // eax
+0x59144e0 37:   void *v36; // [esp-18h] [ebp-13Ch] BYREF
+0x59144e0 38:   int v37; // [esp-14h] [ebp-138h]
+0x59144e0 39:   int v38; // [esp-10h] [ebp-134h]
+0x59144e0 40:   _BYTE *v39; // [esp-Ch] [ebp-130h]
+0x59144e0 41:   DB_Attribute *v40; // [esp-8h] [ebp-12Ch]
+0x59144e0 42:   int v41; // [esp-4h] [ebp-128h]
+0x59144e0 43:   _BYTE v42[104]; // [esp+10h] [ebp-114h] BYREF
+0x59144e0 44:   _BYTE v43[104]; // [esp+78h] [ebp-ACh] BYREF
+0x59144e0 45:   int v44; // [esp+E0h] [ebp-44h] BYREF
+0x59144e0 46:   struct DB_Element *v45; // [esp+E4h] [ebp-40h] BYREF
+0x59144e0 47:   struct DB_Element *v46; // [esp+E8h] [ebp-3Ch]
+0x59144e0 48:   int v47; // [esp+ECh] [ebp-38h]
+0x59144e0 49:   const struct MR_Message *v48; // [esp+F0h] [ebp-34h] BYREF
+0x59144e0 50:   char v49; // [esp+F7h] [ebp-2Dh] BYREF
+0x59144e0 51:   DB_DB *v50; // [esp+F8h] [ebp-2Ch]
+0x59144e0 52:   MR_Message *v51; // [esp+FCh] [ebp-28h] BYREF
+0x59144e0 53:   MR_Message *v52; // [esp+100h] [ebp-24h] BYREF
+0x59144e0 54:   int v53; // [esp+104h] [ebp-20h] BYREF
+0x59144e0 55:   void *v54; // [esp+108h] [ebp-1Ch] BYREF
+0x59144e0 56:   int v55; // [esp+10Ch] [ebp-18h]
+0x59144e0 57:   int v56; // [esp+110h] [ebp-14h] BYREF
+0x59144e0 58:   char v57; // [esp+116h] [ebp-Eh] BYREF
+0x59144e0 59:   char v58; // [esp+117h] [ebp-Dh]
+0x59144e0 60:   int v59; // [esp+120h] [ebp-4h]
+0x59144e0 61:   _BYTE v60[128]; // [esp+124h] [ebp+0h] BYREF
+0x59144e0 62:   _BYTE v61[20]; // [esp+1A4h] [ebp+80h] BYREF
+0x59144e0 63:   _BYTE v62[12]; // [esp+1B8h] [ebp+94h] BYREF
+0x59144e0 64:   int v63; // [esp+1C4h] [ebp+A0h]
+0x59144e0 65:   int v64; // [esp+1C8h] [ebp+A4h]
+0x59144e0 66:   _BYTE v65[8]; // [esp+1CCh] [ebp+A8h] BYREF
+0x59144e0 67:   int v66; // [esp+1D4h] [ebp+B0h] BYREF
+0x59144e0 68:   int v67; // [esp+1D8h] [ebp+B4h]
+0x59144e0 69:   int v68; // [esp+1DCh] [ebp+B8h]
+0x59144e0 70: 
+0x59144e0 71:   v1 = this;
+0x59144e0 72:   v50 = this;
+0x59144e0 73:   v44 = 4;
+0x59144e0 74:   if ( dword_61EBF7C )
+0x59144e0 75:     sub_588CD00(4, "DB_DB::updateBucketList");
+0x59144e0 76:   v59 = 0;
+0x59144e0 77:   v58 = 1;
+0x59144e0 78:   MR_Message::MR_Message((MR_Message *)v43);
+0x59144e0 79:   LOBYTE(v59) = 1;
+0x59144e0 80:   MR_Message::Reset((MR_Message *)v43, 43, 399);
+0x59144e0 81:   DB_DB::printName(&v36);
+0x59144e0 82:   MR_Message::Name(1, v36, v37, v38, (int)v39, (size_t)v40, v41);
+0x59144e0 83:   v54 = 0;
+0x59144e0 84:   v55 = 0;
+0x59144e0 85:   v54 = (void *)sub_5A28040(&v54);
+0x59144e0 86:   LOBYTE(v59) = 2;
+0x59144e0 87:   DB_IndexTableIterator::DB_IndexTableIterator((DB_IndexTableIterator *)v60, v1);
+0x59144e0 88:   LOBYTE(v59) = 3;
+0x59144e0 89:   if ( !DB_IntArrayTableIterator::isDone((DB_IntArrayTableIterator *)v60) )
+0x59144e0 90:   {
+0x59144e0 91:     do
+0x59144e0 92:     {
+0x59144e0 93:       DB_Communication::getCommsEle(v60, v61);
+0x59144e0 94:       v2 = DLL_GlobalInterface::returnError((DLL_GlobalInterface *)v61);
+0x59144e0 95:       v3 = DB_Element::asPointer(v2);
+0x59144e0 96:       v4 = v54;
+0x59144e0 97:       v5 = v3;
+0x59144e0 98:       v6 = v54;
+0x59144e0 99:       v7 = (int *)*((_DWORD *)v54 + 1);
+0x59144e0 100:       if ( *((_BYTE *)v7 + 13) )
+0x59144e0 101:         goto LABEL_12;
+0x59144e0 102:       v8 = *(_DWORD *)v5;
+0x59144e0 103:       do
+0x59144e0 104:       {
+0x59144e0 105:         if ( v7[4] >= v8 )
+0x59144e0 106:         {
+0x59144e0 107:           v6 = v7;
+0x59144e0 108:           v7 = (int *)*v7;
+0x59144e0 109:         }
+0x59144e0 110:         else
+0x59144e0 111:         {
+0x59144e0 112:           v7 = (int *)v7[2];
+0x59144e0 113:         }
+0x59144e0 114:       }
+0x59144e0 115:       while ( !*((_BYTE *)v7 + 13) );
+0x59144e0 116:       if ( v6 == v54 || v8 < v6[4] )
+0x59144e0 117:       {
+0x59144e0 118: LABEL_12:
+0x59144e0 119:         v48 = v5;
+0x59144e0 120:         v9 = (void *)sub_5A6EC00(&unk_5D4CD04, &v48, &v57);
+0x59144e0 121:         sub_58E48C0((int)&v53, (int)v6, (int)v9 + 16, v9);
+0x59144e0 122:         v6 = (_DWORD *)v53;
+0x59144e0 123:         v4 = v54;
+0x59144e0 124:       }
+0x59144e0 125:       if ( *((_DWORD *)v5 + 1) > v6[5] )
+0x59144e0 126:       {
+0x59144e0 127:         v10 = v4[1];
+0x59144e0 128:         v11 = (int)v4;
+0x59144e0 129:         if ( *(_BYTE *)(v10 + 13) )
+0x59144e0 130:           goto LABEL_22;
+0x59144e0 131:         v12 = *(_DWORD *)v5;
+0x59144e0 132:         do
+0x59144e0 133:         {
+0x59144e0 134:           if ( *(_DWORD *)(v10 + 16) >= v12 )
+0x59144e0 135:           {
+0x59144e0 136:             v11 = v10;
+0x59144e0 137:             v10 = *(_DWORD *)v10;
+0x59144e0 138:           }
+0x59144e0 139:           else
+0x59144e0 140:           {
+0x59144e0 141:             v10 = *(_DWORD *)(v10 + 8);
+0x59144e0 142:           }
+0x59144e0 143:         }
+0x59144e0 144:         while ( !*(_BYTE *)(v10 + 13) );
+0x59144e0 145:         if ( (_DWORD *)v11 == v4 || v12 < *(_DWORD *)(v11 + 16) )
+0x59144e0 146:         {
+0x59144e0 147: LABEL_22:
+0x59144e0 148:           v48 = v5;
+0x59144e0 149:           v13 = (void *)sub_5A6EC00(&unk_5D4CD04, &v48, &v49);
+0x59144e0 150:           sub_58E48C0((int)&v56, v11, (int)v13 + 16, v13);
+0x59144e0 151:           v11 = v56;
+0x59144e0 152:         }
+0x59144e0 153:         *(_DWORD *)(v11 + 20) = *((_DWORD *)v5 + 1);
+0x59144e0 154:       }
+0x59144e0 155:       DB_IndexTableIterator::next((DB_IndexTableIterator *)v60);
+0x59144e0 156:     }
+0x59144e0 157:     while ( !DB_IntArrayTableIterator::isDone((DB_IntArrayTableIterator *)v60) );
+0x59144e0 158:     v1 = v50;
+0x59144e0 159:   }
+0x59144e0 160:   if ( !(unsigned __int8)DB_DB::checkBucketList(&v54) )
+0x59144e0 161:   {
+0x59144e0 162:     MR_Message::EmbedMessage((MR_Message *)v43, (DB_DB *)((char *)v1 + 4));
+0x59144e0 163:     v58 = 0;
+0x59144e0 164:   }
+0x59144e0 165:   v56 = (int)v1;
+0x59144e0 166:   v51 = 0;
+0x59144e0 167:   v52 = 0;
+0x59144e0 168:   v53 = 0;
+0x59144e0 169:   LOBYTE(v59) = 4;
+0x59144e0 170:   sub_5819EB0(&v56);
+0x59144e0 171:   LOBYTE(v59) = 5;
+0x59144e0 172:   v14 = DB_DB::close((int)&v51, 0);
+0x59144e0 173:   LOBYTE(v59) = 3;
+0x59144e0 174:   v15 = v14;
+0x59144e0 175:   G2L_BooleanEngine::~G2L_BooleanEngine((G2L_BooleanEngine *)&v51);
+0x59144e0 176:   if ( !v15 )
+0x59144e0 177:   {
+0x59144e0 178:     MR_Message::EmbedMessage((MR_Message *)v43, (DB_DB *)((char *)v1 + 4));
+0x59144e0 179:     v58 = 0;
+0x59144e0 180:   }
+0x59144e0 181:   sub_5901410((char *)v1 + 108);
+0x59144e0 182:   *((_BYTE *)v1 + 248) = 0;
+0x59144e0 183:   v45 = 0;
+0x59144e0 184:   v46 = 0;
+0x59144e0 185:   v47 = 0;
+0x59144e0 186:   v56 = 4;
+0x59144e0 187:   if ( dword_61EBF7C )
+0x59144e0 188:     sub_588CD00(4, "DB_DB::dbele");
+0x59144e0 189:   v16 = (DB_DB *)((char *)v1 + 228);
+0x59144e0 190:   LOBYTE(v59) = 7;
+0x59144e0 191:   DB_Ref::DB_Ref((DB_Ref *)v65, (DB_DB *)((char *)v1 + 228));
+0x59144e0 192:   v67 = *((_DWORD *)v1 + 60);
+0x59144e0 193:   v68 = *((_DWORD *)v1 + 61);
+0x59144e0 194:   LOBYTE(v59) = 6;
+0x59144e0 195:   if ( dword_61EBF7C )
+0x59144e0 196:     sub_588CD30(4);
+0x59144e0 197:   v41 = (int)&v45;
+0x59144e0 198:   v40 = ATT_EXTFAM;
+0x59144e0 199:   DLL_GlobalInterface::returnError((DLL_GlobalInterface *)v65);
+0x59144e0 200:   DB_Element::getAtt(v40, v41);
+0x59144e0 201:   v17 = v45;
+0x59144e0 202:   if ( v45 != v46 )
+0x59144e0 203:   {
+0x59144e0 204:     v53 = 4;
+0x59144e0 205:     do
+0x59144e0 206:     {
+0x59144e0 207:       if ( dword_61EBF7C )
+0x59144e0 208:         sub_588CD00(4, "DB_DB::dbele");
+0x59144e0 209:       LOBYTE(v59) = 8;
+0x59144e0 210:       DB_Ref::DB_Ref((DB_Ref *)v62, v16);
+0x59144e0 211:       v63 = *((_DWORD *)v16 + 3);
+0x59144e0 212:       v64 = *((_DWORD *)v16 + 4);
+0x59144e0 213:       LOBYTE(v59) = 6;
+0x59144e0 214:       if ( dword_61EBF7C )
+0x59144e0 215:         sub_588CD30(4);
+0x59144e0 216:       if ( !(unsigned __int8)DB_Element::operator==(v62) )
+0x59144e0 217:       {
+0x59144e0 218:         v18 = DB_DB::construct(v17, (DB_DB *)((char *)v1 + 4));
+0x59144e0 219:         if ( v18 )
+0x59144e0 220:         {
+0x59144e0 221:           if ( !(unsigned __int8)DB_DB::checkBucketList(&v54) )
+0x59144e0 222:           {
+0x59144e0 223:             MR_Message::EmbedMessage((MR_Message *)v43, (struct DB_DB *)((char *)v18 + 4));
+0x59144e0 224:             v58 = 0;
+0x59144e0 225:           }
+0x59144e0 226:           v56 = (int)v18;
+0x59144e0 227:           v66 = 0;
+0x59144e0 228:           v67 = 0;
+0x59144e0 229:           v68 = 0;
+0x59144e0 230:           LOBYTE(v59) = 9;
+0x59144e0 231:           sub_5819EB0(&v56);
+0x59144e0 232:           LOBYTE(v59) = 10;
+0x59144e0 233:           DB_DB::close((int)&v66, 0);
+0x59144e0 234:           LOBYTE(v59) = 6;
+0x59144e0 235:           G2L_BooleanEngine::~G2L_BooleanEngine((G2L_BooleanEngine *)&v66);
+0x59144e0 236:           (**(void (__thiscall ***)(struct DB_DB *, int))v18)(v18, 1);
+0x59144e0 237:           v1 = v50;
+0x59144e0 238:         }
+0x59144e0 239:         else
+0x59144e0 240:         {
+0x59144e0 241:           v1 = v50;
+0x59144e0 242:           MR_Message::EmbedMessage((MR_Message *)v43, (DB_DB *)((char *)v50 + 4));
+0x59144e0 243:           v58 = 0;
+0x59144e0 244:         }
+0x59144e0 245:       }
+0x59144e0 246:       v17 = (struct DB_Element *)((char *)v17 + 20);
+0x59144e0 247:     }
+0x59144e0 248:     while ( v17 != v46 );
+0x59144e0 249:   }
+0x59144e0 250:   if ( v55 > 0 )
+0x59144e0 251:   {
+0x59144e0 252:     v56 = 4;
+0x59144e0 253:     if ( dword_61EBF7C )
+0x59144e0 254:       sub_588CD00(4, "DB_DB::dbele");
+0x59144e0 255:     LOBYTE(v59) = 11;
+0x59144e0 256:     DB_Ref::DB_Ref((DB_Ref *)v62, v16);
+0x59144e0 257:     v63 = *((_DWORD *)v16 + 3);
+0x59144e0 258:     v64 = *((_DWORD *)v16 + 4);
+0x59144e0 259:     LOBYTE(v59) = 6;
+0x59144e0 260:     if ( dword_61EBF7C )
+0x59144e0 261:       sub_588CD30(4);
+0x59144e0 262:     v41 = 0;
+0x59144e0 263:     v40 = ATT_EXTMAS;
+0x59144e0 264:     v39 = v61;
+0x59144e0 265:     v19 = DLL_GlobalInterface::returnError((DLL_GlobalInterface *)v62);
+0x59144e0 266:     DB_Element::getElement(v19, v39, v40, v41);
+0x59144e0 267:     v56 = 4;
+0x59144e0 268:     if ( dword_61EBF7C )
+0x59144e0 269:       sub_588CD00(4, "DB_DB::dbele");
+0x59144e0 270:     LOBYTE(v59) = 12;
+0x59144e0 271:     DB_Ref::DB_Ref((DB_Ref *)v62, v16);
+0x59144e0 272:     v63 = *((_DWORD *)v16 + 3);
+0x59144e0 273:     v64 = *((_DWORD *)v16 + 4);
+0x59144e0 274:     LOBYTE(v59) = 6;
+0x59144e0 275:     if ( dword_61EBF7C )
+0x59144e0 276:       sub_588CD30(4);
+0x59144e0 277:     if ( (unsigned __int8)DB_Element::operator==(v62) )
+0x59144e0 278:       v20 = v1;
+0x59144e0 279:     else
+0x59144e0 280:       v20 = DB_DB::construct((const struct DB_Element *)v61, (DB_DB *)((char *)v1 + 4));
+0x59144e0 281:     if ( v20 )
+0x59144e0 282:     {
+0x59144e0 283:       if ( !DB_DB::openFileWrite(v20) )
+0x59144e0 284:       {
+0x59144e0 285:         MR_Message::EmbedMessage((MR_Message *)v43, (struct DB_DB *)((char *)v20 + 4));
+0x59144e0 286:         v58 = 0;
+0x59144e0 287:       }
+0x59144e0 288:       v57 = 0;
+0x59144e0 289:       v21 = *(int **)v54;
+0x59144e0 290:       if ( *(void **)v54 != v54 )
+0x59144e0 291:       {
+0x59144e0 292:         do
+0x59144e0 293:         {
+0x59144e0 294:           v52 = (MR_Message *)v21[4];
+0x59144e0 295:           v53 = v21[5] + 1;
+0x59144e0 296:           if ( !db_add_bucket(*((_DWORD *)v20 + 27), *((_DWORD *)v20 + 34), *((_DWORD *)v20 + 75), &v52) )
+0x59144e0 297:           {
+0x59144e0 298:             MR_Message::MR_Message((MR_Message *)v42, 43, 400);
+0x59144e0 299:             LOBYTE(v59) = 13;
+0x59144e0 300:             error = db_get_error();
+0x59144e0 301:             db_clear_error();
+0x59144e0 302:             if ( error == 514 )
+0x59144e0 303:             {
+0x59144e0 304:               if ( !v57 )
+0x59144e0 305:               {
+0x59144e0 306:                 MR_Message::Reset((MR_Message *)v42, 43, 456);
+0x59144e0 307:                 DB_DB::printName(&v36);
+0x59144e0 308:                 MR_Message::Name(1, v36, v37, v38, (int)v39, (size_t)v40, v41);
+0x59144e0 309:                 MR_Message::Int((MR_Message *)v42, (void *)1, 514);
+0x59144e0 310:                 MR_Message::EmbedMessage((MR_Message *)v43, (const struct MR_Message *)v42);
+0x59144e0 311:                 v57 = 1;
+0x59144e0 312:               }
+0x59144e0 313:             }
+0x59144e0 314:             else
+0x59144e0 315:             {
+0x59144e0 316:               DB_DB::printName(&v36);
+0x59144e0 317:               MR_Message::Name(1, v36, v37, v38, (int)v39, (size_t)v40, v41);
+0x59144e0 318:               MR_Message::Int((MR_Message *)v42, (void *)1, error);
+0x59144e0 319:               MR_Message::EmbedMessage((MR_Message *)v43, (const struct MR_Message *)v42);
+0x59144e0 320:             }
+0x59144e0 321:             v58 = 0;
+0x59144e0 322:             LOBYTE(v59) = 6;
+0x59144e0 323:             MR_Message::~MR_Message((MR_Message *)v42);
+0x59144e0 324:           }
+0x59144e0 325:           if ( !*((_BYTE *)v21 + 13) )
+0x59144e0 326:           {
+0x59144e0 327:             v23 = (int **)v21[2];
+0x59144e0 328:             if ( *((_BYTE *)v23 + 13) )
+0x59144e0 329:             {
+0x59144e0 330:               for ( i = (int *)v21[1]; !*((_BYTE *)i + 13); i = (int *)i[1] )
+0x59144e0 331:               {
+0x59144e0 332:                 if ( v21 != (int *)i[2] )
+0x59144e0 333:                   break;
+0x59144e0 334:                 v21 = i;
+0x59144e0 335:               }
+0x59144e0 336:               v21 = i;
+0x59144e0 337:             }
+0x59144e0 338:             else
+0x59144e0 339:             {
+0x59144e0 340:               v21 = (int *)v21[2];
+0x59144e0 341:               for ( j = *v23; !*((_BYTE *)j + 13); j = (int *)*j )
+0x59144e0 342:                 v21 = j;
+0x59144e0 343:             }
+0x59144e0 344:           }
+0x59144e0 345:         }
+0x59144e0 346:         while ( v21 != v54 );
+0x59144e0 347:         v1 = v50;
+0x59144e0 348:       }
+0x59144e0 349:       v56 = (int)v20;
+0x59144e0 350:       v66 = 0;
+0x59144e0 351:       v67 = 0;
+0x59144e0 352:       v68 = 0;
+0x59144e0 353:       LOBYTE(v59) = 14;
+0x59144e0 354:       sub_5819EB0(&v56);
+0x59144e0 355:       LOBYTE(v59) = 15;
+0x59144e0 356:       DB_DB::close((int)&v66, 0);
+0x59144e0 357:       LOBYTE(v59) = 6;
+0x59144e0 358:       G2L_BooleanEngine::~G2L_BooleanEngine((G2L_BooleanEngine *)&v66);
+0x59144e0 359:       if ( v20 != v1 )
+0x59144e0 360:         (**(void (__thiscall ***)(struct DB_DB *, int))v20)(v20, 1);
+0x59144e0 361:     }
+0x59144e0 362:     else
+0x59144e0 363:     {
+0x59144e0 364:       MR_Message::EmbedMessage((MR_Message *)v43, (DB_DB *)((char *)v1 + 4));
+0x59144e0 365:       v58 = 0;
+0x59144e0 366:     }
+0x59144e0 367:   }
+0x59144e0 368:   DB_DB::addToDBLookup(v1);
+0x59144e0 369:   v26 = v58;
+0x59144e0 370:   if ( !v58 )
+0x59144e0 371:   {
+0x59144e0 372:     v27 = 1;
+0x59144e0 373:     v51 = 0;
+0x59144e0 374:     v52 = 0;
+0x59144e0 375:     v53 = 0;
+0x59144e0 376:     LOBYTE(v59) = 16;
+0x59144e0 377:     MR_Message::RetrieveEmbeddedMessages(&v51);
+0x59144e0 378:     if ( v51 == v52 )
+0x59144e0 379:       goto LABEL_91;
+0x59144e0 380:     v28 = (_DWORD *)((char *)v51 + 100);
+0x59144e0 381:     do
+0x59144e0 382:     {
+0x59144e0 383:       if ( *(v28 - 1) != 43 && *v28 != 456 )
+0x59144e0 384:         v27 = 0;
+0x59144e0 385:       v28 += 26;
+0x59144e0 386:     }
+0x59144e0 387:     while ( v28 - 25 != (_DWORD *)v52 );
+0x59144e0 388:     if ( v27 )
+0x59144e0 389:     {
+0x59144e0 390: LABEL_91:
+0x59144e0 391:       MR_Message::Reset((MR_Message *)v43, 43, 457);
+0x59144e0 392:       DB_DB::printName(&v36);
+0x59144e0 393:       MR_Message::Name(1, v36, v37, v38, (int)v39, (size_t)v40, v41);
+0x59144e0 394:       MR_Message::EmbedMessages(&v51);
+0x59144e0 395:     }
+0x59144e0 396:     MR_Message::operator=((DB_DB *)((char *)v1 + 4), (struct MR_Message *)v43);
+0x59144e0 397:     v29 = v51;
+0x59144e0 398:     if ( v51 )
+0x59144e0 399:     {
+0x59144e0 400:       v30 = v52;
+0x59144e0 401:       if ( v51 != v52 )
+0x59144e0 402:       {
+0x59144e0 403:         do
+0x59144e0 404:         {
+0x59144e0 405:           MR_Message::~MR_Message(v29);
+0x59144e0 406:           v29 = (MR_Message *)((char *)v29 + 104);
+0x59144e0 407:         }
+0x59144e0 408:         while ( v29 != v30 );
+0x59144e0 409:         v29 = v51;
+0x59144e0 410:       }
+0x59144e0 411:       v31 = v29;
+0x59144e0 412:       v32 = (v53 - (int)v29) / 104;
+0x59144e0 413:       if ( v32 > 0x2762762
+0x59144e0 414:         || (v33 = 104 * v32, v33 >= 0x1000)
+0x59144e0 415:         && (v33 + 35 < v33
+0x59144e0 416:          || (v33 += 35, ((unsigned __int8)v29 & 0x1F) != 0)
+0x59144e0 417:          || (v29 = (MR_Message *)*((_DWORD *)v29 - 1), v29 >= v31)
+0x59144e0 418:          || (v34 = v31 - v29, v34 < 4)
+0x59144e0 419:          || v34 > 0x23) )
+0x59144e0 420:       {
+0x59144e0 421:         invalid_parameter_noinfo_noreturn();
+0x59144e0 422:       }
+0x59144e0 423:       v41 = v33;
+0x59144e0 424:       LicFeatureCheckOut_Free(v29);
+0x59144e0 425:     }
+0x59144e0 426:     v26 = v58;
+0x59144e0 427:   }
+0x59144e0 428:   sub_582C710(&v45);
+0x59144e0 429:   DB_IndexTableIterator::~DB_IndexTableIterator((DB_IndexTableIterator *)v60);
+0x59144e0 430:   sub_58D7E40(&v44, *(_DWORD *)v54, v54);
+0x59144e0 431:   v41 = 24;
+0x59144e0 432:   LicFeatureCheckOut_Free(v54);
+0x59144e0 433:   MR_Message::~MR_Message((MR_Message *)v43);
+0x59144e0 434:   if ( dword_61EBF7C )
+0x59144e0 435:     sub_588CD30(4);
+0x59144e0 436:   return v26;
+0x59144e0 437: }
+0x59ef020 1: int __cdecl sub_59EF020(int *a1)
+0x59ef020 2: {
+0x59ef020 3:   DB_DB *DB; // esi
+0x59ef020 4:   char updated; // bl
+0x59ef020 5:   struct MR_Message *v3; // eax
+0x59ef020 6: 
+0x59ef020 7:   if ( dword_61EBF7C )
+0x59ef020 8:     sub_588CD00(4, "MDUPDB");
+0x59ef020 9:   DB = DB_DB::findDB(*a1);
+0x59ef020 10:   updated = DB_DB::updateBucketList(DB);
+0x59ef020 11:   if ( !updated )
+0x59ef020 12:   {
+0x59ef020 13:     v3 = DB_DB::returnError(DB);
+0x59ef020 14:     MR_Message::operator=((MR_Message *)&unk_639A520, v3);
+0x59ef020 15:   }
+0x59ef020 16:   if ( dword_61EBF7C )
+0x59ef020 17:     sub_588CD30(4);
+0x59ef020 18:   return -(updated != 0);
+0x59ef020 19: }
+0x5aaaac0 1: BOOL __cdecl db_add_bucket(char a1, char a2, int a3, int a4)
+0x5aaaac0 2: {
+0x5aaaac0 3:   sub_5ABAD10(358, a1, a2, a3, a4);
+0x5aaaac0 4:   return dword_6453B98 == 0;
+0x5aaaac0 5: }
+0x5aadd90 1: BOOL __cdecl db_get_bucket(char a1, char a2, int a3, int a4)
+0x5aadd90 2: {
+0x5aadd90 3:   sub_5AC3810(360, a1, a2, a3, a4);
+0x5aadd90 4:   return dword_6453B98 == 0;
+0x5aadd90 5: }
+0x5ab2d40 1: int __cdecl sub_5AB2D40(int a1, int a2, int *a3, int a4)
+0x5ab2d40 2: {
+0x5ab2d40 3:   int v4; // ecx
+0x5ab2d40 4:   int v5; // edx
+0x5ab2d40 5:   int v6; // edi
+0x5ab2d40 6:   int v7; // ebx
+0x5ab2d40 7:   int v8; // esi
+0x5ab2d40 8:   int v9; // edx
+0x5ab2d40 9:   int v10; // ecx
+0x5ab2d40 10:   int v11; // ecx
+0x5ab2d40 11:   int v12; // esi
+0x5ab2d40 12:   int v13; // edi
+0x5ab2d40 13:   int v14; // eax
+0x5ab2d40 14:   int v15; // edi
+0x5ab2d40 15:   _DWORD *v16; // eax
+0x5ab2d40 16:   _DWORD *v17; // ebx
+0x5ab2d40 17:   int *v18; // edi
+0x5ab2d40 18:   void *v19; // eax
+0x5ab2d40 19:   int v20; // esi
+0x5ab2d40 20:   int v21; // edx
+0x5ab2d40 21:   int v22; // ecx
+0x5ab2d40 22:   int v23; // eax
+0x5ab2d40 23:   int v24; // edi
+0x5ab2d40 24:   int v25; // ecx
+0x5ab2d40 25:   int v26; // eax
+0x5ab2d40 26:   bool v27; // cc
+0x5ab2d40 27:   int v28; // eax
+0x5ab2d40 28:   int i; // ecx
+0x5ab2d40 29:   bool v30; // zf
+0x5ab2d40 30:   int *v31; // edx
+0x5ab2d40 31:   int v32; // edi
+0x5ab2d40 32:   int v33; // eax
+0x5ab2d40 33:   int v34; // esi
+0x5ab2d40 34:   int v35; // ecx
+0x5ab2d40 35:   void *v36; // eax
+0x5ab2d40 36:   int v37; // edx
+0x5ab2d40 37:   int v38; // esi
+0x5ab2d40 38:   char v39; // bl
+0x5ab2d40 39:   int v40; // esi
+0x5ab2d40 40:   int v42[3]; // [esp+10h] [ebp-C4h] BYREF
+0x5ab2d40 41:   int v43; // [esp+1Ch] [ebp-B8h] BYREF
+0x5ab2d40 42:   int v44; // [esp+20h] [ebp-B4h] BYREF
+0x5ab2d40 43:   int v45; // [esp+24h] [ebp-B0h] BYREF
+0x5ab2d40 44:   __int128 v46; // [esp+28h] [ebp-ACh]
+0x5ab2d40 45:   int v47[2]; // [esp+38h] [ebp-9Ch] BYREF
+0x5ab2d40 46:   _DWORD v48[3]; // [esp+40h] [ebp-94h] BYREF
+0x5ab2d40 47:   int v49; // [esp+4Ch] [ebp-88h] BYREF
+0x5ab2d40 48:   int v50; // [esp+50h] [ebp-84h] BYREF
+0x5ab2d40 49:   int v51; // [esp+54h] [ebp-80h] BYREF
+0x5ab2d40 50:   int v52; // [esp+58h] [ebp-7Ch] BYREF
+0x5ab2d40 51:   int v53; // [esp+5Ch] [ebp-78h] BYREF
+0x5ab2d40 52:   int v54; // [esp+60h] [ebp-74h] BYREF
+0x5ab2d40 53:   int v55; // [esp+64h] [ebp-70h] BYREF
+0x5ab2d40 54:   int v56; // [esp+68h] [ebp-6Ch] BYREF
+0x5ab2d40 55:   int v57; // [esp+6Ch] [ebp-68h] BYREF
+0x5ab2d40 56:   int v58; // [esp+70h] [ebp-64h] BYREF
+0x5ab2d40 57:   int v59; // [esp+74h] [ebp-60h]
+0x5ab2d40 58:   char v60[4]; // [esp+78h] [ebp-5Ch] BYREF
+0x5ab2d40 59:   int v61; // [esp+7Ch] [ebp-58h]
+0x5ab2d40 60:   int v62; // [esp+80h] [ebp-54h]
+0x5ab2d40 61:   _DWORD *v63; // [esp+84h] [ebp-50h]
+0x5ab2d40 62:   char ArgList[4]; // [esp+88h] [ebp-4Ch] BYREF
+0x5ab2d40 63:   int v65; // [esp+8Ch] [ebp-48h]
+0x5ab2d40 64:   int v66; // [esp+90h] [ebp-44h] BYREF
+0x5ab2d40 65:   int v67; // [esp+94h] [ebp-40h] BYREF
+0x5ab2d40 66:   int v68; // [esp+98h] [ebp-3Ch]
+0x5ab2d40 67:   char v69[4]; // [esp+9Ch] [ebp-38h]
+0x5ab2d40 68:   int v70; // [esp+A0h] [ebp-34h] BYREF
+0x5ab2d40 69:   int j; // [esp+A4h] [ebp-30h] BYREF
+0x5ab2d40 70:   int v72; // [esp+A8h] [ebp-2Ch] BYREF
+0x5ab2d40 71:   int *v73; // [esp+ACh] [ebp-28h] BYREF
+0x5ab2d40 72:   int v74; // [esp+B0h] [ebp-24h] BYREF
+0x5ab2d40 73:   int v75; // [esp+B4h] [ebp-20h] BYREF
+0x5ab2d40 74:   void *v76; // [esp+B8h] [ebp-1Ch] BYREF
+0x5ab2d40 75:   int v77; // [esp+BCh] [ebp-18h] BYREF
+0x5ab2d40 76:   int v78; // [esp+C0h] [ebp-14h]
+0x5ab2d40 77:   int v79; // [esp+C4h] [ebp-10h] BYREF
+0x5ab2d40 78:   int v80; // [esp+D0h] [ebp-4h]
+0x5ab2d40 79: 
+0x5ab2d40 80:   v4 = dword_6A54024;
+0x5ab2d40 81:   v73 = 0;
+0x5ab2d40 82:   v52 = 0;
+0x5ab2d40 83:   v56 = 0;
+0x5ab2d40 84:   v70 = 0;
+0x5ab2d40 85:   v75 = 0;
+0x5ab2d40 86:   v63 = 0;
+0x5ab2d40 87:   if ( dword_6A54024 && (v5 = *(_DWORD *)(dword_6A54024 + 8), v5 >= 0) )
+0x5ab2d40 88:   {
+0x5ab2d40 89:     v6 = dword_6A54024 + 60 * v5;
+0x5ab2d40 90:     if ( !*(_DWORD *)(v6 + 24) )
+0x5ab2d40 91:     {
+0x5ab2d40 92:       if ( !sub_5AEA430(0) )
+0x5ab2d40 93:         return 0;
+0x5ab2d40 94:       v4 = dword_6A54024;
+0x5ab2d40 95:     }
+0x5ab2d40 96:     v7 = *(_DWORD *)(v6 + 48);
+0x5ab2d40 97:     *(_DWORD *)v69 = v7;
+0x5ab2d40 98:     if ( a2 != 776966 && *(_DWORD *)(v4 + 8) + 1 >= dword_6A54014 )
+0x5ab2d40 99:     {
+0x5ab2d40 100:       dword_6453B98 = 543;
+0x5ab2d40 101:       return 0;
+0x5ab2d40 102:     }
+0x5ab2d40 103:   }
+0x5ab2d40 104:   else
+0x5ab2d40 105:   {
+0x5ab2d40 106:     v7 = *(_DWORD *)dword_6A54030;
+0x5ab2d40 107:     *(_DWORD *)v69 = *(_DWORD *)dword_6A54030;
+0x5ab2d40 108:   }
+0x5ab2d40 109:   if ( !sub_5AF6600(v7, 11, &v57)
+0x5ab2d40 110:     || !sub_5AF6AB0(v57, a1, 2, &v73, &v43, &v52, &v44)
+0x5ab2d40 111:     || (*(_BYTE *)v73 & 0x3F) != 0
+0x5ab2d40 112:     || !sub_5AF6AB0(v57, a1, 1, &v56, &v66, &v70, &v72) )
+0x5ab2d40 113:   {
+0x5ab2d40 114:     return 0;
+0x5ab2d40 115:   }
+0x5ab2d40 116:   v62 = *v73;
+0x5ab2d40 117:   if ( (v62 & 0x40) != 0 )
+0x5ab2d40 118:     sub_5AEB000();
+0x5ab2d40 119:   if ( a3 )
+0x5ab2d40 120:   {
+0x5ab2d40 121:     if ( (*a3 & 0x1FFF | (*a3 >> 13) & 0x3E000) != v7 )
+0x5ab2d40 122:     {
+0x5ab2d40 123:       LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "4CEIL:Reference is =%d/%d", *a3, a3[1]);
+0x5ab2d40 124:       dword_6453B98 = 10;
+0x5ab2d40 125:       return 0;
+0x5ab2d40 126:     }
+0x5ab2d40 127:     j = 2;
+0x5ab2d40 128:     if ( sub_5B01340(v7, 13387743, a3, 2, v60, &j) )
+0x5ab2d40 129:     {
+0x5ab2d40 130:       dword_6453B98 = 569;
+0x5ab2d40 131:       return 0;
+0x5ab2d40 132:     }
+0x5ab2d40 133:     sub_5AEDE80();
+0x5ab2d40 134:     v67 = *a3;
+0x5ab2d40 135:     v68 = a3[1];
+0x5ab2d40 136:   }
+0x5ab2d40 137:   else if ( !sub_5AEA9C0(v7, a4, (int)&v67) )
+0x5ab2d40 138:   {
+0x5ab2d40 139:     return 0;
+0x5ab2d40 140:   }
+0x5ab2d40 141:   if ( !sub_5AE9DF0(v66 + 11, v66 + 11, 1, v47, ArgList, &v74, &v75, &v49) )
+0x5ab2d40 142:     return 0;
+0x5ab2d40 143:   v8 = 0;
+0x5ab2d40 144:   *(_DWORD *)(v75 + 4 * v74) = v66 + 11;
+0x5ab2d40 145:   *(_DWORD *)(v75 + 4 * v74 + 4) = v67;
+0x5ab2d40 146:   *(_DWORD *)(v75 + 4 * v74 + 8) = v68;
+0x5ab2d40 147:   *(_DWORD *)(v75 + 4 * v74 + 12) = a1;
+0x5ab2d40 148:   *(_DWORD *)(v75 + 4 * v74 + 16) = 0;
+0x5ab2d40 149:   *(_DWORD *)(v75 + 4 * v74 + 20) = 0;
+0x5ab2d40 150:   *(_DWORD *)(v75 + 4 * v74 + 24) = 0;
+0x5ab2d40 151:   *(_DWORD *)(v75 + 4 * v74 + 28) = 0;
+0x5ab2d40 152:   *(_DWORD *)(v75 + 4 * v74 + 32) = 0;
+0x5ab2d40 153:   *(_DWORD *)(v75 + 4 * v74 + 36) = 0;
+0x5ab2d40 154:   *(_DWORD *)(v75 + 4 * v74 + 40) = v72 << 14;
+0x5ab2d40 155:   *(_DWORD *)(v75 + 4 * v74 + 40) |= 0x20000000u;
+0x5ab2d40 156:   if ( v66 > 0 )
+0x5ab2d40 157:   {
+0x5ab2d40 158:     do
+0x5ab2d40 159:     {
+0x5ab2d40 160:       v9 = v8 + v74;
+0x5ab2d40 161:       v10 = *(_DWORD *)(v56 + 4 * v8++);
+0x5ab2d40 162:       *(_DWORD *)(v75 + 4 * v9 + 44) = v10;
+0x5ab2d40 163:     }
+0x5ab2d40 164:     while ( v8 < v66 );
+0x5ab2d40 165:   }
+0x5ab2d40 166:   v11 = 0;
+0x5ab2d40 167:   v12 = 0;
+0x5ab2d40 168:   v13 = v73[9];
+0x5ab2d40 169:   if ( v13 > 0 )
+0x5ab2d40 170:   {
+0x5ab2d40 171:     j = 1;
+0x5ab2d40 172:     v7 = 0;
+0x5ab2d40 173:     do
+0x5ab2d40 174:     {
+0x5ab2d40 175:       if ( (unsigned int)(v73[v11 + 14] - 531442) > 0x17179147 || (v73[v11 + 22] & 0xFFFFF) == 0 )
+0x5ab2d40 176:       {
+0x5ab2d40 177:         if ( (v73[v11 + 20] & 2) == 0 || (v12 = j, (v62 & 0x40) != 0) )
+0x5ab2d40 178:           v7 += v73[v11 + 21] + 2;
+0x5ab2d40 179:       }
+0x5ab2d40 180:       v11 += v73[v11 + 15];
+0x5ab2d40 181:       --v13;
+0x5ab2d40 182:     }
+0x5ab2d40 183:     while ( v13 );
+0x5ab2d40 184:     v14 = v7;
+0x5ab2d40 185:     v65 = v7;
+0x5ab2d40 186:     LOBYTE(v7) = v69[0];
+0x5ab2d40 187:     if ( v14 > 0 )
+0x5ab2d40 188:     {
+0x5ab2d40 189:       v15 = v14 + 4;
+0x5ab2d40 190:       v16 = malloc(4 * (v14 + 4));
+0x5ab2d40 191:       v17 = v16;
+0x5ab2d40 192:       v63 = v16;
+0x5ab2d40 193:       if ( !v16 )
+0x5ab2d40 194:       {
+0x5ab2d40 195:         dword_6453B98 = 106;
+0x5ab2d40 196:         return 0;
+0x5ab2d40 197:       }
+0x5ab2d40 198:       v16[1] = 1;
+0x5ab2d40 199:       *v16 = 1;
+0x5ab2d40 200:       v16[3] = v15;
+0x5ab2d40 201:       if ( v12 )
+0x5ab2d40 202:       {
+0x5ab2d40 203:         v18 = v73;
+0x5ab2d40 204:         v19 = 0;
+0x5ab2d40 205:         v20 = 4;
+0x5ab2d40 206:         v76 = 0;
+0x5ab2d40 207:         v61 = 0;
+0x5ab2d40 208:         if ( v73[9] > 0 )
+0x5ab2d40 209:         {
+0x5ab2d40 210:           v21 = v70;
+0x5ab2d40 211:           v22 = v72;
+0x5ab2d40 212:           do
+0x5ab2d40 213:           {
+0x5ab2d40 214:             if ( (v18[(_DWORD)v19 + 22] & 0xFFFFF) == 0 && (v18[(_DWORD)v19 + 20] & 2) == 0 )
+0x5ab2d40 215:             {
+0x5ab2d40 216:               j = v18[(_DWORD)v19 + 14];
+0x5ab2d40 217:               v23 = 0;
+0x5ab2d40 218:               if ( v22 > 0 )
+0x5ab2d40 219:               {
+0x5ab2d40 220:                 while ( j != *(_DWORD *)(v21 + 4 * v23) )
+0x5ab2d40 221:                 {
+0x5ab2d40 222:                   v23 += (*(_DWORD *)(v21 + 4 * v23 + 4) & 0x3FFFFFF) + 2;
+0x5ab2d40 223:                   if ( v23 >= v72 )
+0x5ab2d40 224:                     goto LABEL_50;
+0x5ab2d40 225:                 }
+0x5ab2d40 226:                 v17[v20] = *(_DWORD *)(v21 + 4 * v23);
+0x5ab2d40 227:                 v17[v20 + 1] = *(_DWORD *)(v70 + 4 * v23 + 4);
+0x5ab2d40 228:                 v20 += 2;
+0x5ab2d40 229:                 v21 = v70;
+0x5ab2d40 230:                 v24 = *(_DWORD *)(v70 + 4 * v23 + 4) & 0x3FFFFFF;
+0x5ab2d40 231:                 if ( v24 )
+0x5ab2d40 232:                 {
+0x5ab2d40 233:                   v25 = 4 * v23 + 8;
+0x5ab2d40 234:                   do
+0x5ab2d40 235:                   {
+0x5ab2d40 236:                     v26 = *(_DWORD *)(v25 + v21);
+0x5ab2d40 237:                     v25 += 4;
+0x5ab2d40 238:                     v17[v20++] = v26;
+0x5ab2d40 239:                     v21 = v70;
+0x5ab2d40 240:                     --v24;
+0x5ab2d40 241:                   }
+0x5ab2d40 242:                   while ( v24 );
+0x5ab2d40 243:                 }
+0x5ab2d40 244:                 v18 = v73;
+0x5ab2d40 245: LABEL_50:
+0x5ab2d40 246:                 v22 = v72;
+0x5ab2d40 247:               }
+0x5ab2d40 248:               v19 = v76;
+0x5ab2d40 249:             }
+0x5ab2d40 250:             v19 = (char *)v19 + v18[(_DWORD)v19 + 15];
+0x5ab2d40 251:             v27 = ++v61 < v18[9];
+0x5ab2d40 252:             v17 = v63;
+0x5ab2d40 253:             v76 = v19;
+0x5ab2d40 254:           }
+0x5ab2d40 255:           while ( v27 );
+0x5ab2d40 256:         }
+0x5ab2d40 257:         v28 = v20 - 4;
+0x5ab2d40 258:       }
+0x5ab2d40 259:       else
+0x5ab2d40 260:       {
+0x5ab2d40 261:         v28 = v72;
+0x5ab2d40 262:         for ( i = 0; i < v72; v28 = v72 )
+0x5ab2d40 263:         {
+0x5ab2d40 264:           v17[i + 4] = *(_DWORD *)(v70 + 4 * i);
+0x5ab2d40 265:           ++i;
+0x5ab2d40 266:         }
+0x5ab2d40 267:       }
+0x5ab2d40 268:       v30 = (v62 & 0x40) == 0;
+0x5ab2d40 269:       v17[2] = v28;
+0x5ab2d40 270:       if ( !v30 )
+0x5ab2d40 271:       {
+0x5ab2d40 272:         v31 = v73;
+0x5ab2d40 273:         v32 = 0;
+0x5ab2d40 274:         v33 = 4;
+0x5ab2d40 275:         v61 = 0;
+0x5ab2d40 276:         v76 = (void *)4;
+0x5ab2d40 277:         for ( j = 0; j < v31[9]; ++j )
+0x5ab2d40 278:         {
+0x5ab2d40 279:           v34 = v31[v32 + 14];
+0x5ab2d40 280:           v59 = v33;
+0x5ab2d40 281:           if ( (unsigned int)(v34 - 531442) > 0x17179147 || (v31[v32 + 22] & 0xFFFFF) == 0 )
+0x5ab2d40 282:           {
+0x5ab2d40 283:             v35 = 4;
+0x5ab2d40 284:             v78 = v72 + 4;
+0x5ab2d40 285:             if ( v72 + 4 <= 4 )
+0x5ab2d40 286:             {
+0x5ab2d40 287: LABEL_63:
+0x5ab2d40 288:               v36 = v76;
+0x5ab2d40 289:               v37 = v31[v32 + 18];
+0x5ab2d40 290:               v17[(_DWORD)v76] = v34;
+0x5ab2d40 291:               v17[(_DWORD)v36 + 1] = v37;
+0x5ab2d40 292:               v33 = (int)v36 + 2;
+0x5ab2d40 293:               v76 = (void *)v33;
+0x5ab2d40 294:               if ( v37 <= 0 )
+0x5ab2d40 295:               {
+0x5ab2d40 296:                 v31 = v73;
+0x5ab2d40 297:               }
+0x5ab2d40 298:               else
+0x5ab2d40 299:               {
+0x5ab2d40 300:                 v38 = v59;
+0x5ab2d40 301:                 memset(&v17[v59 + 2], 0, 4 * v37);
+0x5ab2d40 302:                 v32 = v61;
+0x5ab2d40 303:                 v33 = v37 + v38 + 2;
+0x5ab2d40 304:                 v31 = v73;
+0x5ab2d40 305:                 v76 = (void *)v33;
+0x5ab2d40 306:               }
+0x5ab2d40 307:               goto LABEL_67;
+0x5ab2d40 308:             }
+0x5ab2d40 309:             while ( v17[v35] != v34 )
+0x5ab2d40 310:             {
+0x5ab2d40 311:               v35 += (v17[v35 + 1] & 0x3FFFFFF) + 2;
+0x5ab2d40 312:               if ( v35 >= v78 )
+0x5ab2d40 313:                 goto LABEL_63;
+0x5ab2d40 314:             }
+0x5ab2d40 315:           }
+0x5ab2d40 316:           v33 = (int)v76;
+0x5ab2d40 317: LABEL_67:
+0x5ab2d40 318:           v32 += v31[v32 + 15];
+0x5ab2d40 319:           v61 = v32;
+0x5ab2d40 320:         }
+0x5ab2d40 321:         v17[2] = v65;
+0x5ab2d40 322:         if ( !sub_5AEC110(v17, v75 + 4 * v74, 1, 0, *(_DWORD *)ArgList, 21, 0) )
+0x5ab2d40 323:           return 0;
+0x5ab2d40 324:       }
+0x5ab2d40 325:       LOBYTE(v7) = v69[0];
+0x5ab2d40 326:     }
+0x5ab2d40 327:   }
+0x5ab2d40 328:   if ( !sub_5AFDF10(13387743, v7, (int)&v67, 2, (int)v47, 2, 1, 0) )
+0x5ab2d40 329:     return 0;
+0x5ab2d40 330:   if ( !sub_5AF6600(v7, 0, &v51)
+0x5ab2d40 331:     || !sub_5AF6600(v7, 1, &v55)
+0x5ab2d40 332:     || (sub_5AEB030(&v67, v51, v55, v47, *(_DWORD *)ArgList, v73), !sub_5AF6600(v7, 17, &v53))
+0x5ab2d40 333:     || !sub_5AF6600(v7, 12, &v54) )
+0x5ab2d40 334:   {
+0x5ab2d40 335: LABEL_108:
+0x5ab2d40 336:     sub_5AFDF10(13387743, v69[0], (int)&v67, 2, (int)&v50, 1, 0, 0);
+0x5ab2d40 337:     sub_5AEDE80();
+0x5ab2d40 338:     return 0;
+0x5ab2d40 339:   }
+0x5ab2d40 340:   if ( v73[4] && v54 == 1 && v53 )
+0x5ab2d40 341:   {
+0x5ab2d40 342:     v58 = 0;
+0x5ab2d40 343:     v59 = 0;
+0x5ab2d40 344:     DB_Ref::DB_Ref((DB_Ref *)v42);
+0x5ab2d40 345:     v45 = (int)&DAB_ErrorMessage::`vftable';
+0x5ab2d40 346:     v46 = 0;
+0x5ab2d40 347:     v80 = 0;
+0x5ab2d40 348:     sub_5B14A80(&v76);
+0x5ab2d40 349:     LOBYTE(v80) = 1;
+0x5ab2d40 350:     if ( !(unsigned __int8)sub_5B14B90(v7, (int)v42, (int)&v45) )
+0x5ab2d40 351:     {
+0x5ab2d40 352:       if ( v76 )
+0x5ab2d40 353:         LicFeatureCheckOut_Free(v76);
+0x5ab2d40 354:       sub_5AB2350(&v45);
+0x5ab2d40 355:       return 0;
+0x5ab2d40 356:     }
+0x5ab2d40 357:     v59 = v55;
+0x5ab2d40 358:     v77 = v67;
+0x5ab2d40 359:     v78 = v68;
+0x5ab2d40 360:     v58 = 0;
+0x5ab2d40 361:     memset(v48, 0, sizeof(v48));
+0x5ab2d40 362:     sub_5AB28D0(&v77, &v79, v49);
+0x5ab2d40 363:     LOBYTE(v80) = 2;
+0x5ab2d40 364:     v39 = (*(int (__thiscall **)(void *, int *, _DWORD *, int *, int *))(*(_DWORD *)v76 + 8))(v76, v42, v48, &v58, &v45);
+0x5ab2d40 365:     sub_5AB29C0(v48);
+0x5ab2d40 366:     if ( !v39 )
+0x5ab2d40 367:     {
+0x5ab2d40 368:       if ( v76 )
+0x5ab2d40 369:         LicFeatureCheckOut_Free(v76);
+0x5ab2d40 370:       v80 = -1;
+0x5ab2d40 371:       sub_5AB2350(&v45);
+0x5ab2d40 372:       goto LABEL_108;
+0x5ab2d40 373:     }
+0x5ab2d40 374:     if ( v76 )
+0x5ab2d40 375:       LicFeatureCheckOut_Free(v76);
+0x5ab2d40 376:     v80 = -1;
+0x5ab2d40 377:     sub_5AB2350(&v45);
+0x5ab2d40 378:     LOBYTE(v7) = v69[0];
+0x5ab2d40 379:   }
+0x5ab2d40 380:   sub_5AF11D0(ArgList[0]);
+0x5ab2d40 381:   if ( a2 != 776966 )
+0x5ab2d40 382:   {
+0x5ab2d40 383:     if ( dword_6A54024 && *(int *)(dword_6A54024 + 8) >= 0 )
+0x5ab2d40 384:     {
+0x5ab2d40 385:       if ( sub_5AB6990(a2, (int)&v67, 0) || dword_6453B98 == 34 || dword_6453B98 == 48 )
+0x5ab2d40 386:         goto LABEL_98;
+0x5ab2d40 387:     }
+0x5ab2d40 388:     else
+0x5ab2d40 389:     {
+0x5ab2d40 390:       dword_6453B98 = 538;
+0x5ab2d40 391:     }
+0x5ab2d40 392: LABEL_104:
+0x5ab2d40 393:     if ( v73[4] && v54 == 1 && v53 && !sub_5AFDF10(7618377, v7, (int)&v67, 2, (int)&v50, 1, 0, 0) )
+0x5ab2d40 394:       return 0;
+0x5ab2d40 395:     goto LABEL_108;
+0x5ab2d40 396:   }
+0x5ab2d40 397:   if ( !sub_5AEB6B0(&v67, 1) )
+0x5ab2d40 398:     goto LABEL_104;
+0x5ab2d40 399: LABEL_98:
+0x5ab2d40 400:   v40 = dword_6A54024 + 60 * *(_DWORD *)(dword_6A54024 + 8);
+0x5ab2d40 401:   if ( *(_DWORD *)(v40 + 28) )
+0x5ab2d40 402:   {
+0x5ab2d40 403:     free(*(void **)(dword_6A54024 + 60 * *(_DWORD *)(dword_6A54024 + 8) + 28));
+0x5ab2d40 404:     *(_DWORD *)(v40 + 28) = 0;
+0x5ab2d40 405:   }
+0x5ab2d40 406:   v30 = (v62 & 0x40) == 0;
+0x5ab2d40 407:   *(_DWORD *)(v40 + 28) = v63;
+0x5ab2d40 408:   if ( !v30 )
+0x5ab2d40 409:     sub_5AEB000();
+0x5ab2d40 410:   return 1;
+0x5ab2d40 411: }
+0x5abd470 1: int __cdecl sub_5ABD470(int a1, int a2, int a3)
+0x5abd470 2: {
+0x5abd470 3:   const char *v3; // edx
+0x5abd470 4:   int result; // eax
+0x5abd470 5:   int v5; // ebx
+0x5abd470 6:   int v6; // edi
+0x5abd470 7:   int v7; // eax
+0x5abd470 8:   char *v8; // esi
+0x5abd470 9:   char *v9; // ecx
+0x5abd470 10:   int v10; // ecx
+0x5abd470 11:   int v11; // [esp+Ch] [ebp-30h] BYREF
+0x5abd470 12:   int v12; // [esp+10h] [ebp-2Ch]
+0x5abd470 13:   int v13; // [esp+14h] [ebp-28h] BYREF
+0x5abd470 14:   _BYTE v14[32]; // [esp+18h] [ebp-24h] BYREF
+0x5abd470 15: 
+0x5abd470 16:   if ( !dword_6423B60 )
+0x5abd470 17:   {
+0x5abd470 18:     if ( (_DWORD)xmmword_6A53F04 )
+0x5abd470 19:     {
+0x5abd470 20:       v11 = 0;
+0x5abd470 21:       v12 = 0;
+0x5abd470 22:       sub_5AB5DD0(&v11);
+0x5abd470 23:       v3 = off_6003900[a1];
+0x5abd470 24:       v13 = 1;
+0x5abd470 25:       ((void (__cdecl *)(int *, const char *, unsigned int, int *))dword_6453B70)(&v13, v3, strlen(v3), &v11);
+0x5abd470 26:     }
+0x5abd470 27:     if ( dword_6453B98 )
+0x5abd470 28:     {
+0x5abd470 29:       sub_5ABA5B0();
+0x5abd470 30:     }
+0x5abd470 31:     else
+0x5abd470 32:     {
+0x5abd470 33:       dword_6004354 = (dword_6004354 + 1) % 5;
+0x5abd470 34:       sub_5AB5DD0((char *)&xmmword_6423B38 + 8 * dword_6004354);
+0x5abd470 35:       *((_DWORD *)&xmmword_6423B24 + dword_6004354) = a1;
+0x5abd470 36:     }
+0x5abd470 37:   }
+0x5abd470 38:   result = sub_5AE4510(a3, a2);
+0x5abd470 39:   if ( result )
+0x5abd470 40:     result = sub_5AB2D40(a3, a2, 0, 1);
+0x5abd470 41:   v5 = dword_6453B98;
+0x5abd470 42:   if ( dword_6453B98 )
+0x5abd470 43:   {
+0x5abd470 44:     v6 = 0;
+0x5abd470 45:     v13 = dword_6004354 % 5;
+0x5abd470 46:     v7 = *((_DWORD *)&xmmword_6423B24 + dword_6004354 % 5);
+0x5abd470 47:     v8 = off_6003900[v7];
+0x5abd470 48:     if ( *v8 )
+0x5abd470 49:     {
+0x5abd470 50:       v9 = off_6003900[v7];
+0x5abd470 51:       while ( v6 < 32 )
+0x5abd470 52:       {
+0x5abd470 53:         ++v6;
+0x5abd470 54:         v9[v14 - v8] = *v9;
+0x5abd470 55:         if ( !*++v9 )
+0x5abd470 56:         {
+0x5abd470 57:           if ( v6 >= 32 )
+0x5abd470 58:             break;
+0x5abd470 59:           goto LABEL_15;
+0x5abd470 60:         }
+0x5abd470 61:       }
+0x5abd470 62:     }
+0x5abd470 63:     else
+0x5abd470 64:     {
+0x5abd470 65: LABEL_15:
+0x5abd470 66:       memset(&v14[v6], 0x20u, 32 - v6);
+0x5abd470 67:     }
+0x5abd470 68:     v10 = v13;
+0x5abd470 69:     v13 = v5;
+0x5abd470 70:     v11 = *((_DWORD *)&xmmword_6423B38 + 2 * v10);
+0x5abd470 71:     v12 = *((_DWORD *)&xmmword_6423B38 + 2 * v10 + 1);
+0x5abd470 72:     result = ((int (__cdecl *)(int *, _BYTE *, unsigned int, int *))dword_6423A28)(&v13, v14, strlen(v8), &v11);
+0x5abd470 73:     v5 = dword_6453B98;
+0x5abd470 74:   }
+0x5abd470 75:   if ( !dword_6423B60 )
+0x5abd470 76:   {
+0x5abd470 77:     if ( (_DWORD)xmmword_6A53F04 )
+0x5abd470 78:     {
+0x5abd470 79:       v11 = v5;
+0x5abd470 80:       v13 = 2;
+0x5abd470 81:       return ((int (__cdecl *)(int *, const char *, int, int *))dword_6453B70)(&v13, " ", 1, &v11);
+0x5abd470 82:     }
+0x5abd470 83:   }
+0x5abd470 84:   return result;
+0x5abd470 85: }
+0x5ae5770 1: int __cdecl sub_5AE5770(int ArgList, int a2, int a3, int a4, int a5, int a6, int *a7, int a8)
+0x5ae5770 2: {
+0x5ae5770 3:   int v9; // ebx
+0x5ae5770 4:   int v10; // edi
+0x5ae5770 5:   int v11; // eax
+0x5ae5770 6:   int v12; // ecx
+0x5ae5770 7:   int v13; // ecx
+0x5ae5770 8:   int v14; // eax
+0x5ae5770 9:   int v15; // ebx
+0x5ae5770 10:   int *v16; // edi
+0x5ae5770 11:   int v17[2]; // [esp+Ch] [ebp-38h] BYREF
+0x5ae5770 12:   int v18; // [esp+14h] [ebp-30h] BYREF
+0x5ae5770 13:   int v19; // [esp+18h] [ebp-2Ch]
+0x5ae5770 14:   int v20; // [esp+1Ch] [ebp-28h] BYREF
+0x5ae5770 15:   int v21; // [esp+20h] [ebp-24h] BYREF
+0x5ae5770 16:   int v22; // [esp+24h] [ebp-20h] BYREF
+0x5ae5770 17:   int v23; // [esp+28h] [ebp-1Ch] BYREF
+0x5ae5770 18:   int v24; // [esp+2Ch] [ebp-18h] BYREF
+0x5ae5770 19:   int v25; // [esp+30h] [ebp-14h] BYREF
+0x5ae5770 20:   int v26; // [esp+34h] [ebp-10h] BYREF
+0x5ae5770 21:   _DWORD *v27; // [esp+38h] [ebp-Ch] BYREF
+0x5ae5770 22:   int v28; // [esp+3Ch] [ebp-8h] BYREF
+0x5ae5770 23:   char v29; // [esp+43h] [ebp-1h] BYREF
+0x5ae5770 24: 
+0x5ae5770 25:   dword_6453DB8 = 0;
+0x5ae5770 26:   dword_6453DB4 = -1;
+0x5ae5770 27:   DLL_GlobalInterface::returnError((DLL_GlobalInterface *)&v29);
+0x5ae5770 28:   if ( !sub_5AF6600(ArgList, 0, &v28) )
+0x5ae5770 29:     goto LABEL_4;
+0x5ae5770 30:   if ( (unsigned __int8)sub_5B1BEE0(ArgList, v28) )
+0x5ae5770 31:   {
+0x5ae5770 32:     dword_6453B98 = 699;
+0x5ae5770 33: LABEL_4:
+0x5ae5770 34:     sub_5AEB000();
+0x5ae5770 35:     return 0;
+0x5ae5770 36:   }
+0x5ae5770 37:   if ( !sub_5AF6600(ArgList, 10, &v25) )
+0x5ae5770 38:     goto LABEL_4;
+0x5ae5770 39:   v9 = a5;
+0x5ae5770 40:   if ( a5 == 1 && v25 == 3 )
+0x5ae5770 41:   {
+0x5ae5770 42:     dword_6453B98 = 639;
+0x5ae5770 43:     sub_5AEB000();
+0x5ae5770 44:     return 0;
+0x5ae5770 45:   }
+0x5ae5770 46:   if ( sub_5AFCFD0(ArgList) )
+0x5ae5770 47:   {
+0x5ae5770 48:     dword_6453B98 = 530;
+0x5ae5770 49:     return 0;
+0x5ae5770 50:   }
+0x5ae5770 51:   if ( !sub_5AEA070(ArgList) || !sub_5AE9F90(0) || !sub_5AF6600(ArgList, 12, &v24) )
+0x5ae5770 52:     goto LABEL_4;
+0x5ae5770 53:   if ( v24 != 1 )
+0x5ae5770 54:   {
+0x5ae5770 55:     dword_6453B98 = 627;
+0x5ae5770 56:     return 0;
+0x5ae5770 57:   }
+0x5ae5770 58:   if ( !sub_5AFBF60() )
+0x5ae5770 59:     goto LABEL_4;
+0x5ae5770 60:   if ( !sub_5AFB8C0() )
+0x5ae5770 61:     goto LABEL_4;
+0x5ae5770 62:   sub_5AEB000();
+0x5ae5770 63:   if ( !sub_5AE4DD0(ArgList, &v23) )
+0x5ae5770 64:     goto LABEL_4;
+0x5ae5770 65:   if ( v23 )
+0x5ae5770 66:   {
+0x5ae5770 67:     if ( !sub_5AF0FB0(1, ArgList, v28) )
+0x5ae5770 68:       goto LABEL_4;
+0x5ae5770 69:     v22 = 2;
+0x5ae5770 70:     if ( !sub_5AF6210(ArgList, 7, (int)v17, (int)&v22)
+0x5ae5770 71:       || v17[0] > 0 && !sub_5AFD040(ArgList, v28, v17, 0, (int)dword_6453DF0, 1, 1, 1, 0) )
+0x5ae5770 72:     {
+0x5ae5770 73:       goto LABEL_76;
+0x5ae5770 74:     }
+0x5ae5770 75:     if ( !sub_5B12760(ArgList, v28, 0) )
+0x5ae5770 76:       goto LABEL_76;
+0x5ae5770 77:     v19 = v28;
+0x5ae5770 78:     v18 = 0;
+0x5ae5770 79:     if ( !sub_5AEE4E0(ArgList, &v18, 0, 0, &v26) )
+0x5ae5770 80:       goto LABEL_76;
+0x5ae5770 81:     v18 = *(_DWORD *)(v26 + 40);
+0x5ae5770 82:     v19 = *(_DWORD *)(v26 + 44);
+0x5ae5770 83:     if ( !sub_5AEE4E0(ArgList, &v18, 0, 0, &v27) )
+0x5ae5770 84:       goto LABEL_76;
+0x5ae5770 85:     if ( *v27 != 3 )
+0x5ae5770 86:     {
+0x5ae5770 87:       LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "5SW:(page is type %d)", *v27);
+0x5ae5770 88:       sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5ae5770 89:       dword_6453B98 = 664;
+0x5ae5770 90:       sub_5AF0FB0(0, ArgList, v28);
+0x5ae5770 91:       sub_5AEB000();
+0x5ae5770 92:       return 0;
+0x5ae5770 93:     }
+0x5ae5770 94:     if ( !sub_5AF6600(ArgList, 17, &v23) || v23 && !sub_5AE79F0(ArgList, v28, v27[3]) )
+0x5ae5770 95:       goto LABEL_76;
+0x5ae5770 96:     *(_DWORD *)dword_6A54244 = ArgList;
+0x5ae5770 97:     if ( !sub_5AF6600(ArgList, 1, &dword_6A54234) )
+0x5ae5770 98:       goto LABEL_76;
+0x5ae5770 99:     if ( !sub_5AF6600(ArgList, 0, &dword_6A54248) )
+0x5ae5770 100:       goto LABEL_76;
+0x5ae5770 101:     v10 = a8;
+0x5ae5770 102:     if ( a5 == 2 && v25 == 1 && !sub_5B12250(ArgList, (int)a7, a8) )
+0x5ae5770 103:       goto LABEL_76;
+0x5ae5770 104:     v11 = dword_6453EC4;
+0x5ae5770 105:     if ( dword_6453EC4 <= 0 )
+0x5ae5770 106:     {
+0x5ae5770 107:       v12 = dword_6A54248;
+0x5ae5770 108:       v11 = -dword_6A54234;
+0x5ae5770 109:     }
+0x5ae5770 110:     else
+0x5ae5770 111:     {
+0x5ae5770 112:       v12 = dword_6453EC0;
+0x5ae5770 113:     }
+0x5ae5770 114:     dword_6A54238 = v11;
+0x5ae5770 115:     dword_6A5424C = v12;
+0x5ae5770 116:     if ( !sub_5AF3940(ArgList, v12, v11, -1, 0, 0, 0, 0) )
+0x5ae5770 117:       goto LABEL_76;
+0x5ae5770 118:     v19 = dword_6A54248;
+0x5ae5770 119:     v18 = 0;
+0x5ae5770 120:     if ( !sub_5AEE4E0(ArgList, &v18, 0, 0, &v26) )
+0x5ae5770 121:       goto LABEL_75;
+0x5ae5770 122:     v18 = *(_DWORD *)(v26 + 40);
+0x5ae5770 123:     v19 = *(_DWORD *)(v26 + 44);
+0x5ae5770 124:     if ( !sub_5AEE4E0(ArgList, &v18, 0, 0, &v27) )
+0x5ae5770 125:       goto LABEL_75;
+0x5ae5770 126:     dword_6A54240 = dword_6A54248;
+0x5ae5770 127:     if ( a5 == 1 )
+0x5ae5770 128:     {
+0x5ae5770 129:       dword_6A5423C = v27[3];
+0x5ae5770 130:       if ( !sub_5AF2A70(dword_6A54244[0], dword_6A54248, dword_6A54234)
+0x5ae5770 131:         || !sub_5AF3940(ArgList, dword_6A54240, dword_6A5423C, -1, 1, 0, 1, 0) )
+0x5ae5770 132:       {
+0x5ae5770 133:         goto LABEL_75;
+0x5ae5770 134:       }
+0x5ae5770 135:       v13 = dword_6A54240;
+0x5ae5770 136:       v14 = dword_6A5423C++;
+0x5ae5770 137:       dword_6A54250 = dword_6A5423C - 1;
+0x5ae5770 138:       dword_6A54258 = dword_6A54240;
+0x5ae5770 139:     }
+0x5ae5770 140:     else
+0x5ae5770 141:     {
+0x5ae5770 142:       dword_6A5423C = 0;
+0x5ae5770 143:       dword_6A54250 = v27[3];
+0x5ae5770 144:       dword_6A54258 = dword_6A54248;
+0x5ae5770 145:       if ( !sub_5AF3440(ArgList, dword_6A5424C, dword_6A54238, dword_6A54248, 0) )
+0x5ae5770 146:       {
+0x5ae5770 147: LABEL_75:
+0x5ae5770 148:         sub_5AF54B0(*(int *)dword_6A54244, dword_6A5424C, dword_6A54238);
+0x5ae5770 149: LABEL_76:
+0x5ae5770 150:         sub_5AF0FB0(0, ArgList, v28);
+0x5ae5770 151:         sub_5AEB000();
+0x5ae5770 152:         return 0;
+0x5ae5770 153:       }
+0x5ae5770 154:       v14 = dword_6A54250;
+0x5ae5770 155:       v13 = dword_6A54258;
+0x5ae5770 156:     }
+0x5ae5770 157:     if ( v14 != dword_6A54238 && !sub_5AF3940(ArgList, v13, v14, -1, 1, 0, 0, 0) )
+0x5ae5770 158:     {
+0x5ae5770 159: LABEL_74:
+0x5ae5770 160:       sub_5AF54B0(*(int *)dword_6A54244, dword_6A54240, dword_6A5423C);
+0x5ae5770 161:       goto LABEL_75;
+0x5ae5770 162:     }
+0x5ae5770 163:     if ( a8 )
+0x5ae5770 164:     {
+0x5ae5770 165:       v15 = 0;
+0x5ae5770 166:       if ( a8 > 0 )
+0x5ae5770 167:       {
+0x5ae5770 168:         v16 = a7;
+0x5ae5770 169:         while ( 1 )
+0x5ae5770 170:         {
+0x5ae5770 171:           if ( !sub_5AF2A70(ArgList, dword_6A54248, dword_6A54234) )
+0x5ae5770 172:             goto LABEL_72;
+0x5ae5770 173:           if ( sub_5AEB6B0(v16, 1) )
+0x5ae5770 174:           {
+0x5ae5770 175:             if ( dword_6453B98 != 10 )
+0x5ae5770 176:               goto LABEL_66;
+0x5ae5770 177:           }
+0x5ae5770 178:           else if ( dword_6453B98 != 10 )
+0x5ae5770 179:           {
+0x5ae5770 180:             goto LABEL_72;
+0x5ae5770 181:           }
+0x5ae5770 182:           sub_5AEDE80();
+0x5ae5770 183:           if ( !sub_5AF2A70(ArgList, dword_6A54240, dword_6A5423C) )
+0x5ae5770 184:             goto LABEL_72;
+0x5ae5770 185:           if ( sub_5AEB6B0(v16, 1) )
+0x5ae5770 186:           {
+0x5ae5770 187:             if ( dword_6453B98 != 10 )
+0x5ae5770 188:               goto LABEL_66;
+0x5ae5770 189:           }
+0x5ae5770 190:           else if ( dword_6453B98 != 10 )
+0x5ae5770 191:           {
+0x5ae5770 192:             goto LABEL_72;
+0x5ae5770 193:           }
+0x5ae5770 194:           sub_5AEDE80();
+0x5ae5770 195:           if ( !sub_5AF2A70(ArgList, dword_6A5424C, dword_6A54238) || !sub_5AEB6B0(v16, 1) )
+0x5ae5770 196:             goto LABEL_72;
+0x5ae5770 197: LABEL_66:
+0x5ae5770 198:           if ( !sub_5AB6020(243803617, &v21, 1, &v20) )
+0x5ae5770 199:             goto LABEL_72;
+0x5ae5770 200:           if ( !v21 )
+0x5ae5770 201:           {
+0x5ae5770 202:             dword_6453B98 = 573;
+0x5ae5770 203:             goto LABEL_72;
+0x5ae5770 204:           }
+0x5ae5770 205:           ++v15;
+0x5ae5770 206:           v16 += 2;
+0x5ae5770 207:           if ( v15 >= a8 )
+0x5ae5770 208:           {
+0x5ae5770 209:             v10 = a8;
+0x5ae5770 210:             break;
+0x5ae5770 211:           }
+0x5ae5770 212:         }
+0x5ae5770 213:       }
+0x5ae5770 214:       v9 = a5;
+0x5ae5770 215:     }
+0x5ae5770 216:     if ( !sub_5AF2A70(dword_6A54244[0], dword_6A54248, dword_6A54234) )
+0x5ae5770 217:     {
+0x5ae5770 218: LABEL_72:
+0x5ae5770 219:       if ( dword_6A54250 != dword_6A54238 )
+0x5ae5770 220:         sub_5AF54B0(*(int *)dword_6A54244, dword_6A54258, dword_6A54250);
+0x5ae5770 221:       goto LABEL_74;
+0x5ae5770 222:     }
+0x5ae5770 223:     dword_6A54254 = a6;
+0x5ae5770 224:     dword_6A5425C = 1;
+0x5ae5770 225:     if ( !sub_5B15E10(a2, a3, a4, v9, a6, 2, a7, v10, 0, 0) )
+0x5ae5770 226:       goto LABEL_76;
+0x5ae5770 227:     if ( !sub_5AF0FB0(0, ArgList, v28) )
+0x5ae5770 228:       goto LABEL_4;
+0x5ae5770 229:   }
+0x5ae5770 230:   sub_5AEB2F0();
+0x5ae5770 231:   sub_5AEB000();
+0x5ae5770 232:   return 1;
+0x5ae5770 233: }
+0x5aea9c0 1: BOOL __cdecl sub_5AEA9C0(int ArgList, int a2, int *a3)
+0x5aea9c0 2: {
+0x5aea9c0 3:   void *v3; // eax
+0x5aea9c0 4:   unsigned int v4; // ecx
+0x5aea9c0 5:   unsigned int v5; // ecx
+0x5aea9c0 6:   int v7; // eax
+0x5aea9c0 7:   char v8; // al
+0x5aea9c0 8:   int v9; // esi
+0x5aea9c0 9:   _DWORD *v10; // ecx
+0x5aea9c0 10:   PMLTypeString *heap; // eax
+0x5aea9c0 11:   _BYTE *v12; // eax
+0x5aea9c0 12:   unsigned int v13; // ecx
+0x5aea9c0 13:   unsigned int v14; // ecx
+0x5aea9c0 14:   _BYTE *v15; // eax
+0x5aea9c0 15:   unsigned int v16; // ecx
+0x5aea9c0 16:   unsigned int v17; // ecx
+0x5aea9c0 17:   _BYTE *v18; // eax
+0x5aea9c0 18:   unsigned int v19; // ecx
+0x5aea9c0 19:   unsigned int v20; // ecx
+0x5aea9c0 20:   int v21; // eax
+0x5aea9c0 21:   int v22[2]; // [esp+10h] [ebp-58h] BYREF
+0x5aea9c0 22:   int v23; // [esp+18h] [ebp-50h] BYREF
+0x5aea9c0 23:   int v24; // [esp+1Ch] [ebp-4Ch] BYREF
+0x5aea9c0 24:   void *v25; // [esp+20h] [ebp-48h] BYREF
+0x5aea9c0 25:   int v26; // [esp+24h] [ebp-44h]
+0x5aea9c0 26:   int v27; // [esp+28h] [ebp-40h]
+0x5aea9c0 27:   void *v28; // [esp+2Ch] [ebp-3Ch] BYREF
+0x5aea9c0 28:   void *v29; // [esp+30h] [ebp-38h]
+0x5aea9c0 29:   int v30; // [esp+34h] [ebp-34h]
+0x5aea9c0 30:   int v31; // [esp+38h] [ebp-30h] BYREF
+0x5aea9c0 31:   char v32; // [esp+3Fh] [ebp-29h] BYREF
+0x5aea9c0 32:   PMLTypeString v33; // [esp+40h] [ebp-28h] BYREF
+0x5aea9c0 33:   int v34; // [esp+64h] [ebp-4h]
+0x5aea9c0 34: 
+0x5aea9c0 35:   v24 = 2;
+0x5aea9c0 36:   if ( !sub_5AF6210(ArgList, 7, (int)a3, (int)&v24) )
+0x5aea9c0 37:     return 0;
+0x5aea9c0 38:   if ( !*a3 && !a3[1] )
+0x5aea9c0 39:   {
+0x5aea9c0 40:     if ( !sub_5AF6600(ArgList, 0, &v31) )
+0x5aea9c0 41:       return 0;
+0x5aea9c0 42:     DLL_GlobalInterface::returnError((DLL_GlobalInterface *)&v32);
+0x5aea9c0 43:     if ( (unsigned __int8)sub_5B1BEE0(ArgList, v31) )
+0x5aea9c0 44:     {
+0x5aea9c0 45:       v25 = 0;
+0x5aea9c0 46:       v26 = 0;
+0x5aea9c0 47:       v27 = 0;
+0x5aea9c0 48:       v34 = 0;
+0x5aea9c0 49:       if ( !(unsigned __int8)sub_5B1BE80(ArgList, v31, &v25) )
+0x5aea9c0 50:         goto LABEL_7;
+0x5aea9c0 51:       if ( byte_6A54171 )
+0x5aea9c0 52:       {
+0x5aea9c0 53:         v8 = byte_6A54170;
+0x5aea9c0 54:       }
+0x5aea9c0 55:       else
+0x5aea9c0 56:       {
+0x5aea9c0 57:         v7 = Spectrum_BucketsClient();
+0x5aea9c0 58:         byte_6A54171 = 1;
+0x5aea9c0 59:         v8 = v7 != 0;
+0x5aea9c0 60:         byte_6A54170 = v8;
+0x5aea9c0 61:       }
+0x5aea9c0 62:       if ( !v8 )
+0x5aea9c0 63:       {
+0x5aea9c0 64:         LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "service client unavailable");
+0x5aea9c0 65:         dword_6453B98 = 703;
+0x5aea9c0 66:         goto LABEL_7;
+0x5aea9c0 67:       }
+0x5aea9c0 68:       v28 = 0;
+0x5aea9c0 69:       v29 = 0;
+0x5aea9c0 70:       v30 = 0;
+0x5aea9c0 71:       v33.len = 0;
+0x5aea9c0 72:       v33.cap = 15;
+0x5aea9c0 73:       v33.u.sso[0] = 0;
+0x5aea9c0 74:       v23 = 0;
+0x5aea9c0 75:       LOBYTE(v34) = 2;
+0x5aea9c0 76:       Spectrum_AcquireBucket(ArgList, *(_DWORD *)v25, *((_DWORD *)v25 + 1), &v28, &v23, &v33);
+0x5aea9c0 77:       if ( v23 == 2 )
+0x5aea9c0 78:       {
+0x5aea9c0 79:         v9 = 709;
+0x5aea9c0 80:         LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "Cloud Buckect Service is currently in Maintenance mode");
+0x5aea9c0 81:         goto LABEL_29;
+0x5aea9c0 82:       }
+0x5aea9c0 83:       v10 = v28;
+0x5aea9c0 84:       if ( v28 == v29 )
+0x5aea9c0 85:       {
+0x5aea9c0 86:         heap = &v33;
+0x5aea9c0 87:         v9 = 703;
+0x5aea9c0 88:         if ( v33.cap >= 0x10 )
+0x5aea9c0 89:           heap = (PMLTypeString *)v33.u.heap;
+0x5aea9c0 90:         LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, heap->u.sso);
+0x5aea9c0 91: LABEL_29:
+0x5aea9c0 92:         dword_6453B98 = v9;
+0x5aea9c0 93:         PMLTypeString::~PMLTypeString(&v33);
+0x5aea9c0 94:         v12 = v28;
+0x5aea9c0 95:         if ( v28 )
+0x5aea9c0 96:         {
+0x5aea9c0 97:           v13 = (v30 - (int)v28) >> 2;
+0x5aea9c0 98:           if ( v13 > 0x3FFFFFFF )
+0x5aea9c0 99:             goto LABEL_17;
+0x5aea9c0 100:           v14 = 4 * v13;
+0x5aea9c0 101:           if ( v14 >= 0x1000 )
+0x5aea9c0 102:           {
+0x5aea9c0 103:             if ( v14 + 35 < v14 )
+0x5aea9c0 104:               goto LABEL_17;
+0x5aea9c0 105:             if ( ((unsigned __int8)v28 & 0x1F) != 0 )
+0x5aea9c0 106:               goto LABEL_17;
+0x5aea9c0 107:             v12 = (_BYTE *)*((_DWORD *)v28 - 1);
+0x5aea9c0 108:             if ( v12 >= v28 || (unsigned int)((_BYTE *)v28 - v12) < 4 || (unsigned int)((_BYTE *)v28 - v12) > 0x23 )
+0x5aea9c0 109:               goto LABEL_17;
+0x5aea9c0 110:           }
+0x5aea9c0 111:           LicFeatureCheckOut_Free(v12);
+0x5aea9c0 112:           v28 = 0;
+0x5aea9c0 113:           v29 = 0;
+0x5aea9c0 114:           v30 = 0;
+0x5aea9c0 115:         }
+0x5aea9c0 116: LABEL_7:
+0x5aea9c0 117:         v3 = v25;
+0x5aea9c0 118:         if ( v25 )
+0x5aea9c0 119:         {
+0x5aea9c0 120:           v4 = (v27 - (int)v25) >> 2;
+0x5aea9c0 121:           if ( v4 <= 0x3FFFFFFF )
+0x5aea9c0 122:           {
+0x5aea9c0 123:             v5 = 4 * v4;
+0x5aea9c0 124:             if ( v5 < 0x1000
+0x5aea9c0 125:               || v5 + 35 >= v5
+0x5aea9c0 126:               && ((unsigned __int8)v25 & 0x1F) == 0
+0x5aea9c0 127:               && (v3 = (void *)*((_DWORD *)v25 - 1), v3 < v25)
+0x5aea9c0 128:               && (unsigned int)((_BYTE *)v25 - (_BYTE *)v3) >= 4
+0x5aea9c0 129:               && (unsigned int)((_BYTE *)v25 - (_BYTE *)v3) <= 0x23 )
+0x5aea9c0 130:             {
+0x5aea9c0 131:               LicFeatureCheckOut_Free(v3);
+0x5aea9c0 132:               return 0;
+0x5aea9c0 133:             }
+0x5aea9c0 134:           }
+0x5aea9c0 135: LABEL_17:
+0x5aea9c0 136:           invalid_parameter_noinfo_noreturn();
+0x5aea9c0 137:         }
+0x5aea9c0 138:         return 0;
+0x5aea9c0 139:       }
+0x5aea9c0 140:       *a3 = *(_DWORD *)v28;
+0x5aea9c0 141:       a3[1] = v10[1];
+0x5aea9c0 142:       PMLTypeString::~PMLTypeString(&v33);
+0x5aea9c0 143:       v15 = v28;
+0x5aea9c0 144:       LOBYTE(v34) = 0;
+0x5aea9c0 145:       if ( v28 )
+0x5aea9c0 146:       {
+0x5aea9c0 147:         v16 = (v30 - (int)v28) >> 2;
+0x5aea9c0 148:         if ( v16 > 0x3FFFFFFF )
+0x5aea9c0 149:           goto LABEL_17;
+0x5aea9c0 150:         v17 = 4 * v16;
+0x5aea9c0 151:         if ( v17 >= 0x1000 )
+0x5aea9c0 152:         {
+0x5aea9c0 153:           if ( v17 + 35 < v17 )
+0x5aea9c0 154:             goto LABEL_17;
+0x5aea9c0 155:           if ( ((unsigned __int8)v28 & 0x1F) != 0 )
+0x5aea9c0 156:             goto LABEL_17;
+0x5aea9c0 157:           v15 = (_BYTE *)*((_DWORD *)v28 - 1);
+0x5aea9c0 158:           if ( v15 >= v28 || (unsigned int)((_BYTE *)v28 - v15) < 4 || (unsigned int)((_BYTE *)v28 - v15) > 0x23 )
+0x5aea9c0 159:             goto LABEL_17;
+0x5aea9c0 160:         }
+0x5aea9c0 161:         LicFeatureCheckOut_Free(v15);
+0x5aea9c0 162:         v28 = 0;
+0x5aea9c0 163:         v29 = 0;
+0x5aea9c0 164:         v30 = 0;
+0x5aea9c0 165:       }
+0x5aea9c0 166:       v18 = v25;
+0x5aea9c0 167:       v34 = -1;
+0x5aea9c0 168:       if ( v25 )
+0x5aea9c0 169:       {
+0x5aea9c0 170:         v19 = (v27 - (int)v25) >> 2;
+0x5aea9c0 171:         if ( v19 > 0x3FFFFFFF )
+0x5aea9c0 172:           goto LABEL_17;
+0x5aea9c0 173:         v20 = 4 * v19;
+0x5aea9c0 174:         if ( v20 >= 0x1000 )
+0x5aea9c0 175:         {
+0x5aea9c0 176:           if ( v20 + 35 < v20 )
+0x5aea9c0 177:             goto LABEL_17;
+0x5aea9c0 178:           if ( ((unsigned __int8)v25 & 0x1F) != 0 )
+0x5aea9c0 179:             goto LABEL_17;
+0x5aea9c0 180:           v18 = (_BYTE *)*((_DWORD *)v25 - 1);
+0x5aea9c0 181:           if ( v18 >= v25 || (unsigned int)((_BYTE *)v25 - v18) < 4 || (unsigned int)((_BYTE *)v25 - v18) > 0x23 )
+0x5aea9c0 182:             goto LABEL_17;
+0x5aea9c0 183:         }
+0x5aea9c0 184:         LicFeatureCheckOut_Free(v18);
+0x5aea9c0 185:         v25 = 0;
+0x5aea9c0 186:         v26 = 0;
+0x5aea9c0 187:         v27 = 0;
+0x5aea9c0 188:       }
+0x5aea9c0 189:     }
+0x5aea9c0 190:     else
+0x5aea9c0 191:     {
+0x5aea9c0 192:       if ( !sub_5AF0FB0(1, ArgList, v31) )
+0x5aea9c0 193:         return 0;
+0x5aea9c0 194:       if ( !sub_5AF7480(ArgList, v31, a2, a3) )
+0x5aea9c0 195:       {
+0x5aea9c0 196:         sub_5AF0FB0(0, ArgList, v31);
+0x5aea9c0 197:         return 0;
+0x5aea9c0 198:       }
+0x5aea9c0 199:       if ( !sub_5AF0FB0(0, ArgList, v31) )
+0x5aea9c0 200:         return 0;
+0x5aea9c0 201:     }
+0x5aea9c0 202:   }
+0x5aea9c0 203:   v22[0] = *a3;
+0x5aea9c0 204:   v21 = a3[1];
+0x5aea9c0 205:   if ( v21 == 0x7FFFFFFF )
+0x5aea9c0 206:   {
+0x5aea9c0 207:     dword_6453B98 = 1;
+0x5aea9c0 208:     return 0;
+0x5aea9c0 209:   }
+0x5aea9c0 210:   v24 = 2;
+0x5aea9c0 211:   v22[1] = v21 + 1;
+0x5aea9c0 212:   return sub_5AFC610(ArgList, 7, (int)v22, (int)&v24) != 0;
+0x5aea9c0 213: }
+0x5af1a00 1: int __cdecl sub_5AF1A00(int a1, int a2)
+0x5af1a00 2: {
+0x5af1a00 3:   unsigned int v3; // esi
+0x5af1a00 4:   int v4; // eax
+0x5af1a00 5:   int v5; // ebx
+0x5af1a00 6:   unsigned int v6; // eax
+0x5af1a00 7:   int v7; // ecx
+0x5af1a00 8:   unsigned int v8; // eax
+0x5af1a00 9:   char v9[4]; // [esp+10h] [ebp-148h] BYREF
+0x5af1a00 10:   char ArgList[256]; // [esp+14h] [ebp-144h] BYREF
+0x5af1a00 11:   char v11[64]; // [esp+114h] [ebp-44h] BYREF
+0x5af1a00 12: 
+0x5af1a00 13:   if ( sub_5AEF2F0(*((_DWORD *)dword_6A540EC + 7 * a1 + 5), *((_DWORD *)dword_6A540EC + 7 * a1 + 4), (int)v9) )
+0x5af1a00 14:   {
+0x5af1a00 15:     v3 = *((_DWORD *)dword_6A540EC + 7 * a1 + 3);
+0x5af1a00 16:     if ( v3 > 1 || (v4 = **((_DWORD **)dword_6A540EC + 7 * a1), v3 == v4) )
+0x5af1a00 17:     {
+0x5af1a00 18:       v5 = *(_DWORD *)v9;
+0x5af1a00 19:       sub_5AE8D30("   Writing out db page-tok %d,blkno %d,pfno %d\n", v9[0]);
+0x5af1a00 20:       if ( sub_5AF2260(v5, v3 + 1, *((_DWORD *)dword_6A540EC + 7 * a1), dword_6453DC4, a2) )
+0x5af1a00 21:       {
+0x5af1a00 22:         *((_DWORD *)dword_6A540EC + 7 * a1 + 6) &= ~0x4000u;
+0x5af1a00 23:         return 1;
+0x5af1a00 24:       }
+0x5af1a00 25:       else
+0x5af1a00 26:       {
+0x5af1a00 27:         if ( !a2 )
+0x5af1a00 28:         {
+0x5af1a00 29:           FHQERC(v11, 63);
+0x5af1a00 30:           v6 = CHLENG(v11, 63);
+0x5af1a00 31:           if ( v6 >= 0x40
+0x5af1a00 32:             || (v11[v6] = 0,
+0x5af1a00 33:                 *(_DWORD *)v9 = v5,
+0x5af1a00 34:                 sub_546BF00(v9, "FULLNAME", 8, ArgList, 255),
+0x5af1a00 35:                 v8 = CHLENG(ArgList, 255),
+0x5af1a00 36:                 v8 >= 0x100) )
+0x5af1a00 37:           {
+0x5af1a00 38:             __report_rangecheckfailure(v7);
+0x5af1a00 39:           }
+0x5af1a00 40:           ArgList[v8] = 0;
+0x5af1a00 41:           LicFeatureCheckOut_FormatSafe(
+0x5af1a00 42:             &byte_6453BA0,
+0x5af1a00 43:             0x200u,
+0x5af1a00 44:             "1WDBP:Name is %.256s,Dbno is %d,pgid is %d %d,Token is %d,Flayer error is %.64s",
+0x5af1a00 45:             ArgList,
+0x5af1a00 46:             *((_DWORD *)dword_6A540EC + 7 * a1 + 5),
+0x5af1a00 47:             *((_DWORD *)dword_6A540EC + 7 * a1 + 3),
+0x5af1a00 48:             *((_DWORD *)dword_6A540EC + 7 * a1 + 4),
+0x5af1a00 49:             v5,
+0x5af1a00 50:             v11);
+0x5af1a00 51:         }
+0x5af1a00 52:         dword_6453B98 = 37;
+0x5af1a00 53:         return 0;
+0x5af1a00 54:       }
+0x5af1a00 55:     }
+0x5af1a00 56:     else
+0x5af1a00 57:     {
+0x5af1a00 58:       LicFeatureCheckOut_FormatSafe(
+0x5af1a00 59:         &byte_6453BA0,
+0x5af1a00 60:         0x200u,
+0x5af1a00 61:         "1WDBP:Page being written is not of correct type. Page should be type %d, but is of type %d\n",
+0x5af1a00 62:         v3,
+0x5af1a00 63:         v4);
+0x5af1a00 64:       sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5af1a00 65:       dword_6453B98 = 666;
+0x5af1a00 66:       return 0;
+0x5af1a00 67:     }
+0x5af1a00 68:   }
+0x5af1a00 69:   else
+0x5af1a00 70:   {
+0x5af1a00 71:     LicFeatureCheckOut_FormatSafe(
+0x5af1a00 72:       &byte_6453BA0,
+0x5af1a00 73:       0x200u,
+0x5af1a00 74:       "Dbno is %d,extno is %d",
+0x5af1a00 75:       *((_DWORD *)dword_6A540EC + 7 * a1 + 5),
+0x5af1a00 76:       *((_DWORD *)dword_6A540EC + 7 * a1 + 4));
+0x5af1a00 77:     return 0;
+0x5af1a00 78:   }
+0x5af1a00 79: }
+0x5af59e0 1: BOOL __cdecl sub_5AF59E0(int a1, int a2, int *a3, int a4)
+0x5af59e0 2: {
+0x5af59e0 3:   _DWORD *v4; // edx
+0x5af59e0 4:   int v5; // ecx
+0x5af59e0 5:   int v6; // esi
+0x5af59e0 6:   _DWORD *v7; // eax
+0x5af59e0 7:   int v8; // esi
+0x5af59e0 8:   int v9; // edx
+0x5af59e0 9:   int v10; // edi
+0x5af59e0 10:   int v11; // ecx
+0x5af59e0 11:   int v12; // eax
+0x5af59e0 12:   int v13; // eax
+0x5af59e0 13:   int v14; // eax
+0x5af59e0 14:   int v16; // [esp+8h] [ebp-14h] BYREF
+0x5af59e0 15:   int v17; // [esp+Ch] [ebp-10h]
+0x5af59e0 16:   int v18; // [esp+10h] [ebp-Ch]
+0x5af59e0 17:   _DWORD *v19; // [esp+14h] [ebp-8h] BYREF
+0x5af59e0 18:   _DWORD *v20; // [esp+18h] [ebp-4h] BYREF
+0x5af59e0 19: 
+0x5af59e0 20:   if ( a4 && !sub_5AF0FB0(1, a1, a2) )
+0x5af59e0 21:     return 0;
+0x5af59e0 22:   v17 = a2;
+0x5af59e0 23:   v16 = 0;
+0x5af59e0 24:   sub_5AEFD30(a1, &v16);
+0x5af59e0 25:   v17 = a2;
+0x5af59e0 26:   v16 = 1;
+0x5af59e0 27:   sub_5AEFD30(a1, &v16);
+0x5af59e0 28:   v18 = sub_5AEE4E0(a1, &v16, 0, 0, &v19);
+0x5af59e0 29:   if ( !v18 )
+0x5af59e0 30:     goto LABEL_25;
+0x5af59e0 31:   v4 = v19;
+0x5af59e0 32:   if ( *v19 != 1 )
+0x5af59e0 33:   {
+0x5af59e0 34:     LicFeatureCheckOut_FormatSafe(
+0x5af59e0 35:       &byte_6453BA0,
+0x5af59e0 36:       0x200u,
+0x5af59e0 37:       "2FUB:Page read is not of correct type. Page should be type 1, but is of type %d\n",
+0x5af59e0 38:       *v19);
+0x5af59e0 39:     sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5af59e0 40:     dword_6453B98 = 667;
+0x5af59e0 41: LABEL_25:
+0x5af59e0 42:     sub_5AF0FB0(0, a1, a2);
+0x5af59e0 43:     return 0;
+0x5af59e0 44:   }
+0x5af59e0 45:   v5 = v19[2];
+0x5af59e0 46:   if ( v5 <= 3 )
+0x5af59e0 47:   {
+0x5af59e0 48: LABEL_10:
+0x5af59e0 49:     v16 = 0;
+0x5af59e0 50:     v8 = sub_5AEE4E0(a1, &v16, 0, 0, &v20);
+0x5af59e0 51:     if ( !v8 )
+0x5af59e0 52:       goto LABEL_25;
+0x5af59e0 53:     if ( v20[6] != -1 )
+0x5af59e0 54:     {
+0x5af59e0 55:       dword_6453B98 = 600;
+0x5af59e0 56:       goto LABEL_25;
+0x5af59e0 57:     }
+0x5af59e0 58:     v9 = v20[12];
+0x5af59e0 59:     if ( v9 > 0x1FFF )
+0x5af59e0 60:     {
+0x5af59e0 61:       dword_6453B98 = 504;
+0x5af59e0 62:       goto LABEL_25;
+0x5af59e0 63:     }
+0x5af59e0 64:     v20[12] = v9 + 1;
+0x5af59e0 65:     *a3 = a1 & 0x1FFF | ((v9 | a1 & 0x3E000) << 13);
+0x5af59e0 66:     a3[1] = 1;
+0x5af59e0 67:     ++v20[96];
+0x5af59e0 68:     v14 = sub_5AF1A00(v8, 0);
+0x5af59e0 69:   }
+0x5af59e0 70:   else
+0x5af59e0 71:   {
+0x5af59e0 72:     v6 = 3;
+0x5af59e0 73:     v7 = v19 + 5;
+0x5af59e0 74:     while ( *v7 )
+0x5af59e0 75:     {
+0x5af59e0 76:       v6 += 3;
+0x5af59e0 77:       v7 += 3;
+0x5af59e0 78:       if ( v6 >= v5 )
+0x5af59e0 79:         goto LABEL_10;
+0x5af59e0 80:     }
+0x5af59e0 81:     v10 = v6;
+0x5af59e0 82:     *a3 = v19[v6];
+0x5af59e0 83:     a3[1] = v4[v6 + 1];
+0x5af59e0 84:     v11 = 0;
+0x5af59e0 85:     if ( v4[2] - v6 - 2 >= 0 )
+0x5af59e0 86:     {
+0x5af59e0 87:       do
+0x5af59e0 88:       {
+0x5af59e0 89:         v12 = v4[v10 + 3];
+0x5af59e0 90:         v4[v10++] = v12;
+0x5af59e0 91:         ++v11;
+0x5af59e0 92:         v4 = v19;
+0x5af59e0 93:       }
+0x5af59e0 94:       while ( v11 <= v19[2] - v6 - 2 );
+0x5af59e0 95:     }
+0x5af59e0 96:     v4[2] -= 3;
+0x5af59e0 97:     if ( !sub_5AF1A00(v18, 0) )
+0x5af59e0 98:       goto LABEL_25;
+0x5af59e0 99:     v16 = 0;
+0x5af59e0 100:     v13 = sub_5AEE4E0(a1, &v16, 0, 0, &v20);
+0x5af59e0 101:     if ( !v13 )
+0x5af59e0 102:       goto LABEL_25;
+0x5af59e0 103:     ++v20[96];
+0x5af59e0 104:     v14 = sub_5AF1A00(v13, 0);
+0x5af59e0 105:   }
+0x5af59e0 106:   if ( !v14 )
+0x5af59e0 107:     goto LABEL_25;
+0x5af59e0 108:   return !a4 || sub_5AF0FB0(0, a1, a2);
+0x5af59e0 109: }
+0x5af7480 1: int __cdecl sub_5AF7480(int a1, int a2, int a3, int *a4)
+0x5af7480 2: {
+0x5af7480 3:   int v4; // edi
+0x5af7480 4:   _DWORD *v5; // ebx
+0x5af7480 5:   int v7; // esi
+0x5af7480 6:   _DWORD *v8; // eax
+0x5af7480 7:   int i; // ecx
+0x5af7480 8:   int v10; // edx
+0x5af7480 9:   _DWORD *v11; // eax
+0x5af7480 10:   int v12; // eax
+0x5af7480 11:   int v13; // ebx
+0x5af7480 12:   int v14; // edx
+0x5af7480 13:   _DWORD *v15; // eax
+0x5af7480 14:   int v16; // esi
+0x5af7480 15:   int v17; // ecx
+0x5af7480 16:   int v18; // esi
+0x5af7480 17:   int v19; // [esp+Ch] [ebp-18h] BYREF
+0x5af7480 18:   int v20; // [esp+10h] [ebp-14h]
+0x5af7480 19:   int v21; // [esp+14h] [ebp-10h]
+0x5af7480 20:   _DWORD *v22; // [esp+18h] [ebp-Ch] BYREF
+0x5af7480 21:   _DWORD *v23; // [esp+1Ch] [ebp-8h]
+0x5af7480 22:   _DWORD *v24; // [esp+20h] [ebp-4h] BYREF
+0x5af7480 23: 
+0x5af7480 24:   v20 = a2;
+0x5af7480 25:   v19 = 0;
+0x5af7480 26:   sub_5AEFD30(a1, &v19);
+0x5af7480 27:   v19 = 1;
+0x5af7480 28:   sub_5AEFD30(a1, &v19);
+0x5af7480 29:   if ( a3 == 1 )
+0x5af7480 30:     goto LABEL_15;
+0x5af7480 31:   v19 = 1;
+0x5af7480 32:   v4 = sub_5AEE4E0(a1, &v19, 1, 0, &v24);
+0x5af7480 33:   if ( !v4 )
+0x5af7480 34:     return 0;
+0x5af7480 35:   v5 = v24;
+0x5af7480 36:   if ( *v24 != 1 )
+0x5af7480 37:   {
+0x5af7480 38:     LicFeatureCheckOut_FormatSafe(
+0x5af7480 39:       &byte_6453BA0,
+0x5af7480 40:       0x200u,
+0x5af7480 41:       "2GNE:Page read is not of correct type. Page should be type 1, but is of type %d\n",
+0x5af7480 42:       *v24);
+0x5af7480 43:     sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5af7480 44:     dword_6453B98 = 667;
+0x5af7480 45:     return 0;
+0x5af7480 46:   }
+0x5af7480 47:   v7 = v24[2];
+0x5af7480 48:   if ( v7 > 3 )
+0x5af7480 49:   {
+0x5af7480 50:     v8 = v24 + 5;
+0x5af7480 51:     for ( i = 3; i < v7; i += 3 )
+0x5af7480 52:     {
+0x5af7480 53:       if ( *v8 == *(_DWORD *)dword_6453DF0 )
+0x5af7480 54:       {
+0x5af7480 55:         LicFeatureCheckOut_FormatSafe(
+0x5af7480 56:           &byte_6453BA0,
+0x5af7480 57:           0x200u,
+0x5af7480 58:           "2GNE:There is already an entry on page 1 for user is %d",
+0x5af7480 59:           *(_DWORD *)dword_6453DF0);
+0x5af7480 60:         sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5af7480 61:         sub_5AF11D0(v4);
+0x5af7480 62:         dword_6453B98 = 657;
+0x5af7480 63:         return 0;
+0x5af7480 64:       }
+0x5af7480 65:       v8 += 3;
+0x5af7480 66:     }
+0x5af7480 67:     v10 = 3;
+0x5af7480 68:     v11 = v24 + 5;
+0x5af7480 69:     while ( *v11 )
+0x5af7480 70:     {
+0x5af7480 71:       v10 += 3;
+0x5af7480 72:       v11 += 3;
+0x5af7480 73:       if ( v10 >= v7 )
+0x5af7480 74:         goto LABEL_12;
+0x5af7480 75:     }
+0x5af7480 76:     *a4 = v24[v10];
+0x5af7480 77:     a4[1] = v5[v10 + 1];
+0x5af7480 78:     v5[v10 + 2] = *(_DWORD *)dword_6453DF0;
+0x5af7480 79: LABEL_28:
+0x5af7480 80:     if ( sub_5AF1A00(v4, 0) )
+0x5af7480 81:     {
+0x5af7480 82:       sub_5AF11D0(v4);
+0x5af7480 83:       return 1;
+0x5af7480 84:     }
+0x5af7480 85:     goto LABEL_31;
+0x5af7480 86:   }
+0x5af7480 87: LABEL_12:
+0x5af7480 88:   v20 = a2;
+0x5af7480 89:   v19 = 0;
+0x5af7480 90:   v12 = sub_5AEE4E0(a1, &v19, 1, 0, &v22);
+0x5af7480 91:   v13 = v12;
+0x5af7480 92:   if ( !v12 )
+0x5af7480 93:   {
+0x5af7480 94: LABEL_31:
+0x5af7480 95:     sub_5AF11D0(v4);
+0x5af7480 96:     return 0;
+0x5af7480 97:   }
+0x5af7480 98:   if ( v22[6] != -1 )
+0x5af7480 99:   {
+0x5af7480 100:     sub_5AF11D0(v12);
+0x5af7480 101: LABEL_15:
+0x5af7480 102:     dword_6453B98 = 601;
+0x5af7480 103:     return 0;
+0x5af7480 104:   }
+0x5af7480 105:   v14 = v22[12];
+0x5af7480 106:   if ( v14 > 0x1FFF )
+0x5af7480 107:   {
+0x5af7480 108:     sub_5AF11D0(v12);
+0x5af7480 109:     sub_5AF11D0(v4);
+0x5af7480 110:     dword_6453B98 = 504;
+0x5af7480 111:     return 0;
+0x5af7480 112:   }
+0x5af7480 113:   v22[12] = v14 + 1;
+0x5af7480 114:   *a4 = a1 & 0x1FFF | ((v14 | a1 & 0x3E000) << 13);
+0x5af7480 115:   v21 = a1 & 0x1FFF | ((v14 | a1 & 0x3E000) << 13);
+0x5af7480 116:   v15 = v24;
+0x5af7480 117:   a4[1] = 1;
+0x5af7480 118:   v23 = v15;
+0x5af7480 119:   v16 = v15[2];
+0x5af7480 120:   if ( v16 + 3 > dword_6453DC4 - 1 )
+0x5af7480 121:   {
+0x5af7480 122:     sub_5AF11D0(v13);
+0x5af7480 123:     sub_5AF11D0(v4);
+0x5af7480 124:     dword_6453B98 = 514;
+0x5af7480 125:     return 0;
+0x5af7480 126:   }
+0x5af7480 127:   if ( v16 <= 3 )
+0x5af7480 128:   {
+0x5af7480 129: LABEL_27:
+0x5af7480 130:     v23[v16 + 1] = v21;
+0x5af7480 131:     v24[v16 + 2] = a4[1];
+0x5af7480 132:     v24[v16 + 3] = *(_DWORD *)dword_6453DF0;
+0x5af7480 133:     v24[2] += 3;
+0x5af7480 134:     ++v22[96];
+0x5af7480 135:     v18 = sub_5AF1A00(v13, 0);
+0x5af7480 136:     sub_5AF11D0(v13);
+0x5af7480 137:     if ( v18 )
+0x5af7480 138:       goto LABEL_28;
+0x5af7480 139:     goto LABEL_31;
+0x5af7480 140:   }
+0x5af7480 141:   v17 = 3;
+0x5af7480 142:   while ( (((int)v23[v17] >> 13) & 0x1FFF) != v14 )
+0x5af7480 143:   {
+0x5af7480 144:     v17 += 3;
+0x5af7480 145:     if ( v17 >= v16 )
+0x5af7480 146:       goto LABEL_27;
+0x5af7480 147:   }
+0x5af7480 148:   LicFeatureCheckOut_FormatSafe(
+0x5af7480 149:     &byte_6453BA0,
+0x5af7480 150:     0x200u,
+0x5af7480 151:     "2GNE:There is already an entry on page 1 for bucket number is %d",
+0x5af7480 152:     v14);
+0x5af7480 153:   sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5af7480 154:   sub_5AF11D0(v13);
+0x5af7480 155:   sub_5AF11D0(v4);
+0x5af7480 156:   dword_6453B98 = 658;
+0x5af7480 157:   return 0;
+0x5af7480 158: }
+0x5afba00 1: BOOL __cdecl sub_5AFBA00(int a1, int a2, _DWORD *a3)
+0x5afba00 2: {
+0x5afba00 3:   int v3; // esi
+0x5afba00 4:   _DWORD *v4; // ecx
+0x5afba00 5:   int v6; // ebx
+0x5afba00 6:   int v7; // edi
+0x5afba00 7:   int v8; // edx
+0x5afba00 8:   int v9; // esi
+0x5afba00 9:   int v10; // eax
+0x5afba00 10:   int v11; // eax
+0x5afba00 11:   _DWORD v12[2]; // [esp+8h] [ebp-14h] BYREF
+0x5afba00 12:   int v13; // [esp+10h] [ebp-Ch]
+0x5afba00 13:   int v14; // [esp+14h] [ebp-8h] BYREF
+0x5afba00 14:   _DWORD *v15; // [esp+18h] [ebp-4h] BYREF
+0x5afba00 15: 
+0x5afba00 16:   v3 = a1;
+0x5afba00 17:   if ( !sub_5AF0FB0(1, a1, a2) )
+0x5afba00 18:     return 0;
+0x5afba00 19:   v12[1] = a2;
+0x5afba00 20:   v12[0] = 1;
+0x5afba00 21:   sub_5AEFD30(a1, v12);
+0x5afba00 22:   v13 = sub_5AEE4E0(a1, v12, 0, 0, &v15);
+0x5afba00 23:   if ( !v13 )
+0x5afba00 24:     goto LABEL_5;
+0x5afba00 25:   v4 = v15;
+0x5afba00 26:   if ( *v15 != 1 )
+0x5afba00 27:   {
+0x5afba00 28:     LicFeatureCheckOut_FormatSafe(
+0x5afba00 29:       &byte_6453BA0,
+0x5afba00 30:       0x200u,
+0x5afba00 31:       "2RBE:Page read is not of correct type. Page should be type 1, but is of type %d\n",
+0x5afba00 32:       *v15);
+0x5afba00 33:     sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5afba00 34:     dword_6453B98 = 667;
+0x5afba00 35:     goto LABEL_5;
+0x5afba00 36:   }
+0x5afba00 37:   v6 = v15[2];
+0x5afba00 38:   v7 = 3;
+0x5afba00 39:   if ( v6 > 3 )
+0x5afba00 40:   {
+0x5afba00 41:     do
+0x5afba00 42:     {
+0x5afba00 43:       v8 = v7;
+0x5afba00 44:       if ( *a3 == v4[v7] )
+0x5afba00 45:       {
+0x5afba00 46:         v9 = 0;
+0x5afba00 47:         if ( v6 - v7 - 2 >= 0 )
+0x5afba00 48:         {
+0x5afba00 49:           do
+0x5afba00 50:           {
+0x5afba00 51:             v10 = v4[v8 + 3];
+0x5afba00 52:             v4[v8++] = v10;
+0x5afba00 53:             ++v9;
+0x5afba00 54:             v4 = v15;
+0x5afba00 55:           }
+0x5afba00 56:           while ( v9 <= v15[2] - v7 - 2 );
+0x5afba00 57:         }
+0x5afba00 58:       }
+0x5afba00 59:       v6 = v4[2];
+0x5afba00 60:       v7 += 3;
+0x5afba00 61:     }
+0x5afba00 62:     while ( v7 < v6 );
+0x5afba00 63:     v3 = a1;
+0x5afba00 64:   }
+0x5afba00 65:   v4[2] -= 3;
+0x5afba00 66:   v12[0] = 0;
+0x5afba00 67:   sub_5AEFD30(v3, v12);
+0x5afba00 68:   v11 = sub_5AEE4E0(v3, v12, 0, 0, &v14);
+0x5afba00 69:   if ( !v11 )
+0x5afba00 70:     goto LABEL_5;
+0x5afba00 71:   ++*(_DWORD *)(v14 + 384);
+0x5afba00 72:   if ( !sub_5AF1A00(v11, 0) )
+0x5afba00 73:     return 0;
+0x5afba00 74:   if ( !sub_5AF1A00(v13, 0) )
+0x5afba00 75:   {
+0x5afba00 76: LABEL_5:
+0x5afba00 77:     sub_5AF0FB0(0, v3, a2);
+0x5afba00 78:     return 0;
+0x5afba00 79:   }
+0x5afba00 80:   return sub_5AF0FB0(0, v3, a2) != 0;
+0x5afba00 81: }
+0x5afd040 1: int __cdecl sub_5AFD040(int a1, int a2, int *a3, int a4, int a5, int a6, int a7, int a8, int a9)
+0x5afd040 2: {
+0x5afd040 3:   int v9; // edi
+0x5afd040 4:   char v10; // bl
+0x5afd040 5:   int v12; // esi
+0x5afd040 6:   void *v13; // eax
+0x5afd040 7:   unsigned int v14; // ecx
+0x5afd040 8:   unsigned int v15; // ecx
+0x5afd040 9:   int v16; // eax
+0x5afd040 10:   char v17; // al
+0x5afd040 11:   PMLTypeString *p_Format; // eax
+0x5afd040 12:   void *v19; // eax
+0x5afd040 13:   unsigned int v20; // ecx
+0x5afd040 14:   unsigned int v21; // ecx
+0x5afd040 15:   int v22; // eax
+0x5afd040 16:   _DWORD *v23; // esi
+0x5afd040 17:   int v24; // ecx
+0x5afd040 18:   int v25; // ebx
+0x5afd040 19:   bool v26; // zf
+0x5afd040 20:   int v27; // eax
+0x5afd040 21:   bool v28; // zf
+0x5afd040 22:   _DWORD *v29; // ecx
+0x5afd040 23:   int v30; // eax
+0x5afd040 24:   int v31; // eax
+0x5afd040 25:   int v32; // [esp-Ch] [ebp-70h]
+0x5afd040 26:   int v33; // [esp+10h] [ebp-54h]
+0x5afd040 27:   int v34; // [esp+10h] [ebp-54h]
+0x5afd040 28:   int v35; // [esp+14h] [ebp-50h] BYREF
+0x5afd040 29:   _DWORD v36[2]; // [esp+18h] [ebp-4Ch] BYREF
+0x5afd040 30:   _DWORD *v37; // [esp+20h] [ebp-44h] BYREF
+0x5afd040 31:   int *v38; // [esp+24h] [ebp-40h]
+0x5afd040 32:   void *v39[2]; // [esp+28h] [ebp-3Ch] BYREF
+0x5afd040 33:   int v40; // [esp+30h] [ebp-34h]
+0x5afd040 34:   int v41; // [esp+34h] [ebp-30h] BYREF
+0x5afd040 35:   char v42; // [esp+3Ah] [ebp-2Ah] BYREF
+0x5afd040 36:   bool v43; // [esp+3Bh] [ebp-29h]
+0x5afd040 37:   PMLTypeString Format; // [esp+3Ch] [ebp-28h] BYREF
+0x5afd040 38:   int v45; // [esp+60h] [ebp-4h]
+0x5afd040 39: 
+0x5afd040 40:   v38 = a3;
+0x5afd040 41:   v43 = 0;
+0x5afd040 42:   DLL_GlobalInterface::returnError((DLL_GlobalInterface *)&v42);
+0x5afd040 43:   v9 = a1;
+0x5afd040 44:   v10 = sub_5B1BEE0(a1, a2);
+0x5afd040 45:   if ( *a3 )
+0x5afd040 46:   {
+0x5afd040 47:     if ( *a3 == -1 )
+0x5afd040 48:     {
+0x5afd040 49:       v12 = v33;
+0x5afd040 50:       goto LABEL_9;
+0x5afd040 51:     }
+0x5afd040 52:   }
+0x5afd040 53:   else if ( !a3[1] )
+0x5afd040 54:   {
+0x5afd040 55:     return 1;
+0x5afd040 56:   }
+0x5afd040 57:   v12 = *a3 & 0x1FFF | (*a3 >> 13) & 0x3E000;
+0x5afd040 58:   if ( v12 != a1 )
+0x5afd040 59:   {
+0x5afd040 60:     LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "2UP1UOR:Dbno in Bucket is %d,dbno given is %d", v12, a1);
+0x5afd040 61: LABEL_7:
+0x5afd040 62:     dword_6453B98 = 632;
+0x5afd040 63:     return 0;
+0x5afd040 64:   }
+0x5afd040 65: LABEL_9:
+0x5afd040 66:   v36[1] = a2;
+0x5afd040 67:   v36[0] = 0;
+0x5afd040 68:   if ( !sub_5AEE4E0(a1, v36, 0, 0, &v35) )
+0x5afd040 69:     return 0;
+0x5afd040 70:   if ( *v38 != -1 && v12 != *(_DWORD *)(v35 + 8) )
+0x5afd040 71:   {
+0x5afd040 72:     LicFeatureCheckOut_FormatSafe(
+0x5afd040 73:       &byte_6453BA0,
+0x5afd040 74:       0x200u,
+0x5afd040 75:       "2UP1UOR:Dbno in Bucket is %d,dbno on page0 is %d",
+0x5afd040 76:       v12,
+0x5afd040 77:       *(_DWORD *)(v35 + 8));
+0x5afd040 78:     goto LABEL_7;
+0x5afd040 79:   }
+0x5afd040 80:   if ( v10 )
+0x5afd040 81:   {
+0x5afd040 82:     v39[0] = 0;
+0x5afd040 83:     v39[1] = 0;
+0x5afd040 84:     v40 = 0;
+0x5afd040 85:     v45 = 0;
+0x5afd040 86:     if ( (unsigned __int8)sub_5B1BE80(a1, a2, v39) )
+0x5afd040 87:     {
+0x5afd040 88:       if ( byte_6A54171 )
+0x5afd040 89:       {
+0x5afd040 90:         v17 = byte_6A54170;
+0x5afd040 91:       }
+0x5afd040 92:       else
+0x5afd040 93:       {
+0x5afd040 94:         v16 = Spectrum_BucketsClient();
+0x5afd040 95:         byte_6A54171 = 1;
+0x5afd040 96:         v17 = v16 != 0;
+0x5afd040 97:         byte_6A54170 = v17;
+0x5afd040 98:       }
+0x5afd040 99:       if ( v17 )
+0x5afd040 100:       {
+0x5afd040 101:         if ( a7 == 1 || a7 == 2 )
+0x5afd040 102:         {
+0x5afd040 103:           Format.len = 0;
+0x5afd040 104:           Format.cap = 15;
+0x5afd040 105:           Format.u.sso[0] = 0;
+0x5afd040 106:           LOBYTE(v45) = 1;
+0x5afd040 107:           if ( !(unsigned __int8)Spectrum_UpdateBucket(
+0x5afd040 108:                                    a1,
+0x5afd040 109:                                    *(_DWORD *)v39[0],
+0x5afd040 110:                                    *((_DWORD *)v39[0] + 1),
+0x5afd040 111:                                    v38[1],
+0x5afd040 112:                                    &v41,
+0x5afd040 113:                                    &Format)
+0x5afd040 114:             && v41 != 2 )
+0x5afd040 115:           {
+0x5afd040 116:             dword_6453B98 = 701;
+0x5afd040 117:             PMLTypeString::~PMLTypeString(&Format);
+0x5afd040 118:             goto LABEL_15;
+0x5afd040 119:           }
+0x5afd040 120:           LOBYTE(v45) = 0;
+0x5afd040 121:           PMLTypeString::~PMLTypeString(&Format);
+0x5afd040 122:         }
+0x5afd040 123:         if ( !a7 || a7 == 2 )
+0x5afd040 124:         {
+0x5afd040 125:           Format.len = 0;
+0x5afd040 126:           Format.cap = 15;
+0x5afd040 127:           Format.u.sso[0] = 0;
+0x5afd040 128:           v41 = 0;
+0x5afd040 129:           v32 = *((_DWORD *)v39[0] + 1);
+0x5afd040 130:           LOBYTE(v45) = 2;
+0x5afd040 131:           if ( !(unsigned __int8)Spectrum_ReleaseBucket(a1, *(_DWORD *)v39[0], v32, &v41, &Format) )
+0x5afd040 132:           {
+0x5afd040 133:             if ( v41 != 2 )
+0x5afd040 134:             {
+0x5afd040 135:               p_Format = &Format;
+0x5afd040 136:               if ( Format.cap >= 0x10 )
+0x5afd040 137:                 p_Format = (PMLTypeString *)Format.u.heap;
+0x5afd040 138:               LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, p_Format->u.sso);
+0x5afd040 139:               dword_6453B98 = 702;
+0x5afd040 140:             }
+0x5afd040 141:             PMLTypeString::~PMLTypeString(&Format);
+0x5afd040 142:             goto LABEL_15;
+0x5afd040 143:           }
+0x5afd040 144:           PMLTypeString::~PMLTypeString(&Format);
+0x5afd040 145:         }
+0x5afd040 146:         v19 = v39[0];
+0x5afd040 147:         if ( !v39[0] )
+0x5afd040 148:           return 1;
+0x5afd040 149:         v20 = (signed int)(v40 - (unsigned int)v39[0]) >> 2;
+0x5afd040 150:         if ( v20 <= 0x3FFFFFFF )
+0x5afd040 151:         {
+0x5afd040 152:           v21 = 4 * v20;
+0x5afd040 153:           if ( v21 < 0x1000
+0x5afd040 154:             || v21 + 35 >= v21
+0x5afd040 155:             && ((int)v39[0] & 0x1F) == 0
+0x5afd040 156:             && (v19 = (void *)*((_DWORD *)v39[0] - 1), v19 < v39[0])
+0x5afd040 157:             && (unsigned int)((char *)v39[0] - (char *)v19) >= 4
+0x5afd040 158:             && (unsigned int)((char *)v39[0] - (char *)v19) <= 0x23 )
+0x5afd040 159:           {
+0x5afd040 160:             LicFeatureCheckOut_Free(v19);
+0x5afd040 161:             return 1;
+0x5afd040 162:           }
+0x5afd040 163:         }
+0x5afd040 164:         goto LABEL_24;
+0x5afd040 165:       }
+0x5afd040 166:       LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "service client unavailable");
+0x5afd040 167:       dword_6453B98 = 701;
+0x5afd040 168:     }
+0x5afd040 169: LABEL_15:
+0x5afd040 170:     v13 = v39[0];
+0x5afd040 171:     if ( !v39[0] )
+0x5afd040 172:       return 0;
+0x5afd040 173:     v14 = (signed int)(v40 - (unsigned int)v39[0]) >> 2;
+0x5afd040 174:     if ( v14 <= 0x3FFFFFFF )
+0x5afd040 175:     {
+0x5afd040 176:       v15 = 4 * v14;
+0x5afd040 177:       if ( v15 < 0x1000
+0x5afd040 178:         || v15 + 35 >= v15
+0x5afd040 179:         && ((int)v39[0] & 0x1F) == 0
+0x5afd040 180:         && (v13 = (void *)*((_DWORD *)v39[0] - 1), v13 < v39[0])
+0x5afd040 181:         && (unsigned int)((char *)v39[0] - (char *)v13) >= 4
+0x5afd040 182:         && (unsigned int)((char *)v39[0] - (char *)v13) <= 0x23 )
+0x5afd040 183:       {
+0x5afd040 184:         LicFeatureCheckOut_Free(v13);
+0x5afd040 185:         return 0;
+0x5afd040 186:       }
+0x5afd040 187:     }
+0x5afd040 188: LABEL_24:
+0x5afd040 189:     invalid_parameter_noinfo_noreturn();
+0x5afd040 190:   }
+0x5afd040 191:   if ( a9 == 1 )
+0x5afd040 192:   {
+0x5afd040 193:     v22 = sub_5AF0FB0(1, a1, a2);
+0x5afd040 194:     v43 = v22 != 0;
+0x5afd040 195:     if ( !v22 )
+0x5afd040 196:       return 0;
+0x5afd040 197:   }
+0x5afd040 198:   v36[0] = 1;
+0x5afd040 199:   sub_5AEFD30(a1, v36);
+0x5afd040 200:   v34 = sub_5AEE4E0(a1, v36, 0, 0, &v37);
+0x5afd040 201:   if ( !v34 )
+0x5afd040 202:   {
+0x5afd040 203: LABEL_59:
+0x5afd040 204:     if ( v43 )
+0x5afd040 205:       sub_5AF0FB0(0, v9, a2);
+0x5afd040 206:     return 0;
+0x5afd040 207:   }
+0x5afd040 208:   v23 = v37;
+0x5afd040 209:   if ( *v37 != 1 )
+0x5afd040 210:   {
+0x5afd040 211:     LicFeatureCheckOut_FormatSafe(
+0x5afd040 212:       &byte_6453BA0,
+0x5afd040 213:       0x200u,
+0x5afd040 214:       "2UP1UOR:Page read is not of correct type. Page should be type 1, but is of type %d\n",
+0x5afd040 215:       *v37);
+0x5afd040 216:     sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5afd040 217:     dword_6453B98 = 667;
+0x5afd040 218:     goto LABEL_59;
+0x5afd040 219:   }
+0x5afd040 220:   v24 = 0;
+0x5afd040 221:   v25 = 3;
+0x5afd040 222:   v41 = 0;
+0x5afd040 223:   if ( (int)v37[2] <= 3 )
+0x5afd040 224:   {
+0x5afd040 225: LABEL_90:
+0x5afd040 226:     if ( a6 <= 0 )
+0x5afd040 227:       goto LABEL_87;
+0x5afd040 228:     LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "Page 1 entry not found");
+0x5afd040 229:     dword_6453B98 = 574;
+0x5afd040 230:     goto LABEL_59;
+0x5afd040 231:   }
+0x5afd040 232:   do
+0x5afd040 233:   {
+0x5afd040 234:     v26 = a6 == 0;
+0x5afd040 235:     if ( a6 > 0 )
+0x5afd040 236:     {
+0x5afd040 237:       v27 = 0;
+0x5afd040 238:       while ( 1 )
+0x5afd040 239:       {
+0x5afd040 240:         v9 = a1;
+0x5afd040 241:         if ( v23[v25 + 2] == *(_DWORD *)(a5 + 4 * v27) )
+0x5afd040 242:           break;
+0x5afd040 243:         if ( ++v27 >= a6 )
+0x5afd040 244:         {
+0x5afd040 245:           v28 = a4 == 1;
+0x5afd040 246:           goto LABEL_69;
+0x5afd040 247:         }
+0x5afd040 248:       }
+0x5afd040 249:       v28 = a4 == 0;
+0x5afd040 250: LABEL_69:
+0x5afd040 251:       if ( v28 )
+0x5afd040 252:         goto LABEL_72;
+0x5afd040 253:       v24 = v41;
+0x5afd040 254:       v26 = a6 == 0;
+0x5afd040 255:     }
+0x5afd040 256:     if ( !v26 )
+0x5afd040 257:       goto LABEL_80;
+0x5afd040 258: LABEL_72:
+0x5afd040 259:     v29 = &v23[v25];
+0x5afd040 260:     v30 = *v38;
+0x5afd040 261:     if ( *v38 == *v29 || v30 == -1 )
+0x5afd040 262:     {
+0x5afd040 263:       if ( !a7 || a7 == 2 )
+0x5afd040 264:       {
+0x5afd040 265:         v24 = 1;
+0x5afd040 266:         v23[v25 + 2] = 0;
+0x5afd040 267:         v23 = v37;
+0x5afd040 268:         v41 = 1;
+0x5afd040 269:         goto LABEL_80;
+0x5afd040 270:       }
+0x5afd040 271:       if ( a7 == 1 )
+0x5afd040 272:       {
+0x5afd040 273:         *v29 = v30;
+0x5afd040 274:         v37[v25 + 1] = v38[1];
+0x5afd040 275:         v24 = 1;
+0x5afd040 276:         v23 = v37;
+0x5afd040 277:         v41 = 1;
+0x5afd040 278:         goto LABEL_80;
+0x5afd040 279:       }
+0x5afd040 280:     }
+0x5afd040 281:     v24 = v41;
+0x5afd040 282: LABEL_80:
+0x5afd040 283:     v25 += 3;
+0x5afd040 284:   }
+0x5afd040 285:   while ( v25 < v23[2] );
+0x5afd040 286:   if ( !v24 )
+0x5afd040 287:     goto LABEL_90;
+0x5afd040 288:   v36[0] = 0;
+0x5afd040 289:   if ( a8 )
+0x5afd040 290:     sub_5AEFD30(v9, v36);
+0x5afd040 291:   v31 = sub_5AEE4E0(v9, v36, 0, 0, &v35);
+0x5afd040 292:   if ( !v31 )
+0x5afd040 293:     goto LABEL_59;
+0x5afd040 294:   ++*(_DWORD *)(v35 + 384);
+0x5afd040 295:   if ( !sub_5AF1A00(v31, 0) || !sub_5AF1A00(v34, 0) )
+0x5afd040 296:     goto LABEL_59;
+0x5afd040 297: LABEL_87:
+0x5afd040 298:   if ( v43 )
+0x5afd040 299:     sub_5AF0FB0(0, v9, a2);
+0x5afd040 300:   return 1;
+0x5afd040 301: }
+0x5afdf10 1: int __cdecl sub_5AFDF10(int a1, int ArgList, _DWORD *a3, int a4, const void *a5, int a6, int a7, int a8)
+0x5afdf10 2: {
+0x5afdf10 3:   int v9; // ebx
+0x5afdf10 4:   int v10; // esi
+0x5afdf10 5:   int v11; // edi
+0x5afdf10 6:   int v12; // edi
+0x5afdf10 7:   int v13; // ebx
+0x5afdf10 8:   int v14; // edx
+0x5afdf10 9:   int v15; // esi
+0x5afdf10 10:   int v16; // ecx
+0x5afdf10 11:   int v17; // ecx
+0x5afdf10 12:   int v18; // ecx
+0x5afdf10 13:   int v19; // eax
+0x5afdf10 14:   int v20; // eax
+0x5afdf10 15:   const char *v21; // eax
+0x5afdf10 16:   int v22; // eax
+0x5afdf10 17:   int v23; // eax
+0x5afdf10 18:   int *v24; // edi
+0x5afdf10 19:   _BYTE *v25; // ecx
+0x5afdf10 20:   int v26; // edx
+0x5afdf10 21:   int *v27; // edi
+0x5afdf10 22:   int v28; // eax
+0x5afdf10 23:   int v29; // edx
+0x5afdf10 24:   int v30; // ecx
+0x5afdf10 25:   int v31; // eax
+0x5afdf10 26:   int v32; // ecx
+0x5afdf10 27:   int v33; // ebx
+0x5afdf10 28:   int **v34; // esi
+0x5afdf10 29:   int v35; // eax
+0x5afdf10 30:   const char *v36; // eax
+0x5afdf10 31:   int v37; // ebx
+0x5afdf10 32:   _BYTE *v38; // esi
+0x5afdf10 33:   int *v39; // ecx
+0x5afdf10 34:   _BYTE *v40; // eax
+0x5afdf10 35:   int v41; // edi
+0x5afdf10 36:   int *v43; // eax
+0x5afdf10 37:   int v44; // eax
+0x5afdf10 38:   int v45; // edx
+0x5afdf10 39:   int v46; // eax
+0x5afdf10 40:   int v47; // ecx
+0x5afdf10 41:   int *v48; // esi
+0x5afdf10 42:   int v49; // eax
+0x5afdf10 43:   int v50; // edx
+0x5afdf10 44:   int v51; // eax
+0x5afdf10 45:   int v52; // eax
+0x5afdf10 46:   int v53; // ecx
+0x5afdf10 47:   int v54; // eax
+0x5afdf10 48:   int v55; // ebx
+0x5afdf10 49:   int v56; // ecx
+0x5afdf10 50:   int v57; // esi
+0x5afdf10 51:   int *v58; // edx
+0x5afdf10 52:   int v59; // ebx
+0x5afdf10 53:   _BYTE *v60; // esi
+0x5afdf10 54:   int *v61; // ebx
+0x5afdf10 55:   int v62; // edx
+0x5afdf10 56:   int v63; // eax
+0x5afdf10 57:   int v64; // ecx
+0x5afdf10 58:   int v65; // ecx
+0x5afdf10 59:   int v66; // edi
+0x5afdf10 60:   int v67; // esi
+0x5afdf10 61:   int *v68; // ebx
+0x5afdf10 62:   int v69; // ecx
+0x5afdf10 63:   int *v70; // eax
+0x5afdf10 64:   int v71; // edx
+0x5afdf10 65:   int v72; // esi
+0x5afdf10 66:   int v73; // ebx
+0x5afdf10 67:   int v74; // eax
+0x5afdf10 68:   int v75; // esi
+0x5afdf10 69:   int v76; // eax
+0x5afdf10 70:   int *v77; // edi
+0x5afdf10 71:   int *v78; // eax
+0x5afdf10 72:   int v79; // ebx
+0x5afdf10 73:   int v80; // ecx
+0x5afdf10 74:   int v81; // edx
+0x5afdf10 75:   int v82; // edi
+0x5afdf10 76:   int v83; // edx
+0x5afdf10 77:   int v84; // esi
+0x5afdf10 78:   int *v85; // edi
+0x5afdf10 79:   int v86; // ecx
+0x5afdf10 80:   int *v87; // esi
+0x5afdf10 81:   int v88; // edx
+0x5afdf10 82:   int v89; // edi
+0x5afdf10 83:   _DWORD *v90; // esi
+0x5afdf10 84:   int v91; // ecx
+0x5afdf10 85:   int v92; // edx
+0x5afdf10 86:   int *v93; // ecx
+0x5afdf10 87:   int v94; // esi
+0x5afdf10 88:   int v95; // edx
+0x5afdf10 89:   int *v96; // esi
+0x5afdf10 90:   int v97; // edx
+0x5afdf10 91:   int v98; // ecx
+0x5afdf10 92:   int *v99; // ebx
+0x5afdf10 93:   int *v100; // eax
+0x5afdf10 94:   int v101; // eax
+0x5afdf10 95:   int *v102; // ecx
+0x5afdf10 96:   bool v103; // zf
+0x5afdf10 97:   const char *v104; // [esp-Ch] [ebp-2474h]
+0x5afdf10 98:   int v105[2]; // [esp+4h] [ebp-2464h] BYREF
+0x5afdf10 99:   _DWORD v106[2]; // [esp+Ch] [ebp-245Ch] BYREF
+0x5afdf10 100:   int v107[2]; // [esp+14h] [ebp-2454h] BYREF
+0x5afdf10 101:   int v108; // [esp+1Ch] [ebp-244Ch] BYREF
+0x5afdf10 102:   int v109; // [esp+20h] [ebp-2448h]
+0x5afdf10 103:   int v110; // [esp+24h] [ebp-2444h] BYREF
+0x5afdf10 104:   int v111; // [esp+28h] [ebp-2440h]
+0x5afdf10 105:   int v112; // [esp+2Ch] [ebp-243Ch] BYREF
+0x5afdf10 106:   int v113; // [esp+30h] [ebp-2438h] BYREF
+0x5afdf10 107:   int v114; // [esp+34h] [ebp-2434h]
+0x5afdf10 108:   int v115; // [esp+38h] [ebp-2430h] BYREF
+0x5afdf10 109:   int *v116; // [esp+3Ch] [ebp-242Ch]
+0x5afdf10 110:   int *v117; // [esp+40h] [ebp-2428h] BYREF
+0x5afdf10 111:   int v118; // [esp+44h] [ebp-2424h] BYREF
+0x5afdf10 112:   int v119; // [esp+48h] [ebp-2420h] BYREF
+0x5afdf10 113:   BOOL v120; // [esp+4Ch] [ebp-241Ch] BYREF
+0x5afdf10 114:   int v121; // [esp+50h] [ebp-2418h] BYREF
+0x5afdf10 115:   _BYTE *v122; // [esp+54h] [ebp-2414h]
+0x5afdf10 116:   int v123; // [esp+58h] [ebp-2410h]
+0x5afdf10 117:   char v124[4]; // [esp+5Ch] [ebp-240Ch] BYREF
+0x5afdf10 118:   int v125; // [esp+60h] [ebp-2408h] BYREF
+0x5afdf10 119:   int *v126; // [esp+64h] [ebp-2404h] BYREF
+0x5afdf10 120:   char v127[4]; // [esp+68h] [ebp-2400h]
+0x5afdf10 121:   _BYTE v128[2048]; // [esp+6Ch] [ebp-23FCh] BYREF
+0x5afdf10 122:   _BYTE v129[2048]; // [esp+86Ch] [ebp-1BFCh] BYREF
+0x5afdf10 123:   _DWORD v130[512]; // [esp+106Ch] [ebp-13FCh] BYREF
+0x5afdf10 124:   _DWORD v131[510]; // [esp+186Ch] [ebp-BFCh] BYREF
+0x5afdf10 125:   _BYTE v132[1008]; // [esp+2064h] [ebp-404h] BYREF
+0x5afdf10 126:   _DWORD v133[2]; // [esp+2454h] [ebp-14h] BYREF
+0x5afdf10 127:   _DWORD v134[2]; // [esp+245Ch] [ebp-Ch] BYREF
+0x5afdf10 128: 
+0x5afdf10 129:   v125 = a1;
+0x5afdf10 130:   v123 = 0;
+0x5afdf10 131:   if ( *a3 == 0x80000000 || *a3 == -2147483647 )
+0x5afdf10 132:   {
+0x5afdf10 133:     dword_6453B98 = 570;
+0x5afdf10 134:     return 0;
+0x5afdf10 135:   }
+0x5afdf10 136:   v9 = a4;
+0x5afdf10 137:   if ( a4 > 0 )
+0x5afdf10 138:     qmemcpy(v131, a3, 4 * a4);
+0x5afdf10 139:   v10 = a6;
+0x5afdf10 140:   if ( a6 > 0 )
+0x5afdf10 141:   {
+0x5afdf10 142:     qmemcpy(v130, a5, 4 * a6);
+0x5afdf10 143:     v10 = a6;
+0x5afdf10 144:   }
+0x5afdf10 145:   v11 = v125;
+0x5afdf10 146:   if ( !sub_5AF6840(ArgList, v125, (int)&v113) )
+0x5afdf10 147:     return 0;
+0x5afdf10 148:   if ( a8 )
+0x5afdf10 149:   {
+0x5afdf10 150:     v18 = ArgList;
+0x5afdf10 151:   }
+0x5afdf10 152:   else
+0x5afdf10 153:   {
+0x5afdf10 154:     v12 = v113;
+0x5afdf10 155:     if ( dword_6A541E8 > 0 )
+0x5afdf10 156:     {
+0x5afdf10 157:       v13 = v114;
+0x5afdf10 158:       v14 = 0;
+0x5afdf10 159:       v15 = dword_6A541E8;
+0x5afdf10 160:       v16 = ArgList;
+0x5afdf10 161:       do
+0x5afdf10 162:       {
+0x5afdf10 163:         if ( *(_DWORD *)((char *)dword_6A541EC + v14 + 4) == v16
+0x5afdf10 164:           && *(_DWORD *)((char *)dword_6A541EC + v14 + 8) == v12
+0x5afdf10 165:           && *(_DWORD *)((char *)dword_6A541EC + v14 + 12) == v13 )
+0x5afdf10 166:         {
+0x5afdf10 167:           v17 = *(_DWORD *)((char *)dword_6A541EC + v14 + 28);
+0x5afdf10 168:           if ( (v17 & 1) == 0 )
+0x5afdf10 169:           {
+0x5afdf10 170:             *(_DWORD *)((char *)dword_6A541EC + v14 + 28) = v17 | 2;
+0x5afdf10 171:             v12 = v113;
+0x5afdf10 172:             v13 = v114;
+0x5afdf10 173:           }
+0x5afdf10 174:           v16 = ArgList;
+0x5afdf10 175:         }
+0x5afdf10 176:         v14 += 32;
+0x5afdf10 177:         --v15;
+0x5afdf10 178:       }
+0x5afdf10 179:       while ( v15 );
+0x5afdf10 180:       v9 = a4;
+0x5afdf10 181:       v10 = a6;
+0x5afdf10 182:     }
+0x5afdf10 183:     v18 = ArgList;
+0x5afdf10 184:     if ( ArgList == dword_6A54228
+0x5afdf10 185:       && (v12 == dword_6A54210 && v114 == dword_6A54214 || v12 == dword_6A54218 && v114 == dword_6A5421C) )
+0x5afdf10 186:     {
+0x5afdf10 187:       v19 = dword_6A5422C;
+0x5afdf10 188:       if ( !dword_6A54230 )
+0x5afdf10 189:         v19 = 5;
+0x5afdf10 190:       dword_6A5422C = v19;
+0x5afdf10 191:     }
+0x5afdf10 192:     v11 = v125;
+0x5afdf10 193:   }
+0x5afdf10 194:   *(_DWORD *)v127 = sub_5AEE4E0(v18, &v113, 1, 0, &v126);
+0x5afdf10 195:   if ( !*(_DWORD *)v127 )
+0x5afdf10 196:     return 0;
+0x5afdf10 197:   if ( *v126 != 5 )
+0x5afdf10 198:   {
+0x5afdf10 199:     LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "3CTE:Page is not a table page (page is type %d)\n", *v126);
+0x5afdf10 200:     goto LABEL_73;
+0x5afdf10 201:   }
+0x5afdf10 202:   v20 = v126[1];
+0x5afdf10 203:   if ( v20 != v11 )
+0x5afdf10 204:   {
+0x5afdf10 205:     v21 = (const char *)sub_5AEDEF0(v20, v134);
+0x5afdf10 206: LABEL_71:
+0x5afdf10 207:     v104 = v21;
+0x5afdf10 208:     v36 = (const char *)sub_5AEDEF0(v11, v133);
+0x5afdf10 209:     LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "3CTE:Expected table name %s, got table name %s\n", v36, v104);
+0x5afdf10 210:     sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5afdf10 211:     dword_6453B98 = 660;
+0x5afdf10 212:     goto LABEL_76;
+0x5afdf10 213:   }
+0x5afdf10 214:   if ( v126[2] + 1 > 50 )
+0x5afdf10 215:   {
+0x5afdf10 216:     dword_6453B98 = 533;
+0x5afdf10 217:     goto LABEL_81;
+0x5afdf10 218:   }
+0x5afdf10 219:   v22 = v126[3];
+0x5afdf10 220:   if ( v22 > 0 && v9 != v22 )
+0x5afdf10 221:   {
+0x5afdf10 222:     dword_6453B98 = 531;
+0x5afdf10 223:     goto LABEL_81;
+0x5afdf10 224:   }
+0x5afdf10 225:   if ( a7 )
+0x5afdf10 226:   {
+0x5afdf10 227:     v23 = v126[4];
+0x5afdf10 228:     if ( v23 >= 0 && v10 != v23 )
+0x5afdf10 229:     {
+0x5afdf10 230:       dword_6453B98 = 532;
+0x5afdf10 231:       goto LABEL_81;
+0x5afdf10 232:     }
+0x5afdf10 233:   }
+0x5afdf10 234:   if ( !sub_5AF1600(*(_DWORD *)v127, &v119, v105) || v119 && !sub_5AFC950(ArgList, v11, (int)v105) )
+0x5afdf10 235:     return 0;
+0x5afdf10 236:   v24 = v126;
+0x5afdf10 237:   if ( v126[2] > 0 )
+0x5afdf10 238:   {
+0x5afdf10 239:     v122 = v132;
+0x5afdf10 240:     while ( sub_5B00F10(v131, v9, v24, v107, v124) )
+0x5afdf10 241:     {
+0x5afdf10 242:       v25 = v122;
+0x5afdf10 243:       ++v123;
+0x5afdf10 244:       *((_DWORD *)v122 + 6) = *(_DWORD *)v127;
+0x5afdf10 245:       *((_DWORD *)v25 + 5) = *(_DWORD *)v124;
+0x5afdf10 246:       *((_DWORD *)v25 + 2) = v24;
+0x5afdf10 247:       v122 = v25 + 20;
+0x5afdf10 248:       v26 = sub_5AEE4E0(ArgList, v107, 1, 0, &v126);
+0x5afdf10 249:       *(_DWORD *)v127 = v26;
+0x5afdf10 250:       if ( !v26 )
+0x5afdf10 251:         goto LABEL_77;
+0x5afdf10 252:       if ( *v126 != 5 )
+0x5afdf10 253:       {
+0x5afdf10 254:         LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "3CTE:Page is not a table page (is page type %d)\n", *v126);
+0x5afdf10 255: LABEL_73:
+0x5afdf10 256:         sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5afdf10 257:         dword_6453B98 = 659;
+0x5afdf10 258: LABEL_76:
+0x5afdf10 259:         LOBYTE(v26) = v127[0];
+0x5afdf10 260: LABEL_77:
+0x5afdf10 261:         v37 = v123;
+0x5afdf10 262:         if ( v123 > 0 )
+0x5afdf10 263:         {
+0x5afdf10 264:           v38 = &v132[20 * v123 + 24];
+0x5afdf10 265:           do
+0x5afdf10 266:           {
+0x5afdf10 267:             sub_5AF11D0(v26);
+0x5afdf10 268:             v26 = *((_DWORD *)v38 - 5);
+0x5afdf10 269:             v38 -= 20;
+0x5afdf10 270:             --v37;
+0x5afdf10 271:           }
+0x5afdf10 272:           while ( v37 > 0 );
+0x5afdf10 273:           *(_DWORD *)v127 = v26;
+0x5afdf10 274:         }
+0x5afdf10 275: LABEL_81:
+0x5afdf10 276:         sub_5AF11D0(v127[0]);
+0x5afdf10 277:         return 0;
+0x5afdf10 278:       }
+0x5afdf10 279:       v11 = v125;
+0x5afdf10 280:       if ( v126[1] != v125 )
+0x5afdf10 281:       {
+0x5afdf10 282:         v21 = (const char *)sub_5AEDEF0(v126[1], v134);
+0x5afdf10 283:         goto LABEL_71;
+0x5afdf10 284:       }
+0x5afdf10 285:       v27 = (int *)v122;
+0x5afdf10 286:       v28 = *(_DWORD *)(*((_DWORD *)v122 - 3) + 8) - 1;
+0x5afdf10 287:       if ( v126[2] != v28 )
+0x5afdf10 288:       {
+0x5afdf10 289:         LicFeatureCheckOut_FormatSafe(
+0x5afdf10 290:           &byte_6453BA0,
+0x5afdf10 291:           0x200u,
+0x5afdf10 292:           "3CTE:Expected page of level %d, but got level %d\n",
+0x5afdf10 293:           v28,
+0x5afdf10 294:           v126[2]);
+0x5afdf10 295:         sub_5861C70("INTERNAL CONSISTENCY ERROR:%s\n", (char)&byte_6453BA0);
+0x5afdf10 296:         dword_6453B98 = 661;
+0x5afdf10 297:         goto LABEL_76;
+0x5afdf10 298:       }
+0x5afdf10 299:       if ( !sub_5AF1600(v26, &v119, &v108) )
+0x5afdf10 300:         goto LABEL_76;
+0x5afdf10 301:       if ( v119 )
+0x5afdf10 302:       {
+0x5afdf10 303:         v29 = *(v27 - 3);
+0x5afdf10 304:         v30 = *v27;
+0x5afdf10 305:         v31 = *(_DWORD *)(v29 + 12);
+0x5afdf10 306:         if ( v31 <= 0 )
+0x5afdf10 307:           v31 = *(_DWORD *)(v29 + 4 * v30++);
+0x5afdf10 308:         v32 = v31 + v30;
+0x5afdf10 309:         *(_DWORD *)(v29 + 4 * v32) = v108;
+0x5afdf10 310:         *(_DWORD *)(v29 + 4 * v32 + 4) = v109;
+0x5afdf10 311:       }
+0x5afdf10 312:       v24 = v126;
+0x5afdf10 313:       if ( v126[2] <= 0 )
+0x5afdf10 314:         goto LABEL_59;
+0x5afdf10 315:     }
+0x5afdf10 316:     LicFeatureCheckOut_FormatSafe(&byte_6453BA0, 0x200u, "3CTE:Dbno is %d, table name is %d", ArgList, v125);
+0x5afdf10 317: LABEL_75:
+0x5afdf10 318:     dword_6453B98 = 534;
+0x5afdf10 319:     goto LABEL_76;
+0x5afdf10 320:   }
+0x5afdf10 321: LABEL_59:
+0x5afdf10 322:   if ( a7 )
+0x5afdf10 323:   {
+0x5afdf10 324:     if ( a7 == 1 )
+0x5afdf10 325:     {
+0x5afdf10 326:       if ( !sub_5B017F0(v24, v131, v9, v130, v10, &v112) )
+0x5afdf10 327:         goto LABEL_76;
+0x5afdf10 328:       if ( !v112 )
+0x5afdf10 329:         goto LABEL_65;
+0x5afdf10 330:       v39 = v126;
+0x5afdf10 331:       v40 = (_BYTE *)v123;
+0x5afdf10 332: LABEL_86:
+0x5afdf10 333:       if ( v40 )
+0x5afdf10 334:       {
+0x5afdf10 335:         v121 = 1;
+0x5afdf10 336:         while ( 1 )
+0x5afdf10 337:         {
+0x5afdf10 338:           v41 = (int)v40;
+0x5afdf10 339:           v122 = v40;
+0x5afdf10 340:           if ( !sub_5B01BF0(ArgList, v39, v131, v9, &v118, v106, &v117, v124, &v120) )
+0x5afdf10 341:             goto LABEL_76;
+0x5afdf10 342:           if ( !(v118 ? sub_5B017F0(v117, v131, v9, v130, v10, &v121) : sub_5B017F0(v126, v131, v9, v130, v10, &v121)) )
+0x5afdf10 343:             goto LABEL_76;
+0x5afdf10 344:           if ( !v121 )
+0x5afdf10 345:             sub_5AF11D0(v127[0]);
+0x5afdf10 346:           --v123;
+0x5afdf10 347:           *(_DWORD *)v127 = *(_DWORD *)&v132[20 * v123 + 24];
+0x5afdf10 348:           v43 = *(int **)&v132[20 * v123 + 8];
+0x5afdf10 349:           v134[0] = *(_DWORD *)&v132[20 * v123 + 20];
+0x5afdf10 350:           v116 = v43;
+0x5afdf10 351:           v126 = v43;
+0x5afdf10 352:           if ( !v120 )
+0x5afdf10 353:           {
+0x5afdf10 354:             v44 = v117[3];
+0x5afdf10 355:             if ( v44 >= 0 )
+0x5afdf10 356:               v45 = v117[3];
+0x5afdf10 357:             else
+0x5afdf10 358:               v45 = v117[7];
+0x5afdf10 359:             v109 = v9;
+0x5afdf10 360:             v46 = ((v44 >> 31) & 1) + 7;
+0x5afdf10 361:             v111 = v46;
+0x5afdf10 362:             if ( v9 > 0 )
+0x5afdf10 363:             {
+0x5afdf10 364:               qmemcpy(v129, v131, 4 * v9);
+0x5afdf10 365:               v10 = a6;
+0x5afdf10 366:             }
+0x5afdf10 367:             v133[0] = v10;
+0x5afdf10 368:             if ( v10 > 0 )
+0x5afdf10 369:               qmemcpy(v128, v130, 4 * v10);
+0x5afdf10 370:             v47 = 0;
+0x5afdf10 371:             if ( v45 > 0 )
+0x5afdf10 372:             {
+0x5afdf10 373:               v48 = v117;
+0x5afdf10 374:               do
+0x5afdf10 375:               {
+0x5afdf10 376:                 v131[v47] = v48[v47 + v46];
+0x5afdf10 377:                 ++v47;
+0x5afdf10 378:                 v46 = v111;
+0x5afdf10 379:               }
+0x5afdf10 380:               while ( v47 < v45 );
+0x5afdf10 381:             }
+0x5afdf10 382:             v41 = (int)v122;
+0x5afdf10 383:             v9 = v45;
+0x5afdf10 384:           }
+0x5afdf10 385:           v10 = 2;
+0x5afdf10 386:           v130[0] = v106[0];
+0x5afdf10 387:           v130[1] = v106[1];
+0x5afdf10 388:           a6 = 2;
+0x5afdf10 389:           if ( !sub_5B017F0(v116, v131, v9, v130, 2, &v112) )
+0x5afdf10 390:             goto LABEL_76;
+0x5afdf10 391:           if ( v121 )
+0x5afdf10 392:           {
+0x5afdf10 393:             if ( v118 )
+0x5afdf10 394:             {
+0x5afdf10 395:               if ( !v120 )
+0x5afdf10 396:               {
+0x5afdf10 397:                 v9 = v109;
+0x5afdf10 398:                 if ( v109 > 0 )
+0x5afdf10 399:                   qmemcpy(v131, v129, 4 * v109);
+0x5afdf10 400:                 v49 = v133[0];
+0x5afdf10 401:                 v10 = v133[0];
+0x5afdf10 402:                 a6 = v133[0];
+0x5afdf10 403:                 if ( v133[0] > 0 )
+0x5afdf10 404:                 {
+0x5afdf10 405:                   qmemcpy(v130, v128, 4 * v133[0]);
+0x5afdf10 406:                   v10 = v49;
+0x5afdf10 407:                 }
+0x5afdf10 408:                 v41 = (int)v122;
+0x5afdf10 409:               }
+0x5afdf10 410:               v50 = *(_DWORD *)v124;
+0x5afdf10 411:               v51 = 5 * v41;
+0x5afdf10 412:               v39 = v117;
+0x5afdf10 413:               *(_DWORD *)&v132[4 * v51 + 24] = *(_DWORD *)v124;
+0x5afdf10 414:               *(_DWORD *)&v132[4 * v51 + 8] = v39;
+0x5afdf10 415:               v40 = (_BYTE *)v41;
+0x5afdf10 416:               v126 = v39;
+0x5afdf10 417:               *(_DWORD *)v127 = v50;
+0x5afdf10 418:               v123 = v41;
+0x5afdf10 419:             }
+0x5afdf10 420:             else
+0x5afdf10 421:             {
+0x5afdf10 422:               v52 = 5 * v41;
+0x5afdf10 423:               *(_DWORD *)&v132[4 * v52 + 24] = *(_DWORD *)v127;
+0x5afdf10 424:               *(_DWORD *)&v132[4 * v52 + 20] = v134[0];
+0x5afdf10 425:               v39 = v126;
+0x5afdf10 426:               *(_DWORD *)&v132[4 * v52 + 8] = v126;
+0x5afdf10 427:               v40 = (_BYTE *)v41;
+0x5afdf10 428:               v123 = v41;
+0x5afdf10 429:             }
+0x5afdf10 430:           }
+0x5afdf10 431:           else
+0x5afdf10 432:           {
+0x5afdf10 433:             sub_5AF11D0(v124[0]);
+0x5afdf10 434:             v39 = v126;
+0x5afdf10 435:             v40 = (_BYTE *)v123;
+0x5afdf10 436:           }
+0x5afdf10 437:           if ( !v121 )
+0x5afdf10 438:           {
+0x5afdf10 439:             if ( v112 )
+0x5afdf10 440:               goto LABEL_86;
+0x5afdf10 441:             goto LABEL_65;
+0x5afdf10 442:           }
+0x5afdf10 443:         }
+0x5afdf10 444:       }
+0x5afdf10 445:       if ( sub_5B02530(ArgList, v105, v39, v131, v9, v130, v10, v107) )
+0x5afdf10 446:       {
+0x5afdf10 447:         sub_5AF11D0(v127[0]);
+0x5afdf10 448:         if ( sub_5AFC950(ArgList, v125, (int)v107) )
+0x5afdf10 449:           return 1;
+0x5afdf10 450:       }
+0x5afdf10 451:       goto LABEL_81;
+0x5afdf10 452:     }
+0x5afdf10 453:     if ( a7 != 2 )
+0x5afdf10 454:       goto LABEL_65;
+0x5afdf10 455:     if ( sub_5B010F0(v131, v9, v24, v124, v134) )
+0x5afdf10 456:     {
+0x5afdf10 457:       if ( v10 > 0 )
+0x5afdf10 458:         qmemcpy(&v24[*(_DWORD *)v124], v130, 4 * v10);
+0x5afdf10 459:       goto LABEL_65;
+0x5afdf10 460:     }
+0x5afdf10 461:     goto LABEL_75;
+0x5afdf10 462:   }
+0x5afdf10 463:   if ( !sub_5B010F0(v131, v9, v24, v133, v134) )
+0x5afdf10 464:     goto LABEL_75;
+0x5afdf10 465:   v53 = v9 + 1;
+0x5afdf10 466:   v54 = v24[4];
+0x5afdf10 467:   if ( v24[3] >= 0 )
+0x5afdf10 468:     v53 = v9;
+0x5afdf10 469:   if ( v54 >= 0 )
+0x5afdf10 470:     v55 = v54 + v53;
+0x5afdf10 471:   else
+0x5afdf10 472:     v55 = v24[v53 + v134[0]] + v53 + 1;
+0x5afdf10 473:   v56 = v55 + v134[0];
+0x5afdf10 474:   v57 = v24[6];
+0x5afdf10 475:   if ( v55 + v134[0] < dword_6453DC4 - v57 )
+0x5afdf10 476:   {
+0x5afdf10 477:     v58 = &v24[v134[0]];
+0x5afdf10 478:     do
+0x5afdf10 479:     {
+0x5afdf10 480:       *v58++ = v24[v56++];
+0x5afdf10 481:       v57 = v24[6];
+0x5afdf10 482:     }
+0x5afdf10 483:     while ( v56 < dword_6453DC4 - v57 );
+0x5afdf10 484:   }
+0x5afdf10 485:   v24[6] = v57 + v55;
+0x5afdf10 486:   v120 = v57 + v55 == dword_6453DC4 - 7;
+0x5afdf10 487:   if ( v57 + v55 != dword_6453DC4 - 7 )
+0x5afdf10 488:     goto LABEL_65;
+0x5afdf10 489:   v59 = v123;
+0x5afdf10 490:   v60 = &v132[20 * v123 + 8];
+0x5afdf10 491:   while ( v59 )
+0x5afdf10 492:   {
+0x5afdf10 493:     sub_5AF11D0(v127[0]);
+0x5afdf10 494:     *(_DWORD *)v127 = *((_DWORD *)v60 - 1);
+0x5afdf10 495:     v123 = v59 - 1;
+0x5afdf10 496:     v109 = (int)(v60 - 20);
+0x5afdf10 497:     v61 = (int *)*((_DWORD *)v60 - 5);
+0x5afdf10 498:     v62 = *((_DWORD *)v60 - 2);
+0x5afdf10 499:     v126 = v61;
+0x5afdf10 500:     v120 = v62;
+0x5afdf10 501:     v63 = v61[3];
+0x5afdf10 502:     v121 = (int)v61;
+0x5afdf10 503:     if ( v63 >= 0 )
+0x5afdf10 504:     {
+0x5afdf10 505:       v64 = 0;
+0x5afdf10 506:     }
+0x5afdf10 507:     else
+0x5afdf10 508:     {
+0x5afdf10 509:       v63 = v61[v62];
+0x5afdf10 510:       v64 = 1;
+0x5afdf10 511:     }
+0x5afdf10 512:     *(_DWORD *)v124 = v64;
+0x5afdf10 513:     v65 = v63 + v64;
+0x5afdf10 514:     v122 = (_BYTE *)dword_6453DC4;
+0x5afdf10 515:     v66 = v65 + 2;
+0x5afdf10 516:     if ( v62 != 7 )
+0x5afdf10 517:     {
+0x5afdf10 518:       v67 = v61[6];
+0x5afdf10 519:       v70 = v61 + 6;
+0x5afdf10 520:       v68 = v61 + 6;
+0x5afdf10 521: LABEL_147:
+0x5afdf10 522:       v118 = 0;
+0x5afdf10 523:       v69 = v62;
+0x5afdf10 524:       goto LABEL_148;
+0x5afdf10 525:     }
+0x5afdf10 526:     v67 = v61[6];
+0x5afdf10 527:     v68 = v61 + 6;
+0x5afdf10 528:     v134[0] = v68;
+0x5afdf10 529:     if ( v67 >= dword_6453DC4 - v66 - 7 )
+0x5afdf10 530:     {
+0x5afdf10 531:       v70 = (int *)v134[0];
+0x5afdf10 532:       goto LABEL_147;
+0x5afdf10 533:     }
+0x5afdf10 534:     v69 = v65 + 7;
+0x5afdf10 535:     v118 = 1;
+0x5afdf10 536:     if ( *(int *)(v121 + 12) < 0 )
+0x5afdf10 537:     {
+0x5afdf10 538:       v62 = v120;
+0x5afdf10 539:       v66 = *(_DWORD *)(v121 + 4 * v66 + 28) + *(_DWORD *)v124 + 2;
+0x5afdf10 540:     }
+0x5afdf10 541:     v70 = v68;
+0x5afdf10 542: LABEL_148:
+0x5afdf10 543:     v122 -= v67;
+0x5afdf10 544:     v122 -= v66;
+0x5afdf10 545:     if ( v69 < (int)v122 )
+0x5afdf10 546:     {
+0x5afdf10 547:       v68 = v70;
+0x5afdf10 548:       v71 = v121 + 4 * (v66 + v69);
+0x5afdf10 549:       do
+0x5afdf10 550:       {
+0x5afdf10 551:         v71 += 4;
+0x5afdf10 552:         *(_DWORD *)(v121 + 4 * v69++) = *(_DWORD *)(v71 - 4);
+0x5afdf10 553:         v67 = *v70;
+0x5afdf10 554:       }
+0x5afdf10 555:       while ( v69 < dword_6453DC4 - *v70 - v66 );
+0x5afdf10 556:       v62 = v120;
+0x5afdf10 557:     }
+0x5afdf10 558:     v72 = v66 + v67;
+0x5afdf10 559:     *v68 = v72;
+0x5afdf10 560:     v73 = dword_6453DC4 - 7;
+0x5afdf10 561:     v133[0] = v72;
+0x5afdf10 562:     v134[0] = dword_6453DC4 - 7;
+0x5afdf10 563:     v120 = v72 == dword_6453DC4 - 7;
+0x5afdf10 564:     v74 = v126[3];
+0x5afdf10 565:     if ( v74 <= 0 )
+0x5afdf10 566:       v75 = v126[v62] + v62 + 1;
+0x5afdf10 567:     else
+0x5afdf10 568:       v75 = v74 + v62;
+0x5afdf10 569:     if ( v62 == 7 && v126[2] >= 2 && v118 )
+0x5afdf10 570:     {
+0x5afdf10 571:       v115 = v126[v75];
+0x5afdf10 572:       v116 = (int *)v126[v75 + 1];
+0x5afdf10 573:       v76 = sub_5AEE4E0(ArgList, &v115, 0, 0, &v125);
+0x5afdf10 574:       if ( !v76 || !sub_5AF1600(v76, &v119, &v110) )
+0x5afdf10 575:         goto LABEL_76;
+0x5afdf10 576:       if ( v119 )
+0x5afdf10 577:       {
+0x5afdf10 578:         v126[v75] = v110;
+0x5afdf10 579:         v126[v75 + 1] = v111;
+0x5afdf10 580:       }
+0x5afdf10 581:       v77 = v126;
+0x5afdf10 582:       if ( v126[2] > 1 )
+0x5afdf10 583:       {
+0x5afdf10 584:         v78 = (int *)v125;
+0x5afdf10 585:         do
+0x5afdf10 586:         {
+0x5afdf10 587:           if ( v126[3] >= 0 )
+0x5afdf10 588:           {
+0x5afdf10 589:             v94 = 0;
+0x5afdf10 590:             if ( v77[3] > 0 )
+0x5afdf10 591:             {
+0x5afdf10 592:               v95 = 7;
+0x5afdf10 593:               do
+0x5afdf10 594:               {
+0x5afdf10 595:                 ++v95;
+0x5afdf10 596:                 ++v94;
+0x5afdf10 597:                 v78[v95 - 1] = *(_DWORD *)(v121 + v95 * 4 - 4);
+0x5afdf10 598:                 v78 = (int *)v125;
+0x5afdf10 599:               }
+0x5afdf10 600:               while ( v94 < v77[3] );
+0x5afdf10 601:             }
+0x5afdf10 602:             v115 = v78[v78[3] + 7];
+0x5afdf10 603:             v93 = (int *)v78[v78[3] + 8];
+0x5afdf10 604:           }
+0x5afdf10 605:           else
+0x5afdf10 606:           {
+0x5afdf10 607:             v79 = *(_DWORD *)(v121 + 28);
+0x5afdf10 608:             v80 = v78[3];
+0x5afdf10 609:             if ( v80 >= 0 )
+0x5afdf10 610:               v81 = v78[3];
+0x5afdf10 611:             else
+0x5afdf10 612:               v81 = v78[7];
+0x5afdf10 613:             v82 = v79 - v81;
+0x5afdf10 614:             v83 = ((unsigned int)v80 >> 31) + v81 + 7;
+0x5afdf10 615:             *(_DWORD *)v124 = v82;
+0x5afdf10 616:             if ( v82 <= 0 )
+0x5afdf10 617:             {
+0x5afdf10 618:               if ( v82 < 0 && v83 < dword_6453DC4 - v78[6] )
+0x5afdf10 619:               {
+0x5afdf10 620:                 v87 = &v78[v83 + v82];
+0x5afdf10 621:                 do
+0x5afdf10 622:                   *v87++ = v78[v83++];
+0x5afdf10 623:                 while ( v83 < dword_6453DC4 - v78[6] );
+0x5afdf10 624:               }
+0x5afdf10 625:             }
+0x5afdf10 626:             else
+0x5afdf10 627:             {
+0x5afdf10 628:               v84 = dword_6453DC4 - v78[6];
+0x5afdf10 629:               if ( v84 >= v83 )
+0x5afdf10 630:               {
+0x5afdf10 631:                 v85 = &v78[v84 + v82];
+0x5afdf10 632:                 do
+0x5afdf10 633:                 {
+0x5afdf10 634:                   v86 = v78[v84];
+0x5afdf10 635:                   --v85;
+0x5afdf10 636:                   --v84;
+0x5afdf10 637:                   v85[1] = v86;
+0x5afdf10 638:                 }
+0x5afdf10 639:                 while ( v84 >= v83 );
+0x5afdf10 640:                 v82 = *(_DWORD *)v124;
+0x5afdf10 641:               }
+0x5afdf10 642:             }
+0x5afdf10 643:             v88 = 0;
+0x5afdf10 644:             if ( v79 > 0 )
+0x5afdf10 645:             {
+0x5afdf10 646:               v89 = v121;
+0x5afdf10 647:               v90 = v78 + 8;
+0x5afdf10 648:               do
+0x5afdf10 649:               {
+0x5afdf10 650:                 v91 = *(_DWORD *)(v89 + 4 * v88 + 32);
+0x5afdf10 651:                 ++v90;
+0x5afdf10 652:                 ++v88;
+0x5afdf10 653:                 *(v90 - 1) = v91;
+0x5afdf10 654:               }
+0x5afdf10 655:               while ( v88 < v79 );
+0x5afdf10 656:               v82 = *(_DWORD *)v124;
+0x5afdf10 657:             }
+0x5afdf10 658:             v78[6] -= v82;
+0x5afdf10 659:             v78[7] = v79;
+0x5afdf10 660:             v78 = (int *)v125;
+0x5afdf10 661:             v92 = *(_DWORD *)(v125 + 28);
+0x5afdf10 662:             v115 = *(_DWORD *)(v125 + 4 * v92 + 32);
+0x5afdf10 663:             v93 = *(int **)(v125 + 4 * v92 + 36);
+0x5afdf10 664:           }
+0x5afdf10 665:           v96 = v78 + 2;
+0x5afdf10 666:           v116 = v93;
+0x5afdf10 667:           v77 = v78;
+0x5afdf10 668:           if ( v78[2] == 1 )
+0x5afdf10 669:             break;
+0x5afdf10 670:           v97 = sub_5AEE4E0(ArgList, &v115, 0, 0, &v125);
+0x5afdf10 671:           if ( !v97 )
+0x5afdf10 672:             goto LABEL_76;
+0x5afdf10 673:           if ( v126[3] <= 0 )
+0x5afdf10 674:           {
+0x5afdf10 675:             v101 = v77[7];
+0x5afdf10 676:             v99 = &v77[v101 + 8];
+0x5afdf10 677:             v100 = &v77[v101 + 9];
+0x5afdf10 678:           }
+0x5afdf10 679:           else
+0x5afdf10 680:           {
+0x5afdf10 681:             v98 = v77[3];
+0x5afdf10 682:             v99 = &v77[2 * v98 + 9];
+0x5afdf10 683:             v100 = &v77[2 * v98 + 10];
+0x5afdf10 684:           }
+0x5afdf10 685:           *(_DWORD *)v124 = v100;
+0x5afdf10 686:           if ( !sub_5AF1600(v97, &v119, &v110) )
+0x5afdf10 687:             goto LABEL_76;
+0x5afdf10 688:           if ( v119 )
+0x5afdf10 689:           {
+0x5afdf10 690:             v102 = *(int **)v124;
+0x5afdf10 691:             *v99 = v110;
+0x5afdf10 692:             *v102 = v111;
+0x5afdf10 693:           }
+0x5afdf10 694:           v78 = (int *)v125;
+0x5afdf10 695:         }
+0x5afdf10 696:         while ( *v96 > 1 );
+0x5afdf10 697:         v73 = v134[0];
+0x5afdf10 698:       }
+0x5afdf10 699:     }
+0x5afdf10 700:     v103 = v133[0] == v73;
+0x5afdf10 701:     v59 = v123;
+0x5afdf10 702:     if ( !v103 )
+0x5afdf10 703:       break;
+0x5afdf10 704:     v60 = (_BYTE *)v109;
+0x5afdf10 705:   }
+0x5afdf10 706:   if ( v120 && !v59 )
+0x5afdf10 707:   {
+0x5afdf10 708:     v126[2] = 0;
+0x5afdf10 709:     goto LABEL_68;
+0x5afdf10 710:   }
+0x5afdf10 711: LABEL_65:
+0x5afdf10 712:   v33 = v123;
+0x5afdf10 713:   if ( v123 > 0 )
+0x5afdf10 714:   {
+0x5afdf10 715:     v34 = (int **)&v132[20 * v123 + 8];
+0x5afdf10 716:     do
+0x5afdf10 717:     {
+0x5afdf10 718:       sub_5AF11D0(v127[0]);
+0x5afdf10 719:       v35 = (int)*(v34 - 1);
+0x5afdf10 720:       v34 -= 5;
+0x5afdf10 721:       --v33;
+0x5afdf10 722:       *(_DWORD *)v127 = v35;
+0x5afdf10 723:       v126 = *v34;
+0x5afdf10 724:     }
+0x5afdf10 725:     while ( v33 > 0 );
+0x5afdf10 726:   }
+0x5afdf10 727: LABEL_68:
+0x5afdf10 728:   sub_5AF11D0(v127[0]);
+0x5afdf10 729:   return 1;
+0x5afdf10 730: }
+0x5b017f0 1: int __cdecl sub_5B017F0(_DWORD *a1, int a2, int a3, int a4, int a5, _DWORD *a6)
+0x5b017f0 2: {
+0x5b017f0 3:   _DWORD *v6; // esi
+0x5b017f0 4:   int v8; // ecx
+0x5b017f0 5:   bool v9; // cc
+0x5b017f0 6:   int v10; // eax
+0x5b017f0 7:   int v11; // edx
+0x5b017f0 8:   int v12; // eax
+0x5b017f0 9:   int v13; // ecx
+0x5b017f0 10:   int v14; // edx
+0x5b017f0 11:   int v15; // ecx
+0x5b017f0 12:   _DWORD *v16; // edi
+0x5b017f0 13:   int v17; // eax
+0x5b017f0 14:   int v18; // ecx
+0x5b017f0 15:   _DWORD *v19; // edi
+0x5b017f0 16:   int v20; // eax
+0x5b017f0 17:   int v21; // edx
+0x5b017f0 18:   int v22; // ecx
+0x5b017f0 19:   _DWORD *v23; // edx
+0x5b017f0 20:   int v24; // eax
+0x5b017f0 21:   int v25; // [esp+Ch] [ebp-10h] BYREF
+0x5b017f0 22:   int v26; // [esp+10h] [ebp-Ch]
+0x5b017f0 23:   int v27; // [esp+14h] [ebp-8h] BYREF
+0x5b017f0 24:   int v28; // [esp+18h] [ebp-4h]
+0x5b017f0 25: 
+0x5b017f0 26:   v6 = a1;
+0x5b017f0 27:   *a6 = 0;
+0x5b017f0 28:   if ( sub_5B010F0(a2, a3, a1, &v25, &v27) )
+0x5b017f0 29:   {
+0x5b017f0 30:     dword_6453B98 = 529;
+0x5b017f0 31:     return 0;
+0x5b017f0 32:   }
+0x5b017f0 33:   else
+0x5b017f0 34:   {
+0x5b017f0 35:     v8 = a1[3] >> 31;
+0x5b017f0 36:     v9 = a1[2] <= 0;
+0x5b017f0 37:     v26 = v8;
+0x5b017f0 38:     if ( v9 )
+0x5b017f0 39:       v10 = a1[4] >> 31;
+0x5b017f0 40:     else
+0x5b017f0 41:       v10 = 0;
+0x5b017f0 42:     v11 = a1[6];
+0x5b017f0 43:     v28 = v10;
+0x5b017f0 44:     v12 = a5 + a3 + v8 + v10;
+0x5b017f0 45:     v25 = v12;
+0x5b017f0 46:     if ( v11 >= v12 )
+0x5b017f0 47:     {
+0x5b017f0 48:       v13 = dword_6453DC4 - v11;
+0x5b017f0 49:       v14 = v27;
+0x5b017f0 50:       v15 = v13 - 1;
+0x5b017f0 51:       if ( v15 >= v27 )
+0x5b017f0 52:       {
+0x5b017f0 53:         v16 = &a1[v15 + v12];
+0x5b017f0 54:         do
+0x5b017f0 55:         {
+0x5b017f0 56:           v17 = a1[v15];
+0x5b017f0 57:           --v16;
+0x5b017f0 58:           --v15;
+0x5b017f0 59:           v16[1] = v17;
+0x5b017f0 60:         }
+0x5b017f0 61:         while ( v15 >= v14 );
+0x5b017f0 62:       }
+0x5b017f0 63:       if ( v26 == 1 )
+0x5b017f0 64:         a1[v14++] = a3;
+0x5b017f0 65:       v18 = 0;
+0x5b017f0 66:       if ( a3 > 0 )
+0x5b017f0 67:       {
+0x5b017f0 68:         v19 = &a1[v14];
+0x5b017f0 69:         do
+0x5b017f0 70:         {
+0x5b017f0 71:           v20 = *(_DWORD *)(a2 + 4 * v18);
+0x5b017f0 72:           ++v19;
+0x5b017f0 73:           ++v18;
+0x5b017f0 74:           *(v19 - 1) = v20;
+0x5b017f0 75:         }
+0x5b017f0 76:         while ( v18 < a3 );
+0x5b017f0 77:         v6 = a1;
+0x5b017f0 78:       }
+0x5b017f0 79:       v21 = a3 + v14;
+0x5b017f0 80:       if ( v28 == 1 )
+0x5b017f0 81:         v6[v21++] = a5;
+0x5b017f0 82:       v22 = 0;
+0x5b017f0 83:       if ( a5 > 0 )
+0x5b017f0 84:       {
+0x5b017f0 85:         v23 = &v6[v21];
+0x5b017f0 86:         do
+0x5b017f0 87:         {
+0x5b017f0 88:           v24 = *(_DWORD *)(a4 + 4 * v22);
+0x5b017f0 89:           ++v23;
+0x5b017f0 90:           ++v22;
+0x5b017f0 91:           *(v23 - 1) = v24;
+0x5b017f0 92:         }
+0x5b017f0 93:         while ( v22 < a5 );
+0x5b017f0 94:       }
+0x5b017f0 95:       v6[6] -= v25;
+0x5b017f0 96:       return 1;
+0x5b017f0 97:     }
+0x5b017f0 98:     else
+0x5b017f0 99:     {
+0x5b017f0 100:       *a6 = 1;
+0x5b017f0 101:       return 1;
+0x5b017f0 102:     }
+0x5b017f0 103:   }
+0x5b017f0 104: }

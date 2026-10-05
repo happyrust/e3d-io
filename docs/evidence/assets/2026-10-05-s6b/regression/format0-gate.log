@@ -1,0 +1,18 @@
+project copied to D:\e3dio-s6b-tesgate\TEST
+reset D:\e3dio-s6b-tesgate\TEST\TES000\TES023 and the system / comms databases from the original
+e3d-write: session 110 on base 109: ZONE 17419/107 renamed and described, EQUI 17419/331 inserted
+PASS E1  e3d-io reads back both NAMEs and both DESCs
+PASS E2  the 16384 appended bytes hold the ZONE's name key and DESC escaped, and no Chinese as UTF-8
+E3D: TTY session 3 s, launcher exit 0, reached the command loop: True, finished the macro: True
+PASS F0  E3D is in the project copy with MDB /COMP
+PASS F1  control: E3D names the SITE it wrote itself, and serves EQUIB/DESI_COMP for the MDB
+PASS F2a ZONE renamed: a Chinese NAME, record and table
+PASS F2b EQUI inserted: a Chinese NAME, under the renamed ZONE
+PASS F2c the ZONE lists the new EQUI last, by its Chinese name
+PASS F3a ZONE DESC: an escaped run inside plain text
+PASS F3b EQUI DESC: Chinese and ASCII runs
+PASS F4  Q SESSION: the e3d-io session, user e3dio, its Chinese comment
+     (logs decoded as: 00_project.log=utf-8, 10_control.log=utf-8, 20_zone_name.log=utf-8, 30_zone_desc.log=utf-8, 40_equi.log=utf-8, 50_zone_members.log=utf-8, 60_session.log=utf-8)
+PASS F5  the original D:\AVEVA\Projects\E3D3.1\TEST\TES000 is untouched: E3D and e3d-io wrote only the copy
+
+all PASS — E3D 3.1 read back every Chinese NAME, DESC and comment e3d-io wrote into the FORMAT 0 database TES000\TES023 (logs in D:\e3dio-s6b-tesgate\logs-format0)

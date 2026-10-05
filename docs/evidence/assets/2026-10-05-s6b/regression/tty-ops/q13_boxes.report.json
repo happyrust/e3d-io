@@ -1,0 +1,468 @@
+{
+  "base_sesno": 662,
+  "comment": "Q13 required boxes and fixed probes",
+  "commit": {
+    "appended_pages": [
+      17598,
+      17599,
+      17600,
+      17601,
+      17602,
+      17603,
+      17604,
+      17605,
+      17606,
+      17607,
+      17608,
+      17609,
+      17610,
+      17611,
+      17612,
+      17613,
+      17614,
+      17615,
+      17616,
+      17617,
+      17618
+    ],
+    "base_sesno": 662,
+    "merged_onto": null,
+    "previous": {
+      "end": 17597,
+      "page": 17597,
+      "sesno": 662
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 17618,
+      "page": 17618,
+      "sesno": 663
+    }
+  },
+  "database": "D:\\e3dio-s6b-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 662,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/7",
+      "id": "main",
+      "index": 0,
+      "name": "/E3DIO-Q13-MAIN",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/7"
+    },
+    {
+      "attrs": [
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/8",
+      "id": "moving",
+      "index": 1,
+      "name": "/E3DIO-Q13-MOVING",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/8"
+    },
+    {
+      "attrs": [
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/9",
+      "id": "growing",
+      "index": 2,
+      "name": "/E3DIO-Q13-GROWING",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/9"
+    },
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/10",
+      "id": "deleting",
+      "index": 3,
+      "name": "/E3DIO-Q13-DELETING",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/10"
+    },
+    {
+      "attrs": [
+        "POS"
+      ],
+      "given": "16192/11",
+      "id": "newowner",
+      "index": 4,
+      "name": "/E3DIO-Q13-NEWOWNER",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/11"
+    },
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/12",
+      "id": "controlprobe",
+      "index": 5,
+      "name": "/E3DIO-Q13-CONTROL-PROBE",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/12"
+    },
+    {
+      "attrs": [
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/13",
+      "id": "oldprobe",
+      "index": 6,
+      "name": "/E3DIO-Q13-OLD-PROBE",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/13"
+    },
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/14",
+      "id": "newprobe",
+      "index": 7,
+      "name": "/E3DIO-Q13-NEW-PROBE",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/14"
+    },
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/15",
+      "id": "growprobe",
+      "index": 8,
+      "name": "/E3DIO-Q13-GROW-PROBE",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/15"
+    },
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/16",
+      "id": "deleteprobe",
+      "index": 9,
+      "name": "/E3DIO-Q13-DELETE-PROBE",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/16"
+    }
+  ],
+  "ops_file": "D:\\e3dio-s6b-gate\\ops\\q13_boxes.json",
+  "spatial": {
+    "elements": {
+      "16192/10": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              299990287,
+              16192,
+              10,
+              0
+            ],
+            "value": [
+              4294957583,
+              78040,
+              11500,
+              4294960583,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      },
+      "16192/12": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              1600009000,
+              16192,
+              12,
+              0
+            ],
+            "value": [
+              4294964083,
+              75040,
+              9000,
+              6787,
+              85040,
+              19000,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      },
+      "16192/13": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              1400013500,
+              16192,
+              13,
+              0
+            ],
+            "value": [
+              4294938583,
+              79540,
+              13500,
+              4294939583,
+              80540,
+              14500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      },
+      "16192/14": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              1400013500,
+              16192,
+              14,
+              0
+            ],
+            "value": [
+              71287,
+              79540,
+              13500,
+              72287,
+              80540,
+              14500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      },
+      "16192/15": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              1400013500,
+              16192,
+              15,
+              0
+            ],
+            "value": [
+              4294944583,
+              79540,
+              13500,
+              4294945583,
+              80540,
+              14500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      },
+      "16192/16": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              1400013500,
+              16192,
+              16,
+              0
+            ],
+            "value": [
+              4294958583,
+              79540,
+              13500,
+              4294959583,
+              80540,
+              14500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      },
+      "16192/7": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              299970287,
+              16192,
+              7,
+              0
+            ],
+            "value": [
+              4294937583,
+              78040,
+              11500,
+              4294940583,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      },
+      "16192/8": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              299970287,
+              16192,
+              8,
+              0
+            ],
+            "value": [
+              4294937583,
+              78040,
+              11500,
+              4294940583,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      },
+      "16192/9": {
+        "aabb": "BuiltIn",
+        "causes": [
+          "Inserted"
+        ],
+        "given": null,
+        "registered": [
+          {
+            "key": [
+              299970287,
+              16192,
+              9,
+              0
+            ],
+            "value": [
+              4294937583,
+              78040,
+              11500,
+              4294940583,
+              82040,
+              16500,
+              2
+            ]
+          }
+        ],
+        "removed": []
+      }
+    },
+    "pages": [
+      17612,
+      17613,
+      17614,
+      17615,
+      17616,
+      17617
+    ],
+    "policy": "require",
+    "skipped": [],
+    "table": "Rewritten { root: 17617 }",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "require",
+  "staged": null,
+  "user": "e3dio"
+}

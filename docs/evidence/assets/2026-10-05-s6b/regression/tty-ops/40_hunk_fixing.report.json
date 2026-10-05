@@ -1,0 +1,69 @@
+{
+  "base_sesno": 650,
+  "comment": "e3d-io write-path gate: FIXING with ROKEYS inline (type 19) and ROVALS as a hunk (type 23)",
+  "commit": {
+    "appended_pages": [
+      16670,
+      16671,
+      16672,
+      16673,
+      16674,
+      16675,
+      16676,
+      16677,
+      16678,
+      16679,
+      16680,
+      16681,
+      16682
+    ],
+    "base_sesno": 650,
+    "merged_onto": null,
+    "previous": {
+      "end": 16669,
+      "page": 16669,
+      "sesno": 650
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 16682,
+      "page": 16682,
+      "sesno": 651
+    }
+  },
+  "database": "D:\\e3dio-s6b-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 650,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "ROKEYS",
+        "ROVALS"
+      ],
+      "given": "24384/26510",
+      "id": "fixing",
+      "index": 0,
+      "noun": "FIXING",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26510"
+    }
+  ],
+  "ops_file": "D:\\e3dio-s6b-gate\\ops\\40_hunk_fixing.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

@@ -1,0 +1,26 @@
+{
+    "comment":  "e3d-io S6b probe Live insert",
+    "ops":  [
+                {
+                    "op":  "insert",
+                    "id":  "z1",
+                    "owner":  "/1RX03-PIPEBJ",
+                    "noun":  "ZONE",
+                    "name":  "/E3DIO-S6B-L1"
+                },
+                {
+                    "op":  "insert",
+                    "id":  "z2",
+                    "owner":  "/1RX03-PIPEBJ",
+                    "noun":  "ZONE",
+                    "name":  "/E3DIO-S6B-L2"
+                },
+                {
+                    "op":  "insert",
+                    "id":  "z3",
+                    "owner":  "/1RX03-PIPEBJ",
+                    "noun":  "ZONE",
+                    "name":  "/E3DIO-S6B-L3"
+                }
+            ]
+}

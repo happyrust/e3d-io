@@ -1,0 +1,119 @@
+{
+  "base_sesno": 651,
+  "comment": "e3d-io write-path gate: three BOXes under the second ZONE, two referenced by the GROU",
+  "commit": {
+    "appended_pages": [
+      16683,
+      16684,
+      16685,
+      16686,
+      16687,
+      16688,
+      16689,
+      16690,
+      16691,
+      16692,
+      16693,
+      16694,
+      16695,
+      16696
+    ],
+    "base_sesno": 651,
+    "merged_onto": null,
+    "previous": {
+      "end": 16682,
+      "page": 16682,
+      "sesno": 651
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 16696,
+      "page": 16696,
+      "sesno": 652
+    }
+  },
+  "database": "D:\\e3dio-s6b-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 651,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "24384/26511",
+      "id": "a",
+      "index": 0,
+      "name": "/E3DIO-MOVE-A",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "24384/2498",
+      "refno": "24384/26511"
+    },
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "24384/26512",
+      "id": "b",
+      "index": 1,
+      "name": "/E3DIO-MOVE-B",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "24384/2498",
+      "refno": "24384/26512"
+    },
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "24384/26513",
+      "id": "c",
+      "index": 2,
+      "name": "/E3DIO-MOVE-C",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "24384/2498",
+      "refno": "24384/26513"
+    },
+    {
+      "at": "last",
+      "group": "16192/3",
+      "index": 3,
+      "member": "24384/26511",
+      "op": "reference"
+    },
+    {
+      "at": "last",
+      "group": "16192/3",
+      "index": 4,
+      "member": "24384/26512",
+      "op": "reference"
+    }
+  ],
+  "ops_file": "D:\\e3dio-s6b-gate\\ops\\50_moves.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

@@ -1,0 +1,5 @@
+gates start 2026-10-05T21:47:40.8065031+08:00 HEAD b8faf7ae9f3add039fc9da630ec0a15fbd98315b + worktree
+tty exit=1 elapsed_s=0.27002 end=2026-10-05T21:47:41.1248875+08:00
+alternate exit=0 elapsed_s=73.4135424 end=2026-10-05T21:48:54.5396686+08:00
+format0 exit=0 elapsed_s=10.0605809 end=2026-10-05T21:49:04.6013218+08:00
+tty(rerun, PSModulePath=WindowsPowerShell only) exit=0 elapsed_s=212.4219671 end=2026-10-05T21:52:42.9057654+08:00

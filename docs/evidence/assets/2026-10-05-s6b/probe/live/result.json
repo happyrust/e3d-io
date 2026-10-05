@@ -1,0 +1,447 @@
+{
+    "case":  "Live",
+    "source":  {
+                   "path":  "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+                   "sha256":  "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+                   "length":  34037760
+               },
+    "e3dio_sessions":  [
+                           647
+                       ],
+    "e3dio_issued":  [
+                         "24384/26506",
+                         "24384/26507",
+                         "24384/26508"
+                     ],
+    "e3dio_live":  [
+                       "24384/26506",
+                       "24384/26507",
+                       "24384/26508"
+                   ],
+    "e3dio_deleted":  [
+
+                      ],
+    "e3d_user":  "SYSTEM",
+    "e3d_refno":  "24384/26509",
+    "e3d_new_error":  null,
+    "e3d_saved_sesno":  648,
+    "e3d_refno_is_live_e3dio":  false,
+    "e3d_refno_is_deleted_e3dio":  false,
+    "session_written_before_new":  false,
+    "page1_changed_before_new":  false,
+    "driver_exit":  0,
+    "e3d_stopped_after_done":  false,
+    "e3d_errors":  [
+
+                   ],
+    "snapshots":  [
+                      {
+                          "label":  "source",
+                          "newest":  646,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               },
+                                               {
+                                                   "sesno":  645,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete delete scratch BRAN",
+                                                   "reason":  0,
+                                                   "base_sesno":  644,
+                                                   "page":  16597
+                                               },
+                                               {
+                                                   "sesno":  644,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16563
+                                               },
+                                               {
+                                                   "sesno":  643,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete rename scratch BRAN A to B",
+                                                   "reason":  0,
+                                                   "base_sesno":  642,
+                                                   "page":  16542
+                                               }
+                                           ],
+                          "page0_sha256":  "7BF400766E6A025C54D7FD7F14CF0DCC2A1ED575B68EF74F878FEC5477B953B0",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26506,
+                                                    0
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26506,
+                          "scan_max_word1":  26483,
+                          "index_keys":  6639
+                      },
+                      {
+                          "label":  "before-e3d",
+                          "newest":  647,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Live insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               },
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               },
+                                               {
+                                                   "sesno":  645,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete delete scratch BRAN",
+                                                   "reason":  0,
+                                                   "base_sesno":  644,
+                                                   "page":  16597
+                                               },
+                                               {
+                                                   "sesno":  644,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16563
+                                               }
+                                           ],
+                          "page0_sha256":  "F2FE2C77E5ECF75F028A9EA3D466517ED8919B61CB0ECC835736BC98039B260B",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26506,
+                                                    0
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26506,
+                          "scan_max_word1":  26508,
+                          "index_keys":  6642
+                      },
+                      {
+                          "label":  "before_new",
+                          "newest":  647,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Live insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               },
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               },
+                                               {
+                                                   "sesno":  645,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete delete scratch BRAN",
+                                                   "reason":  0,
+                                                   "base_sesno":  644,
+                                                   "page":  16597
+                                               },
+                                               {
+                                                   "sesno":  644,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16563
+                                               }
+                                           ],
+                          "page0_sha256":  "04886C6AD2E7CEBB739DFC118EC0B638487F7100FDF1DB77C4FD3009943B3323",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26506,
+                                                    0
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26506,
+                          "scan_max_word1":  26508,
+                          "index_keys":  6642
+                      },
+                      {
+                          "label":  "after_new",
+                          "newest":  647,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Live insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               },
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               },
+                                               {
+                                                   "sesno":  645,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete delete scratch BRAN",
+                                                   "reason":  0,
+                                                   "base_sesno":  644,
+                                                   "page":  16597
+                                               },
+                                               {
+                                                   "sesno":  644,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16563
+                                               }
+                                           ],
+                          "page0_sha256":  "04886C6AD2E7CEBB739DFC118EC0B638487F7100FDF1DB77C4FD3009943B3323",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "43CEBE2FE8E9CC7C90144826454BD3456F2386B1E9E25F74A195A34B15321987",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26506,
+                                                    4
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26506,
+                          "scan_max_word1":  26508,
+                          "index_keys":  6642
+                      },
+                      {
+                          "label":  "after_save",
+                          "newest":  648,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  648,
+                                                   "user":  "dpc",
+                                                   "comment":  "e3d-io S6b probe Live",
+                                                   "reason":  0,
+                                                   "base_sesno":  647,
+                                                   "page":  16650
+                                               },
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Live insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               },
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               },
+                                               {
+                                                   "sesno":  645,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete delete scratch BRAN",
+                                                   "reason":  0,
+                                                   "base_sesno":  644,
+                                                   "page":  16597
+                                               }
+                                           ],
+                          "page0_sha256":  "04ACBFDDC5631DE374DAD934CA7D9A85E47106400A78C1A030C5690F292EE71C",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "64D38C94544D9E0FF52F87ABB204ED4FC2E8F15CA32385E8B57A509302BAED5D",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26510,
+                                                    4
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26510,
+                          "scan_max_word1":  26509,
+                          "index_keys":  6643
+                      },
+                      {
+                          "label":  "after-e3d",
+                          "newest":  649,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  649,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16670
+                                               },
+                                               {
+                                                   "sesno":  648,
+                                                   "user":  "dpc",
+                                                   "comment":  "e3d-io S6b probe Live",
+                                                   "reason":  0,
+                                                   "base_sesno":  647,
+                                                   "page":  16650
+                                               },
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Live insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               },
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               }
+                                           ],
+                          "page0_sha256":  "DB77E71F91034251FF15B49C249FB093E5616F976C1E7B967C96526EE78C3524",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  1,
+                          "page1_sha256":  "F69DE574C6A533075E16642AE274D867D861A34581A058EC7F5DE0C464DA2220",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26510,
+                                                    0
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26510,
+                          "scan_max_word1":  26509,
+                          "index_keys":  6643
+                      }
+                  ]
+}

@@ -1,0 +1,448 @@
+{
+    "case":  "Deleted",
+    "source":  {
+                   "path":  "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+                   "sha256":  "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+                   "length":  34037760
+               },
+    "e3dio_sessions":  [
+                           647,
+                           648
+                       ],
+    "e3dio_issued":  [
+                         "24384/26506",
+                         "24384/26507",
+                         "24384/26508"
+                     ],
+    "e3dio_live":  [
+
+                   ],
+    "e3dio_deleted":  [
+                          "24384/26506",
+                          "24384/26507",
+                          "24384/26508"
+                      ],
+    "e3d_user":  "SYSTEM",
+    "e3d_refno":  "24384/26506",
+    "e3d_new_error":  null,
+    "e3d_saved_sesno":  649,
+    "e3d_refno_is_live_e3dio":  false,
+    "e3d_refno_is_deleted_e3dio":  true,
+    "session_written_before_new":  false,
+    "page1_changed_before_new":  false,
+    "driver_exit":  0,
+    "e3d_stopped_after_done":  false,
+    "e3d_errors":  [
+
+                   ],
+    "snapshots":  [
+                      {
+                          "label":  "source",
+                          "newest":  646,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               },
+                                               {
+                                                   "sesno":  645,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete delete scratch BRAN",
+                                                   "reason":  0,
+                                                   "base_sesno":  644,
+                                                   "page":  16597
+                                               },
+                                               {
+                                                   "sesno":  644,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16563
+                                               },
+                                               {
+                                                   "sesno":  643,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete rename scratch BRAN A to B",
+                                                   "reason":  0,
+                                                   "base_sesno":  642,
+                                                   "page":  16542
+                                               }
+                                           ],
+                          "page0_sha256":  "7BF400766E6A025C54D7FD7F14CF0DCC2A1ED575B68EF74F878FEC5477B953B0",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26506,
+                                                    0
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26506,
+                          "scan_max_word1":  26483,
+                          "index_keys":  6639
+                      },
+                      {
+                          "label":  "before-e3d",
+                          "newest":  648,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  648,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted delete",
+                                                   "reason":  0,
+                                                   "base_sesno":  647,
+                                                   "page":  16651
+                                               },
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               },
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               },
+                                               {
+                                                   "sesno":  645,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete delete scratch BRAN",
+                                                   "reason":  0,
+                                                   "base_sesno":  644,
+                                                   "page":  16597
+                                               }
+                                           ],
+                          "page0_sha256":  "3A490FB8C66148D8315807E80CBFB6BDEE7AC757FB1D555611D97944A0C7E73A",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26506,
+                                                    0
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26506,
+                          "scan_max_word1":  26483,
+                          "index_keys":  6639
+                      },
+                      {
+                          "label":  "before_new",
+                          "newest":  648,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  648,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted delete",
+                                                   "reason":  0,
+                                                   "base_sesno":  647,
+                                                   "page":  16651
+                                               },
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               },
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               },
+                                               {
+                                                   "sesno":  645,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete delete scratch BRAN",
+                                                   "reason":  0,
+                                                   "base_sesno":  644,
+                                                   "page":  16597
+                                               }
+                                           ],
+                          "page0_sha256":  "596A4083CF9EA93351F92501A1C6AAE03C657C071B5D14CAF4D5492D705C3BB0",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26506,
+                                                    0
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26506,
+                          "scan_max_word1":  26483,
+                          "index_keys":  6639
+                      },
+                      {
+                          "label":  "after_new",
+                          "newest":  648,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  648,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted delete",
+                                                   "reason":  0,
+                                                   "base_sesno":  647,
+                                                   "page":  16651
+                                               },
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               },
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               },
+                                               {
+                                                   "sesno":  645,
+                                                   "user":  "dpc",
+                                                   "comment":  "Issue 1 datacent_delete delete scratch BRAN",
+                                                   "reason":  0,
+                                                   "base_sesno":  644,
+                                                   "page":  16597
+                                               }
+                                           ],
+                          "page0_sha256":  "596A4083CF9EA93351F92501A1C6AAE03C657C071B5D14CAF4D5492D705C3BB0",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "5437ECC5AAE8F18617F696892417B019FF97958C92FA513D0FE6AB9D3CE50EBF",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26506,
+                                                    5
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26506,
+                          "scan_max_word1":  26483,
+                          "index_keys":  6639
+                      },
+                      {
+                          "label":  "after_save",
+                          "newest":  649,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  649,
+                                                   "user":  "dpc",
+                                                   "comment":  "e3d-io S6b probe Deleted",
+                                                   "reason":  0,
+                                                   "base_sesno":  648,
+                                                   "page":  16666
+                                               },
+                                               {
+                                                   "sesno":  648,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted delete",
+                                                   "reason":  0,
+                                                   "base_sesno":  647,
+                                                   "page":  16651
+                                               },
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               },
+                                               {
+                                                   "sesno":  646,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16617
+                                               }
+                                           ],
+                          "page0_sha256":  "6CC1FE231C9497D194CC1B4E8A6AE0F6A78B795F37D1E33C3DEA876092A5715A",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  0,
+                          "page1_sha256":  "05802F4FA8F5BF62E119591FCDFD130F1CB4C460BD280609A6303FB9145DA257",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26507,
+                                                    5
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26507,
+                          "scan_max_word1":  26506,
+                          "index_keys":  6640
+                      },
+                      {
+                          "label":  "after-e3d",
+                          "newest":  650,
+                          "top_sessions":  [
+                                               {
+                                                   "sesno":  650,
+                                                   "user":  "dpc",
+                                                   "comment":  "Saving Meta Data.",
+                                                   "reason":  15,
+                                                   "base_sesno":  0,
+                                                   "page":  16686
+                                               },
+                                               {
+                                                   "sesno":  649,
+                                                   "user":  "dpc",
+                                                   "comment":  "e3d-io S6b probe Deleted",
+                                                   "reason":  0,
+                                                   "base_sesno":  648,
+                                                   "page":  16666
+                                               },
+                                               {
+                                                   "sesno":  648,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted delete",
+                                                   "reason":  0,
+                                                   "base_sesno":  647,
+                                                   "page":  16651
+                                               },
+                                               {
+                                                   "sesno":  647,
+                                                   "user":  "e3dio",
+                                                   "comment":  "e3d-io S6b probe Deleted insert",
+                                                   "reason":  0,
+                                                   "base_sesno":  646,
+                                                   "page":  16635
+                                               }
+                                           ],
+                          "page0_sha256":  "4156B2559AC8A43C16F864389D0FCAD6863ABDBF51D15477E2F89BF9F2007A11",
+                          "page0_word6":  4294967295,
+                          "page0_word12":  4,
+                          "page0_word96":  1,
+                          "page1_sha256":  "D49B9795D902577B125BA7E39571079A54CA9CC61FBDE842F48ABEC389ADB910",
+                          "page1_head":  [
+                                             1,
+                                             4294967295,
+                                             8
+                                         ],
+                          "page1_entries":  [
+                                                [
+                                                    24384,
+                                                    26507,
+                                                    0
+                                                ],
+                                                [
+                                                    32576,
+                                                    98,
+                                                    0
+                                                ],
+                                                [
+                                                    0,
+                                                    0,
+                                                    0
+                                                ]
+                                            ],
+                          "bucket_counter":  26507,
+                          "scan_max_word1":  26506,
+                          "index_keys":  6640
+                      }
+                  ]
+}

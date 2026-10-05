@@ -1,0 +1,69 @@
+{
+  "base_sesno": 655,
+  "comment": "e3d-io 写路径门：中文 NAME / DESC / 会话注释",
+  "commit": {
+    "appended_pages": [
+      17473,
+      17474,
+      17475,
+      17476,
+      17477,
+      17478,
+      17479,
+      17480,
+      17481,
+      17482,
+      17483,
+      17484
+    ],
+    "base_sesno": 655,
+    "merged_onto": null,
+    "previous": {
+      "end": 17472,
+      "page": 17472,
+      "sesno": 655
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 17484,
+      "page": 17484,
+      "sesno": 656
+    }
+  },
+  "database": "D:\\e3dio-s6b-gate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 655,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "index": 0,
+      "name": "/E3DIO-盒子",
+      "op": "rename",
+      "refno": "24384/26507"
+    },
+    {
+      "attrs": [
+        "DESC"
+      ],
+      "index": 1,
+      "op": "set",
+      "refno": "24384/47"
+    }
+  ],
+  "ops_file": "D:\\e3dio-s6b-gate\\ops\\80_text.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

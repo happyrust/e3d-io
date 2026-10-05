@@ -1,0 +1,10 @@
+e3d-write apply: 3 instruction(s) from D:\e3dio-s6b-probe\s6b\deleted\io-delete.json onto D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 647
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 delete 24384/26506
+  #1 delete 24384/26507
+  #2 delete 24384/26508
+wrote session 648 to D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 647
+  appended pages   : 16
+  report           : D:\e3dio-s6b-probe\s6b\deleted\io-delete.report.json
