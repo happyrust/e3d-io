@@ -436,16 +436,17 @@
     - 优化复测三热轮Off/Require比例7.23/8.72；Require10k stage+commit231.74ms；七类页数满足D6。真TTY39PASS（207.410s）、alternate五轮全PASS（68.285s）、原样FORMAT0全PASS（10.209s），源AMS/TES哈希/长度不变；10.5/10.6/第13组保持待办。
 
 - [ ] 13. S6b 页 1 桶表（需求 13，条件分支）
-  - [~] 13.1 取证页 1 桶表
+  - [x] 13.1 取证页 1 桶表
     - 经 IB_Wrapper 读 `DB_DB::updateBucketList`、`DB_DB::getRefBuckets`、`db_get_bucket`、`db_add_bucket`，坐实 `bucket.persist`
     - 写 `tools/e3d/s6b_probe.ps1` 驱动一次 E3D_Session：比对 `NEW` 前后的页 1 字节与会话链，分测「e3d-io 已发且仍存在」与「已发后删去」的 word1，坐实 `bucket.collision`
     - 写 Phase_3_Evidence_Doc，经 `check_evidence.ps1` 机检；结论写入 `src/core_rules.rs`
+    - Evidence 文档通过机检；Live 为 fresh，Deleted/Gap 复用已删除编号；page 1 在 NEW 时原地 claim，保存时推进计数器，退出时释放。
     - _Requirements: 2.4, 13.1, 13.2, 13.11, 13.12_
   - [~] 13.2 按取证结果判定分支
     - 不撞号 → 在 Spec_Ledger 把 S6b 写侧记为留待并附证据与触发条件，13.3–13.5 不做
     - 撞号且 E3D 原地重写页 1 → 停下，把「page 0 不再是唯一提交点」对崩溃一致性的影响写进 Spec_Ledger，取得用户确认后才做 13.3–13.5（需用户）
     - 撞号且页 1 写时复制、由 page 0 指向 → 做 13.3–13.5
-    - 判定结果填入「规则坐实状态总表」`bucket.*` 行
+    - 判定结果填入「规则坐实状态总表」`bucket.*` 行；当前为“撞号且 E3D 原地重写页 1”，已记录一致性影响，13.3–13.5 等待用户确认。
     - _Requirements: 13.4, 13.5_
   - [~] 13.3 （条件）实现 `src/write/bucket.rs`
     - 以上一会话（合并时为 Merge_Latest）的页 1 为起点，把每个扩展的 Bucket_Counter 抬到使 Bucket_Floor 大于新会话索引与本批发出的每个 word1（重铸后的号计入、原号不计）；保留全部条目，计数器只升不降；落盘方式与 E3D_Core 相同

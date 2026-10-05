@@ -157,3 +157,21 @@ _Avoid_: 预检报告、dry run（本仓库的 dry run 专指 e3d-write 的 stag
 **核验报告**：
 等价核验对一个库给出的逐项结论与计数，随输出一起保存。
 _Avoid_: 日志、对比结果
+
+## 发号与桶表
+
+**Bucket_Table（桶表）**：
+按扩展保存 RefNo 发号计数器的元数据表。
+_Avoid_: 发号索引、元素索引
+
+**Bucket_Counter（桶计数器）**：
+Bucket_Table 中某个扩展的发号计数值。其含义由该发布版本的 Counter_Semantics 确定。
+_Avoid_: 活最大、已发最大
+
+**Counter_Semantics（计数器语义）**：
+Bucket_Counter 表示“下一个待发值”还是“已发高水位”的约定。
+_Avoid_: 计数方式
+
+**Bucket_Floor（桶发号下界）**：
+按 Counter_Semantics 从某个扩展的 Bucket_Counter 得出的最小可发 word1。
+_Avoid_: 活最大加一、桶最大值

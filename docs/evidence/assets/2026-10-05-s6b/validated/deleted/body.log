@@ -1,0 +1,15 @@
+﻿[S6B-7cb8243e-BEGIN]
+User: SYSTEM
+ZONE /1RX03-MSUP
+EQUIPMENT /E3DIO-S6B-E3D-7cb8243e
+[S6B-7cb8243e-NEW-BEGIN]
+Ref =24384/26506
+[S6B-7cb8243e-NEW-END]
+[S6B-7cb8243e-SAVE-BEGIN]
+Db MASTER/DESIN, number 8000
+
+Last saved session number 649
+Session 649:
+ Date: 20:46  5 Oct 2026 User: dpc Description: e3d-io S6b probe Deleted
+[S6B-7cb8243e-SAVE-END]
+[S6B-7cb8243e-END]

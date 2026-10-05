@@ -1,0 +1,10 @@
+e3d-write apply: 3 instruction(s) from D:\e3dio-s6b-probe\runs\20261005-204559\live\io-insert.json onto D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 646
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert ZONE under 24384/46 -> 24384/26506 /E3DIO-S6B-L1 [@z1]
+  #1 insert ZONE under 24384/46 -> 24384/26507 /E3DIO-S6B-L2 [@z2]
+  #2 insert ZONE under 24384/46 -> 24384/26508 /E3DIO-S6B-L3 [@z3]
+wrote session 647 to D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 646
+  appended pages   : 16
+  report           : D:\e3dio-s6b-probe\runs\20261005-204559\live\io-insert.report.json

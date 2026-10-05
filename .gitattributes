@@ -15,3 +15,6 @@ docs/evidence/assets/2026-10-05-allocation-q14/** -text whitespace=cr-at-eol,-bl
 
 # Scale profiling and regression manifests cover original native output bytes.
 docs/evidence/assets/2026-10-05-staging-scale/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+# S6b page-1 bucket probe retains native logs and manifests byte-for-byte.
+docs/evidence/assets/2026-10-05-s6b/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof

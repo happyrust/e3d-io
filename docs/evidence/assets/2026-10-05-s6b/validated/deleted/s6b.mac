@@ -1,0 +1,36 @@
+ALPHA LOG "D:/e3dio-s6b-probe/runs/20261005-204559/deleted/body.log" OVER
+$P [S6B-7cb8243e-BEGIN]
+Q USER
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\runs\20261005-204559\deleted\after_login.a.db"'
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\runs\20261005-204559\deleted\after_login.b.db"'
+/1RX03-MSUP
+handle any
+  $P [S6B-7cb8243e-OWNER-ERROR] $!!error.text
+endhandle
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\runs\20261005-204559\deleted\before_new.a.db"'
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\runs\20261005-204559\deleted\before_new.b.db"'
+NEW EQUI /E3DIO-S6B-E3D-7cb8243e
+handle any
+  $P [S6B-7cb8243e-NEW-ERROR] $!!error.text
+elsehandle none
+  $P [S6B-7cb8243e-NEW-BEGIN]
+  Q REF
+  $P [S6B-7cb8243e-NEW-END]
+endhandle
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\runs\20261005-204559\deleted\after_new.a.db"'
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\runs\20261005-204559\deleted\after_new.b.db"'
+SAVEWORK 'e3d-io S6b probe Deleted'
+handle any
+  $P [S6B-7cb8243e-SAVE-ERROR] $!!error.text
+elsehandle none
+  $P [S6B-7cb8243e-SAVE-BEGIN]
+  Q SESSION
+  $P [S6B-7cb8243e-SAVE-END]
+endhandle
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\runs\20261005-204559\deleted\after_save.a.db"'
+SYSCOM 'cmd.exe /c copy /y "D:\e3dio-s6b-probe\AvevaMarineSample\ams000\ams8000_0001" "D:\e3dio-s6b-probe\runs\20261005-204559\deleted\after_save.b.db"'
+$P [S6B-7cb8243e-END]
+ALPHA LOG END
+ALPHA LOG "D:/e3dio-s6b-probe/runs/20261005-204559/deleted/s6b.log" OVER
+$P [S6B-7cb8243e-DONE]
+ALPHA LOG END

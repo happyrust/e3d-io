@@ -1,0 +1,606 @@
+{
+  "case": "Gap",
+  "run_id": "5ba6a23d",
+  "run_dir": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\gap",
+  "source": {
+    "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+    "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+    "length": 34037760
+  },
+  "e3dio_sessions": [
+    647,
+    648
+  ],
+  "e3dio_issued": [
+    "24384/26506",
+    "24384/26507",
+    "24384/26508"
+  ],
+  "e3dio_live": [
+    "24384/26508"
+  ],
+  "e3dio_deleted": [
+    "24384/26506",
+    "24384/26507"
+  ],
+  "e3d_refno": "24384/26506",
+  "e3d_saved_sesno": 649,
+  "driver_exit": 0,
+  "timed_out": false,
+  "elapsed_seconds": 13.7287679,
+  "verdict": {
+    "valid": true,
+    "verdict": "observed",
+    "observation": "historical_reuse",
+    "live_duplicate": false,
+    "historical_reuse": true,
+    "rebuilt_before_new": false,
+    "reasons": [],
+    "notes": []
+  },
+  "e3d_errors": [],
+  "cleanup_problems": [],
+  "e3d_stopped_after_done": false,
+  "snapshots": [
+    {
+      "label": "source",
+      "file": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_length": 34037760,
+      "file_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "second": {
+        "length": 34037760,
+        "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023"
+      },
+      "page_size": 2048,
+      "page0_sha256": "7BF400766E6A025C54D7FD7F14CF0DCC2A1ED575B68EF74F878FEC5477B953B0",
+      "page1_sha256": "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 646,
+      "top_sessions": [
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        },
+        {
+          "sesno": 644,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16563
+        },
+        {
+          "sesno": 643,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete rename scratch BRAN A to B",
+          "reason": 0,
+          "base_sesno": 642,
+          "page": 16542
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26483,
+      "index_keys": 6639,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "before_e3d",
+      "file": "D:\\e3dio-s6b-probe\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_length": 34103296,
+      "file_sha256": "5A501EE5C66975DBD91A5737F82C4E49F01FC6A2CBA634F42A4C8B17FB5D3161",
+      "second": {
+        "length": 34103296,
+        "sha256": "5A501EE5C66975DBD91A5737F82C4E49F01FC6A2CBA634F42A4C8B17FB5D3161"
+      },
+      "page_size": 2048,
+      "page0_sha256": "3A490FB8C66148D8315807E80CBFB6BDEE7AC757FB1D555611D97944A0C7E73A",
+      "page1_sha256": "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 648,
+      "top_sessions": [
+        {
+          "sesno": 648,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap delete",
+          "reason": 0,
+          "base_sesno": 647,
+          "page": 16651
+        },
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26508,
+      "index_keys": 6640,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "after_login",
+      "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\gap\\after_login.a.db",
+      "file_length": 34103296,
+      "file_sha256": "E537B744194624861CC6D45116B93BE1526BC09B2BA4AB4733304AA645E30EF8",
+      "second": {
+        "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\gap\\after_login.b.db",
+        "length": 34103296,
+        "sha256": "E537B744194624861CC6D45116B93BE1526BC09B2BA4AB4733304AA645E30EF8"
+      },
+      "page_size": 2048,
+      "page0_sha256": "596A4083CF9EA93351F92501A1C6AAE03C657C071B5D14CAF4D5492D705C3BB0",
+      "page1_sha256": "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 648,
+      "top_sessions": [
+        {
+          "sesno": 648,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap delete",
+          "reason": 0,
+          "base_sesno": 647,
+          "page": 16651
+        },
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26508,
+      "index_keys": 6640,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "before_new",
+      "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\gap\\before_new.a.db",
+      "file_length": 34103296,
+      "file_sha256": "E537B744194624861CC6D45116B93BE1526BC09B2BA4AB4733304AA645E30EF8",
+      "second": {
+        "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\gap\\before_new.b.db",
+        "length": 34103296,
+        "sha256": "E537B744194624861CC6D45116B93BE1526BC09B2BA4AB4733304AA645E30EF8"
+      },
+      "page_size": 2048,
+      "page0_sha256": "596A4083CF9EA93351F92501A1C6AAE03C657C071B5D14CAF4D5492D705C3BB0",
+      "page1_sha256": "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 648,
+      "top_sessions": [
+        {
+          "sesno": 648,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap delete",
+          "reason": 0,
+          "base_sesno": 647,
+          "page": 16651
+        },
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26508,
+      "index_keys": 6640,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "after_new",
+      "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\gap\\after_new.a.db",
+      "file_length": 34103296,
+      "file_sha256": "CC5861E7A0DBBC574D57413C42EA46218842A31D6C98AED82EE3D9A5A31D1A50",
+      "second": {
+        "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\gap\\after_new.b.db",
+        "length": 34103296,
+        "sha256": "CC5861E7A0DBBC574D57413C42EA46218842A31D6C98AED82EE3D9A5A31D1A50"
+      },
+      "page_size": 2048,
+      "page0_sha256": "596A4083CF9EA93351F92501A1C6AAE03C657C071B5D14CAF4D5492D705C3BB0",
+      "page1_sha256": "43CEBE2FE8E9CC7C90144826454BD3456F2386B1E9E25F74A195A34B15321987",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          4
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 648,
+      "top_sessions": [
+        {
+          "sesno": 648,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap delete",
+          "reason": 0,
+          "base_sesno": 647,
+          "page": 16651
+        },
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26508,
+      "index_keys": 6640,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "after_save",
+      "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\gap\\after_save.a.db",
+      "file_length": 34134016,
+      "file_sha256": "CC2082CD86B6B5D33C0A56C84476F7DE81C06BF49AD1B20B3CFA0B84C1E129E3",
+      "second": {
+        "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\gap\\after_save.b.db",
+        "length": 34134016,
+        "sha256": "CC2082CD86B6B5D33C0A56C84476F7DE81C06BF49AD1B20B3CFA0B84C1E129E3"
+      },
+      "page_size": 2048,
+      "page0_sha256": "6CC1FE231C9497D194CC1B4E8A6AE0F6A78B795F37D1E33C3DEA876092A5715A",
+      "page1_sha256": "BF96898472A186CCFF1AD7849D62C5E28AC4AF08CE50B8BD70DA296361CFA111",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26507,
+          4
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 649,
+      "top_sessions": [
+        {
+          "sesno": 649,
+          "user": "dpc",
+          "comment": "e3d-io S6b probe Gap",
+          "reason": 0,
+          "base_sesno": 648,
+          "page": 16666
+        },
+        {
+          "sesno": 648,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap delete",
+          "reason": 0,
+          "base_sesno": 647,
+          "page": 16651
+        },
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        }
+      ],
+      "bucket_counter": 26507,
+      "scan_max_word1": 26508,
+      "index_keys": 6641,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "after_e3d",
+      "file": "D:\\e3dio-s6b-probe\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_length": 34179072,
+      "file_sha256": "D373331D9F6BA9A4FBA9CEE48119AD81539EFFDB558417813932D38F6F9E644B",
+      "second": {
+        "length": 34179072,
+        "sha256": "D373331D9F6BA9A4FBA9CEE48119AD81539EFFDB558417813932D38F6F9E644B"
+      },
+      "page_size": 2048,
+      "page0_sha256": "4156B2559AC8A43C16F864389D0FCAD6863ABDBF51D15477E2F89BF9F2007A11",
+      "page1_sha256": "D49B9795D902577B125BA7E39571079A54CA9CC61FBDE842F48ABEC389ADB910",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 1,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26507,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 650,
+      "top_sessions": [
+        {
+          "sesno": 650,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16686
+        },
+        {
+          "sesno": 649,
+          "user": "dpc",
+          "comment": "e3d-io S6b probe Gap",
+          "reason": 0,
+          "base_sesno": 648,
+          "page": 16666
+        },
+        {
+          "sesno": 648,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap delete",
+          "reason": 0,
+          "base_sesno": 647,
+          "page": 16651
+        },
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Gap insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        }
+      ],
+      "bucket_counter": 26507,
+      "scan_max_word1": 26508,
+      "index_keys": 6641,
+      "window_valid": true,
+      "window_problems": []
+    }
+  ],
+  "page_differences": {
+    "source->before_e3d": [],
+    "before_e3d->after_login": [],
+    "after_login->before_new": [],
+    "before_new->after_new": [
+      {
+        "word": 5,
+        "old": 0,
+        "new": 4
+      }
+    ],
+    "after_new->after_save": [
+      {
+        "word": 4,
+        "old": 26506,
+        "new": 26507
+      }
+    ],
+    "after_save->after_e3d": [
+      {
+        "word": 5,
+        "old": 4,
+        "new": 0
+      }
+    ]
+  },
+  "source_after": {
+    "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+    "length": 34037760
+  },
+  "source_unchanged": true
+}

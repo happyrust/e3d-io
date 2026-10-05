@@ -1,0 +1,604 @@
+{
+  "case": "Live",
+  "run_id": "26eca547",
+  "run_dir": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\live",
+  "source": {
+    "path": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+    "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+    "length": 34037760
+  },
+  "e3dio_sessions": [
+    647
+  ],
+  "e3dio_issued": [
+    "24384/26506",
+    "24384/26507",
+    "24384/26508"
+  ],
+  "e3dio_live": [
+    "24384/26506",
+    "24384/26507",
+    "24384/26508"
+  ],
+  "e3dio_deleted": [],
+  "e3d_refno": "24384/26509",
+  "e3d_saved_sesno": 648,
+  "driver_exit": 0,
+  "timed_out": false,
+  "elapsed_seconds": 14.6332769,
+  "verdict": {
+    "valid": true,
+    "verdict": "observed",
+    "observation": "fresh",
+    "live_duplicate": false,
+    "historical_reuse": false,
+    "rebuilt_before_new": false,
+    "reasons": [],
+    "notes": []
+  },
+  "e3d_errors": [],
+  "cleanup_problems": [],
+  "e3d_stopped_after_done": false,
+  "snapshots": [
+    {
+      "label": "source",
+      "file": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_length": 34037760,
+      "file_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+      "second": {
+        "length": 34037760,
+        "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023"
+      },
+      "page_size": 2048,
+      "page0_sha256": "7BF400766E6A025C54D7FD7F14CF0DCC2A1ED575B68EF74F878FEC5477B953B0",
+      "page1_sha256": "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 646,
+      "top_sessions": [
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        },
+        {
+          "sesno": 644,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16563
+        },
+        {
+          "sesno": 643,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete rename scratch BRAN A to B",
+          "reason": 0,
+          "base_sesno": 642,
+          "page": 16542
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26483,
+      "index_keys": 6639,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "before_e3d",
+      "file": "D:\\e3dio-s6b-probe\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_length": 34070528,
+      "file_sha256": "938DE8D779979235BFECC204E770906A94B3DB8BE35D0215E8727DD327796BA3",
+      "second": {
+        "length": 34070528,
+        "sha256": "938DE8D779979235BFECC204E770906A94B3DB8BE35D0215E8727DD327796BA3"
+      },
+      "page_size": 2048,
+      "page0_sha256": "F2FE2C77E5ECF75F028A9EA3D466517ED8919B61CB0ECC835736BC98039B260B",
+      "page1_sha256": "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 647,
+      "top_sessions": [
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Live insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        },
+        {
+          "sesno": 644,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16563
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26508,
+      "index_keys": 6642,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "after_login",
+      "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\live\\after_login.a.db",
+      "file_length": 34070528,
+      "file_sha256": "06A68329108B8A9880741E3BBC6D04A9626B24F6E63B6A0D3C43AE5DCCD36358",
+      "second": {
+        "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\live\\after_login.b.db",
+        "length": 34070528,
+        "sha256": "06A68329108B8A9880741E3BBC6D04A9626B24F6E63B6A0D3C43AE5DCCD36358"
+      },
+      "page_size": 2048,
+      "page0_sha256": "04886C6AD2E7CEBB739DFC118EC0B638487F7100FDF1DB77C4FD3009943B3323",
+      "page1_sha256": "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 647,
+      "top_sessions": [
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Live insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        },
+        {
+          "sesno": 644,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16563
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26508,
+      "index_keys": 6642,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "before_new",
+      "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\live\\before_new.a.db",
+      "file_length": 34070528,
+      "file_sha256": "06A68329108B8A9880741E3BBC6D04A9626B24F6E63B6A0D3C43AE5DCCD36358",
+      "second": {
+        "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\live\\before_new.b.db",
+        "length": 34070528,
+        "sha256": "06A68329108B8A9880741E3BBC6D04A9626B24F6E63B6A0D3C43AE5DCCD36358"
+      },
+      "page_size": 2048,
+      "page0_sha256": "04886C6AD2E7CEBB739DFC118EC0B638487F7100FDF1DB77C4FD3009943B3323",
+      "page1_sha256": "D5A9A7287844355DE5FC683FB150E06A65A9E6AA60AAE16DF23E56ED5ABB7253",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 647,
+      "top_sessions": [
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Live insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        },
+        {
+          "sesno": 644,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16563
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26508,
+      "index_keys": 6642,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "after_new",
+      "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\live\\after_new.a.db",
+      "file_length": 34070528,
+      "file_sha256": "139BC0139BAD0A38CA4281AFCF0094B747A186A38092598D0B5CC0324EAF597C",
+      "second": {
+        "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\live\\after_new.b.db",
+        "length": 34070528,
+        "sha256": "139BC0139BAD0A38CA4281AFCF0094B747A186A38092598D0B5CC0324EAF597C"
+      },
+      "page_size": 2048,
+      "page0_sha256": "04886C6AD2E7CEBB739DFC118EC0B638487F7100FDF1DB77C4FD3009943B3323",
+      "page1_sha256": "43CEBE2FE8E9CC7C90144826454BD3456F2386B1E9E25F74A195A34B15321987",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26506,
+          4
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 647,
+      "top_sessions": [
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Live insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        },
+        {
+          "sesno": 644,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16563
+        }
+      ],
+      "bucket_counter": 26506,
+      "scan_max_word1": 26508,
+      "index_keys": 6642,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "after_save",
+      "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\live\\after_save.a.db",
+      "file_length": 34101248,
+      "file_sha256": "4EAD79E783C87A282FF45E498997DB67DE31E9134C453495605FD2FF858FFF8A",
+      "second": {
+        "file": "D:\\e3dio-s6b-probe\\runs\\20261005-204559\\live\\after_save.b.db",
+        "length": 34101248,
+        "sha256": "4EAD79E783C87A282FF45E498997DB67DE31E9134C453495605FD2FF858FFF8A"
+      },
+      "page_size": 2048,
+      "page0_sha256": "04ACBFDDC5631DE374DAD934CA7D9A85E47106400A78C1A030C5690F292EE71C",
+      "page1_sha256": "64D38C94544D9E0FF52F87ABB204ED4FC2E8F15CA32385E8B57A509302BAED5D",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 0,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26510,
+          4
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 648,
+      "top_sessions": [
+        {
+          "sesno": 648,
+          "user": "dpc",
+          "comment": "e3d-io S6b probe Live",
+          "reason": 0,
+          "base_sesno": 647,
+          "page": 16650
+        },
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Live insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        },
+        {
+          "sesno": 645,
+          "user": "dpc",
+          "comment": "Issue 1 datacent_delete delete scratch BRAN",
+          "reason": 0,
+          "base_sesno": 644,
+          "page": 16597
+        }
+      ],
+      "bucket_counter": 26510,
+      "scan_max_word1": 26509,
+      "index_keys": 6643,
+      "window_valid": true,
+      "window_problems": []
+    },
+    {
+      "label": "after_e3d",
+      "file": "D:\\e3dio-s6b-probe\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "file_length": 34146304,
+      "file_sha256": "04274F70162D2646DCA06A9E56ED976FD8D9576637EFC42BE2F9690EB566C577",
+      "second": {
+        "length": 34146304,
+        "sha256": "04274F70162D2646DCA06A9E56ED976FD8D9576637EFC42BE2F9690EB566C577"
+      },
+      "page_size": 2048,
+      "page0_sha256": "DB77E71F91034251FF15B49C249FB093E5616F976C1E7B967C96526EE78C3524",
+      "page1_sha256": "F69DE574C6A533075E16642AE274D867D861A34581A058EC7F5DE0C464DA2220",
+      "page0_word6": 4294967295,
+      "page0_word12": 4,
+      "page0_word96": 1,
+      "page1_head": [
+        1,
+        4294967295,
+        8
+      ],
+      "page1_valid": true,
+      "page1_problems": [],
+      "page1_entries": [
+        [
+          24384,
+          26510,
+          0
+        ],
+        [
+          32576,
+          98,
+          0
+        ]
+      ],
+      "newest": 649,
+      "top_sessions": [
+        {
+          "sesno": 649,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16670
+        },
+        {
+          "sesno": 648,
+          "user": "dpc",
+          "comment": "e3d-io S6b probe Live",
+          "reason": 0,
+          "base_sesno": 647,
+          "page": 16650
+        },
+        {
+          "sesno": 647,
+          "user": "e3dio",
+          "comment": "e3d-io S6b probe Live insert",
+          "reason": 0,
+          "base_sesno": 646,
+          "page": 16635
+        },
+        {
+          "sesno": 646,
+          "user": "dpc",
+          "comment": "Saving Meta Data.",
+          "reason": 15,
+          "base_sesno": 0,
+          "page": 16617
+        }
+      ],
+      "bucket_counter": 26510,
+      "scan_max_word1": 26509,
+      "index_keys": 6643,
+      "window_valid": true,
+      "window_problems": []
+    }
+  ],
+  "page_differences": {
+    "source->before_e3d": [],
+    "before_e3d->after_login": [],
+    "after_login->before_new": [],
+    "before_new->after_new": [
+      {
+        "word": 5,
+        "old": 0,
+        "new": 4
+      }
+    ],
+    "after_new->after_save": [
+      {
+        "word": 4,
+        "old": 26506,
+        "new": 26510
+      }
+    ],
+    "after_save->after_e3d": [
+      {
+        "word": 5,
+        "old": 4,
+        "new": 0
+      }
+    ]
+  },
+  "source_after": {
+    "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
+    "length": 34037760
+  },
+  "source_unchanged": true
+}

@@ -313,13 +313,13 @@ pub const RULES: &[Rule] = &[
         id: RuleId::BucketCollision,
         name: "bucket.collision",
         governs: "whether E3D hands out a word1 e3d-io has already used",
-        status: unconfirmed("an E3D NEW after an e3d-io insert in the same extent", None),
+        status: confirmed("docs/evidence/2026-10-05-s6b-bucket-evidence.md#bucket.collision"),
     },
     Rule {
         id: RuleId::BucketPersist,
         name: "bucket.persist",
         governs: "how page 1 reaches the disk: copied on write and pointed to by page 0, or rewritten in place",
-        status: unconfirmed("every page-1 write", None),
+        status: confirmed("docs/evidence/2026-10-05-s6b-bucket-evidence.md#bucket.persist"),
     },
 ];
 
@@ -453,18 +453,6 @@ pub mod candidate {
     /// `aabb.arithmetic`: how a value of the computation is held — as it is
     /// for double precision, through `f32` for single.
     pub type Arithmetic = fn(value: f64) -> f64;
-}
-
-macro_rules! implementations {
-    ($($(#[$doc:meta])* $name:ident;)*) => {
-        $(
-            $(#[$doc])*
-            ///
-            /// Empty until the rule is confirmed or a candidate is written.
-            #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-            pub enum $name {}
-        )*
-    };
 }
 
 /// `spamap.table_shape`.
@@ -806,11 +794,18 @@ pub enum IndexOrder {
     NonnegativeLexicographic,
 }
 
-implementations! {
-    /// `bucket.collision`.
-    BucketCollision;
-    /// `bucket.persist`.
-    BucketPersist;
+/// `bucket.collision`: E3D may reuse a word1 that e3d-io issued and later
+/// deleted when the page-1 counter is below that historical high water mark.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BucketCollision {
+    HistoricalReuse,
+}
+
+/// `bucket.persist`: E3D updates page 1 in place while claiming and releasing
+/// a bucket; the page-1 mutation is not a page-0-only commit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BucketPersist {
+    InPlace,
 }
 
 /// One implementation slot per rule.
@@ -878,8 +873,8 @@ const CONFIRMED: RuleSet = RuleSet {
     arithmetic: Slot::Confirmed(Arithmetic::Double),
     counter_semantics: Slot::Confirmed(CounterSemantics::NextAvailable),
     index_order: Slot::Confirmed(IndexOrder::NonnegativeLexicographic),
-    bucket_collision: Slot::Pending,
-    bucket_persist: Slot::Pending,
+    bucket_collision: Slot::Confirmed(BucketCollision::HistoricalReuse),
+    bucket_persist: Slot::Confirmed(BucketPersist::InPlace),
 };
 
 static CONFIRMED_SET: RuleSet = CONFIRMED;
