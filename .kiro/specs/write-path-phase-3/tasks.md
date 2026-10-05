@@ -350,6 +350,7 @@
   - [~] 10.5 （需用户）人工 E3D 图形会话一次
     - 用户在 E3D 图形界面 `ADD` 一个 e3d-io 写的 BOX，确认 `LIMITS CE` 不报 (2,536)
     - 截图放 `docs/evidence/assets/`，记录写入 `docs/evidence/YYYY-MM-DD-e3d-spatial-gui-session.md`
+    - 2026-10-06 尝试启动已安装的 `D:\AVEVA\Everything3D2.10\des.exe`：进程立即退出，Windows 返回 `0xE0434352`（CLR 未处理异常），没有可操作的图形窗口；未伪造 PASS，仍需在可用许可证/图形环境中由用户完成。
     - _Requirements: 10.11_
   - [~] 10.6 Checkpoint - 第 10 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
