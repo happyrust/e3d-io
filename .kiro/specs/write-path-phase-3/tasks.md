@@ -435,7 +435,7 @@
     - _Requirements: 12.3, 12.4, 12.6, 12.7, 12.9_
     - 优化复测三热轮Off/Require比例7.23/8.72；Require10k stage+commit231.74ms；七类页数满足D6。真TTY39PASS（207.410s）、alternate五轮全PASS（68.285s）、原样FORMAT0全PASS（10.209s），源AMS/TES哈希/长度不变；10.5/10.6/第13组保持待办。
 
-- [ ] 13. S6b 页 1 桶表（需求 13，条件分支）
+- [x] 13. S6b 页 1 桶表（需求 13，条件分支）
   - [x] 13.1 取证页 1 桶表
     - 经 IB_Wrapper 读 `DB_DB::updateBucketList`、`DB_DB::getRefBuckets`、`db_get_bucket`、`db_add_bucket`，坐实 `bucket.persist`
     - 写 `tools/e3d/s6b_probe.ps1` 驱动一次 E3D_Session：比对 `NEW` 前后的页 1 字节与会话链，分测「e3d-io 已发且仍存在」与「已发后删去」的 word1，坐实 `bucket.collision`
@@ -464,6 +464,7 @@
     - 判分 `tools/e3d/q15_checks.ps1`、离线自检 `q15_selfcheck.ps1`（`tests/write_stage10_s6b_gate.rs`）；门加 `-OnlyQ15` / `-WriteExe`。AMS8000 扩展 24384：M 26483、C 26506、K 23。当前构建 PASS（发 26506–26528，页 1 抬到 26529，E3D NEW 24384/26529）；`c61b097` FAIL（发 26484–26506，页 1 不动，E3D NEW 24384/26506 为已删号）。证据 `docs/evidence/2026-10-06-s6b-q15-gate.md`
     - 回归（`docs/evidence/assets/2026-10-06-s6b-q15/regression/`）：Cargo 788/0/30（132 个测试二进制 + Doc-tests，skip 提示 8 条不变）；Clippy/doc 63/25；真 TTY 39 PASS（211.602s，Q13 164.792s、Q14 9.873s，Q14 为 24384/26506）；alternate 五轮 T4a–c + Q15 全 PASS（82.034s，Q15 11.959s）；原样 FORMAT0 11 行全 PASS（8.034s）；源 AMS/TES 哈希/长度不变。多一次 sync 的耗时与 13.2 回归相当（TTY −0.6s，五轮约 70s 对 73.4s）
     - _Requirements: 13.7, 13.8_
+    - 2026-10-06 收口复核：`q15_selfcheck.ps1` 11 个离线判例通过；`alternate_write_gate.ps1 -OnlyQ15` 实跑通过（24384/26506–26528 删除后页 1 抬至 26529，E3D NEW 取得 26529）；`cargo test --no-fail-fast -- --nocapture` 退出码 0。10.5、10.6 及第 14 组其余收尾仍待办。
 
 - [ ] 14. 文档、回归与收尾（需求 14、15、16）
   - [~] 14.1 更新 `MISSION.md`
