@@ -480,13 +480,15 @@
   - [x] 14.4 跑 Build_Checks 并与基线对照
     - `cargo test --no-fail-fast`、`cargo clippy --all-targets`、`cargo doc` 全绿，与 1.1 的基线对照；列出 skip 清单（skip 不计为通过），记入 Spec_Ledger「skip 清单」
     - _Requirements: 15.1, 15.2, 15.6, 15.8_
-  - [~] 14.5 下游 `cargo check`
+  - [x] 14.5 下游 `cargo check`
     - 合并到 `main` 后做，或用依赖覆盖（path 指向本工作树）做，覆盖全部 Downstream_Crates；与 e3d-io 无关的既有错误只记录；结果记入 Spec_Ledger「下游检查」
     - 2026-10-06：对 `e3d-model` 及 9 个 verify 变体使用 path override 检查；9 个 verify 变体通过，`e3d-model` 在既有 `catalogue_point.rs:466` 的 `DbElementParamEnv::with_derived` 缺失处失败。错误不在本仓库写入改动，未修改下游；日志保存在本机 `.agents/tasks/phase3-final/e3d-model.log`（不入库）。
+    - 2026-10-06 收口：结果和限制记录于 `docs/evidence/2026-10-06-downstream-and-ledger-closeout.md`。
     - _Requirements: 15.4, 15.5_
-  - [~] 14.6 Spec_Ledger 收尾
+  - [x] 14.6 Spec_Ledger 收尾
     - 不做项与触发条件定稿；实测数字、规则坐实状态与决策记录定稿；「D# 变更」写明有无改选
     - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 16.7, 16.8, 16.9_
+    - 2026-10-06 收口：D1–D8、实测数字、不做项及触发条件均已定稿；无 D# 改选。10.5 图形门仍未完成，故 10.6 与 14.7 保持待办。详见 `docs/evidence/2026-10-06-downstream-and-ledger-closeout.md`。
   - [~] 14.7 Checkpoint - 最终：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
 
