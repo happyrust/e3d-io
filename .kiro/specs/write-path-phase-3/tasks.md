@@ -694,6 +694,8 @@ CLI：`src/bin/e3d-write.rs` 显式 Off 作为 E→F 过渡，不新增空间参
 
 2026-10-04：基线 `dcc71d8`，脚本首提交 `4939b8a`；真实门发现 BOM 与默认整毫米显示的判分问题，修正后完整重跑。10.1–10.3 经验收打勾；10.4 部分完成，Q14 待第 11 组，10.5、10.6 待办。详见 `docs/evidence/2026-10-04-q13-spatial-gate.md` 及同名 assets 的报告、框、SAVEWORK、manifest。
 
+2026-10-06：在当前写侧和页 1 桶表实现上用真实 E3D TTY 重跑 `tools/e3d/write_gate.ps1`。Q0、既有 Q1–Q12、Q13/Q13a–Q13h、Q14 全部 PASS，Q13 用时 158.8434024 s，总用时 204.7711665 s；Q14 实际 `24384/26506`。Q13g 精确保存会话 667 的 SPAMAP 读侧核对为 3755 条、244 页，五项 1/1 且 `waiting=0`；Q13h 世界坐标逐轴误差 ≤0.1 mm。离线 Q13/Q14/Q15 检查亦全 PASS。源库 SHA-256 `3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342`、长度 34037760 字节保持不变。证据见 `docs/evidence/2026-10-06-e3d-tty-write-acceptance.md`；10.5 图形门和 10.6 最终检查点仍待办。
+
 | 本次自动验收 | 结果 |
 |---|---|
 | TTY | 38 PASS / 0 FAIL：Q0 + 既有 28 问 + Q13/Q13a–h |
