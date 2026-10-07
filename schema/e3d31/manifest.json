@@ -17,7 +17,8 @@
     "templates": {
       "DESI": "desvir.dat",
       "CATA": "catvir.dat",
-      "DICT": "dicvir.dat"
+      "DICT": "dicvir.dat",
+      "PADD": "padvir.dat"
     }
   },
   "catalog": {

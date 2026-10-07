@@ -1217,36 +1217,41 @@ impl DbElement {
 
         let parsed = self.parsed()?;
         if let Some(words) = stored_expression_words(&parsed, attribute.hash) {
-            if let Some(value) = catalogue_pml::evaluate_words(words, env) {
-                return Ok(AttributeNumber::Evaluated {
-                    value,
-                    form: ExpressionForm::Pml,
-                });
+            match explicit_body_shape(words) {
+                ExplicitBodyShape::Program => {
+                    return Ok(match catalogue_pml::evaluate_words(words, env) {
+                        Some(value) => AttributeNumber::Evaluated {
+                            value,
+                            form: ExpressionForm::Pml,
+                        },
+                        // 是程序却求不出的，照旧按 PML 报未解。
+                        None => AttributeNumber::Unresolved {
+                            form: ExpressionForm::Pml,
+                            text: catalogue_pml::render_with_dictionary(
+                                words,
+                                self.set.uda.as_deref(),
+                            ),
+                        },
+                    });
+                }
+                // 显式流里放的不一定是 PML 程序：ams7324 的 BS 型材库（`SPRE` 直连 SPRF 那
+                // 一族）把 `SPVE.PX` 存成四词元组 `[20, 1, 1, 0]`（`0.5 TIMES PARAM 1`），
+                // 键仍是取负的属性哈希。
+                ExplicitBodyShape::Tuple(tuple) => {
+                    return Ok(match catalogue_expr::evaluate_words(&tuple, env) {
+                        Some(value) => AttributeNumber::Evaluated {
+                            value,
+                            form: ExpressionForm::Tuple,
+                        },
+                        None => AttributeNumber::Unresolved {
+                            form: ExpressionForm::Tuple,
+                            text: catalogue_expr::render(&tuple),
+                        },
+                    });
+                }
+                // 两种都不是：与 `extract_attribute` 同口径，当这条正文不存在，往下读槽位。
+                ExplicitBodyShape::NotAFormula => {}
             }
-            // 显式流里放的不一定是 PML 程序：ams7324 的 BS 型材库（`SPRE` 直连 SPRF 那
-            // 一族）把 `SPVE.PX` 存成四词元组 `[20, 1, 1, 0]`（`0.5 TIMES PARAM 1`），
-            // 键仍是取负的属性哈希。不是程序形状的，交给元组读法；是程序却求不出的，
-            // 照旧按 PML 报未解——两种形状由 `is_program` 分开，不靠「元组也解不开」兜底。
-            if !catalogue_pml::is_program(words) {
-                let tuple: Vec<u32> = words.iter().map(|word| *word as u32).collect();
-                return Ok(match catalogue_expr::evaluate_words(&tuple, env) {
-                    Some(value) => AttributeNumber::Evaluated {
-                        value,
-                        form: ExpressionForm::Tuple,
-                    },
-                    None => AttributeNumber::Unresolved {
-                        form: ExpressionForm::Tuple,
-                        text: catalogue_expr::render(&tuple),
-                    },
-                });
-            }
-            return Ok(AttributeNumber::Unresolved {
-                form: ExpressionForm::Pml,
-                text: catalogue_pml::render_with_dictionary(
-                    words,
-                    self.set.uda.as_deref(),
-                ),
-            });
         }
 
         Ok(match &attribute.value {
@@ -1569,9 +1574,79 @@ fn string_projection(value: &DescriptorValue) -> Option<Option<String>> {
     }
 }
 
+/// 显式流里挂在属性**取负哈希**下的那段词是什么形状。
+enum ExplicitBodyShape {
+    /// 整段 PML 程序（首词计整段长度、次词程序标记）：目录公式的常态。
+    Program,
+    /// 四词元组（可带计数前缀）：ams7324 BS 型材库那种 `[20, 1, 1, 0]`。
+    Tuple(Vec<u32>),
+    /// 两者都不是——这段词不是一条能代替槽位的公式。
+    NotAFormula,
+}
+
+/// 与 [`crate::record::descriptor::extract_attribute`] 同口径：只有**整段解得开**的正文才算公式，
+/// 其余当它不存在、读槽位。
+///
+/// 第三档不是假设出来的。aps250110 的四只 NOZZ（`/P_S_01/N1` `N2`、`/P_D_01/N1` `N2`）在
+/// `HEIG` / `POS` / `ORI` 取负的哈希下各挂一条**设计侧属性规则**：`HEIG` 那条是
+/// `[0, 2, 10, 1, 106, 2, 897510, 1, 1, 712463, 1601, 1701]`——前两个词之后才是一段整程序
+/// `( ATTRIB CDPR NHEI )`。规则是注解，值早已算好存在槽位里（`HEIG = 180`，TTY `Q HEIG` 与
+/// RVM 里 180 mm 长的喷嘴都对着它）；Core3D 画图时 `DECARG -5 → GATRE(HEIG)` 读的也是槽位。
+/// 此前这里把它按元组解、解不开就报 `Unresolved`，目录颈段 `SCYL.PHEI = DDHEIGHT` 因此求不出，
+/// 四只喷嘴各少 148–151 mm 的颈段（整站对拍 NOZZ 0 / 4）。
+fn explicit_body_shape(words: &[i32]) -> ExplicitBodyShape {
+    if catalogue_pml::is_program(words) {
+        return ExplicitBodyShape::Program;
+    }
+    let tuple: Vec<u32> = words.iter().map(|word| *word as u32).collect();
+    if catalogue_expr::decode(&tuple).is_some() {
+        return ExplicitBodyShape::Tuple(tuple);
+    }
+    ExplicitBodyShape::NotAFormula
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// aps250110 `/P_S_01/N1` 的 `HEIG` 规则正文：不是整段程序（首词 0 不是长度），也不是四词元组，
+    /// 所以不算公式——`get_number` 要落到槽位读 180，`DDHEIGHT` 才有数。
+    #[test]
+    fn a_design_rule_body_is_not_a_formula() {
+        let rule = [0, 2, 10, 1, 106, 2, 897510, 1, 1, 712463, 1601, 1701];
+        assert!(matches!(
+            explicit_body_shape(&rule),
+            ExplicitBodyShape::NotAFormula
+        ));
+        // 去掉前两个词就是那段整程序，渲染得出来——说明前两个词是规则的包头，不是程序的一部分。
+        assert!(catalogue_pml::is_program(&rule[2..]));
+        assert_eq!(
+            catalogue_pml::render(&rule[2..]).as_deref(),
+            Some("( ATTRIB CDPR NHEI )")
+        );
+    }
+
+    /// 目录公式的两种形状照旧被认出来：整段 PML 与 BS 型材库的四词元组（带 / 不带计数前缀）。
+    #[test]
+    fn programs_and_tuples_are_still_formulas() {
+        // 同一只 NOZZ 目录颈段 `SCYL.PHEI = DDHEIGHT` 的元组，与 `0.5 TIMES PARAM 1` 那种。
+        for tuple in [vec![40, 1, -5, 0], vec![20, 1, 1, 0], vec![4, 20, 1, 1, 0]] {
+            assert!(
+                matches!(explicit_body_shape(&tuple), ExplicitBodyShape::Tuple(_)),
+                "{tuple:?}"
+            );
+        }
+        // catalogue_pml 单测里的真程序：`( ATTRIB OPAR[2 ] + 20 )` 那族的形状（首词 = 整段长度）。
+        let program = [
+            28, 1, 101, 6, 0, 0, 1073742848, 0, 0, 106, 2, 886911, -1, -1, 0, 1601, 1701, 101, 9,
+            1310720, 0, 1073742851, 0, 11, 1, 1, 0, 802,
+        ];
+        assert!(catalogue_pml::is_program(&program));
+        assert!(matches!(
+            explicit_body_shape(&program),
+            ExplicitBodyShape::Program
+        ));
+    }
 
     #[test]
     fn zero_word_projects_as_unset_string() {

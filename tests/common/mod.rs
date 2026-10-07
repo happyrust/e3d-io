@@ -68,6 +68,64 @@ pub const TEST_FILE_ATTLIB: &str = r"D:\work\plant-code\plant-io\test-file\attli
 /// against. The database indexes 1156 of them.
 pub const NXTR_HASH: u32 = 0x000DBF71;
 
+/// The DRAFT fixtures: the two AVEVA sample projects' picture directories
+/// (`<proj>pic\NN\M<w0>-<w1>-<EXFI>-<PVNO>`, 881 Plant + 1 885 Marine files)
+/// and the Plant PADD databases. Sample-project data, not committed
+/// (`docs/plans/2026-09-24-gw-picture-read-plan.md` Q2).
+pub const PLANT_PIC_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\apspic";
+pub const MARINE_PIC_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\amspic";
+pub const PLANT_PADD_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\aps000";
+pub const MARINE_PADD_DIR: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000";
+
+/// The 30 Plant sheet thumbnails `draft31\gw\thumbs.py` pulled out of the
+/// PADD databases (`<sheet name with / → _>.png`, plus `thumbs.tsv`: db,
+/// refno, name, EXFI, PVNO, png, picture).
+pub const DRAFT31_THUMBS: &str = r"D:\ida_scratch\draft31\gw\thumbs";
+
+/// `/APS-0001`'s smallest sheet picture (SHEE 2013286677/4350, 42 KB: 31
+/// segments, 655 primitives) and its biggest (`/APS-0001/1`, SHEE
+/// 2013286677/265, 14 MB: 4 715 segments, 351 819 primitives).
+pub const PLANT_PIC_SMALL: &str =
+    r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\apspic\30\M2013286677-4350-10000-11";
+pub const PLANT_PIC_BIG: &str =
+    r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\apspic\09\M2013286677-265-10000-11";
+
+/// Two Marine background pictures: `M2013287597-16864-10000-1` holds TEXT
+/// (kind 1) and INSTANCE primitives, `M2013287597-1792-10000-1` TEXT2
+/// (kind 10) with multi-run strings (`SHOP&/TEST`, `Block &&&/Unit No.`,
+/// `&USEC.(Right)`), BOUNDARY and BOUNDCONIC.
+pub const MARINE_PIC_TEXT: &str =
+    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\amspic\00\M2013287597-16864-10000-1";
+pub const MARINE_PIC_TEXT2: &str =
+    r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\amspic\00\M2013287597-1792-10000-1";
+
+/// Listings the frozen reference implementation (`draft31\gwdump.py`, DRAFT
+/// plan Q8) wrote for those files — `<name>.raw.txt` in local coordinates,
+/// `<name>.page.txt` / `marine_<name>.page.txt` in sheet mm. The Rust
+/// listing is diffed against them line for line.
+pub const DRAFT31_LISTS: &str = r"D:\ida_scratch\draft31\lists";
+
+/// Diff the `gwdump.py` listing of `file` (`--list`, `--page` when `page`)
+/// against the Rust one, line for line, and panic on the first difference.
+/// `oracle` is the file the Python script wrote.
+pub fn assert_listing_matches(file: &e3d_io::picture::PictureFile, page: bool, oracle: &str) {
+    let expected = std::fs::read_to_string(oracle).expect("the oracle listing reads");
+    let expected: Vec<&str> = expected.lines().collect();
+    let mut ours = vec![e3d_io::picture::listing::list_header(file, page)];
+    ours.extend(e3d_io::picture::listing::list_lines(file, page, false));
+    for (i, (ours, theirs)) in ours.iter().zip(expected.iter()).enumerate() {
+        assert_eq!(
+            ours, theirs,
+            "line {i} of {oracle} differs (ours first, gwdump.py second)"
+        );
+    }
+    assert_eq!(
+        ours.len(),
+        expected.len(),
+        "{oracle}: line counts differ (ours, gwdump.py)"
+    );
+}
+
 /// True when any fixture is absent, after printing which. Call it as the first
 /// line of a test and return.
 pub fn missing(paths: &[&str]) -> bool {

@@ -88,6 +88,18 @@ const NUMERIC_DESIGN_PARAMS: &str = "DDES";
 const CATALOGUE_PARAMS: &str = "CPAR";
 /// `PARA`：目录件的参数数组，[`CATALOGUE_PARAMS`] 最终读的就是它。
 const CATALOGUE_PARAM_ARRAY: &str = "PARA";
+/// `ATTRIB OPAR[n]` / `ATTRIB ODES[n]`：**属主截面**的参数（`OPARAM n` / `ODESP n` 是同一对的
+/// 元组写法）。见 [`DbElementParamEnv::related_element`]。
+const OWNER_PARAMS: &str = "OPAR";
+const OWNER_DESIGN_PARAMS: &str = "ODES";
+/// `ATTRIB APAR[n]` / `ATTRIB ADES[n]`：**连接对象**（设计件 `CREF`）的参数。
+const ATTACHED_PARAMS: &str = "APAR";
+const ATTACHED_DESIGN_PARAMS: &str = "ADES";
+/// 找属主截面时沿 owner 链最多爬几层。FIXING 到 GENSEC 是三层（PLDATU、JLDATU），
+/// 配件到 SCTN 是一两层；16 只是防环。
+const MAX_OWNER_CLIMB: usize = 16;
+/// 设计件 `SPRE` 到目录件最多跳几次（`SPCO`/`GPART`/`PRTELE` 跟 `CATR`、`TABITEM` 跟 `PRTREF`）。
+const MAX_COMPONENT_HOPS: usize = 8;
 /// `UNIPAR`: the per-entry unit/type words that go with `DESP`.
 const DESIGN_PARAM_UNITS: &str = "UNIPAR";
 /// The `WORD` type word `UNIPAR` carries for a non-numeric `DESP` entry.
@@ -138,6 +150,8 @@ pub struct DbElementParamEnv {
     design: Option<DbElement>,
     catalogue: Option<DbElement>,
     insulation: bool,
+    /// 调用方现算好交进来的伪属性（[`Self::with_derived`]）。
+    derived: Vec<(&'static str, f64)>,
     depth: Cell<u32>,
 }
 
@@ -157,6 +171,7 @@ impl DbElementParamEnv {
             design,
             catalogue,
             insulation: true,
+            derived: Vec::new(),
             depth: Cell::new(0),
         }
     }
@@ -164,6 +179,16 @@ impl DbElementParamEnv {
     /// Evaluate a narrow, uninsulated model: every positive `IPARAM n` is 0.
     pub fn without_insulation(mut self) -> Self {
         self.insulation = false;
+        self
+    }
+
+    /// 一条由调用方现算的伪属性：`ATTRIB <name>`（不带下标、限定词、属主链）答这个值。
+    ///
+    /// 有些伪属性是 Core3D 按**世界几何**现算的——FIXING 的 `AANGYZ` / `AANGXZ`
+    /// （`pllib/PATANG`）量的是连接对象的截面轴在 FIXING 标架里的转角，要 datum 的现算标架与
+    /// SPINE 路径，读库这一层都没有。算得出来的一方把值交进来；没交的名字照旧按存储读。
+    pub fn with_derived(mut self, name: &'static str, value: f64) -> Self {
+        self.derived.push((name, value));
         self
     }
 
@@ -599,6 +624,112 @@ impl DbElementParamEnv {
             None
         })
     }
+
+    /// `OPAR` / `ODES` / `APAR` / `ADES` 问的是**另一个元素**的参数，不是实例自己的。
+    ///
+    /// 照 Core3D `getattlib_des/DESPRE@0x10031CE0` 的 886911 / 909186 / 886897 / 909172 支：
+    ///
+    /// - `APAR` / `ADES`：设计件的 `CREF`（连接对象）。
+    /// - `OPAR` / `ODES`：属主截面。设计件是 FIXING、它的属主是 `ENDATU` 时取那只 ENDATU 的
+    ///   `OWNREF`；其余走 `desgetattlib/GTOREF@0x10018BC0` 的表——FIXING 沿 owner 链爬到
+    ///   `GENSEC`，`SJOI` / `SCOJ` / `CMFI` / `FITT` / `SBFI` / `SNOD` 爬到 `SCTN`，`SUBJ` 取
+    ///   `OWNER`；表外的 noun 没有属主截面。
+    ///
+    /// 语料：aps250110 柱底板 SFIT `/F1_SQR_PFI_6H_003` 的负体 NSBO 写
+    /// `PXLE = ( ATTRIB OPAR[2 ] )`、`PZLE = ( ATTRIB OPAR[1 ] )`，FIXING 挂在柱 GENSEC 的
+    /// JLDATU → PLDATU 下；柱是 `/BS-UC305x305x137`，E3D TTY RVM 里那块 30 mm 刀正好切掉
+    /// 柱底 309.2 × 320.5（型材 PARA[2] × PARA[1]）的整个截面。
+    fn related_element(&self, array: ParamArray) -> Option<DbElement> {
+        let design = self.design.as_ref()?;
+        match array {
+            ParamArray::APar | ParamArray::ADes => design.get_element("CREF").ok().flatten(),
+            ParamArray::OPar | ParamArray::ODes => owning_section(design),
+            ParamArray::Para | ParamArray::Desp | ParamArray::IPar => None,
+        }
+    }
+
+    /// [`Self::related_element`] 那个元素的参数数组：`*PAR` 取 `PARA`，`*DES` 取 `DESP`。
+    ///
+    /// DESPRE 对它调 `GATRAR` / `GATPAR`——与 `PARAM n` 同一口实例参数：`PARA` 在设计件上
+    /// 没有，就是它目录件的 `PARA`（`GATGOC` 那条 `SPRE → [SPCO → CATR]*`）。
+    fn related_parameters(&self, array: ParamArray) -> Option<Vec<f64>> {
+        let target = self.related_element(array)?;
+        match array {
+            ParamArray::APar | ParamArray::OPar => {
+                if let Some(items) = real_array(&target, CATALOGUE_PARAM_ARRAY) {
+                    return Some(items);
+                }
+                real_array(&component_of(&target)?, CATALOGUE_PARAM_ARRAY)
+            }
+            ParamArray::ADes | ParamArray::ODes => {
+                real_array(&target, ParamArray::Desp.attribute())
+            }
+            ParamArray::Para | ParamArray::Desp | ParamArray::IPar => None,
+        }
+    }
+}
+
+/// `OPAR` 的属主截面（见 [`DbElementParamEnv::related_element`]）。
+fn owning_section(design: &DbElement) -> Option<DbElement> {
+    let noun = design.element_type().ok()?;
+    if noun == "FIXING" {
+        let owner = design.owner().ok()??;
+        if owner.element_type().ok()? == "ENDATU" {
+            return owner.get_element("OWNREF").ok().flatten();
+        }
+    }
+    let target = match noun.as_str() {
+        "FIXING" => "GENSEC",
+        "SJOI" | "SCOJ" | "CMFI" | "FITT" | "SBFI" | "SNOD" => "SCTN",
+        "SUBJ" => return design.owner().ok().flatten(),
+        _ => return None,
+    };
+    let mut cursor = design.owner().ok()?;
+    for _ in 0..MAX_OWNER_CLIMB {
+        let current = cursor?;
+        if current.element_type().ok()? == target {
+            return Some(current);
+        }
+        cursor = current.owner().ok()?;
+    }
+    None
+}
+
+/// 设计件的目录件：`catdblib/GATGOC@0x1035CFB0` 从 `SPRE` 起跳，落在 `SPCO` / `GPART` /
+/// `PRTELE` 上跟 `CATR`，落在 `TABITEM` 上跟 `PRTREF`，落在别的 noun 上就是它。
+fn component_of(design: &DbElement) -> Option<DbElement> {
+    let mut cursor = design.get_element("SPRE").ok()??;
+    for _ in 0..MAX_COMPONENT_HOPS {
+        let via = match cursor.element_type().ok()?.as_str() {
+            "SPCO" | "GPART" | "PRTELE" => "CATR",
+            "TABITEM" => "PRTREF",
+            _ => return Some(cursor),
+        };
+        cursor = cursor.get_element(via).ok()??;
+    }
+    None
+}
+
+/// 一个实数数组属性（整数数组按值转）。
+fn real_array(element: &DbElement, name: &str) -> Option<Vec<f64>> {
+    match element.attribute(name) {
+        Ok(Some(DescriptorValue::RealArray(items))) => Some(items),
+        Ok(Some(DescriptorValue::IntArray(items))) => {
+            Some(items.into_iter().map(f64::from).collect())
+        }
+        _ => None,
+    }
+}
+
+/// PML 写法 `ATTRIB OPAR[n]` 这四个名字各对应哪个元组波段。
+fn related_array(name: &str) -> Option<ParamArray> {
+    match name {
+        OWNER_PARAMS => Some(ParamArray::OPar),
+        OWNER_DESIGN_PARAMS => Some(ParamArray::ODes),
+        ATTACHED_PARAMS => Some(ParamArray::APar),
+        ATTACHED_DESIGN_PARAMS => Some(ParamArray::ADes),
+        _ => None,
+    }
 }
 
 /// 一个 word 属性的文本形态（`DKEY` / `PURP` 存的都是 `db1_hash` 词）。
@@ -675,14 +806,18 @@ impl ParamEnv for DbElementParamEnv {
     }
 
     /// 元组操作数各波段（Core3D `pplib/DECARG`）：`PARAM` 问目录件、`DESP` 问设计
-    /// 构件、`IPARAM` 走保温选件；`APARAM`/`ADESP`/`OPARAM`/`ODESP` 四个波段在
-    /// 现有语料（ams1112/7997/8000 + 三目录库）里一次都没出现，没有取证前不答。
+    /// 构件、`IPARAM` 走保温选件；`APARAM`/`ADESP`/`OPARAM`/`ODESP` 问连接对象 / 属主截面
+    /// （[`Self::related_element`]），越界与 `PARAM` 同样折成 0。
     fn parameter(&self, array: ParamArray, n: i32) -> Option<f64> {
         match array {
             ParamArray::Para => self.param(n),
             ParamArray::Desp => self.design_parameter(n),
             ParamArray::IPar => self.iparam(n),
-            ParamArray::APar | ParamArray::ADes | ParamArray::OPar | ParamArray::ODes => None,
+            ParamArray::APar | ParamArray::ADes | ParamArray::OPar | ParamArray::ODes => {
+                let index = usize::try_from(n).ok()?.checked_sub(1)?;
+                let items = self.related_parameters(array)?;
+                Some(items.get(index).copied().unwrap_or(0.0))
+            }
         }
     }
 
@@ -795,6 +930,9 @@ impl ParamEnv for DbElementParamEnv {
                     // DESPRE：当前元素的 `PARA`，读不到再去目录件上读——就是 `hosts()`
                     // 的顺序，所以直接按 `PARA` 走同一条索引路。
                     self.indexed(CATALOGUE_PARAM_ARRAY, index)
+                } else if let Some(array) = related_array(attribute.name) {
+                    let slot = usize::try_from(index).ok()?.checked_sub(1)?;
+                    self.related_parameters(array)?.get(slot).copied()
                 } else {
                     self.indexed(attribute.name, index)
                 }
@@ -803,7 +941,12 @@ impl ParamEnv for DbElementParamEnv {
                 DESIGN_PROPERTY => self.design_property(qualifier),
                 reference => self.through_reference(reference, qualifier),
             },
-            (None, None) => self.number(attribute.name),
+            (None, None) => self
+                .derived
+                .iter()
+                .find(|(name, _)| *name == attribute.name)
+                .map(|(_, value)| *value)
+                .or_else(|| self.number(attribute.name)),
         }
     }
 
@@ -918,6 +1061,51 @@ mod tests {
         );
         assert_eq!(
             env.attribute_number(&AttribRef::subscripted(CATALOGUE_PARAMS, 0.0)),
+            None
+        );
+    }
+
+    /// 属主截面 / 连接对象的参数要有设计件才问得到：没有宿主时四个名字、四个元组波段都答不上，
+    /// 不是 0（越界折 0 只在拿到了数组之后）。
+    #[test]
+    fn related_parameters_without_a_design_element_answer_nothing() {
+        let env = DbElementParamEnv::new(None, None);
+        for name in [
+            OWNER_PARAMS,
+            OWNER_DESIGN_PARAMS,
+            ATTACHED_PARAMS,
+            ATTACHED_DESIGN_PARAMS,
+        ] {
+            assert_eq!(
+                env.attribute_number(&AttribRef::subscripted(name, 1.0)),
+                None,
+                "{name}"
+            );
+        }
+        for array in [
+            ParamArray::OPar,
+            ParamArray::ODes,
+            ParamArray::APar,
+            ParamArray::ADes,
+        ] {
+            assert_eq!(env.parameter(array, 1), None, "{array:?}");
+        }
+        assert_eq!(related_array("OPAR"), Some(ParamArray::OPar));
+        assert_eq!(related_array("ADES"), Some(ParamArray::ADes));
+        assert_eq!(related_array("PARA"), None);
+    }
+
+    /// 调用方交进来的伪属性只答不带下标 / 限定词的那个名字，别的名字照旧答不上。
+    #[test]
+    fn a_derived_attribute_answers_its_plain_name_only() {
+        let env = DbElementParamEnv::new(None, None).with_derived("AANGYZ", -14.481);
+        assert_eq!(
+            env.attribute_number(&AttribRef::named("AANGYZ")),
+            Some(-14.481)
+        );
+        assert_eq!(env.attribute_number(&AttribRef::named("AANGXZ")), None);
+        assert_eq!(
+            env.attribute_number(&AttribRef::subscripted("AANGYZ", 1.0)),
             None
         );
     }
