@@ -496,6 +496,11 @@
 
 ### Unified regression follow-up (2026-10-07)
 
+### core.dll layout follow-up (2026-10-07)
+
+- [x] Install and pin ida-bridge `1e192b2c9c598b4ffaf7f0ec69b14cfbb7d44d69`; validate Python 3.12, IDA 9.2 and bridge v5. Analyze read-only copies of Core_IDB/Core3D_IDB because the source IDBs were locked.
+- [x] Capture `sub_5AECBE0`, `sub_5AE9960`, `sub_5AE7C30`, `sub_5AB91B0` and Core3D SPAMAP/world symbols. The evidence confirms core's member/explicit/hunk calls and compact-to-wide branch, but establishes no failing current writer behavior; Rust layout/API/Golden/gates remain unchanged. Evidence: `docs/evidence/2026-10-07-core-layout-ida-bridge.md`.
+
 - [x] Add `tools/e3d/regression.ps1`: serial Cargo/offline/TTY/alternate five rounds + Q15/unchanged FORMAT0; unique scratch per gate; source and Golden integrity checks; failure evidence and manifest. Implementation `1b0bbf9`.
 - [x] Validate scorer selfchecks and Rust integration, two independent offline runs, then a complete real E3D run; record actual counts, warnings, verdicts and timings in Spec_Ledger. Evidence: `docs/evidence/2026-10-07-unified-regression.md`.
 - GUI 10.5, checkpoints 10.6/14.7 remain independently pending. No Golden re-recording, dependencies or public Rust API changes.

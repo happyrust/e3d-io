@@ -1,0 +1,72 @@
+{
+  "v": 5,
+  "type": "exec_response",
+  "id": "cbfbc87a-fc9e-4102-b039-1b9a9fed5b90",
+  "src": "idalib-38584",
+  "dst": "agent-2b27cf379a3f",
+  "ok": true,
+  "result": {
+    "columns": [
+      "from_ea",
+      "type_name",
+      "caller"
+    ],
+    "rows": [
+      {
+        "from_ea": "0x5ab8d7c",
+        "type_name": "call",
+        "caller": "sub_5AB8D20"
+      },
+      {
+        "from_ea": "0x5ad1de5",
+        "type_name": "call",
+        "caller": "sub_5AD1B50"
+      },
+      {
+        "from_ea": "0x5ad213e",
+        "type_name": "call",
+        "caller": "sub_5AD1F20"
+      },
+      {
+        "from_ea": "0x5ad2572",
+        "type_name": "call",
+        "caller": "sub_5AD2480"
+      },
+      {
+        "from_ea": "0x5ad3461",
+        "type_name": "call",
+        "caller": "sub_5AD3240"
+      },
+      {
+        "from_ea": "0x5b0af74",
+        "type_name": "call",
+        "caller": "sub_5B0A920"
+      },
+      {
+        "from_ea": "0x5b0d532",
+        "type_name": "call",
+        "caller": "sub_5B0D080"
+      },
+      {
+        "from_ea": "0x5b0e590",
+        "type_name": "call",
+        "caller": "sub_5B0D950"
+      },
+      {
+        "from_ea": "0x5b0e822",
+        "type_name": "call",
+        "caller": "sub_5B0D950"
+      },
+      {
+        "from_ea": "0x5b0e931",
+        "type_name": "call",
+        "caller": "sub_5B0D950"
+      },
+      {
+        "from_ea": "0x5b0fc71",
+        "type_name": "call",
+        "caller": "sub_5B0F1E0"
+      }
+    ]
+  }
+}

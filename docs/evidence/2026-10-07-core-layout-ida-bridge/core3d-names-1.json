@@ -1,0 +1,176 @@
+{
+  "v": 5,
+  "type": "exec_response",
+  "id": "e962b68c-5fac-4975-89a3-fa0d06b3ed38",
+  "src": "idalib-22052",
+  "dst": "agent-5c9fb068358b",
+  "ok": true,
+  "result": {
+    "columns": [
+      "address",
+      "name"
+    ],
+    "rows": [
+      {
+        "address": "0x104786b0",
+        "name": "?getWorldDir2@PositionUtils@@QAE_NHHNABVDB_Element@@_NQAN@Z"
+      },
+      {
+        "address": "0x104786e0",
+        "name": "?getWorldDir@PositionUtils@@QAE_NHHNABVDB_Element@@_NQAN@Z"
+      },
+      {
+        "address": "0x10478710",
+        "name": "?getWorldPos@PositionUtils@@QAE_NHHNABVDB_Element@@_NQAN@Z"
+      },
+      {
+        "address": "0x10478740",
+        "name": "?getWorldPosAndDir@PositionUtils@@QAE_NHHNABVDB_Element@@_NAAVD3_Vector@@2@Z"
+      },
+      {
+        "address": "0x104787e0",
+        "name": "?getWorldPosAndDir@PositionUtils@@QAE_NHHNABVDB_Element@@_NQAN2@Z"
+      },
+      {
+        "address": "0x10478810",
+        "name": "?getWorldPosAndDirAndDir2@PositionUtils@@QAE_NHHNABVDB_Element@@_NQAN22@Z"
+      },
+      {
+        "address": "0x10478850",
+        "name": "?getWorldPosAndDirInternal@PositionUtils@@AAE_NHHNABVDB_Element@@_NQAN22@Z"
+      },
+      {
+        "address": "0x104789f0",
+        "name": "?getWorldPosAndDirSpecial@PositionUtils@@AAE_NHHNABVDB_Element@@_NQAN22AAH@Z"
+      },
+      {
+        "address": "0x1048e530",
+        "name": "?WorldToCPSTransform@WWDerivedPPoints@@CA_NABVDB_Element@@AAVD3_Transform@@@Z"
+      },
+      {
+        "address": "0x105664c0",
+        "name": "?getWorld@DES_ModelViewPos@@AAE?AVDB_Element@@XZ"
+      },
+      {
+        "address": "0x1065b150",
+        "name": "?getWorld@PDMS_Element@@QAE?AV?$PDMS_SmartPtr@VPDMS_Element@@@@H@Z"
+      },
+      {
+        "address": "0x1073c68a",
+        "name": "?toWorld@mthOrientedPlane@@QBE?AVD3_Point@@ABVD2_Point@@@Z"
+      },
+      {
+        "address": "0x107992c0",
+        "name": "?getENUWorld@GFX_GraphicsManager@@QBE?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ"
+      },
+      {
+        "address": "0x10799ef0",
+        "name": "?getXYZWorld@GFX_GraphicsManager@@QBE?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ"
+      },
+      {
+        "address": "0x10a6ea28",
+        "name": "?WorldToCPSTransform@WWDerivedPPoints@@CA_NABVDB_Element@@AAVD3_Transform@@@Z_SEH"
+      },
+      {
+        "address": "0x10ae7540",
+        "name": "?getWorld@DB_DB@@QBE?AVDB_Element@@XZ"
+      },
+      {
+        "address": "0x10ae8b94",
+        "name": "?getDefaultWorld@DB_MDB@@QBE?AVDB_Element@@XZ"
+      },
+      {
+        "address": "0x10ae9dcc",
+        "name": "?getWorldRef@@YAHXZ"
+      },
+      {
+        "address": "0x10aea754",
+        "name": "?ConverttoWorld@@YA_NPBHHAAH1@Z"
+      },
+      {
+        "address": "0x10aea824",
+        "name": "?getPositionWrtWorldinMM@@YA_NHHAAVD3_Point@@@Z"
+      },
+      {
+        "address": "0x10aea830",
+        "name": "?getOriWrtWorld@@YA_NHHAAN00@Z"
+      },
+      {
+        "address": "0x10aea834",
+        "name": "?getLineWrtWorldinMM@@YA_NHHAAVD3_Point@@0@Z"
+      },
+      {
+        "address": "0x10aea838",
+        "name": "?getArcWrtWorldinMM@@YA_NHHAAVmthOrientedPlane@@AAVmth2Arc@@@Z"
+      },
+      {
+        "address": "0x10aec2dc",
+        "name": "__imp_?toWorld@mthOrientedPlane@@QBE?AVD3_Point@@ABVD2_Point@@@Z"
+      },
+      {
+        "address": "0x10b1f260",
+        "name": "aWorld"
+      },
+      {
+        "address": "0x10b4cd04",
+        "name": "aAtWorldCoordin"
+      },
+      {
+        "address": "0x10b74e5c",
+        "name": "aWorld_0"
+      },
+      {
+        "address": "0x10c61cb2",
+        "name": "aWorldtocpstran"
+      },
+      {
+        "address": "0x10c76235",
+        "name": "aGetenuworldGfx"
+      },
+      {
+        "address": "0x10c8225a",
+        "name": "aGetworldDesMod"
+      },
+      {
+        "address": "0x10c8228b",
+        "name": "aGetworldPdmsEl"
+      },
+      {
+        "address": "0x10c822ce",
+        "name": "aGetworlddir2Po"
+      },
+      {
+        "address": "0x10c8230a",
+        "name": "aGetworlddirPos"
+      },
+      {
+        "address": "0x10c82345",
+        "name": "aGetworldposPos"
+      },
+      {
+        "address": "0x10c82380",
+        "name": "aGetworldposand"
+      },
+      {
+        "address": "0x10c823cd",
+        "name": "aGetworldposand_0"
+      },
+      {
+        "address": "0x10c8240f",
+        "name": "aGetworldposand_1"
+      },
+      {
+        "address": "0x10c82459",
+        "name": "aGetworldposand_2"
+      },
+      {
+        "address": "0x10c824a4",
+        "name": "aGetworldposand_3"
+      },
+      {
+        "address": "0x10c82684",
+        "name": "aGetxyzworldGfx"
+      }
+    ]
+  }
+}

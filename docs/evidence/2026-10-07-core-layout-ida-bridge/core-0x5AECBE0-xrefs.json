@@ -1,0 +1,102 @@
+{
+  "v": 5,
+  "type": "exec_response",
+  "id": "df672fe8-aabd-4891-abdf-2e7823ff8784",
+  "src": "idalib-38584",
+  "dst": "agent-a17e4fd3405b",
+  "ok": true,
+  "result": {
+    "columns": [
+      "from_ea",
+      "type_name",
+      "caller"
+    ],
+    "rows": [
+      {
+        "from_ea": "0x5ab37ec",
+        "type_name": "call",
+        "caller": "sub_5AB3620"
+      },
+      {
+        "from_ea": "0x5ab403e",
+        "type_name": "call",
+        "caller": "sub_5AB3F30"
+      },
+      {
+        "from_ea": "0x5ab4080",
+        "type_name": "call",
+        "caller": "sub_5AB3F30"
+      },
+      {
+        "from_ea": "0x5ab6a52",
+        "type_name": "call",
+        "caller": "sub_5AB6990"
+      },
+      {
+        "from_ea": "0x5ab6c70",
+        "type_name": "call",
+        "caller": "sub_5AB6990"
+      },
+      {
+        "from_ea": "0x5ab6ead",
+        "type_name": "call",
+        "caller": "sub_5AB6E90"
+      },
+      {
+        "from_ea": "0x5ab71ee",
+        "type_name": "call",
+        "caller": "sub_5AB71B0"
+      },
+      {
+        "from_ea": "0x5ab7bc4",
+        "type_name": "call",
+        "caller": "sub_5AB7B90"
+      },
+      {
+        "from_ea": "0x5ab8c32",
+        "type_name": "call",
+        "caller": "sub_5AB8C20"
+      },
+      {
+        "from_ea": "0x5ab8e22",
+        "type_name": "call",
+        "caller": "sub_5AB8DC0"
+      },
+      {
+        "from_ea": "0x5ab923b",
+        "type_name": "call",
+        "caller": "sub_5AB91B0"
+      },
+      {
+        "from_ea": "0x5b1f6ba",
+        "type_name": "call",
+        "caller": "sub_5B1F660"
+      },
+      {
+        "from_ea": "0x5b2147c",
+        "type_name": "call",
+        "caller": "sub_5B211C0"
+      },
+      {
+        "from_ea": "0x5b217d9",
+        "type_name": "call",
+        "caller": "sub_5B214D0"
+      },
+      {
+        "from_ea": "0x5b21a27",
+        "type_name": "call",
+        "caller": "sub_5B219B0"
+      },
+      {
+        "from_ea": "0x5b21c17",
+        "type_name": "call",
+        "caller": "sub_5B21C10"
+      },
+      {
+        "from_ea": "0x5b21fab",
+        "type_name": "call",
+        "caller": "sub_5B21F80"
+      }
+    ]
+  }
+}

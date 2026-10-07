@@ -271,6 +271,10 @@ On Windows with PowerShell 7, run `pwsh -NoProfile -File tools/e3d/regression.ps
 
 To verify saved evidence without launching E3D, run `pwsh -NoProfile -File tools/e3d/regression_verify.ps1 -RunDirectory docs/evidence/assets/2026-10-07-unified-regression/full -RequireTTY`. Verification checks manifest paths, file lengths and hashes, required result/summary files, successful stage exit codes and logs, status consistency and source/Golden snapshots. Omit `-RequireTTY` to verify offline or failed records; a valid failed record is not a successful regression. This checks the saved record and does not rerun the gates or authenticate its provenance.
 
+## IDA core layout evidence
+
+The read-only core.dll investigation uses the pinned `ida-bridge` commit `1e192b2c9c598b4ffaf7f0ec69b14cfbb7d44d69`, IDA 9.2, and the wrapper `tools/ida/ib.ps1`. It analyzes copies when the source IDB is locked and records the source/copy hashes. Queries and the decision to keep the current hunk placement are documented in `docs/evidence/2026-10-07-core-layout-ida-bridge.md`; no IDB, public API, Golden, or gate script is changed.
+
 ## Byte-order convention
 
 Supported E3D 2.1/3.1 database files use **big-endian** byte order (Fortran

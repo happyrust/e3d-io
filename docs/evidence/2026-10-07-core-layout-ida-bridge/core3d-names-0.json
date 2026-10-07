@@ -1,0 +1,24 @@
+{
+  "v": 5,
+  "type": "exec_response",
+  "id": "77af3e3d-ad94-4f0f-8622-2a0308c372c5",
+  "src": "idalib-22052",
+  "dst": "agent-6068bba7fb22",
+  "ok": true,
+  "result": {
+    "columns": [
+      "address",
+      "name"
+    ],
+    "rows": [
+      {
+        "address": "0x10aeaadc",
+        "name": "?ATT_SPAMAP@@3QBVDB_Attribute@@B"
+      },
+      {
+        "address": "0x10b6cc8c",
+        "name": "aMaplibMapkey"
+      }
+    ]
+  }
+}

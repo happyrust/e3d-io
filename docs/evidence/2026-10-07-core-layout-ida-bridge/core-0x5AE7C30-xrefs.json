@@ -1,0 +1,52 @@
+{
+  "v": 5,
+  "type": "exec_response",
+  "id": "ffca6c71-d501-46e7-b484-d4ff76b6e3de",
+  "src": "idalib-38584",
+  "dst": "agent-c6628f2c2347",
+  "ok": true,
+  "result": {
+    "columns": [
+      "from_ea",
+      "type_name",
+      "caller"
+    ],
+    "rows": [
+      {
+        "from_ea": "0x5ae2260",
+        "type_name": "call",
+        "caller": "sub_5AE1B00"
+      },
+      {
+        "from_ea": "0x5ae7209",
+        "type_name": "call",
+        "caller": "sub_5AE68D0"
+      },
+      {
+        "from_ea": "0x5b11dd7",
+        "type_name": "call",
+        "caller": "sub_5B113E0"
+      },
+      {
+        "from_ea": "0x5b16128",
+        "type_name": "call",
+        "caller": "sub_5B15E10"
+      },
+      {
+        "from_ea": "0x5b169cf",
+        "type_name": "call",
+        "caller": "sub_5B15E10"
+      },
+      {
+        "from_ea": "0x5b182f5",
+        "type_name": "call",
+        "caller": "sub_5B17900"
+      },
+      {
+        "from_ea": "0x5b19ef4",
+        "type_name": "call",
+        "caller": "sub_5B18A20"
+      }
+    ]
+  }
+}
