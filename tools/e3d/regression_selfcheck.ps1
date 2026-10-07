@@ -31,6 +31,17 @@ try {
     Assert (-not(Test-RegressionEvidence $temp @('empty.log'))) 'raw log empty'
     $before=Get-RegressionSnapshot $temp
     Assert (Test-RegressionManifest $temp $before) 'manifest valid'
+    Assert (-not(Test-RegressionManifest $temp @())) 'empty manifest rejected'
+    Assert (-not(Test-RegressionManifest $temp $null)) 'null manifest rejected'
+    Assert (-not(Test-RegressionManifest $temp @($before[0],$before[0]))) 'duplicate manifest entries rejected'
+    $bad=@{path='..\outside.txt';length=1;sha256=('A'*64)}
+    Assert (-not(Test-RegressionManifest $temp @($bad))) 'outside path rejected'
+    $bad.path=Join-Path $temp 'evidence.txt'
+    Assert (-not(Test-RegressionManifest $temp @($bad))) 'absolute path rejected'
+    $bad.path='evidence.txt';$bad.length=-1
+    Assert (-not(Test-RegressionManifest $temp @($bad))) 'negative size rejected'
+    $bad.length=1;$bad.sha256='invalid'
+    Assert (-not(Test-RegressionManifest $temp @($bad))) 'invalid hash rejected'
     Assert (Test-RegressionSnapshot $before (Get-RegressionSnapshot $temp)) 'snapshot same'
     Set-Content (Join-Path $temp 'evidence.txt') 'changed'
     Assert (-not(Test-RegressionManifest $temp $before)) 'manifest tamper'
@@ -62,6 +73,29 @@ try {
         Assert (@($result.stages | Where-Object status -eq 'not_run').Count -eq 8) 'successors not run'
         $manifest=Get-Content (Join-Path $dir.FullName 'manifest.json') -Raw | ConvertFrom-Json
         Assert (Test-RegressionManifest $dir.FullName $manifest) 'failure manifest valid'
+        Assert (Test-RegressionRecord $dir.FullName) 'failure archive is a valid record'
+        Assert (-not(Test-RegressionRecord $dir.FullName $true)) 'failure archive never certifies TTY'
     }
+    $archive=Join-Path ((Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path) 'docs\evidence\assets\2026-10-07-unified-regression'
+    Assert (Test-RegressionRecord (Join-Path $archive 'full') $true) 'archived full TTY record'
+    Assert (Test-RegressionRecord (Join-Path $archive 'offline-2')) 'archived offline record'
+    Assert (-not(Test-RegressionRecord (Join-Path $archive 'offline-2') $true)) 'offline archive never certifies TTY'
+    $record=Join-Path $temp 'record'
+    New-Item -ItemType Directory $record | Out-Null
+    Copy-Item (Join-Path $archive 'offline-2\*') $record
+    function Update-RecordManifest {
+        $entries=@(Get-RegressionSnapshot $record | Where-Object path -ne 'manifest.json')
+        ConvertTo-Json -InputObject $entries -Depth 8 | Set-Content (Join-Path $record 'manifest.json')
+    }
+    $result=Get-Content (Join-Path $record 'results.json') -Raw | ConvertFrom-Json
+    $result.stages[0].exit_code=1
+    $result | ConvertTo-Json -Depth 30 | Set-Content (Join-Path $record 'results.json')
+    Update-RecordManifest
+    Assert (-not(Test-RegressionRecord $record)) 'passed stage with nonzero exit rejected even with valid hashes'
+    $result.stages[0].exit_code=0
+    $result | ConvertTo-Json -Depth 30 | Set-Content (Join-Path $record 'results.json')
+    Remove-Item (Join-Path $record 'tests.log')
+    Update-RecordManifest
+    Assert (-not(Test-RegressionRecord $record)) 'passed stage missing log rejected even with valid hashes'
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force }
 Write-Output "PASS REGRESSION offline checks=$count"

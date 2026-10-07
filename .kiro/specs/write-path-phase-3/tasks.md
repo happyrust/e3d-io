@@ -510,6 +510,8 @@
 
 ### Unified regression acceptance (2026-10-07)
 
+- [x] Harden saved archive verification: reject empty/null, duplicate, absolute or escaping manifest paths, invalid lengths/hashes, and successful stages with nonzero exit codes or missing logs. Add read-only `regression_verify.ps1`; scorer selfchecks now 52 PASS, including re-hashed inconsistent-record cases. Full TTY and offline archives verify; offline/failed records cannot satisfy `-RequireTTY`. This revalidates saved evidence, does not rerun E3D, and leaves GUI dependencies unchanged.
+
 `1b0bbf9` complete run: Cargo 789/0/30, 134 result summaries including Doc-tests, 8 existing sample skip messages; Clippy/doc 63/25; TTY 39 PASS (213.278 s, Q13 161.437 s, Q14 9.113 s); alternate five rounds + Q15 PASS (84.208 s); unchanged FORMAT0 11 PASS (10.410 s). AMS/TES database directory inventories and Golden hashes unchanged; 304 archived evidence files re-hashed successfully. Scorer selfchecks 36 PASS and Rust integration PASS; independent offline runs never certify TTY. See `docs/evidence/2026-10-07-unified-regression.md`. D1–D8 unchanged; GUI 10.5, 10.6 and 14.7 remain pending.
 
 ### 决策

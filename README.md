@@ -269,6 +269,8 @@ On Windows with PowerShell 7, run `pwsh -NoProfile -File tools/e3d/regression.ps
 
 `-OfflineOnly` runs only Cargo and offline checks; it does not certify E3D TTY acceptance. `-OutputRoot` defaults to `D:\e3dio-regression`; each run creates a unique directory with `results.json`, `summary.md`, `manifest.json`, stage output and redacted original gate evidence. Project database copies remain in scratch subdirectories and are excluded from the evidence manifest. Source database directories and Golden hashes are checked before and after the run. A failed stage stops later stages and returns a nonzero exit code while retaining evidence. GUI acceptance remains a separate manual gate.
 
+To verify saved evidence without launching E3D, run `pwsh -NoProfile -File tools/e3d/regression_verify.ps1 -RunDirectory docs/evidence/assets/2026-10-07-unified-regression/full -RequireTTY`. Verification checks manifest paths, file lengths and hashes, required result/summary files, successful stage exit codes and logs, status consistency and source/Golden snapshots. Omit `-RequireTTY` to verify offline or failed records; a valid failed record is not a successful regression. This checks the saved record and does not rerun the gates or authenticate its provenance.
+
 ## Byte-order convention
 
 Supported E3D 2.1/3.1 database files use **big-endian** byte order (Fortran
