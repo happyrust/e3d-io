@@ -1,0 +1,79 @@
+{
+  "base_sesno": 109,
+  "comment": "e3d-io FORMAT 0 门：中文 NAME / DESC / 会话注释",
+  "commit": {
+    "appended_pages": [
+      141,
+      142,
+      143,
+      144,
+      145,
+      146,
+      147,
+      148
+    ],
+    "base_sesno": 109,
+    "merged_onto": null,
+    "previous": {
+      "end": 140,
+      "page": 140,
+      "sesno": 109
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 148,
+      "page": 148,
+      "sesno": 110
+    }
+  },
+  "database": "D:\\e3dio-regression\\20261007-133329-46342331\\format0\\TEST\\TES000\\TES023",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 109,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "index": 0,
+      "name": "/反应堆厂房-E3DIO",
+      "op": "rename",
+      "refno": "17419/107"
+    },
+    {
+      "attrs": [
+        "DESC"
+      ],
+      "index": 1,
+      "op": "set",
+      "refno": "17419/107"
+    },
+    {
+      "attrs": [
+        "DESC",
+        "POS"
+      ],
+      "given": "17419/331",
+      "id": "equi",
+      "index": 2,
+      "name": "/E3DIO-锅炉设备",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "17419/107",
+      "refno": "17419/331"
+    }
+  ],
+  "ops_file": "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\format0_gate_ops\\10_text.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "require",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "require",
+  "staged": null,
+  "user": "e3dio"
+}

@@ -19,3 +19,6 @@ docs/evidence/assets/2026-10-05-staging-scale/** -text whitespace=cr-at-eol,-bla
 # S6b page-1 bucket probe retains native logs and manifests byte-for-byte.
 docs/evidence/assets/2026-10-05-s6b/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/evidence/assets/2026-10-06-s6b-q15/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+# Unified regression manifests cover redacted evidence bytes in their native encodings.
+docs/evidence/assets/2026-10-07-unified-regression/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof

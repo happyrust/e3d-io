@@ -1,0 +1,6 @@
+{
+  "comment": "refused: the dictionary allows POS 3 elements",
+  "ops": [
+    {"op": "insert", "owner": "/1RX03-MSUP", "noun": "EQUI", "attrs": {"POS": "1 2 3 4"}}
+  ]
+}

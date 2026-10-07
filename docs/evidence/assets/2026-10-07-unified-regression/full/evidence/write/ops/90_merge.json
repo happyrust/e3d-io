@@ -1,0 +1,8 @@
+{
+  "comment": "e3d-io write-path gate: merged onto a session E3D saved after this transaction's base",
+  "ops": [
+    {"op": "insert", "id": "merge-box", "owner": "/1RX03-MSUP", "noun": "BOX", "name": "/E3DIO-MERGE-BOX",
+     "attrs": {"XLEN": "555", "YLEN": "555", "ZLEN": "555", "POS": "5000 5000 5000"}},
+    {"op": "set", "refno": "/1RX03-MCT", "attrs": {"FUNC": "MERGED-BY-E3DIO"}}
+  ]
+}

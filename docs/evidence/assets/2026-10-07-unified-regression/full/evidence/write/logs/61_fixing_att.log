@@ -1,0 +1,40 @@
+﻿GATE-61-BEGIN
+FIXING 1 of ZONE /1RX03-MSUP
+Attributes
+Name FIXING 1 of ZONE /1RX03-MSUP
+Type FIXING
+Lock false
+Owner /1RX03-MSUP
+Description unset
+Function unset
+Purpose unset
+Gtype unset
+Number 0
+Position E 0mm N 0mm U 0mm
+Orientation Y is N and Z is U
+Cutback 0mm
+Cutplane U
+Jline unset
+Jfree false
+Desparam unset
+Built false
+Shop false
+Cref Nulref
+Cfrarray unset
+Ispec Nulref
+Firesistance 0
+PosNo 0
+Inref Nulref
+Spref Nulref
+MFIXref Nulref
+Matref Nulref
+Mdsysf unset
+Bevcodes unset
+Excess 0mm
+Stdconnection unset
+:CNPEOPENITEM UNSET
+:JGOBJBASE UNSET
+:JGOBJMAT UNSET
+:JGOBJZL UNSET
+:JGOBJNOTE UNSET
+GATE-61-END

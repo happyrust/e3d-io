@@ -1,0 +1,78 @@
+-- e3d-io write-path gate, read back after the merge (plan T1c): e3d-write apply
+-- --base (90_merge.json) opened a transaction at the session before E3D's own save
+-- (write_gate_e3d_saves.mac.template) and committed a merge onto it. Rendered by
+-- tools/e3d/write_gate.ps1: 24384/47 the first ZONE, 24384/2498 the second, 24384/34718 the
+-- BOX E3D created and saved, 24384/34719 the BOX the merge put under the same ZONE.
+--
+-- One ALPHA LOG block per question, every navigation followed by handle any.
+
+-- T1c: what E3D saved is still there after the merge.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/98_merge_e3d_box.log" OVER
+$P GATE-98-BEGIN
+=24384/34718
+handle any
+  $P GATE-98-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q NAME
+  Q OWNER
+  Q XLEN
+endhandle
+$P GATE-98-END
+ALPHA LOG END
+
+-- T1c: the ZONE lists E3D's EQUI (first, where NEW at the owner puts it), the base's
+-- members, and the merged BOX last (after its anchor, the base's last member).
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/99_merge_zone.log" OVER
+$P GATE-99-BEGIN
+=24384/47
+handle any
+  $P GATE-99-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q MEM
+endhandle
+$P GATE-99-END
+ALPHA LOG END
+
+-- T1c: the merged BOX, under the ZONE, with the values the transaction set by name.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/99b_merge_box.log" OVER
+$P GATE-99B-BEGIN
+=24384/34719
+handle any
+  $P GATE-99B-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q NAME
+  Q OWNER
+  Q XLEN
+  Q POS
+endhandle
+$P GATE-99B-END
+ALPHA LOG END
+
+-- T1c: the second ZONE's FUNC, set in the merged session.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/99c_merge_zone2.log" OVER
+$P GATE-99C-BEGIN
+=24384/2498
+handle any
+  $P GATE-99C-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q FUNC
+endhandle
+$P GATE-99C-END
+ALPHA LOG END
+
+-- T1c: the newest session is the merge, by e3dio.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/99d_merge_session.log" OVER
+$P GATE-99D-BEGIN
+Q SESSION
+$P GATE-99D-END
+ALPHA LOG END
+
+-- The driver reads <macro>.log as the scenario log: a summary marker.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/write_gate_merge.log" OVER
+$P E3DIO-GATE-DONE see D:/e3dio-regression/20261007-133329-46342331/write/logs/9*_merge*.log
+ALPHA LOG END
+

@@ -1,0 +1,109 @@
+﻿GATE-60-BEGIN
+EQUIPMENT 2 of ZONE /1RX03-MSUP
+Attributes
+Name EQUIPMENT 2 of ZONE /1RX03-MSUP
+Type EQUI
+Lock false
+Owner /1RX03-MSUP
+Description e3d-io hunk gate EQUI 2: DESC stored out of the record (type 22) @065 @070 @075 @080 @085 @090 @095 @100 @105 @110 @115
+Function unset
+Purpose unset
+Number 0
+Area 0
+Usrweight unset
+Usrwweight unset
+Usrcogravity unset
+Usrwcogravity unset
+Position E 0mm N 0mm U 0mm
+Orientation Y is N and Z is U
+Desparam 2001.3 2002.3 2003.3 2004.3 2005.3
+2006.3 2007.3 2008.3 2009.3 2010.3
+2011.3 2012.3 2013.3 2014.3 2015.3
+2016.3 2017.3 2018.3 2019.3 2020.3
+2021.3 2022.3 2023.3 2024.3 2025.3
+2026.3 2027.3 2028.3 2029.3 2030.3
+2031.3 2032.3 2033.3 2034.3 2035.3
+2036.3 2037.3 2038.3 2039.3 2040.3
+2041.3 2042.3 2043.3 2044.3 2045.3
+2046.3 2047.3 2048.3 2049.3 2050.3
+2051.3 2052.3 2053.3 2054.3 2055.3
+2056.3 2057.3 2058.3 2059.3 2060.3
+2061.3 2062.3 2063.3 2064.3 2065.3
+2066.3 2067.3 2068.3 2069.3 2070.3
+2071.3 2072.3 2073.3 2074.3 2075.3
+2076.3 2077.3 2078.3 2079.3 2080.3
+2081.3 2082.3 2083.3 2084.3 2085.3
+2086.3 2087.3 2088.3 2089.3 2090.3
+2091.3 2092.3 2093.3 2094.3 2095.3
+2096.3 2097.3 2098.3 2099.3 2100.3
+Built false
+Ispec Nulref
+Uwmtxt unset
+Dscode unset
+Ptspec unset
+Inschedule unset
+Skey unset
+StlRef Nulref
+Propst unset
+Spref Nulref
+Fstatus unset
+Mdsysf unset
+Inprtref Nulref
+Ouprtref Nulref
+Impvcount 0
+Impstchange Undefined
+Imprchange false
+Imprpchange false
+Impdchange false
+:3D_SJJD C
+:3D_FAZT unset
+:3D_SJZT Designing
+:3D_WCZT 0
+:3D_THZT unset
+:3D_SJRY unset
+:3D_JDRY unset
+:3D_SHRY unset
+:3D_SDRY unset
+:3D_PZRY unset
+:3D_SJBG unset
+:3D_GCBG unset
+:3D_PZJC unset
+:3D_GXZH unset
+:3D_MXGH unset
+:3D_FAMX unset
+:3D_KKZT unset
+:PLANREF1 unset
+:PLANREF2 unset
+:PLANREF3 unset
+:ROOM_NO unset
+:PIDREF unset
+:PIDPOS unset
+:AREA unset
+:PRES unset
+:TEMP unset
+:WEIGHT unset
+:WWEIGHT unset
+:EQNA unset
+:MODE unset
+:INST unset
+:CONF unset
+:POWE unset
+:CATY unset
+:DWJZ unset
+:SFBR true
+:SFZY true
+:LTLX unset
+:ZDGW unset
+:SFBW true
+:BWHD unset
+:SBFJ unset
+:JKGN unset
+:EPower 0
+:Room unset
+:G_ICS unset
+:G_STATUS DESIGN
+:ICSR-DoseRate-NrOp unset
+:ICSR-DoseRate-NrSh unset
+:ICSR-DoseRate-Acci unset
+:OriPosition unset
+GATE-60-END

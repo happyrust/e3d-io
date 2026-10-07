@@ -1,0 +1,9 @@
+{
+  "comment": "e3d-io write-path gate: GPWL + GROU with reference members",
+  "ops": [
+    {"op": "insert", "id": "gpwl", "owner": "/*", "noun": "GPWL"},
+    {"op": "insert", "id": "grou", "owner": "@gpwl", "noun": "GROU"},
+    {"op": "reference", "group": "@grou", "member": "/1RX03-MSUP"},
+    {"op": "reference", "group": "@grou", "member": "=24384/26507"}
+  ]
+}

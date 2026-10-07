@@ -1,0 +1,41 @@
+-- e3d-io write-path gate, T4 alternate-write: one E3D-written round (plan ?2 T4,
+-- "E3D ? ? e3d-io ? ? E3D ? ? ?"). Run by tools/e3d/alternate_write_gate.ps1 as the
+-- E3D half of round q15: E3D opens the project (its newest session is e3d-io's from
+-- the round before), creates an EQUI under the first ZONE and SAVEWORKs, so the file now
+-- has an E3D session on top of an e3d-io one. Rendered: D:/e3dio-regression/20261007-133329-46342331/alternate/logs-alt, D:/e3dio-regression/20261007-133329-46342331/alternate/alt_e3d_q15.log,
+-- 24384/47 (=refno of the first ZONE), E3DIO-Q15-E3D (the EQUI's name), q15, 0.
+--
+-- Read-back of e3d-io's previous round is the readback macro's job (Q MEM lists every
+-- name); here the point is only that E3D can SAVEWORK on top of an e3d-io base.
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/alternate/logs-alt/alt_e3d_q15.log" OVER
+$P ALT-E3D-q15-BEGIN
+=24384/47
+handle any
+  $P ALT-E3D-NAV-ERROR $!!error.text
+elsehandle none
+  NEW EQUI /E3DIO-Q15-E3D
+  handle any
+    $P ALT-E3D-NEW-ERROR $!!error.text
+  elsehandle none
+    POS E 0 N 0 U 0
+    $P ALT-E3D-EQUI
+    Q REF
+    Q OWNER
+    SAVEWORK
+    handle any
+      $P ALT-E3D-SAVE-ERROR $!!error.text
+    elsehandle none
+      $P ALT-E3D-SAVED
+      Q SESSION
+    endhandle
+  endhandle
+endhandle
+$P ALT-E3D-q15-END
+ALPHA LOG END
+
+-- The driver reads <macro>.log as the scenario log: a summary marker.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/alternate/alt_e3d_q15.log" OVER
+$P E3DIO-GATE-DONE alt E3D round q15, see D:/e3dio-regression/20261007-133329-46342331/alternate/logs-alt/alt_e3d_q15.log
+ALPHA LOG END
+

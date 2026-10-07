@@ -1,0 +1,6 @@
+{
+  "comment": "refused: no element has this refno",
+  "ops": [
+    {"op": "set", "refno": "=24384/2147483000", "attrs": {"DESC": "nobody"}}
+  ]
+}

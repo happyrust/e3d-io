@@ -1,0 +1,20 @@
+-- Independently rendered spatial questions, one fresh TTY snapshot per call.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/Q13d-new-after.log" OVER
+$P [Q13d-new-after-BEGIN]
+VAR !q13 EVALUATE (REF) FOR ALL BOX WITHIN VOLUME =16192/14 0
+handle any
+  $P Q13-ERROR $!!error.text
+endhandle
+$P [Q13d-new-after-RESULT-BEGIN]
+Q VAR !q13
+handle any
+  $P Q13-ERROR $!!error.text
+endhandle
+$P [Q13d-new-after-RESULT-END]
+$P [Q13d-new-after-END]
+ALPHA LOG END
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/Q13d-new-after.log" OVER
+$P E3DIO-GATE-DONE
+ALPHA LOG END
+
+

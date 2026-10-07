@@ -1,0 +1,8 @@
+e3d-write apply: 1 instruction(s) from D:\e3dio-regression\20261007-133329-46342331\write\ops\40_hunk_fixing.json onto D:\e3dio-regression\20261007-133329-46342331\write\AvevaMarineSample\ams000\ams8000_0001
+  base session     : 650
+  dictionary       : 4271 attributes from D:\work\plant-code\old\vendor\e3d-io-write/schema/e3d31\catalog\noun_attr_fields.json
+  #0 insert FIXING under 24384/47 -> 24384/26510 [@fixing]
+wrote session 651 to D:\e3dio-regression\20261007-133329-46342331\write\AvevaMarineSample\ams000\ams8000_0001
+  previous session : 650
+  appended pages   : 13
+  report           : D:\e3dio-regression\20261007-133329-46342331\write\ops\40_hunk_fixing.report.json

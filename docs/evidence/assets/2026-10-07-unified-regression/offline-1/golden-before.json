@@ -1,0 +1,27 @@
+[
+  {
+    "path": "allocation_floor.json",
+    "length": 17444,
+    "sha256": "878BA765A4855D85FB0261DB601F7F0BEDB1B188E167F6757D1821EB2131E62C"
+  },
+  {
+    "path": "bucket_write.json",
+    "length": 11217,
+    "sha256": "629FBBE45A5686C1E59406F79EB9F55B53DAA73DD0F811C60972111F0E92FE68"
+  },
+  {
+    "path": "off_compat.json",
+    "length": 5733,
+    "sha256": "1B2AC106E9A69A9A5FE677B439AE7C43EF190191DCD8D392B2375A6602E4E80A"
+  },
+  {
+    "path": "staging_scale.json",
+    "length": 1879,
+    "sha256": "041093D8DFA1335511340D71C39D7178C012C1BE864842A5EDD3E0EAE1A61BDB"
+  },
+  {
+    "path": "write_hashes.json",
+    "length": 6883,
+    "sha256": "A42ADA523EDDD3EBB57D4FD27E855B253968E8F0B54DCD2C9AFA9BC12EBC9E25"
+  }
+]

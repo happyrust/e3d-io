@@ -1,0 +1,40 @@
+{
+  "base_sesno": 646,
+  "comment": "alt_probe.json",
+  "commit": null,
+  "database": "D:\\e3dio-regression\\20261007-133329-46342331\\alternate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": true,
+  "error": null,
+  "latest_before": 646,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [],
+      "given": "24384/26506",
+      "index": 0,
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26506"
+    }
+  ],
+  "ops_file": "D:\\e3dio-regression\\20261007-133329-46342331\\alternate\\alt_probe.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": {
+    "pages": 13,
+    "previous_sesno": 646,
+    "rolled_back": true,
+    "sesno": 647
+  },
+  "user": "e3dio"
+}

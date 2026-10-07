@@ -1,0 +1,99 @@
+-- e3d-io write-path T4 FORMAT 0 gate, read back by E3D itself in a TTY session (read-only:
+-- no SAVEWORK, no QUIT ? the wrapper owns the session). Rendered by
+-- tools/e3d/format0_gate.ps1 from this template: D:/e3dio-regression/20261007-133329-46342331/format0/logs-format0 and the refnos come from the
+-- e3d-write run on the project copy.
+--
+-- The session format0_gate_ops/10_text.json appended to TES023 (*EQUIB/DESI_COMP, FORMAT 0):
+--   ZONE 17419/107 (was /10HDE) renamed in Chinese and given a Chinese DESC
+--   EQUI 17419/331 inserted under it, Chinese NAME and DESC
+--   the session commented in Chinese
+-- A macro cannot carry Chinese (E3D reads it in a single-byte code page), so every element
+-- is reached by refno and every Chinese string in these logs came out of E3D.
+--
+-- One ALPHA LOG block per question: a block's log is written only at ALPHA LOG END, so an
+-- unhandled error loses that block's log and no other. Every navigation and every risky Q
+-- is followed by handle any.
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/format0/logs-format0/00_project.log" OVER
+$P F0-00-BEGIN
+Q PROJ
+Q MDB
+$P F0-00-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/format0/logs-format0/10_control.log" OVER
+$P F0-10-BEGIN
+=17419/107
+handle any
+  $P F0-10-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q DBNAME
+endhandle
+$P F0-10-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/format0/logs-format0/20_zone_name.log" OVER
+$P F0-20-BEGIN
+=17419/107
+handle any
+  $P F0-20-NAV-ERROR $!!error.text
+elsehandle none
+  Q NAME
+endhandle
+$P F0-20-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/format0/logs-format0/30_zone_desc.log" OVER
+$P F0-30-BEGIN
+=17419/107
+handle any
+  $P F0-30-NAV-ERROR $!!error.text
+elsehandle none
+  Q DESC
+endhandle
+$P F0-30-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/format0/logs-format0/40_equi.log" OVER
+$P F0-40-BEGIN
+=17419/331
+handle any
+  $P F0-40-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q NAME
+  Q DESC
+  Q OWNER
+  Q POS
+endhandle
+$P F0-40-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/format0/logs-format0/50_zone_members.log" OVER
+$P F0-50-BEGIN
+=17419/107
+handle any
+  $P F0-50-NAV-ERROR $!!error.text
+elsehandle none
+  Q MEM
+endhandle
+$P F0-50-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/format0/logs-format0/60_session.log" OVER
+$P F0-60-BEGIN
+=17419/107
+handle any
+  $P F0-60-NAV-ERROR $!!error.text
+endhandle
+Q SESSION
+handle any
+  $P F0-60-SESSION-ERROR $!!error.text
+endhandle
+$P F0-60-END
+ALPHA LOG END
+

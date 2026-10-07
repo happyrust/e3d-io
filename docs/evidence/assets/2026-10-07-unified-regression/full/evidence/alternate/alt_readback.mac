@@ -1,0 +1,29 @@
+-- e3d-io write-path gate, T4 alternate-write read-back (plan ?2 T4): after N rounds of
+-- E3D and e3d-io writing in turn on the same first ZONE, one read-only E3D session lists
+-- the ZONE's members ? every EQUI both sides created must be there, by name ? and prints
+-- the newest session page. Rendered by tools/e3d/alternate_write_gate.ps1: D:/e3dio-regression/20261007-133329-46342331/alternate/logs-alt,
+-- D:/e3dio-regression/20261007-133329-46342331/alternate/alt_readback.log, 24384/47 (=refno of the first ZONE).
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/alternate/logs-alt/alt_readback.log" OVER
+$P ALT-READBACK-BEGIN
+=24384/47
+handle any
+  $P ALT-READBACK-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q MEM
+endhandle
+$P ALT-READBACK-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/alternate/logs-alt/alt_session.log" OVER
+$P ALT-SESSION-BEGIN
+Q SESSION
+$P ALT-SESSION-END
+ALPHA LOG END
+
+-- The driver reads <macro>.log as the scenario log: a summary marker.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/alternate/alt_readback.log" OVER
+$P E3DIO-GATE-DONE alt readback, see D:/e3dio-regression/20261007-133329-46342331/alternate/logs-alt/alt_readback.log
+ALPHA LOG END
+

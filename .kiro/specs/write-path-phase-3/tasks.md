@@ -496,8 +496,8 @@
 
 ### Unified regression follow-up (2026-10-07)
 
-- [ ] Add `tools/e3d/regression.ps1`: serial Cargo/offline/TTY/alternate five rounds + Q15/unchanged FORMAT0; unique scratch per gate; source and Golden integrity checks; failure evidence and manifest.
-- [ ] Validate scorer selfchecks and Rust integration, two independent offline runs, then a complete real E3D run; record actual counts, warnings, verdicts and timings in Spec_Ledger.
+- [x] Add `tools/e3d/regression.ps1`: serial Cargo/offline/TTY/alternate five rounds + Q15/unchanged FORMAT0; unique scratch per gate; source and Golden integrity checks; failure evidence and manifest. Implementation `1b0bbf9`.
+- [x] Validate scorer selfchecks and Rust integration, two independent offline runs, then a complete real E3D run; record actual counts, warnings, verdicts and timings in Spec_Ledger. Evidence: `docs/evidence/2026-10-07-unified-regression.md`.
 - GUI 10.5, checkpoints 10.6/14.7 remain independently pending. No Golden re-recording, dependencies or public Rust API changes.
 
 - 标 `*` 的子任务是可选测试，可为更快的 MVP 跳过。不可跳过的测试：需求 2 第 5 条的写侧读回（8.11 的 Property 9②、8.12 的 Property 14、11.5 的 Property 22、条件成立时 13.4 的 Property 27）、逐字节对比（8.13 的 Property 16，11.5、12.3、12.4 的 Property 23）与 Corpus 核对（5.5、7.2、6.3 的 Property 5、7、8）。
@@ -507,6 +507,10 @@
 - 每个 Checkpoint 做增量验收；Spec_Ledger 的记录写在下一节。
 
 ## Spec_Ledger
+
+### Unified regression acceptance (2026-10-07)
+
+`1b0bbf9` complete run: Cargo 789/0/30, 134 result summaries including Doc-tests, 8 existing sample skip messages; Clippy/doc 63/25; TTY 39 PASS (213.278 s, Q13 161.437 s, Q14 9.113 s); alternate five rounds + Q15 PASS (84.208 s); unchanged FORMAT0 11 PASS (10.410 s). AMS/TES database directory inventories and Golden hashes unchanged; 304 archived evidence files re-hashed successfully. Scorer selfchecks 36 PASS and Rust integration PASS; independent offline runs never certify TTY. See `docs/evidence/2026-10-07-unified-regression.md`. D1–D8 unchanged; GUI 10.5, 10.6 and 14.7 remain pending.
 
 ### 决策
 

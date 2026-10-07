@@ -1,0 +1,442 @@
+-- e3d-io write-path gate, read back by E3D itself in a TTY session (read-only: no
+-- SAVEWORK, no QUIT ? the l3_suite driver's wrapper owns the session). Rendered by
+-- tools/e3d/write_gate.ps1 from this template: D:/e3dio-regression/20261007-133329-46342331/write/logs and the refnos come from the
+-- e3d-write apply runs (tools/e3d/write_gate_ops/*.json) on the project copy.
+--
+-- Sessions e3d-write appended:
+--   BOX 24384/26507 under the first ZONE 24384/47
+--   GPWL 16192/2 under the WORL, GROU 16192/3 with reference members ZONE + BOX
+--   EQUI 24384/26508 and EQUI 24384/26509: DESC / DESP / UUIDIA as hunks (types 22/21/20),
+--     one chain across a page boundary
+--   FIXING 24384/26510: ROKEYS inline type 19, ROVALS as a type-23 hunk
+--   BOX A 24384/26511, B 24384/26512, C 24384/26513 under the second ZONE 24384/2498, A and B
+--     referenced by the GROU; then A moved under the third ZONE 24384/22400 (move_to), C
+--     put before B (reorder), B taken out of the GROU (remove_reference_member) - T1a
+--   ZONE 24384/26514 with 8 200 BOXes: member count saturated at 0x3FFF (plan 1.3 #11)
+--   EQUI 24384/34715 and FIXING 24384/34716: every value typed as text and set by
+--     attribute name (Transaction::set) under E3D's dictionary - T1b
+--   BOX 24384/26507 renamed in Chinese, ZONE 24384/47 described in Chinese, the session
+--     commented in Chinese ? text stored the way the header's FORMAT says (S5)
+--
+-- One ALPHA LOG block per question: a block's log is written only at ALPHA LOG END, so an
+-- unhandled error loses that block's log and no other. Every navigation and every risky Q
+-- is followed by handle any.
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/00_project.log" OVER
+$P GATE-00-BEGIN
+Q PROJ
+Q MDB
+$P GATE-00-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/10_box.log" OVER
+$P GATE-10-BEGIN
+=24384/26507
+handle any
+  $P GATE-10-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q POS
+  Q XLEN
+  Q YLEN
+  Q ZLEN
+endhandle
+$P GATE-10-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/20_grou.log" OVER
+$P GATE-20-BEGIN
+=16192/3
+handle any
+  $P GATE-20-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q MEM
+endhandle
+=16192/2
+handle any
+  $P GATE-20-GPWL-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q MEM
+endhandle
+$P GATE-20-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/30_equi1_nav.log" OVER
+$P GATE-30-BEGIN
+=24384/26508
+handle any
+  $P GATE-30-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+endhandle
+$P GATE-30-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/31_equi1_desc.log" OVER
+$P GATE-31-BEGIN
+=24384/26508
+handle any
+  $P GATE-31-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESC
+handle any
+  $P GATE-31-DESC-ERROR $!!error.text
+endhandle
+$P GATE-31-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/32_equi1_desp.log" OVER
+$P GATE-32-BEGIN
+=24384/26508
+handle any
+  $P GATE-32-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESP
+handle any
+  $P GATE-32-DESP-ERROR $!!error.text
+endhandle
+$P GATE-32-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/33_equi1_uuidia.log" OVER
+$P GATE-33-BEGIN
+=24384/26508
+handle any
+  $P GATE-33-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q UUIDIA
+handle any
+  $P GATE-33-UUIDIA-ERROR $!!error.text
+endhandle
+$P GATE-33-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/35_equi2_nav.log" OVER
+$P GATE-35-BEGIN
+=24384/26509
+handle any
+  $P GATE-35-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+endhandle
+$P GATE-35-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/36_equi2_desc.log" OVER
+$P GATE-36-BEGIN
+=24384/26509
+handle any
+  $P GATE-36-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESC
+handle any
+  $P GATE-36-DESC-ERROR $!!error.text
+endhandle
+$P GATE-36-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/37_equi2_desp.log" OVER
+$P GATE-37-BEGIN
+=24384/26509
+handle any
+  $P GATE-37-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESP
+handle any
+  $P GATE-37-DESP-ERROR $!!error.text
+endhandle
+$P GATE-37-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/38_equi2_uuidia.log" OVER
+$P GATE-38-BEGIN
+=24384/26509
+handle any
+  $P GATE-38-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q UUIDIA
+handle any
+  $P GATE-38-UUIDIA-ERROR $!!error.text
+endhandle
+$P GATE-38-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/40_fixing_nav.log" OVER
+$P GATE-40-BEGIN
+=24384/26510
+handle any
+  $P GATE-40-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+endhandle
+$P GATE-40-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/41_fixing_rokeys.log" OVER
+$P GATE-41-BEGIN
+=24384/26510
+handle any
+  $P GATE-41-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q ROKEYS
+handle any
+  $P GATE-41-ROKEYS-ERROR $!!error.text
+endhandle
+$P GATE-41-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/42_fixing_rovals.log" OVER
+$P GATE-42-BEGIN
+=24384/26510
+handle any
+  $P GATE-42-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q ROVALS
+handle any
+  $P GATE-42-ROVALS-ERROR $!!error.text
+endhandle
+$P GATE-42-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/50_zone.log" OVER
+$P GATE-50-BEGIN
+=24384/47
+handle any
+  $P GATE-50-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q NAME
+  Q TYPE
+  Q MEM
+endhandle
+$P GATE-50-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/60_equi2_att.log" OVER
+$P GATE-60-BEGIN
+=24384/26509
+handle any
+  $P GATE-60-NAV-ERROR $!!error.text
+endhandle
+Q ATT
+handle any
+  $P GATE-60-ATT-ERROR $!!error.text
+endhandle
+$P GATE-60-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/61_fixing_att.log" OVER
+$P GATE-61-BEGIN
+=24384/26510
+handle any
+  $P GATE-61-NAV-ERROR $!!error.text
+endhandle
+Q ATT
+handle any
+  $P GATE-61-ATT-ERROR $!!error.text
+endhandle
+$P GATE-61-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/70_sessions.log" OVER
+$P GATE-70-BEGIN
+=24384/26508
+handle any
+  $P GATE-70-NAV-ERROR $!!error.text
+endhandle
+Q DBNAME
+handle any
+  $P GATE-70-DBNAME-ERROR $!!error.text
+endhandle
+Q SESSION
+handle any
+  $P GATE-70-SESSION-ERROR $!!error.text
+endhandle
+$P GATE-70-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/80_box_name.log" OVER
+$P GATE-80-BEGIN
+=24384/26507
+handle any
+  $P GATE-80-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q NAME
+handle any
+  $P GATE-80-NAME-ERROR $!!error.text
+endhandle
+$P GATE-80-END
+ALPHA LOG END
+
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/81_zone_desc.log" OVER
+$P GATE-81-BEGIN
+=24384/47
+handle any
+  $P GATE-81-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q DESC
+handle any
+  $P GATE-81-DESC-ERROR $!!error.text
+endhandle
+$P GATE-81-END
+ALPHA LOG END
+
+-- T1a: the moved BOX A - its NAME, its OWNER, and the owner reached by navigation.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/90_move_owner.log" OVER
+$P GATE-90-BEGIN
+=24384/26511
+handle any
+  $P GATE-90-NAV-ERROR $!!error.text
+elsehandle none
+  Q NAME
+  Q OWNER
+  OWNER
+  handle any
+    $P GATE-90-OWNER-NAV-ERROR $!!error.text
+  elsehandle none
+    Q REF
+    Q NAME
+  endhandle
+endhandle
+$P GATE-90-END
+ALPHA LOG END
+
+-- T1a: the second ZONE after the reorder (C before B) and the move (no A).
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/91_move_zone2.log" OVER
+$P GATE-91-BEGIN
+=24384/2498
+handle any
+  $P GATE-91-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q MEM
+endhandle
+$P GATE-91-END
+ALPHA LOG END
+
+-- T1a: the third ZONE, A appended last.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/92_move_zone3.log" OVER
+$P GATE-92-BEGIN
+=24384/22400
+handle any
+  $P GATE-92-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q MEM
+endhandle
+$P GATE-92-END
+ALPHA LOG END
+
+-- T1a: the GROU's reference list after A was added and B removed.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/93_move_grou.log" OVER
+$P GATE-93-BEGIN
+=16192/3
+handle any
+  $P GATE-93-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q MEM
+endhandle
+$P GATE-93-END
+ALPHA LOG END
+
+-- Plan 1.3 #11: the 8 200-member ZONE - E3D must list every member, measuring the chain.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/95_big_zone.log" OVER
+$P GATE-95-BEGIN
+=24384/26514
+handle any
+  $P GATE-95-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q NAME
+  Q MEM
+endhandle
+$P GATE-95-END
+ALPHA LOG END
+
+-- T1b: the EQUI whose DESC / POS / FUNC / PURP were typed as text and set by name.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/96_str_equi.log" OVER
+$P GATE-96-BEGIN
+=24384/34715
+handle any
+  $P GATE-96-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q NAME
+Q DESC
+handle any
+  $P GATE-96-DESC-ERROR $!!error.text
+endhandle
+Q POS
+handle any
+  $P GATE-96-POS-ERROR $!!error.text
+endhandle
+Q FUNC
+handle any
+  $P GATE-96-FUNC-ERROR $!!error.text
+endhandle
+Q PURP
+handle any
+  $P GATE-96-PURP-ERROR $!!error.text
+endhandle
+$P GATE-96-END
+ALPHA LOG END
+
+-- T1b: the FIXING likewise - ROKEYS as a | list, BUIL true, NUMB 42, CREF given as /NAME.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/97_str_fixing.log" OVER
+$P GATE-97-BEGIN
+=24384/34716
+handle any
+  $P GATE-97-NAV-ERROR $!!error.text
+endhandle
+Q REF
+Q NAME
+Q ROKEYS
+handle any
+  $P GATE-97-ROKEYS-ERROR $!!error.text
+endhandle
+Q BUIL
+handle any
+  $P GATE-97-BUIL-ERROR $!!error.text
+endhandle
+Q NUMB
+handle any
+  $P GATE-97-NUMB-ERROR $!!error.text
+endhandle
+Q CREF
+handle any
+  $P GATE-97-CREF-ERROR $!!error.text
+endhandle
+$P GATE-97-END
+ALPHA LOG END
+
+-- The driver reads <macro>.log as the scenario log: a summary marker.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/write_gate.log" OVER
+$P E3DIO-GATE-DONE see D:/e3dio-regression/20261007-133329-46342331/write/logs/*.log
+ALPHA LOG END
+
+

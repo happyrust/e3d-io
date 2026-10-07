@@ -1,0 +1,315 @@
+{
+  "schema": "e3dio-regression/v1",
+  "mode": "full",
+  "started_at": "2026-10-07T13:33:29.9677041+08:00",
+  "head": "1b0bbf94a9059e86fe7aa4b4286615790a4e67d5",
+  "working_tree": [
+    "?? .kiro/skills/",
+    "?? .kiro/specs/e3d-studio-m1/"
+  ],
+  "tools": [
+    {
+      "path": "D:\\Rust\\.cargo\\bin\\cargo.exe",
+      "sha256": "86478E53F769379D7F0EBFA7C9AA97CB76CA92233F79AA2CC0DBEE2EFAAC73C7"
+    },
+    {
+      "path": "E:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "sha256": "057A2754877CD356159EA891883179F8620FFDC89D3C70D2C4D1F3BA3F6C49B0"
+    },
+    {
+      "path": "D:\\Rust\\target\\debug\\l3_suite.exe",
+      "sha256": "7FBC32EB523CDC62B5334D23D3D38A67A13E3B2B66C28E848A7DD10BFBD59C2D"
+    },
+    {
+      "path": "D:\\work\\plant-code\\old\\gen-model\\scripts\\e3d\\run_ams_c_entrymacro.bat",
+      "sha256": "C66E528483949EECCADBA48D454FBDE334A126F0C7E16A1455D5AE242903C53B"
+    },
+    {
+      "path": "D:\\Rust\\target\\debug\\e3d-write.exe",
+      "sha256": "C826EC049682EAA20C19E31FC66B19CF68AC2EDDB1053FB20B2F1C7AE27879E2"
+    },
+    {
+      "path": "D:\\Rust\\target\\debug\\e3d-descriptor.exe",
+      "sha256": "EFB59C8A20B58BF97335DCDDBD23EAF65865AB89B635550CDBC925261941D553"
+    }
+  ],
+  "stages": [
+    {
+      "name": "tests",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "test",
+        "--no-fail-fast",
+        "--",
+        "--nocapture"
+      ],
+      "started_at": "2026-10-07T13:33:36.2165106+08:00",
+      "ended_at": "2026-10-07T13:35:44.9144785+08:00",
+      "elapsed_seconds": 128.6978317,
+      "details": {
+        "result_lines": 134,
+        "failed": 0,
+        "ignored": 30,
+        "skip_messages": 8,
+        "skip_lines": [
+          "SKIP: evidence/20260826-tty-sampling/sample.tsv not present",
+          "SKIP: evidence/2026-08-30-tty-sampling/sample.tsv not present",
+          "SKIP: evidence/2026-08-30-tty-sampling/sample.tsv not present",
+          "SKIP: evidence/2026-08-30-tty-sampling/sample.tsv not present",
+          "SKIP: evidence/20260826-tty-sampling/sample.tsv not present",
+          "skipped: E3D_CORPUS_ROOTS is not set; the full corpus gate needs the installed E3D projects",
+          "SKIP: evidence/20260826-tty-sampling/sample.tsv not present",
+          "skipped: E3D_CORPUS_ROOTS is not set; the WORLD corpus gate needs the installed E3D projects"
+        ],
+        "passed": 789
+      }
+    },
+    {
+      "name": "clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "clippy",
+        "--all-targets"
+      ],
+      "started_at": "2026-10-07T13:35:44.9557943+08:00",
+      "ended_at": "2026-10-07T13:35:45.3577594+08:00",
+      "elapsed_seconds": 0.4019703,
+      "details": {
+        "warnings": 63
+      }
+    },
+    {
+      "name": "doc",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "doc"
+      ],
+      "started_at": "2026-10-07T13:35:45.3631004+08:00",
+      "ended_at": "2026-10-07T13:35:45.7774655+08:00",
+      "elapsed_seconds": 0.4143682,
+      "details": {
+        "warnings": 25
+      }
+    },
+    {
+      "name": "q13-offline",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\q13_selfcheck.ps1"
+      ],
+      "started_at": "2026-10-07T13:35:45.7785277+08:00",
+      "ended_at": "2026-10-07T13:35:46.3645535+08:00",
+      "elapsed_seconds": 0.5860346,
+      "details": null
+    },
+    {
+      "name": "q14-offline",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\q14_selfcheck.ps1"
+      ],
+      "started_at": "2026-10-07T13:35:46.3680174+08:00",
+      "ended_at": "2026-10-07T13:35:46.8469303+08:00",
+      "elapsed_seconds": 0.47892,
+      "details": null
+    },
+    {
+      "name": "q15-offline",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\q15_selfcheck.ps1"
+      ],
+      "started_at": "2026-10-07T13:35:46.8477961+08:00",
+      "ended_at": "2026-10-07T13:35:47.3424208+08:00",
+      "elapsed_seconds": 0.4946329,
+      "details": null
+    },
+    {
+      "name": "write",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\write_gate.ps1",
+        "-Project",
+        "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample",
+        "-Scratch",
+        "D:\\e3dio-regression\\20261007-133329-46342331\\write",
+        "-GenModel",
+        "D:\\work\\plant-code\\old\\gen-model",
+        "-L3Exe",
+        "D:\\Rust\\target\\debug\\l3_suite.exe"
+      ],
+      "started_at": "2026-10-07T13:35:47.4182731+08:00",
+      "ended_at": "2026-10-07T13:39:20.9753704+08:00",
+      "elapsed_seconds": 213.5570969,
+      "details": {
+        "verdicts": [
+          "PASS Q0",
+          "PASS Q1",
+          "PASS Q2",
+          "PASS Q3a",
+          "PASS Q3b",
+          "PASS Q3c",
+          "PASS Q3d",
+          "PASS Q3e",
+          "PASS Q3f",
+          "PASS Q4a",
+          "PASS Q4b",
+          "PASS Q5",
+          "PASS Q6",
+          "PASS Q6b",
+          "PASS Q7",
+          "PASS Q8a",
+          "PASS Q8b",
+          "PASS Q9a",
+          "PASS Q9b",
+          "PASS Q9c",
+          "PASS Q9d",
+          "PASS Q10",
+          "PASS Q11a",
+          "PASS Q11b",
+          "PASS Q12a",
+          "PASS Q12b",
+          "PASS Q12c",
+          "PASS Q12d",
+          "PASS Q12e",
+          "PASS Q13",
+          "PASS Q13a",
+          "PASS Q13b",
+          "PASS Q13c",
+          "PASS Q13d",
+          "PASS Q13e",
+          "PASS Q13f",
+          "PASS Q13g",
+          "PASS Q13h",
+          "PASS Q14"
+        ],
+        "ok": true,
+        "errors": [],
+        "times": [
+          {
+            "seconds": 161.4374667,
+            "name": "q13_seconds"
+          },
+          {
+            "seconds": 9.1131719,
+            "name": "Q14_seconds"
+          },
+          {
+            "seconds": 213.2782433,
+            "name": "total_seconds"
+          }
+        ]
+      }
+    },
+    {
+      "name": "alternate",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\alternate_write_gate.ps1",
+        "-Rounds",
+        "5",
+        "-Project",
+        "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample",
+        "-Scratch",
+        "D:\\e3dio-regression\\20261007-133329-46342331\\alternate",
+        "-GenModel",
+        "D:\\work\\plant-code\\old\\gen-model",
+        "-L3Exe",
+        "D:\\Rust\\target\\debug\\l3_suite.exe"
+      ],
+      "started_at": "2026-10-07T13:39:21.0032959+08:00",
+      "ended_at": "2026-10-07T13:40:45.2115744+08:00",
+      "elapsed_seconds": 84.208286,
+      "details": {
+        "verdicts": [
+          "PASS T4a",
+          "PASS T4b",
+          "PASS T4c",
+          "PASS Q15"
+        ],
+        "ok": true,
+        "errors": [],
+        "times": []
+      }
+    },
+    {
+      "name": "format0",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\format0_gate.ps1",
+        "-Project",
+        "D:\\AVEVA\\Projects\\E3D3.1\\TEST",
+        "-Scratch",
+        "D:\\e3dio-regression\\20261007-133329-46342331\\format0",
+        "-Launcher",
+        "D:\\work\\plant-code\\old\\gen-model\\scripts\\e3d\\run_ams_c_entrymacro.bat"
+      ],
+      "started_at": "2026-10-07T13:40:45.2164845+08:00",
+      "ended_at": "2026-10-07T13:40:55.6266252+08:00",
+      "elapsed_seconds": 10.4101478,
+      "details": {
+        "verdicts": [
+          "PASS E1",
+          "PASS E2",
+          "PASS F0",
+          "PASS F1",
+          "PASS F2a",
+          "PASS F2b",
+          "PASS F2c",
+          "PASS F3a",
+          "PASS F3b",
+          "PASS F4",
+          "PASS F5"
+        ],
+        "ok": true,
+        "errors": [],
+        "times": []
+      }
+    }
+  ],
+  "integrity": {
+    "ams": {
+      "status": "unchanged"
+    },
+    "tes": {
+      "status": "unchanged"
+    },
+    "golden": {
+      "status": "unchanged"
+    }
+  },
+  "status": "passed",
+  "errors": [],
+  "tty_verified": true,
+  "ended_at": "2026-10-07T13:41:01.7243871+08:00"
+}

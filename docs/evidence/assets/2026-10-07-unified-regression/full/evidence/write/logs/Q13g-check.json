@@ -1,0 +1,70 @@
+{
+  "databases": [
+    {
+      "authored_elements": 1,
+      "built_in_aabb": {
+        "agree": 1,
+        "by_noun": {
+          "BOX": [
+            1,
+            1
+          ]
+        },
+        "first": [],
+        "total": 1,
+        "waiting": 0
+      },
+      "coverage": {
+        "agree": 1,
+        "by_noun": {
+          "BOX": [
+            1,
+            1
+          ]
+        },
+        "first": [],
+        "total": 1,
+        "waiting": 0
+      },
+      "entries": 1,
+      "entries_k": {
+        "agree": 1,
+        "by_noun": {
+          "BOX": [
+            1,
+            1
+          ]
+        },
+        "first": [],
+        "total": 1,
+        "waiting": 0
+      },
+      "excluded_elements": 0,
+      "flags": {
+        "agree": 1,
+        "by_noun": {
+          "BOX": [
+            1,
+            1
+          ]
+        },
+        "first": [],
+        "total": 1,
+        "waiting": 0
+      },
+      "key0": {
+        "agree": 1,
+        "by_noun": {},
+        "first": [],
+        "total": 1,
+        "waiting": 0
+      },
+      "path": "D:\\e3dio-regression\\20261007-133329-46342331\\write\\AvevaMarineSample\\ams000\\ams8000_0001",
+      "refno": "16192/7",
+      "sesno": 667,
+      "unreadable_records": []
+    }
+  ],
+  "errors": [],
+  "rules": "confirmed"
+}

@@ -1,0 +1,3 @@
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-regression\20261007-133329-46342331\alternate outcome=read_only
+﻿E3DIO-GATE-DONE alt readback, see D:/e3dio-regression/20261007-133329-46342331/alternate/logs-alt/alt_readback.log
+

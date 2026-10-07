@@ -1,0 +1,17 @@
+{
+  "base_sesno": 646,
+  "comment": "refused: RATM is in the template but not in E3D's dictionary",
+  "database": "D:\\e3dio-regression\\20261007-133329-46342331\\write\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": {
+    "message": "op #0 (insert EQUI under /1RX03-MSUP: RATM): RATM is not an attribute in E3D's dictionary (E3D: \"does not have attribute\")",
+    "op": 0
+  },
+  "latest_before": 646,
+  "on_clash": "refuse",
+  "ops": [],
+  "ops_file": "D:\\e3dio-regression\\20261007-133329-46342331\\write\\ops\\refused_ratm.json",
+  "spatial_policy": "off",
+  "user": "e3dio"
+}

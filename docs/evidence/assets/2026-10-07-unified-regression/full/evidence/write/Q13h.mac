@@ -1,0 +1,16 @@
+-- Independently rendered spatial questions, one fresh TTY snapshot per call.
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/Q13h.log" OVER
+$P [Q13h-BEGIN]
+MM DISTANCE
+PRECISION 3DP
+=16192/17
+Q POS WRT /*
+=16192/19
+Q POS WRT /*
+$P [Q13h-END]
+ALPHA LOG END
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/Q13h.log" OVER
+$P E3DIO-GATE-DONE
+ALPHA LOG END
+
+

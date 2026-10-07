@@ -1,0 +1,72 @@
+{
+  "base_sesno": 654,
+  "comment": "e3d-io T4 alternate round 3",
+  "commit": {
+    "appended_pages": [
+      16763,
+      16764,
+      16765,
+      16766,
+      16767,
+      16768,
+      16769,
+      16770,
+      16771,
+      16772,
+      16773,
+      16774,
+      16775,
+      16776,
+      16777,
+      16778
+    ],
+    "base_sesno": 654,
+    "merged_onto": null,
+    "previous": {
+      "end": 16762,
+      "page": 16760,
+      "sesno": 654
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 16778,
+      "page": 16778,
+      "sesno": 655
+    }
+  },
+  "database": "D:\\e3dio-regression\\20261007-133329-46342331\\alternate\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 654,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "FUNC",
+        "POS"
+      ],
+      "given": "24384/26511",
+      "index": 0,
+      "name": "/E3DIO-ALT-IO-3",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/26511"
+    }
+  ],
+  "ops_file": "D:\\e3dio-regression\\20261007-133329-46342331\\alternate\\alt_io_3.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

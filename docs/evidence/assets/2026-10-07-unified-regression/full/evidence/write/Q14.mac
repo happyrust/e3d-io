@@ -1,0 +1,18 @@
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/logs/Q14.log" OVER
+$P [Q14-BEGIN]
+/E3DIO-Q14-NAMED
+handle any
+  $P Q14-ERROR $!!error.text
+endhandle
+$P [Q14-RESULT-BEGIN]
+Q REF
+handle any
+  $P Q14-ERROR $!!error.text
+endhandle
+$P [Q14-RESULT-END]
+$P [Q14-END]
+ALPHA LOG END
+ALPHA LOG "D:/e3dio-regression/20261007-133329-46342331/write/Q14.log" OVER
+$P E3DIO-GATE-DONE
+ALPHA LOG END
+

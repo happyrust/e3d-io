@@ -1,0 +1,94 @@
+{
+  "base_sesno": 654,
+  "comment": "e3d-io write-path gate: an EQUI and a FIXING set by attribute name from text (Transaction::set)",
+  "commit": {
+    "appended_pages": [
+      17454,
+      17455,
+      17456,
+      17457,
+      17458,
+      17459,
+      17460,
+      17461,
+      17462,
+      17463,
+      17464,
+      17465,
+      17466,
+      17467,
+      17468,
+      17469,
+      17470,
+      17471,
+      17472
+    ],
+    "base_sesno": 654,
+    "merged_onto": null,
+    "previous": {
+      "end": 17453,
+      "page": 17453,
+      "sesno": 654
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 17472,
+      "page": 17472,
+      "sesno": 655
+    }
+  },
+  "database": "D:\\e3dio-regression\\20261007-133329-46342331\\write\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 654,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "DESC",
+        "FUNC",
+        "POS",
+        "PURP"
+      ],
+      "given": "24384/34715",
+      "id": "equi",
+      "index": 0,
+      "name": "/E3DIO-STR-EQUI",
+      "noun": "EQUI",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/34715"
+    },
+    {
+      "attrs": [
+        "BUIL",
+        "CREF",
+        "NUMB",
+        "ROKEYS"
+      ],
+      "given": "24384/34716",
+      "id": "fixing",
+      "index": 1,
+      "name": "/E3DIO-STR-FIXING",
+      "noun": "FIXING",
+      "op": "insert",
+      "owner": "24384/47",
+      "refno": "24384/34716"
+    }
+  ],
+  "ops_file": "D:\\e3dio-regression\\20261007-133329-46342331\\write\\ops\\70_strings.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

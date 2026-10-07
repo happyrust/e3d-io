@@ -1,0 +1,197 @@
+{
+  "schema": "e3dio-regression/v1",
+  "mode": "offline",
+  "started_at": "2026-10-07T13:30:56.8720666+08:00",
+  "head": "8663556bc0176dde3b9b1388d8503e0af9e36d6a",
+  "working_tree": [
+    " M .kiro/specs/write-path-phase-3/tasks.md",
+    " M README.md",
+    "?? .kiro/skills/",
+    "?? .kiro/specs/e3d-studio-m1/",
+    "?? tests/write_regression_gate.rs",
+    "?? tools/e3d/regression.ps1",
+    "?? tools/e3d/regression_checks.ps1",
+    "?? tools/e3d/regression_selfcheck.ps1"
+  ],
+  "tools": [
+    {
+      "path": "D:\\Rust\\.cargo\\bin\\cargo.exe",
+      "sha256": "86478E53F769379D7F0EBFA7C9AA97CB76CA92233F79AA2CC0DBEE2EFAAC73C7"
+    },
+    {
+      "path": "E:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "sha256": "057A2754877CD356159EA891883179F8620FFDC89D3C70D2C4D1F3BA3F6C49B0"
+    },
+    {
+      "path": "D:\\Rust\\target\\debug\\l3_suite.exe",
+      "sha256": "7FBC32EB523CDC62B5334D23D3D38A67A13E3B2B66C28E848A7DD10BFBD59C2D"
+    },
+    {
+      "path": "D:\\work\\plant-code\\old\\gen-model\\scripts\\e3d\\run_ams_c_entrymacro.bat",
+      "sha256": "C66E528483949EECCADBA48D454FBDE334A126F0C7E16A1455D5AE242903C53B"
+    },
+    {
+      "path": "D:\\Rust\\target\\debug\\e3d-write.exe",
+      "sha256": "C826EC049682EAA20C19E31FC66B19CF68AC2EDDB1053FB20B2F1C7AE27879E2"
+    },
+    {
+      "path": "D:\\Rust\\target\\debug\\e3d-descriptor.exe",
+      "sha256": "EFB59C8A20B58BF97335DCDDBD23EAF65865AB89B635550CDBC925261941D553"
+    }
+  ],
+  "stages": [
+    {
+      "name": "tests",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "test",
+        "--no-fail-fast",
+        "--",
+        "--nocapture"
+      ],
+      "started_at": "2026-10-07T13:31:02.7522905+08:00",
+      "ended_at": "2026-10-07T13:33:06.7079810+08:00",
+      "elapsed_seconds": 123.9555326,
+      "details": {
+        "ignored": 30,
+        "result_lines": 134,
+        "skip_lines": [
+          "SKIP: evidence/20260826-tty-sampling/sample.tsv not present",
+          "SKIP: evidence/2026-08-30-tty-sampling/sample.tsv not present",
+          "SKIP: evidence/2026-08-30-tty-sampling/sample.tsv not present",
+          "SKIP: evidence/20260826-tty-sampling/sample.tsv not present",
+          "SKIP: evidence/2026-08-30-tty-sampling/sample.tsv not present",
+          "skipped: E3D_CORPUS_ROOTS is not set; the full corpus gate needs the installed E3D projects",
+          "SKIP: evidence/20260826-tty-sampling/sample.tsv not present",
+          "skipped: E3D_CORPUS_ROOTS is not set; the WORLD corpus gate needs the installed E3D projects"
+        ],
+        "passed": 789,
+        "skip_messages": 8,
+        "failed": 0
+      }
+    },
+    {
+      "name": "clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "clippy",
+        "--all-targets"
+      ],
+      "started_at": "2026-10-07T13:33:06.7598124+08:00",
+      "ended_at": "2026-10-07T13:33:07.1581631+08:00",
+      "elapsed_seconds": 0.3983598,
+      "details": {
+        "warnings": 63
+      }
+    },
+    {
+      "name": "doc",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "doc"
+      ],
+      "started_at": "2026-10-07T13:33:07.1632486+08:00",
+      "ended_at": "2026-10-07T13:33:10.9042721+08:00",
+      "elapsed_seconds": 3.7410271,
+      "details": {
+        "warnings": 25
+      }
+    },
+    {
+      "name": "q13-offline",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\q13_selfcheck.ps1"
+      ],
+      "started_at": "2026-10-07T13:33:10.9052829+08:00",
+      "ended_at": "2026-10-07T13:33:11.4823856+08:00",
+      "elapsed_seconds": 0.5771137,
+      "details": null
+    },
+    {
+      "name": "q14-offline",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\q14_selfcheck.ps1"
+      ],
+      "started_at": "2026-10-07T13:33:11.4862973+08:00",
+      "ended_at": "2026-10-07T13:33:11.9568909+08:00",
+      "elapsed_seconds": 0.4705966,
+      "details": null
+    },
+    {
+      "name": "q15-offline",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        "D:\\work\\plant-code\\old\\vendor\\e3d-io-write\\tools\\e3d\\q15_selfcheck.ps1"
+      ],
+      "started_at": "2026-10-07T13:33:11.9575746+08:00",
+      "ended_at": "2026-10-07T13:33:12.4580881+08:00",
+      "elapsed_seconds": 0.5005268,
+      "details": null
+    },
+    {
+      "name": "write",
+      "status": "not_run",
+      "exit_code": null,
+      "command": null,
+      "started_at": null,
+      "ended_at": null,
+      "elapsed_seconds": null,
+      "details": null
+    },
+    {
+      "name": "alternate",
+      "status": "not_run",
+      "exit_code": null,
+      "command": null,
+      "started_at": null,
+      "ended_at": null,
+      "elapsed_seconds": null,
+      "details": null
+    },
+    {
+      "name": "format0",
+      "status": "not_run",
+      "exit_code": null,
+      "command": null,
+      "started_at": null,
+      "ended_at": null,
+      "elapsed_seconds": null,
+      "details": null
+    }
+  ],
+  "integrity": {
+    "ams": {
+      "status": "unchanged"
+    },
+    "golden": {
+      "status": "unchanged"
+    },
+    "tes": {
+      "status": "unchanged"
+    }
+  },
+  "status": "offline_passed",
+  "errors": [],
+  "tty_verified": false,
+  "ended_at": "2026-10-07T13:33:18.2322998+08:00"
+}

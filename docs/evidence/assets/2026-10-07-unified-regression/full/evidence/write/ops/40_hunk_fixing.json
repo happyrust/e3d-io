@@ -1,0 +1,7 @@
+{
+  "comment": "e3d-io write-path gate: FIXING with ROKEYS inline (type 19) and ROVALS as a hunk (type 23)",
+  "ops": [
+    {"op": "insert", "id": "fixing", "owner": "/1RX03-MSUP", "noun": "FIXING",
+     "attrs": {"ROKEYS": "K1|K2", "ROVALS": {"hunk": true, "value": "V1|V2"}}}
+  ]
+}

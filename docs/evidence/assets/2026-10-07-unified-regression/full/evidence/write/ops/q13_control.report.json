@@ -1,0 +1,97 @@
+{
+  "base_sesno": 661,
+  "comment": "Q13 Off control",
+  "commit": {
+    "appended_pages": [
+      17584,
+      17585,
+      17586,
+      17587,
+      17588,
+      17589,
+      17590,
+      17591,
+      17592,
+      17593,
+      17594,
+      17595,
+      17596,
+      17597
+    ],
+    "base_sesno": 661,
+    "merged_onto": null,
+    "previous": {
+      "end": 17583,
+      "page": 17581,
+      "sesno": 661
+    },
+    "reminted": [],
+    "retried_after_move": false,
+    "written": {
+      "end": 17597,
+      "page": 17597,
+      "sesno": 662
+    }
+  },
+  "database": "D:\\e3dio-regression\\20261007-133329-46342331\\write\\AvevaMarineSample\\ams000\\ams8000_0001",
+  "dictionary": 4271,
+  "dry_run": false,
+  "error": null,
+  "latest_before": 661,
+  "on_clash": "refuse",
+  "ops": [
+    {
+      "attrs": [
+        "POS"
+      ],
+      "given": "16192/4",
+      "id": "site",
+      "index": 0,
+      "name": "/E3DIO-Q13-SITE",
+      "noun": "SITE",
+      "op": "insert",
+      "owner": "16192/0",
+      "refno": "16192/4"
+    },
+    {
+      "attrs": [],
+      "given": "16192/5",
+      "id": "zone",
+      "index": 1,
+      "name": "/E3DIO-Q13-ZONE",
+      "noun": "ZONE",
+      "op": "insert",
+      "owner": "16192/4",
+      "refno": "16192/5"
+    },
+    {
+      "attrs": [
+        "POS",
+        "XLEN",
+        "YLEN",
+        "ZLEN"
+      ],
+      "given": "16192/6",
+      "id": "control",
+      "index": 2,
+      "name": "/E3DIO-Q13-CONTROL",
+      "noun": "BOX",
+      "op": "insert",
+      "owner": "16192/5",
+      "refno": "16192/6"
+    }
+  ],
+  "ops_file": "D:\\e3dio-regression\\20261007-133329-46342331\\write\\ops\\q13_control.json",
+  "spatial": {
+    "elements": {},
+    "pages": [],
+    "policy": "off",
+    "skipped": [],
+    "table": "Unchanged",
+    "unreachable": [],
+    "unused_aabb": []
+  },
+  "spatial_policy": "off",
+  "staged": null,
+  "user": "e3dio"
+}

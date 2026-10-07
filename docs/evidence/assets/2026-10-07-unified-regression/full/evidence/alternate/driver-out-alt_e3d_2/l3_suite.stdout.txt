@@ -1,0 +1,3 @@
+E3D driver OK: project=AMS mdb=/ALL projects_dir=D:\e3dio-regression\20261007-133329-46342331\alternate outcome=Completed
+﻿E3DIO-GATE-DONE alt E3D round 2, see D:/e3dio-regression/20261007-133329-46342331/alternate/logs-alt/alt_e3d_2.log
+
