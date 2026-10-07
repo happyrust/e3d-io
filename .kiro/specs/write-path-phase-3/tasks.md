@@ -494,6 +494,12 @@
 
 ## Notes
 
+### Unified regression follow-up (2026-10-07)
+
+- [ ] Add `tools/e3d/regression.ps1`: serial Cargo/offline/TTY/alternate five rounds + Q15/unchanged FORMAT0; unique scratch per gate; source and Golden integrity checks; failure evidence and manifest.
+- [ ] Validate scorer selfchecks and Rust integration, two independent offline runs, then a complete real E3D run; record actual counts, warnings, verdicts and timings in Spec_Ledger.
+- GUI 10.5, checkpoints 10.6/14.7 remain independently pending. No Golden re-recording, dependencies or public Rust API changes.
+
 - 标 `*` 的子任务是可选测试，可为更快的 MVP 跳过。不可跳过的测试：需求 2 第 5 条的写侧读回（8.11 的 Property 9②、8.12 的 Property 14、11.5 的 Property 22、条件成立时 13.4 的 Property 27）、逐字节对比（8.13 的 Property 16，11.5、12.3、12.4 的 Property 23）与 Corpus 核对（5.5、7.2、6.3 的 Property 5、7、8）。
 - 每个性质测试以注释 `// Feature: write-path-phase-3, Property N: <标题>` 标注；同一性质分层或分文件实现时每处都带同一标注。样本缺失时经 `common::missing` 报 skip，skip 不计为通过。
 - 规则坐实前，测试另以 `RuleSet::candidates()` 跑同一组生成器，并断言 Transaction 视同无可用 World_AABB；坐实后期望条目改由 `confirmed()` 算。

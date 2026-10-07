@@ -263,6 +263,12 @@ Phase-3 evidence: [database version](docs/evidence/2026-09-11-e3d-database-versi
 | `write::set_reference` / `set_reference_array` / `table_keys` | Type-16 / type-17 references and the keyed-table keys a record files |
 | `write::WriteOptions { templates }` / `MergeOptions` | Hand the schema over and the tables follow the write |
 
+## Unified write regression
+
+On Windows with PowerShell 7, run `pwsh -NoProfile -File tools/e3d/regression.ps1` to run Cargo tests, Clippy, documentation, offline scorer checks, and the three real E3D TTY gates in sequence. The alternate gate runs five rounds and Q15. Existing E3D installations, projects and drivers are required; override `-AMSProject`, `-TESProject`, `-GenModel`, `-L3Exe` and `-Format0Launcher` as needed.
+
+`-OfflineOnly` runs only Cargo and offline checks; it does not certify E3D TTY acceptance. `-OutputRoot` defaults to `D:\e3dio-regression`; each run creates a unique directory with `results.json`, `summary.md`, `manifest.json`, stage output and redacted original gate evidence. Project database copies remain in scratch subdirectories and are excluded from the evidence manifest. Source database directories and Golden hashes are checked before and after the run. A failed stage stops later stages and returns a nonzero exit code while retaining evidence. GUI acceptance remains a separate manual gate.
+
 ## Byte-order convention
 
 Supported E3D 2.1/3.1 database files use **big-endian** byte order (Fortran
