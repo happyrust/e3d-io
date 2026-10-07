@@ -515,6 +515,13 @@
 
 ### Unified regression acceptance (2026-10-07)
 
+### Post-merge closeout (2026-10-08)
+
+- [x] 合并 `main` 后重跑下游检查：`e3d-model` 主 crate 与 9 个 verify 变体共 10 项均通过 `cargo check --offline`，path override 指向当前工作树。此前 `with_derived` 失败确由分叉造成，合并后已消失。
+- [x] 缺失固定 fixture 的 SPAMAP 单元测试改为缺样本安全跳过，并通过定向测试。
+- [ ] 完整离线回归：当前受控 AMS 样本 SHA `3F8DED...` 与 Golden 记录 SHA `3CAB5D...` 不一致，18 个库副本 Golden 用例按设计拒绝比较；未重录 Golden。证据目录：`D:\e3dio-regression\20261008-012354-b708857a`。
+- 10.5 GUI、10.6 和 14.7 继续保持待办。
+
 - [x] Harden saved archive verification: reject empty/null, duplicate, absolute or escaping manifest paths, invalid lengths/hashes, and successful stages with nonzero exit codes or missing logs. Add read-only `regression_verify.ps1`; scorer selfchecks now 52 PASS, including re-hashed inconsistent-record cases. Full TTY and offline archives verify; offline/failed records cannot satisfy `-RequireTTY`. This revalidates saved evidence, does not rerun E3D, and leaves GUI dependencies unchanged.
 
 `1b0bbf9` complete run: Cargo 789/0/30, 134 result summaries including Doc-tests, 8 existing sample skip messages; Clippy/doc 63/25; TTY 39 PASS (213.278 s, Q13 161.437 s, Q14 9.113 s); alternate five rounds + Q15 PASS (84.208 s); unchanged FORMAT0 11 PASS (10.410 s). AMS/TES database directory inventories and Golden hashes unchanged; 304 archived evidence files re-hashed successfully. Scorer selfchecks 36 PASS and Rust integration PASS; independent offline runs never certify TTY. See `docs/evidence/2026-10-07-unified-regression.md`. D1–D8 unchanged; GUI 10.5, 10.6 and 14.7 remain pending.

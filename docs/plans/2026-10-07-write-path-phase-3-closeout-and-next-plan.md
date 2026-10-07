@@ -112,4 +112,6 @@ P0 随时可做。P1、P2 都在 P3 之前。P2 不依赖 P1，但放在 P1 之�
 
 ## 5. 执行记录
 
-（评审通过后按步填写。）
+- 2026-10-08：合并后运行 `regression.ps1 -OfflineOnly`。Cargo 汇总 835 passed / 20 failed / 35 ignored；失败均来自当前 AMS 样本 `3F8DED...` 与 Golden 记录样本 `3CAB5D...` 的漂移（以及一个缺失的可选 pinned fixture），没有重录 Golden。Clippy 完成且维持基线范围，doc 完成且产生 26 条文档警告；后续离线阶段因测试失败按入口规则未运行。统一回归证据保留于 `D:\e3dio-regression\20261008-012354-b708857a`。
+- 2026-10-08：将缺失 pinned fixture 的单元测试改为安全跳过；定向测试通过。以当前工作树替换 `e3d-io` 和 `e3d-attlib` 路径后，`e3d-model` 主 crate 与 9 个 verify 变体全部 `cargo check --offline` 通过。下游结果保留于 `D:\e3dio-downstream-results-20261008`。
+- P1 状态：下游复验完成；完整回归受样本漂移阻断，不能将 10.6/14.7 标为通过。GUI 10.5 仍待办。
