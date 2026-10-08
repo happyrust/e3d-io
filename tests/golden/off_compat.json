@@ -1,4 +1,11 @@
 {
+  "rerecorded": {
+    "on": "9c53a63fc5491fdf76ff56a9f8c2f3e12f4871cf",
+    "date": "2026-10-08",
+    "sample": { "ams8000_0001": { "len": 34037760, "sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "installed_last_write": "2026-10-06 02:52:32" } },
+    "entries": 1,
+    "reason": "The pinned sample 3CAB5D7D... is gone and the installed one moved; every entry not retired by another file was re-recorded on the current sample with tools/golden/record.ps1 (two runs agreed). Retired entries keep the hashes their retirements pin. The write code is that of 1b0bbf9 (one test-only change since), the last run that matched the 3CAB5D7D recordings."
+  },
   "recorded_on": "d040f1801d4e09b694f50d0d3ef715efca884b1a",
   "uncommitted_changes_under_src_or_tests": false,
   "tests": ["write_stage6_transaction", "write_stage6_merge", "write_stage6_set_by_name", "write_stage6_spread", "write_stage6_cli"],
@@ -18,7 +25,7 @@
     "write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership#0": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "C53D3EFFD9E41A22A77CCE34709B26983924900665860CD6C619ED86A8C5962B", "len": 34074624 },
     "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#0": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "4F4205C0BE9221D969D79F97DEDB1D268C57FB7452B4BEBB84207552A8D741BF", "len": 34056192 },
     "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#1": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "4F4205C0BE9221D969D79F97DEDB1D268C57FB7452B4BEBB84207552A8D741BF", "len": 34056192 },
-    "write_stage6_transaction::a_facade_rename_moves_the_name_and_rewrites_the_record#0": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "4FE0C19E174B73FFDD09113A71ACED337BF93D81C64ECC087E8D1A6DB0B911AA", "len": 34062336 },
+    "write_stage6_transaction::a_facade_rename_moves_the_name_and_rewrites_the_record#0": { "source": "ams8000_0001", "source_sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "sha256": "57CF0A965FA065C99250C6C34C933D59068FE23913ACCDC1C3E82E37B3904C6B", "len": 34062336 },
     "write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner#0": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "634CACB9A7E2F6B8DD0389AF66CA5C1D9C9F3FD232F372452BAC7D1EB7CE911D", "len": 34074624 },
     "write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners#0": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "8221F060152E2E81A850995FC159F274BDE7B15ED43C902FE6867EB3CE78411B", "len": 34101248 },
     "write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else#0": { "source": "ams8000_0001", "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "sha256": "8A4D34679B5D23A10136FBCE2E0EA1D3916F7D4973800AD98EDD6C9FBB75C9AE", "len": 34078720 },

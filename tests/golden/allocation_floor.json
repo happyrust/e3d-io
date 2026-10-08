@@ -1,4 +1,11 @@
 {
+  "rerecorded": {
+    "on": "9c53a63fc5491fdf76ff56a9f8c2f3e12f4871cf",
+    "date": "2026-10-08",
+    "sample": { "ams8000_0001": { "len": 34037760, "sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "installed_last_write": "2026-10-06 02:52:32" } },
+    "entries": 1,
+    "reason": "The pinned sample 3CAB5D7D... is gone and the installed one moved; every entry not retired by another file was re-recorded on the current sample with tools/golden/record.ps1 (two runs agreed). Retired entries keep the hashes their retirements pin. The write code is that of 1b0bbf9 (one test-only change since), the last run that matched the 3CAB5D7D recordings."
+  },
   "parent": "aacdcf9",
   "entries": {
     "write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused#0": {
@@ -69,8 +76,8 @@
     },
     "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#1": {
       "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "36D839AFF179D31BF29E6B3811FEF5AAE2A4E4F4C4E7612758EB439602A82ADA",
+      "source_sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342",
+      "sha256": "66199EF0D4242A6B7C386C6B73A50BBC480FE113095F026E4F5E43CB17E90E2F",
       "len": 34056192
     },
     "write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner#0": {
