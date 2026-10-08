@@ -519,7 +519,8 @@
 
 - [x] 合并 `main` 后重跑下游检查：`e3d-model` 主 crate 与 9 个 verify 变体共 10 项均通过 `cargo check --offline`，path override 指向当前工作树。此前 `with_derived` 失败确由分叉造成，合并后已消失。
 - [x] 缺失固定 fixture 的 SPAMAP 单元测试改为缺样本安全跳过，并通过定向测试。
-- [ ] 完整离线回归：当前受控 AMS 样本 SHA `3F8DED...` 与 Golden 记录 SHA `3CAB5D...` 不一致，18 个库副本 Golden 用例按设计拒绝比较；未重录 Golden。证据目录：`D:\e3dio-regression\20261008-012354-b708857a`。
+- [x] 上一条的跳过补打 `skipped: fixtures not installed: …`（与 `tests/common::missing` 同形）：此前静默 `return`，`regression.ps1` 数不到这条 skip，覆盖缺口不可见。
+- [ ] 完整离线回归：当前受控 AMS 样本 SHA `3F8DED...` 与 Golden 记录 SHA `3CAB5D...` 不一致，19 个库副本 Golden 用例按设计拒绝比较；未重录 Golden。证据目录：`D:\e3dio-regression\20261008-012354-b708857a`。
 - 10.5 GUI、10.6 和 14.7 继续保持待办。
 
 - [x] Harden saved archive verification: reject empty/null, duplicate, absolute or escaping manifest paths, invalid lengths/hashes, and successful stages with nonzero exit codes or missing logs. Add read-only `regression_verify.ps1`; scorer selfchecks now 52 PASS, including re-hashed inconsistent-record cases. Full TTY and offline archives verify; offline/failed records cannot satisfy `-RequireTTY`. This revalidates saved evidence, does not rerun E3D, and leaves GUI dependencies unchanged.
