@@ -1,6 +1,6 @@
 # 计划：E3D Studio M1（浏览 + 2.1 → 3.1 原样携带）开发
 
-状态：**评审通过**（2026-10-09 09:28，Plannotator 门 `approved`，无批注 → Q1–Q4 全按推荐项）→ S0 完成；S1 除 S1.6 外完成（S1.6 等 10.5 用完 E3D）；S2 完成；S3 代码与自动验证完成，界面条目待用户看过记 PASS；S4 的 3.1、3.2 完成（§5）
+状态：**评审通过**（2026-10-09 09:28，Plannotator 门 `approved`，无批注 → Q1–Q4 全按推荐项）→ S0 完成；S1 除 S1.6 外完成（S1.6 等 10.5 用完 E3D）；S2 完成；S3 代码与自动验证完成，界面条目待用户看过记 PASS；S4 的 3.1、3.2 完成（§5）。S4 剩余与 S5 的细化计划见 `2026-10-10-e3d-studio-m1-s4-s5-plan.md`（2026-10-10 Plannotator `approved`）
 日期：2026-10-09
 范围：`vendor/e3d-studio`（新 workspace：`e3d-convert` 已有，`e3d-studio` 应用待建）；`vendor/e3d-io-write`（`write-path` @ `172ab78`）只作依赖，不改源码。
 依据：`docs/plans/2026-09-30-e3d-studio-gui-design.md`（下称「设计」）、`docs/adr/0001-e3d21-to-31-verified-carry-over.md`、`docs/adr/0002-gui-and-converter-outside-e3d-io.md`、`docs/plans/2026-10-07-write-path-phase-3-closeout-and-next-plan.md` §P4、`docs/evidence/2026-10-08-post-merge-closeout.md`，以及本次审核（§1.3）。
