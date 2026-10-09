@@ -1,6 +1,6 @@
 # 计划：E3D Studio M1（浏览 + 2.1 → 3.1 原样携带）开发
 
-状态：**评审通过**（2026-10-09 09:28，Plannotator 门 `approved`，无批注 → Q1–Q4 全按推荐项）→ S0 完成；S1 除 S1.6 外完成，S1.3 的接受范围待用户确认（§5）
+状态：**评审通过**（2026-10-09 09:28，Plannotator 门 `approved`，无批注 → Q1–Q4 全按推荐项）→ S0 完成；S1 除 S1.6 外完成（S1.6 等 10.5 用完 E3D）；S2 完成（§5）
 日期：2026-10-09
 范围：`vendor/e3d-studio`（新 workspace：`e3d-convert` 已有，`e3d-studio` 应用待建）；`vendor/e3d-io-write`（`write-path` @ `172ab78`）只作依赖，不改源码。
 依据：`docs/plans/2026-09-30-e3d-studio-gui-design.md`（下称「设计」）、`docs/adr/0001-e3d21-to-31-verified-carry-over.md`、`docs/adr/0002-gui-and-converter-outside-e3d-io.md`、`docs/plans/2026-10-07-write-path-phase-3-closeout-and-next-plan.md` §P4、`docs/evidence/2026-10-08-post-merge-closeout.md`，以及本次审核（§1.3）。
@@ -133,5 +133,6 @@ S0 先做。S1、S2 可并行。S3 要 S2 写完和一次联网。S4 在 S3 之�
 
 - 2026-10-09 S0 完成。`vendor/e3d-studio` 下 `git init -b main`，`d70f6f7` 原样收录 workspace 与 `crates/e3d-convert`（18 个文件）；`c5705b4` 把 `.kiro/specs/e3d-studio-m1/.config.kiro` 从 `e3d-io-write` 移入（Q1-A，specId 不变）。基线：`cargo test --offline` 10 passed / 0 failed / 0 ignored；`cargo clippy --all-targets` 3 条（`parallel.rs:36` 可写成 `while let`，`report.rs:280` 与 `main.rs:600` 手写了 `is_multiple_of`）；`cargo doc --no-deps` 0 条。构建产物在共享的 `D:\Rust\target`。
 - 2026-10-09 S1 除 S1.6 外完成，证据 `e3d-studio/docs/evidence/2026-10-09-e3d-convert-corpus.md`。`e3d-studio` `fa729de`：S1.5 公开逐元素对照 `ElementComparer`，`verify_database` 改走同一段解码；`a9458cd`：语料测试 `crates/e3d-convert/tests/corpus.rs` 与证据。测试：常规 3 / 3（单元 11 / 11）；`--ignored` 三条全过——全语料 536 个库与 F5、F6、F8 一致（40.6 s），取消 `ams7351_0001` 174 ms 停下且无残留，317 个库落位后 SHA-256 与 3.1 树相同（34.6 s）。S1.2 CLI 六个项目合计与 F5 逐项一致，8 线程 72.7 s。
-  - 与设计不符一处：§5 第 4 条只写 `acp7048_0001` 先按 D2 接受，实跑 317 个里还有 7 份 `ams1112_0001*` 人工副本被拦（两树逐字节相同、F6 已点名它们带 SLADDR）。测试改为 8 个逐个接受后比 SHA-256，待用户确认 A（按 8 个接受，317 不变）或 B（人工副本移出对照集，比 310 个）。
+  - 与设计不符一处：§5 第 4 条只写 `acp7048_0001` 先按 D2 接受，实跑 317 个里还有 7 份 `ams1112_0001*` 人工副本被拦（两树逐字节相同、F6 已点名它们带 SLADDR）。测试改为 8 个逐个接受后比 SHA-256；2026-10-09 用户确认按此口径（A：8 个接受，317 不变）。
   - S1.6 未做：10.5 门的 E3D Design（`shadow_e3d31_aps_all\des.exe`）自 10-08 16:36 起一直开着，按本计划与 10.5 错开。
+- 2026-10-09 S2 完成，`e3d-studio` `313a5c8`：`.kiro/specs/e3d-studio-m1/` 的 `requirements.md`（11 条需求；需求 9 的 7 条与设计 §5 逐条对应，第 4 条按勘误写 Held_8）、`design.md`（落点、线程、组件、7 条性质、D# 落点表）、`tasks.md`（6 组覆盖 S1、S3–S7，S1.1–S1.5 打勾，带 Spec_Ledger）。D1–D14 未改。spec 含设计 §5 第 4 条的勘误，按 Q2-A 是否再过 Plannotator 待用户定（勘误本身用户已确认）。
