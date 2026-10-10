@@ -168,3 +168,13 @@ S6 只依赖 S1、S3，可与 S4、S5 并行。为了不打架：
 ## 5. 执行记录
 
 （按步追加：日期、提交、跑了什么、数字；与 spec 的 Spec_Ledger 和 M1 计划 §5 对应。）
+
+- 2026-10-10 **C 完成**（spec 3.6 打勾），`e3d-studio` `e9c4f91`。
+  - 落点与 §2.1 一致：`db/browse.rs` 的 `Browse` 实体（`OpenLibraries::Opened` 多持一个 `Entity<Browse>`，`current_browse()` 给面板；字段 `tree`、`loader`、`visible`——`trail` 留到 D 与 `Trail` 一起加）；`Loader::want / answered`（`answered` 只认 owner：gate 已保证到达的是最新一代，而 worker 会把窗口夹到成员数，答回的窗口未必等于请求的）；`TreeModel` 加 `parent` / `ancestors` / `line_of`；`panels/tree.rs` 的 `uniform_list` 渲染、`cx.defer_in` 报可见区、`ElementTree` 上下文的 `TreeUp / TreeDown / TreeCollapse / TreeExpand / TreeToggle`；选中变化 `scroll_to_item(Center)`（点选的行本就在视野里，不动）。
+  - 顺带改了 `TreeModel::wanted`：预取放宽的窗口不再圈进已读的槽（实跑看到 TPWL 13 个成员先读 `0..10` 再重读 `0..13`，改后是 `0..4` + `4..13`）。
+  - 读不出成员的 owner：`ElementFailed` 到了就把它折回去（否则未读槽会反复要），原文由 `Workspace` 放进状态栏与日志（locale 键 `Library.ElementFailed`）。
+  - 测试 `cargo test -p e3d-studio --offline` 28 / 0（+4：`Loader` 2 条、proptest「任意树 / 展开 / 可见区序列下在途至多一个且可见未读槽终被读到」、`ancestors`）；`cargo clippy --all-targets` e3d-studio 0、e3d-convert 3（基线）；`cargo doc --no-deps` 0。
+  - 界面实跑（证据 `docs/evidence/2026-10-09-e3d-studio-s4.md` 2026-10-10 节，截图 03–05）：`acp7048_0001` 点箭头 / 双击 / ↑ ↓ ← → Enter 全套；`ams5052_0001` 的 621 成员 CCTA 滚轮下滚，请求 `0..35 → 35..70 → 70..107 → 107..141 → 141..178 → 178..212`，每个到了才发下一个、首尾相接。「…」槽在截图里抓不到（毫秒级就填上）。
+  - 驱动注意事项（补 S3 证据那节）：这版 cua-driver 的 `click(pid, x, y)` 以客户区物理像素偏移计，不按截图比例换算；GPUI 不吃 PostMessage 点击，要 `delivery_mode: "foreground"`；`press_key(pid)` 的 PostMessage 按键能到；滚动要自己 `SetCursorPos` + `mouse_event(WHEEL)`；GPUI 的 UIA 提供者在窗口不在前台时常超时，截图用 `CopyFromScreen`。桌面坐标（`scope: "desktop"`）的点击会落到当时在前面的别的窗口，一次误击让 Chrome 下载了 `ams7351_0001` 的副本，已删。
+  - 3.10 用得上的数：`ams5052_0001`（CATA，77 810 页）里成员最多的是 `SECT /CNPESPECGEN_DESCRIPTIONS/SDTE =13244/218060`（24 104 个成员，WORLD 第 33 个成员 `CATA /CNPESPECGEN-NI` 的第 1 个成员）；`acp7048_0001` 最多的是一个 TMPL 42 个。`ams7351_0001`（CATA，604 643 页）没扫。
+  - 下一步 D（§2.2）。
