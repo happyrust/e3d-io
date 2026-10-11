@@ -110,6 +110,22 @@ pub trait ParamEnv {
         let _ = (key, subscript);
         None
     }
+
+    /// Whether `EXFAST` may keep 0 after this parameter-array miss.
+    ///
+    /// The default is yes (GATPAR 223: the array exists, the index does not).
+    /// A live element makes one exception: a `FITT` with no owning `SCTN`
+    /// answers `ODES`/`OPAR` as "no array" (202), and the fast path must
+    /// decline so the primitive is skipped instead of drawn at 0.
+    fn fast_path_missing_parameter_is_zero(&self, name: &str, subscript: Option<f64>) -> bool {
+        let _ = (name, subscript);
+        true
+    }
+
+    /// A direction-turn angle, the value `dopelib/DPEVAN` asks `EXEVRU` for
+    /// in degrees (unit 35). The live element fails this for a `FITT` whose
+    /// whole program is `ATTRIB RPRO <key>` and that key's `PTYP` is `DIST`.
+    fn direction_angle(&self, program: &[i32]) -> Option<f64>;
 }
 
 /// Which of the two stores an expression came out of.
@@ -314,6 +330,10 @@ impl ParamEnv for MapParamEnv {
             Some(index) if index.fract() == 0.0 => nth(values, index as i32),
             Some(_) => None,
         }
+    }
+
+    fn direction_angle(&self, program: &[i32]) -> Option<f64> {
+        crate::record::catalogue_pml::evaluate_words_full(program, self)
     }
 }
 

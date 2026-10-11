@@ -155,7 +155,9 @@ pub fn direction(
         // `dopelib/DPEVAN` -> `EXEVRU`: no `EXFAST` fast path, so a parameter
         // the instance does not have fails the angle (and with it the
         // direction) even when the program is a bare `( ATTRIB DESP[1 ] )`.
-        let angle = crate::record::catalogue_pml::evaluate_words_full(&program, env)?.to_radians();
+        // Unit 35 (degrees). A distance-typed `RPRO` cannot convert and the
+        // whole direction fails — `DPARAM` then uses +Y. Not the fast path.
+        let angle = env.direction_angle(&program)?.to_radians();
         if !angle.is_finite() {
             return None;
         }

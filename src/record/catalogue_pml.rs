@@ -515,7 +515,16 @@ fn evaluate(words: &[i32], env: &dyn ParamEnv, fast_path: FastPath) -> Option<f6
                     // `EXFAST`'s one concession: a parameter the instance does
                     // not have reads as 0 and the program goes on. See
                     // [`fast_path_eligible`].
-                    None if fast_path && is_parameter_array(&attribute.name) => 0.0,
+                    None
+                        if fast_path
+                            && is_parameter_array(&attribute.name)
+                            && env.fast_path_missing_parameter_is_zero(
+                                &attribute.name,
+                                subscript,
+                            ) =>
+                    {
+                        0.0
+                    }
                     None => return None,
                 };
                 if !value.is_finite() {

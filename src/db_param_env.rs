@@ -474,6 +474,27 @@ impl DbElementParamEnv {
         })
     }
 
+    /// `PTYP DIST` cannot be the degrees `DPEVAN` asks for. A missing row or
+    /// any other `PTYP` (including `ANGL`) is not this rejection.
+    fn design_property_ptype_is_distance(&self, key: &str) -> bool {
+        let Some(catalogue) = self.catalogue.as_ref() else {
+            return false;
+        };
+        let Some(table) = catalogue.get_element("DTRE").ok().flatten() else {
+            return false;
+        };
+        let Ok(rows) = table.members() else {
+            return false;
+        };
+        for row in rows {
+            if word_text(&row, "DKEY").as_deref() != Some(key) {
+                continue;
+            }
+            return word_text(&row, "PTYP").as_deref() == Some("DIST");
+        }
+        false
+    }
+
     /// 设计表里命中的那一行怎么读成数。
     ///
     /// **先认 `PPRO`，再认 `PURP`，最后认 `DPRO`。** 这一行的 `PPRO` 往往把
@@ -970,6 +991,68 @@ impl ParamEnv for DbElementParamEnv {
         }
         None
     }
+
+    fn fast_path_missing_parameter_is_zero(&self, name: &str, subscript: Option<f64>) -> bool {
+        let _ = subscript;
+        // Wall-door `FITT`s sit on `STWALL`, so the `SCTN` climb for `ODES`
+        // finds nothing (GATPAR 202). `EXFAST` does not turn 202 into 0, and
+        // the frame `SEXT`s that read `ODES[1]` then fail and are skipped —
+        // E3D's export of these doors is the panel alone. Other nouns keep
+        // the segment-3 zero: `/Copy-of-R211-M01` (a `FIXING`) is exact
+        // against B1 only while a missing owner array still reads as 0.
+        if name != "ODES" && name != "OPAR" {
+            return true;
+        }
+        let Some(design) = self.design.as_ref() else {
+            return true;
+        };
+        if design.element_type().ok().as_deref() != Some("FITT") {
+            return true;
+        }
+        match related_array(name) {
+            Some(array) => self.related_parameters(array).is_some(),
+            None => true,
+        }
+    }
+
+    fn direction_angle(&self, program: &[i32]) -> Option<f64> {
+        // Only wall-door `FITT`s. The same `PTYP DIST` turn also appears on
+        // FIXING `/Copy-of-R211-M01` (简图1-双开门, `ATTRIB RPRO G`); leaving
+        // that one on the segment-3 reading keeps it exact against B1.
+        // These doors' panel axis is `AXIS -Y ( ATTRIB RPRO H ) Z` and `H`
+        // is `PTYP DIST` (门开角度 stored as a distance). `DPEVAN` asks for
+        // degrees, the conversion fails, and `DPARAM` uses +Y — the panel
+        // stays in the wall. Reading 90 as degrees swings it out.
+        let fitting = self
+            .design
+            .as_ref()
+            .and_then(|design| design.element_type().ok())
+            .is_some_and(|noun| noun == "FITT");
+        if fitting {
+            if let Some(key) = sole_design_property(program) {
+                if self.design_property_ptype_is_distance(&key) {
+                    return None;
+                }
+            }
+        }
+        crate::record::catalogue_pml::evaluate_words_full(program, self)
+    }
+}
+
+/// A direction angle whose whole program is `ATTRIB RPRO <key>` (optionally
+/// wrapped in the parentheses `render` adds). Anything with arithmetic stays
+/// on the ordinary full evaluator.
+fn sole_design_property(program: &[i32]) -> Option<String> {
+    let text = crate::record::catalogue_pml::render(program)?;
+    let mut text = text.trim().to_string();
+    if text.starts_with('(') && text.ends_with(')') {
+        text = text[1..text.len() - 1].trim().to_string();
+    }
+    let rest = text.strip_prefix("ATTRIB RPRO ")?.trim();
+    if rest.is_empty() || rest.contains(' ') || rest.contains('[') {
+        return None;
+    }
+    Some(rest.to_string())
 }
 
 /// 一个 UDA 值读成数：标量直接给（`[1]` 也算是它自己，与 `ATTRIB PARA` 写成 `[1, 1]`
