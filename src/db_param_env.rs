@@ -248,26 +248,33 @@ impl DbElementParamEnv {
         })
     }
 
-    /// `DESP n` / `ATTRIB DESP[n]`：设计构件的第 n 个设计参数，1 起。
+    /// `ATTRIB DESP[n]`：设计构件的第 n 个设计参数，1 起；**只认存了的槽位**。
     ///
-    /// 先问设计构件；该槽位未存储、但当前目录件的 `DTRE` 明确声明了
-    /// `PURP=DESP, NUMB=n` 时，按目录表达式的数值空槽语义返回 0。
+    /// 这就是 `exppdms/GATPAR`（core.dll `0x51B228F`）：`DGOTO(设计构件)` →
+    /// `GATRAR(DESP)` 读元素自己的实数数组，`n > 个数`（空数组 = 0 个）或 `n ≤ 0`
+    /// 都是 223 号错——全程没有一处读 `DTRE` / `DTSE` / `DPRO`。所以这里对未存
+    /// 的槽位答 `None`，由求值器决定它是什么：
+    /// [`crate::record::catalogue_pml::evaluate_words`] 照 `exppdms/EXFAST` 的
+    /// 快路把它当 0 继续算，照全量求值器让整条公式失败。
     ///
-    /// 这个回落由原生 E3D 对拍钉住：ams7999 的阀 `/1RCV071VP` 在 ATT 中
-    /// `DESP=unset`，但原生 RVM 仍生成阀前后约 130/126 mm 的管段，且 APOS/LPOS
-    /// 有效。它的 PTRE 是 `DESP[1] + PARA[2] * 0.5`，原生连接点距中心 115 mm，
-    /// 正好是 `0 + 230 * 0.5`；若把同行 `DPRO=230` 当运行时值，结果会错误地变成
-    /// 345 mm。Core3D 的 DESPRE 原始属性分支也把未存储 DESP 报为 unset，二者
-    /// 一致说明 `DPRO` 是目录定义/交互默认值，不是该表达式的运行时替代值。
+    /// 两条原生对拍都落在这个读法上。ams7999 `/1RCV071VP` 在 ATT 中 `DESP=unset`，
+    /// 原生 RVM 仍生成阀前后约 130/126 mm 的管段：它的 PTRE 是
+    /// `DESP[1] + PARA[2] * 0.5`，只有常量 / ATTRIB / 四则，走快路，连接点距中心
+    /// 115 mm = `0 + 230 * 0.5`——不是同行 `DPRO=230` 给的 345 mm。ams7999
+    /// `/1WCC318VN` 同样 `DESP=unset`，PTCA 4–7 的
+    /// `PX = ( 0.1 * ATTRIB PARA[13 ] * SIN ( ATTRIB DESP[1 ] ) )` 带函数、走不了
+    /// 快路，E3D 日志 `unable to evaluate catalogue expression for attribute PX`
+    /// 并按 0 画——同一目录的 `DTRE` 行明明声明了 `PURP=DESP NUMB=1 DPRO=( 0 )`，
+    /// 也没有被拿来顶。此前这里按「DTRE 声明了就是 0」回落，对前者碰巧对，对后者
+    /// 把 `PY = -52.5` 画到了 E3D 画成 0 的地方（`plant-model-5/outputs/
+    /// rvm-check-20261010/ida/README.md` §③）。
     fn design_parameter(&self, index: i32) -> Option<f64> {
         self.stored_design_parameter(index)
-            .or_else(|| self.declared_design_parameter(index).then_some(0.0))
     }
 
-    /// Read an actually stored `DESP` slot without applying expression-time
-    /// numeric-empty semantics.  RPRO table selection needs this distinction:
-    /// an absent design value selects the DATA row's `DPRO`, whereas an
-    /// ordinary catalogue expression reads the same declared empty slot as 0.
+    /// Read an actually stored `DESP` slot. RPRO table selection reads this
+    /// directly: an absent design value selects the DATA row's `DPRO`
+    /// ([`Self::design_property_row`]), which is the one place `DPRO` has a say.
     fn stored_design_parameter(&self, index: i32) -> Option<f64> {
         let slot = usize::try_from(index).ok()?.checked_sub(1)?;
         match self
@@ -281,24 +288,6 @@ impl DbElementParamEnv {
             }
             _ => None,
         }
-    }
-
-    /// Whether the catalogue design table declares this `DESP` slot.
-    fn declared_design_parameter(&self, index: i32) -> bool {
-        self.nested(|| {
-            let catalogue = self.catalogue.as_ref()?;
-            let table = catalogue.get_element("DTRE").ok().flatten()?;
-            for row in table.members().ok()? {
-                if word_text(&row, "PURP").as_deref() != Some(purpose::DESIGN_PARAM)
-                    || whole_number(&row, "NUMB") != Some(index)
-                {
-                    continue;
-                }
-                return Some(true);
-            }
-            Some(false)
-        })
-        .unwrap_or(false)
     }
 
     /// `ATTRIB DDES[n]`：见 [`NUMERIC_DESIGN_PARAMS`]。
@@ -808,10 +797,17 @@ impl ParamEnv for DbElementParamEnv {
     /// 元组操作数各波段（Core3D `pplib/DECARG`）：`PARAM` 问目录件、`DESP` 问设计
     /// 构件、`IPARAM` 走保温选件；`APARAM`/`ADESP`/`OPARAM`/`ODESP` 问连接对象 / 属主截面
     /// （[`Self::related_element`]），越界与 `PARAM` 同样折成 0。
+    ///
+    /// `DESP` 越界也折成 0：元组形只有 `pplib/YPARUN` 的「四整数参数形」一条读法
+    /// （Core3D `0x103C4BB4`），读不出就是整个属性值 0.0——没有 PML 形那条
+    /// 快路 / 全量之分（见 [`Self::design_parameter`]）。没有设计构件仍是 `None`。
     fn parameter(&self, array: ParamArray, n: i32) -> Option<f64> {
         match array {
             ParamArray::Para => self.param(n),
-            ParamArray::Desp => self.design_parameter(n),
+            ParamArray::Desp => {
+                self.design.as_ref()?;
+                Some(self.stored_design_parameter(n).unwrap_or(0.0))
+            }
             ParamArray::IPar => self.iparam(n),
             ParamArray::APar | ParamArray::ADes | ParamArray::OPar | ParamArray::ODes => {
                 let index = usize::try_from(n).ok()?.checked_sub(1)?;

@@ -414,10 +414,53 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
 /// not end on exactly one value, and when the arithmetic leaves the reals (a
 /// division by an unset parameter is a degenerate to report, not an infinity to
 /// pass on). [`OP_ATANT`] declines too — see [`apply_numeric`].
+///
+/// One reading is E3D's rather than a guess of ours: a program the fast path
+/// [`fast_path_eligible`] would take reads a parameter-array entry the instance
+/// does not have (`ATTRIB DESP[1 ]` on a valve with no `DESP`) as 0 and goes on,
+/// exactly as `exppdms/EXFAST` does. Everywhere else the same miss is `None`.
+///
+/// This is the `pplib/YPARUN` reading — a catalogue **attribute** whose value
+/// is a program (`PX`, `PDIS`, `PHEI`, …). Programs embedded in a direction /
+/// position specification (`PTCD`'s angles) never see the fast path; those go
+/// through [`evaluate_words_full`].
 pub fn evaluate_words(words: &[i32], env: &dyn ParamEnv) -> Option<f64> {
-    let mut stack: Vec<Value> = Vec::new();
+    evaluate(words, env, FastPath::AsYparun)
+}
 
-    for step in parse(words)? {
+/// [`evaluate_words`] without `EXFAST`'s concession: a parameter the instance
+/// does not have is fatal whatever the program's shape.
+///
+/// `dopelib/DPEVAN` (core.dll `0x519D16D`) hands the angle inside `E ( ATTRIB
+/// DESP[1 ] ) N` straight to `exprlib/EXEVRU`; only `pplib/YPARUN` tries
+/// `EXFAST` first. So on a valve with no `DESP` the attribute `PX = ( 0.1 *
+/// ATTRIB PARA[13 ] * SIN ( ATTRIB DESP[1 ] ) )` and the direction `E ( ATTRIB
+/// DESP[1 ] ) N` both fail — but a direction `E ( ATTRIB DESP[1 ] + 10 ) N`
+/// fails too, where the same program as an attribute would read 10. E3D's
+/// export log for `/1WCC318VN` shows it: `PX` / `PY` each get a `parameter
+/// number ( 1 ) out of range` line (the fast path tried and cleared it) and an
+/// `unable to evaluate` line; `PTCD` gets only the `unable to evaluate` line.
+/// `plant-model-5/outputs/rvm-check-20261010/ida/README.md` §③.3, §④.
+pub fn evaluate_words_full(words: &[i32], env: &dyn ParamEnv) -> Option<f64> {
+    evaluate(words, env, FastPath::Never)
+}
+
+/// Whether `exppdms/EXFAST` gets a look at the program before the full
+/// evaluator does.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FastPath {
+    /// `pplib/YPARUN`: try the fast path when the program's shape allows.
+    AsYparun,
+    /// `dopelib` / anything that calls `EXEVRU` directly.
+    Never,
+}
+
+fn evaluate(words: &[i32], env: &dyn ParamEnv, fast_path: FastPath) -> Option<f64> {
+    let mut stack: Vec<Value> = Vec::new();
+    let steps = parse(words)?;
+    let fast_path = fast_path == FastPath::AsYparun && fast_path_eligible(&steps);
+
+    for step in steps {
         match step {
             Step::Number(value) => stack.push(Value::Number(value)),
             Step::Text(value) => stack.push(Value::Text(value)),
@@ -467,7 +510,14 @@ pub fn evaluate_words(words: &[i32], env: &dyn ParamEnv) -> Option<f64> {
                         ..reference
                     });
                 }
-                let value = value?;
+                let value = match value {
+                    Some(value) => value,
+                    // `EXFAST`'s one concession: a parameter the instance does
+                    // not have reads as 0 and the program goes on. See
+                    // [`fast_path_eligible`].
+                    None if fast_path && is_parameter_array(&attribute.name) => 0.0,
+                    None => return None,
+                };
                 if !value.is_finite() {
                     return None;
                 }
@@ -481,6 +531,89 @@ pub fn evaluate_words(words: &[i32], env: &dyn ParamEnv) -> Option<f64> {
         [Value::Number(only)] if only.is_finite() => Some(*only),
         _ => None,
     }
+}
+
+/// The attributes `exppdms/GATPAR` serves: the parameter arrays whose
+/// Dictionary unit is `UNIPAR` (the unit travels with the entry). `EXFAST`
+/// routes an `ATTRIB` of one of these through `GATPAR`; every other attribute
+/// goes through `GATREA`, whose failures end the fast path instead.
+const PARAMETER_ARRAYS: &[&str] = &[
+    "PARA", "DESP", "IPAR", "CPAR", "DDES", "APAR", "ADES", "OPAR", "ODES",
+];
+
+fn is_parameter_array(name: &str) -> bool {
+    PARAMETER_ARRAYS.contains(&name)
+}
+
+/// Deepest the fast path's value stack may get: `exppdms/EXFAST` keeps five
+/// slots and gives up when a push would need the fifth.
+const FAST_PATH_STACK: usize = 4;
+
+/// Whether `exppdms/EXFAST` (core.dll `0x51A6EBE`) would run this program
+/// rather than hand it to the full evaluator — and with it, whether a parameter
+/// the instance does not have reads as 0.
+///
+/// E3D evaluates a catalogue expression twice over: `pplib/YPARUN` tries the
+/// fast path first and only falls back to `exprlib/EXEVRD` when the fast path
+/// declines. The fast path knows nothing but number constants, `ATTRIB` of a
+/// real attribute with a single subscript (the `[-1, -1]`, `[n, n]` and
+/// `[1, 1]` shapes, each closed by `1601 1701`), and `- + - * /` on a stack
+/// of at most four values. Inside it, an `ATTRIB PARA[n]` / `ATTRIB DESP[n]`
+/// that `GATPAR` cannot answer (223, parameter number out of range) prints
+/// `Catalogue error … DESP parameter number ( n ) out of range`, **clears the
+/// error and keeps the 0.0 `GATPAR` left on the stack** — the program finishes
+/// and its value is used. The full evaluator makes the same miss fatal, and
+/// `YPARUN` then prints `unable to evaluate catalogue expression for attribute
+/// …` and takes 0 for the whole attribute.
+///
+/// So `( ATTRIB DESP[1 ] + ATTRIB PARA[2 ] * 0.5 )` on a valve with no `DESP`
+/// is `0 + PARA[2] * 0.5` (ams7999 `/1RCV071VP`'s connection points sit exactly
+/// there), while `( 0.1 * ATTRIB PARA[13 ] * SIN ( ATTRIB DESP[1 ] ) )` on the
+/// same kind of valve is unresolved — the `SIN` sends it down the full path,
+/// where the missing parameter is an error (ams7999 `/1WCC318VN`, `PX` 0 and
+/// `PY` 0 where a 0-degree reading would have given `-52.5`). Both are in
+/// `plant-model-5/outputs/rvm-check-20261010/ida/README.md` §③ with the
+/// decompiled `EXFAST` / `GATPAR` beside them.
+///
+/// The unit-class check `EXFAST` also makes (`KCONDM` ∈ {0, 11, 21}) is not
+/// modelled: catalogue numbers are plain or distance / angle, and all three
+/// pass it.
+fn fast_path_eligible(steps: &[Step]) -> bool {
+    let mut depth = 0usize;
+    for step in steps {
+        match step {
+            Step::Number(_) => depth += 1,
+            Step::Attribute(attribute) => {
+                // The owner-chain shape ends in `1602`, not `1601 1701`.
+                if !attribute.owners.is_empty() {
+                    return false;
+                }
+                if attribute.subscript_from_stack {
+                    if depth == 0 {
+                        return false;
+                    }
+                    depth -= 1;
+                }
+                depth += 1;
+            }
+            Step::Operator(OP_NEGATE) => {
+                if depth == 0 {
+                    return false;
+                }
+            }
+            Step::Operator(OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE) => {
+                if depth < 2 {
+                    return false;
+                }
+                depth -= 1;
+            }
+            Step::Text(_) | Step::Operator(_) => return false,
+        }
+        if depth > FAST_PATH_STACK {
+            return false;
+        }
+    }
+    depth == 1
 }
 
 /// Catalogue conditions travel through logical and text values before MAT
@@ -1789,21 +1922,102 @@ mod tests {
         assert_eq!(evaluate_words(scaled, &env), Some(12.0));
     }
 
-    /// An attribute the environment cannot answer is an admitted gap, and the
-    /// gap swallows the whole formula rather than standing in for a term.
+    /// `( ATTRIB PARA[5 ] + ATTRIB PARA[4 ] )` is a program `exppdms/EXFAST`
+    /// runs itself, and there a parameter `GATPAR` cannot answer is 0 and the
+    /// sum goes on — E3D prints `parameter number ( 4 ) out of range` and
+    /// uses the value anyway. ams7999 `/1RCV071VP` (no `DESP`, PTRE
+    /// `DESP[1] + PARA[2] * 0.5`) has its connection points at exactly
+    /// `0 + PARA[2] * 0.5` in the native RVM.
     #[test]
-    fn an_unanswered_attribute_takes_the_whole_formula_with_it() {
+    fn a_missing_parameter_reads_as_zero_on_the_fast_path() {
         let words = &[
             33, 1, 101, 6, 20480, 0, 3, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 32768,
             0, 2, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 802,
         ];
         // Only one of the two `PARA` subscripts is registered.
         let env = MapParamEnv::new().set_attribute("PARA[5]", 7.0);
-        assert_eq!(evaluate_words(words, &env), None);
-        assert!(
-            render(words).is_some(),
-            "it still prints; only the number is missing"
+        assert_eq!(evaluate_words(words, &env), Some(7.0));
+        assert!(render(words).is_some(), "it prints as before");
+    }
+
+    /// The same two parameters with a `SIN` between them: the fast path does
+    /// not know `SIN`, declines the program, and the full evaluator makes the
+    /// missing parameter fatal. ams7999 `/1WCC318VN` (no `DESP`) gets `PX` and
+    /// `PY` from `( … * SIN ( ATTRIB DESP[1 ] ) )` / `( … * COS ( … ) )`, and
+    /// E3D logs `unable to evaluate catalogue expression for attribute PY`
+    /// and draws it at 0 — not at the `-52.5` a 0-degree reading would give.
+    #[test]
+    fn a_missing_parameter_is_fatal_off_the_fast_path() {
+        let words = &[
+            34, 1, 101, 6, 20480, 0, 3, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 32768,
+            0, 2, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 901, 802,
+        ];
+        assert_eq!(
+            render(words).as_deref(),
+            Some("( ATTRIB PARA[5 ] + SIN ( ATTRIB PARA[4 ] ) )")
         );
+        let missing = MapParamEnv::new().set_attribute("PARA[5]", 7.0);
+        assert_eq!(evaluate_words(words, &missing), None);
+        let present = missing.set_attribute("PARA[4]", 30.0);
+        assert_eq!(evaluate_words(words, &present), Some(7.5));
+    }
+
+    /// Only the parameter arrays get the fast path's concession: `GATPAR`
+    /// serves those, and it is `GATPAR`'s error the fast path clears. A plain
+    /// attribute goes through `GATREA`, whose failure ends the fast path and
+    /// leaves the full evaluator to fail the program.
+    #[test]
+    fn a_missing_plain_attribute_is_fatal_even_on_the_fast_path() {
+        // `( ATTRIB PARA[5 ] + ATTRIB ANGL )`; 773119 is `ANGL`.
+        let words = &[
+            26, 1, 101, 6, 20480, 0, 3, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 106, 2,
+            773119, 1, 1, 0, 1601, 1701, 802,
+        ];
+        assert_eq!(
+            render(words).as_deref(),
+            Some("( ATTRIB PARA[5 ] + ATTRIB ANGL )")
+        );
+        let env = MapParamEnv::new().set_attribute("PARA[5]", 7.0);
+        assert_eq!(evaluate_words(words, &env), None);
+        assert_eq!(
+            evaluate_words(words, &env.set_attribute("ANGL", 90.0)),
+            Some(97.0)
+        );
+    }
+
+    /// What the fast path takes, step for step: constants, single-subscript
+    /// attributes, the four operators and negation, at most four values deep.
+    #[test]
+    fn the_fast_path_takes_exactly_what_exfast_does() {
+        let steps = |words: &[i32]| parse(words).expect("a program");
+        // `( ATTRIB PARA[5 ] + ATTRIB PARA[4 ] )`.
+        assert!(fast_path_eligible(&steps(&[
+            33, 1, 101, 6, 20480, 0, 3, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 32768,
+            0, 2, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 802,
+        ])));
+        // `( - ATTRIB PARA[5 ] )`.
+        assert!(fast_path_eligible(&steps(&[
+            18, 1, 101, 6, 20480, 0, 3, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 801,
+        ])));
+        // A function.
+        assert!(!fast_path_eligible(&steps(&[
+            18, 1, 101, 6, 20480, 0, 3, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 901,
+        ])));
+        // An owner chain (`1602` where `1601 1701` would be).
+        assert!(!fast_path_eligible(&steps(&[
+            20, 1, 106, 4, 816521, 1, 500, 0, 1602, 10, 2, 0, 34, 642049, 1, 5, 18, 641779, 6,
+            1701,
+        ])));
+        // Five constants on the stack before the first operator.
+        assert!(!fast_path_eligible(&steps(&[
+            41, 1, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0,
+            6, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6, 802, 802, 802, 802,
+        ])));
+        // Four is still inside the five slots.
+        assert!(fast_path_eligible(&steps(&[
+            33, 1, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0,
+            6, 101, 6, 16384, 0, 1, 0, 6, 802, 802, 802,
+        ])));
     }
 
     /// `ATANT`'s argument order is not pinned, so it declines rather than

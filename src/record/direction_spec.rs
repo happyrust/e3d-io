@@ -152,7 +152,10 @@ pub fn direction(
         let length = usize::try_from(*rest.first()?).ok()?;
         let program = rest.get(..length)?;
         let program: Vec<i32> = program.iter().map(|word| *word as i32).collect();
-        let angle = crate::record::catalogue_pml::evaluate_words(&program, env)?.to_radians();
+        // `dopelib/DPEVAN` -> `EXEVRU`: no `EXFAST` fast path, so a parameter
+        // the instance does not have fails the angle (and with it the
+        // direction) even when the program is a bare `( ATTRIB DESP[1 ] )`.
+        let angle = crate::record::catalogue_pml::evaluate_words_full(&program, env)?.to_radians();
         if !angle.is_finite() {
             return None;
         }
@@ -190,7 +193,8 @@ fn component_direction(
         let axis = direction_vector(code)?;
         let length = usize::try_from(*tail.first()?).ok()?;
         let program: Vec<i32> = tail.get(..length)?.iter().map(|word| *word as i32).collect();
-        let scale = crate::record::catalogue_pml::evaluate_words(&program, env)?;
+        // Same `dopelib` route as the turn angles: `EXEVRU`, no fast path.
+        let scale = crate::record::catalogue_pml::evaluate_words_full(&program, env)?;
         if !scale.is_finite() {
             return None;
         }
@@ -247,6 +251,57 @@ mod tests {
             Some("( ATTRIB DESP[2 ] )")
         );
         assert_eq!(direction(&words, &env), Some([1.0, 0.0, 0.0]));
+    }
+
+    /// The same `X ( ATTRIB DESP[2] ) Z` on an instance that has no `DESP[2]`
+    /// is **unresolved**, not a zero-degree turn. The bare `( ATTRIB DESP[2 ] )`
+    /// is a program `exppdms/EXFAST` would read as 0 — as a catalogue attribute
+    /// it does (`pplib/YPARUN`) — but `dopelib/DPEVAN` evaluates direction
+    /// angles through `EXEVRU` alone, where the missing parameter is error 223.
+    /// ams7999 `/1WCC318VN` PTCA 4–7 (`E ( ATTRIB DESP[1 ] ) N`, valve with no
+    /// `DESP`): E3D logs `unable to evaluate … PTCD` with no `out of range`
+    /// line and draws the actuator along the `DPARAM` fallback +Y, not along
+    /// the +X a 0-degree reading gives.
+    #[test]
+    fn a_missing_parameter_in_a_turn_angle_is_unresolved_not_zero_degrees() {
+        let words = [
+            24,
+            5,
+            2,
+            22,
+            11,
+            17,
+            1,
+            101,
+            6,
+            0,
+            0,
+            1_073_742_848,
+            0,
+            0,
+            106,
+            2,
+            860_359,
+            u32::MAX,
+            u32::MAX,
+            0,
+            1601,
+            1701,
+            15,
+            61,
+        ];
+        let program: Vec<i32> = words[5..22].iter().map(|word| *word as i32).collect();
+        assert_eq!(
+            crate::record::catalogue_pml::evaluate_words(&program, &MapParamEnv::new()),
+            Some(0.0),
+            "as an attribute the fast path reads the hole as 0"
+        );
+        assert_eq!(direction(&words, &MapParamEnv::new()), None);
+        assert_eq!(
+            direction(&words, &MapParamEnv::new().set_attribute("DESP[2]", 90.0))
+                .map(|d| d.map(|c| (c * 1e9).round() / 1e9)),
+            Some([0.0, 0.0, 1.0])
+        );
     }
 
     /// SLYK `/CIR-FILEXFILL-HOUSE-PT` P5 stores `X ( 0.7 * ATTRIB RPRO LENG )
