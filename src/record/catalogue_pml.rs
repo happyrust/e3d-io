@@ -68,6 +68,20 @@ const PROGRAM_MARKER: i32 = 1;
 const OP_PUSH_NUMBER: i32 = 101;
 const OP_ATTRIBUTE: i32 = 106;
 const OP_PUSH_TEXT: i32 = 118;
+/// The constant `PI`, an operand that takes no words of its own (0x6F; the
+/// earlier `parse-pdms-db` reader spelt the same code `PI`).
+///
+/// The pipe-support saddles `/NPHS-SU-GMSE-A/B/C` (ams7999 `23984/99018` …)
+/// write every arc point of their `SRTO` rings through it: `P6.PX` is
+/// `( ( ATTRIB PARA[2 ] + ATTRIB PARA[4 ] ) / 2 * SIN ( 180 * ATTRIB PARA[6 ] /
+/// ( PI * ( ATTRIB PARA[2 ] + ATTRIB PARA[4 ] ) ) ) )` — the arc length `I`
+/// turned into half the sweep angle in degrees — and the `PTCD` of the same
+/// point turns `X` toward `-Z` by that angle. Unread, the whole program was
+/// declined: `PX` / `PZ` fell to 0 (`pplib/YPARUN`), the direction to `+Y`
+/// (`pplib/DPARAM`), both axes of every saddle ring landed on the origin along
+/// `+Y`, and `torus_frame` wrote the ring off as degenerate. ZONE 66457 lost
+/// all 131 saddles (171 `RectangularTorus` records) that way.
+const OP_PI: i32 = 111;
 /// Numeric equality. The `case 401` arm of Core's expression interpreter
 /// (`core.dll` `sub_51B4976`, reached from `exprlib/EXEVRE` at `0x51B485A`)
 /// does not compare bits — it asks `exprlib/EXRCTL` (`0x51D3B32`) for a slack
@@ -309,6 +323,7 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             OP_PUSH_NUMBER => parse_number(&program[cursor..])?,
             OP_ATTRIBUTE => parse_attribute(&program[cursor..])?,
             OP_PUSH_TEXT => parse_text(&program[cursor..])?,
+            OP_PI => (Step::Operator(OP_PI), 1),
             OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
             | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_ABS_REAL
             | OP_MAX | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_LESS_THAN | OP_GREATER_EQUAL
@@ -366,6 +381,7 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
                     number: None,
                 });
             }
+            Step::Operator(OP_PI) => stack.push(Term::atom("PI".to_string())),
             Step::Operator(OP_SIN) => apply_function("SIN", &mut stack)?,
             Step::Operator(OP_COS) => apply_function("COS", &mut stack)?,
             Step::Operator(OP_TAN) => apply_function("TAN", &mut stack)?,
@@ -710,6 +726,7 @@ fn apply_value(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
 /// nothing today and admits the gap.
 fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
     let value = match operator {
+        OP_PI => std::f64::consts::PI,
         OP_NEGATE => -stack.pop()?.number()?,
         OP_SIN => stack.pop()?.number()?.to_radians().sin(),
         OP_COS => stack.pop()?.number()?.to_radians().cos(),
@@ -1929,6 +1946,76 @@ mod tests {
         ];
         let env = MapParamEnv::new().set_attribute("PARA[20]", 24.0);
         assert_eq!(evaluate_words(scaled, &env), Some(12.0));
+    }
+
+    /// ams7999 `/NPHS-SU-PTSE` P6 (`23984/99015`), the arc point of the saddle
+    /// ring `SRTO 23984/99019`: `PX` / `PZ` place it at half the sweep angle
+    /// round the pipe, the angle itself being `180 * I / ( PI * ( OD + t ) )`
+    /// degrees. With `PARA = [150, 168.3, 10, 3.4, 150, 45, 175.1, 0.2]`
+    /// (`/NPSU168/10S/A`) that is 15.0166°, and E3D's own RVM record for
+    /// `/1WCC-R220.003/ATTA-02` sweeps exactly twice it (0.52417 rad) at
+    /// centre radius 85.85. Opcode 111 was unread and all three programs
+    /// were declined.
+    #[test]
+    fn evaluates_pi_in_the_saddle_arc_programs() {
+        let px = &[
+            100, 1, 101, 6, 0, 0, 1073742848, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6,
+            1048576, 0, 1073742849, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 802, 101, 6, 0, 0,
+            1073742848, 0, 0, 805, 101, 6, 425984, 0, 1073742854, 0, 0, 101, 6, 1572864, 0,
+            1073742849, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 804, 111, 101, 6, 0, 0,
+            1073742848, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 1048576, 0,
+            1073742849, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 802, 804, 805, 901, 804,
+        ];
+        let pz = &[
+            101, 1, 101, 6, 0, 0, 1073742848, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6,
+            1048576, 0, 1073742849, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 802, 101, 6, 0, 0,
+            1073742848, 0, 0, 805, 101, 6, 425984, 0, 1073742854, 0, 0, 101, 6, 1572864, 0,
+            1073742849, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 804, 111, 101, 6, 0, 0,
+            1073742848, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 1048576, 0,
+            1073742849, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 802, 804, 805, 902, 804, 801,
+        ];
+        // The angle inside the same point's `PTCD` (`X ( … ) -Z`), count word and all.
+        let angle = &[
+            59, 1, 101, 6, 425984, 0, 1073742854, 0, 0, 101, 6, 1572864, 0, 1073742849, 0, 0, 106,
+            2, 564289, -1, -1, 0, 1601, 1701, 804, 111, 101, 6, 0, 0, 1073742848, 0, 0, 106, 2,
+            564289, -1, -1, 0, 1601, 1701, 101, 6, 1048576, 0, 1073742849, 0, 0, 106, 2, 564289,
+            -1, -1, 0, 1601, 1701, 802, 804, 805,
+        ];
+        assert_eq!(
+            render(px).as_deref(),
+            Some(
+                "( ( ATTRIB PARA[2 ] + ATTRIB PARA[4 ] ) / 2 * SIN ( 180 * ATTRIB PARA[6 ] / \
+                 ( PI * ( ATTRIB PARA[2 ] + ATTRIB PARA[4 ] ) ) ) )"
+            )
+        );
+        assert_eq!(
+            render(angle).as_deref(),
+            Some("( 180 * ATTRIB PARA[6 ] / ( PI * ( ATTRIB PARA[2 ] + ATTRIB PARA[4 ] ) ) )")
+        );
+        let env = MapParamEnv::new()
+            .set_attribute("PARA[2]", 168.3)
+            .set_attribute("PARA[4]", 3.4)
+            .set_attribute("PARA[6]", 45.0);
+        let half_sweep_deg = 180.0 * 45.0 / (std::f64::consts::PI * 171.7);
+        let got = evaluate_words_full(angle, &env).expect("PI reads");
+        assert!((got - half_sweep_deg).abs() < 1.0e-9, "{got}");
+        let centre_radius = 171.7 / 2.0;
+        let got = evaluate_words(px, &env).expect("PX reads");
+        assert!(
+            (got - centre_radius * half_sweep_deg.to_radians().sin()).abs() < 1.0e-9,
+            "{got}"
+        );
+        let got = evaluate_words(pz, &env).expect("PZ reads");
+        assert!(
+            (got + centre_radius * half_sweep_deg.to_radians().cos()).abs() < 1.0e-9,
+            "{got}"
+        );
+        // A bare `PI` is a program of one operand.
+        assert_eq!(render(&[3, 1, 111]).as_deref(), Some("( PI )"));
+        assert_eq!(
+            evaluate_words(&[3, 1, 111], &MapParamEnv::new()),
+            Some(std::f64::consts::PI)
+        );
     }
 
     /// `( ATTRIB PARA[5 ] + ATTRIB PARA[4 ] )` is a program `exppdms/EXFAST`
