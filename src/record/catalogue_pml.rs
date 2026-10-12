@@ -134,6 +134,20 @@ const OP_MIN: i32 = 1009;
 const OP_MATCH: i32 = 1308;
 const OP_TRIM: i32 = 1314;
 const OP_LOGICAL_STRING: i32 = 1410;
+/// Real `UNSET ( x )`. `sub_51B4976` case 1802 (`0x70A`) pops one real
+/// (`exprlib/EXPORE`) and pushes a logical (`EXPULE`): true when that pop's
+/// error is 223, and the error is cleared; a real that arrived clean pushes
+/// false. Any other error stays an error. The printer `sub_51C0DC1` at
+/// `0x51CD573` spells the family `UNSET ( `; 1803 is the text arm (the printer
+/// masks the low bit) and is not in the corpus.
+///
+/// acp7002 `15194/317` PTAX `ALLANG` guards `360 / DESP[78]` with it: a missing
+/// parameter is 223, not a zero, so the division is not what runs.
+const OP_UNSET_REAL: i32 = 1802;
+/// Logical `OR`. Case 301 (`0x12D`) pops two logicals (`EXPOLE` twice) and
+/// pushes true when either side is true with a clear error; otherwise
+/// `exprlib/EXDEF` merges the errors. The printer at `0x51C19E4` spells ` OR `.
+const OP_OR: i32 = 301;
 /// `IFTRUE ( cond , a , b )` over reals. The `case 1822` arm of the same
 /// interpreter pops `b`, then `a`, then a **logical**, and pushes `a` when
 /// the logical is true and `b` when it is false. The sibling opcodes select the
@@ -327,9 +341,8 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
             | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_ABS_REAL
             | OP_MAX | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_LESS_THAN | OP_GREATER_EQUAL
-            | OP_LESS_EQUAL | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING | OP_IF_REAL => {
-                (Step::Operator(program[cursor]), 1)
-            }
+            | OP_LESS_EQUAL | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING | OP_UNSET_REAL | OP_OR
+            | OP_IF_REAL => (Step::Operator(program[cursor]), 1),
             // An opcode this has never seen used is a program it has not read.
             _ => return None,
         };
@@ -395,6 +408,7 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
             Step::Operator(OP_MATCH) => apply_binary_function("MAT", &mut stack)?,
             Step::Operator(OP_TRIM) => apply_function("TRIM", &mut stack)?,
             Step::Operator(OP_LOGICAL_STRING) => apply_function("STR", &mut stack)?,
+            Step::Operator(OP_UNSET_REAL) => apply_function("UNSET", &mut stack)?,
             Step::Operator(OP_ATANT) => apply_binary_function("ATANT", &mut stack)?,
             Step::Operator(OP_IF_REAL) => {
                 let otherwise = stack.pop()?;
@@ -531,15 +545,18 @@ fn evaluate(words: &[i32], env: &dyn ParamEnv, fast_path: FastPath) -> Option<f6
                     // `EXFAST`'s one concession: a parameter the instance does
                     // not have reads as 0 and the program goes on. See
                     // [`fast_path_eligible`].
-                    None
-                        if fast_path
-                            && is_parameter_array(&attribute.name)
-                            && env.fast_path_missing_parameter_is_zero(
-                                &attribute.name,
-                                subscript,
-                            ) =>
+                    None if fast_path
+                        && is_parameter_array(&attribute.name)
+                        && env.fast_path_missing_parameter_is_zero(&attribute.name, subscript) =>
                     {
                         0.0
+                    }
+                    // Full path: GATPAR's 223 stays on the stack. The fast path
+                    // already turned the same miss into 0 above, and a program
+                    // `EXFAST` would run never contains `UNSET`.
+                    None if !fast_path && is_parameter_array(&attribute.name) => {
+                        stack.push(Value::Unset);
+                        continue;
                     }
                     None => return None,
                 };
@@ -587,9 +604,12 @@ const FAST_PATH_STACK: usize = 4;
 /// that `GATPAR` cannot answer (223, parameter number out of range) prints
 /// `Catalogue error … DESP parameter number ( n ) out of range`, **clears the
 /// error and keeps the 0.0 `GATPAR` left on the stack** — the program finishes
-/// and its value is used. The full evaluator makes the same miss fatal, and
-/// `YPARUN` then prints `unable to evaluate catalogue expression for attribute
-/// …` and takes 0 for the whole attribute.
+/// and its value is used. On the full path the same miss is [`Value::Unset`]
+/// (223 left on the stack). `UNSET` turns that into true and clears it; `OR`
+/// and `IFTRUE` drop an error on a side they do not take. A program that
+/// cannot absorb it still fails, and `YPARUN` then prints `unable to evaluate
+/// catalogue expression for attribute …` and takes 0 for the whole attribute.
+/// A miss that is not a parameter array is an immediate failure on either path.
 ///
 /// So `( ATTRIB DESP[1 ] + ATTRIB PARA[2 ] * 0.5 )` on a valve with no `DESP`
 /// is `0 + PARA[2] * 0.5` (ams7999 `/1RCV071VP`'s connection points sit exactly
@@ -647,6 +667,12 @@ enum Value {
     Number(f64),
     Logical(bool),
     Text(String),
+    /// GATPAR error 223, parameter number out of range. `UNSET` clears it.
+    Unset,
+    /// Any other evaluation fault (a non-finite result, or 223 mixed with a
+    /// harder error). `UNSET` does not clear it; `IFTRUE` still drops it when
+    /// it sits on the branch the condition does not take.
+    Fault,
 }
 
 impl Value {
@@ -667,31 +693,74 @@ impl Value {
 fn apply_value(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
     let value = match operator {
         OP_GREATER_THAN | OP_LESS_THAN | OP_GREATER_EQUAL | OP_LESS_EQUAL => {
-            let right = stack.pop()?.number()?;
-            let left = stack.pop()?.number()?;
-            let slack = comparison_slack(left, right);
-            Value::Logical(match operator {
-                OP_GREATER_THAN => left - right > slack,
-                OP_LESS_THAN => right - left > slack,
-                OP_GREATER_EQUAL => left - right >= -slack,
-                _ => right - left >= -slack,
-            })
+            let right = stack.pop()?;
+            let left = stack.pop()?;
+            match (left, right) {
+                (Value::Number(left), Value::Number(right)) => {
+                    let slack = comparison_slack(left, right);
+                    Value::Logical(match operator {
+                        OP_GREATER_THAN => left - right > slack,
+                        OP_LESS_THAN => right - left > slack,
+                        OP_GREATER_EQUAL => left - right >= -slack,
+                        _ => right - left >= -slack,
+                    })
+                }
+                (Value::Fault, _) | (_, Value::Fault) => Value::Fault,
+                (Value::Unset, _) | (_, Value::Unset) => Value::Unset,
+                _ => return None,
+            }
         }
         OP_EQUAL => {
-            let right = stack.pop()?.number()?;
-            Value::Logical(equal_within_slack(stack.pop()?.number()?, right))
+            let right = stack.pop()?;
+            let left = stack.pop()?;
+            match (left, right) {
+                (Value::Number(left), Value::Number(right)) => {
+                    Value::Logical(equal_within_slack(left, right))
+                }
+                (Value::Fault, _) | (_, Value::Fault) => Value::Fault,
+                (Value::Unset, _) | (_, Value::Unset) => Value::Unset,
+                _ => return None,
+            }
+        }
+        // Case 1802: 223 becomes true and is cleared; a clean real is false;
+        // any other fault stays a fault (EXPULE keeps the error).
+        OP_UNSET_REAL => match stack.pop()? {
+            Value::Unset => Value::Logical(true),
+            Value::Number(_) => Value::Logical(false),
+            Value::Fault => Value::Fault,
+            _ => return None,
+        },
+        // Case 301: 223 is cleared and that side counts as false. A clean true
+        // on either side wins without reading the other error. Two falses,
+        // including unset, are false. A harder fault remains.
+        OP_OR => {
+            let right = stack.pop()?;
+            let left = stack.pop()?;
+            match (left, right) {
+                (Value::Logical(true), _) | (_, Value::Logical(true)) => Value::Logical(true),
+                (Value::Fault, _) | (_, Value::Fault) => Value::Fault,
+                (
+                    Value::Logical(false) | Value::Unset,
+                    Value::Logical(false) | Value::Unset,
+                ) => Value::Logical(false),
+                _ => return None,
+            }
         }
         // The branch not taken is dropped whole — Core pops both before it
         // looks at the logical, so an unreadable `b` cannot fail a program
         // whose condition selects `a`.
         OP_IF_REAL => {
-            let otherwise = stack.pop()?.number()?;
-            let then = stack.pop()?.number()?;
-            match stack.pop()? {
-                Value::Logical(true) => Value::Number(then),
-                Value::Logical(false) => Value::Number(otherwise),
-                // Core pops a logical here; anything else is a program this
-                // has misread, not a condition to coerce.
+            let otherwise = stack.pop()?;
+            let then = stack.pop()?;
+            let selected = match stack.pop()? {
+                Value::Logical(true) => then,
+                Value::Logical(false) => otherwise,
+                // Core pops a logical here; an error or another type is a
+                // program this has misread, not a condition to coerce.
+                _ => return None,
+            };
+            match selected {
+                Value::Number(value) if value.is_finite() => Value::Number(value),
                 _ => return None,
             }
         }
@@ -726,36 +795,60 @@ fn apply_value(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
 /// nothing today and admits the gap.
 fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
     let value = match operator {
-        OP_PI => std::f64::consts::PI,
-        OP_NEGATE => -stack.pop()?.number()?,
-        OP_SIN => stack.pop()?.number()?.to_radians().sin(),
-        OP_COS => stack.pop()?.number()?.to_radians().cos(),
-        OP_TAN => stack.pop()?.number()?.to_radians().tan(),
-        OP_ASIN => stack.pop()?.number()?.asin().to_degrees(),
-        OP_ATAN => stack.pop()?.number()?.atan().to_degrees(),
-        OP_SQRT => stack.pop()?.number()?.sqrt(),
-        OP_ABS | OP_ABS_REAL => stack.pop()?.number()?.abs(),
+        OP_PI => Value::Number(std::f64::consts::PI),
+        OP_NEGATE => unary_number(stack, |n| -n)?,
+        OP_SIN => unary_number(stack, |n| n.to_radians().sin())?,
+        OP_COS => unary_number(stack, |n| n.to_radians().cos())?,
+        OP_TAN => unary_number(stack, |n| n.to_radians().tan())?,
+        OP_ASIN => unary_number(stack, |n| n.asin().to_degrees())?,
+        OP_ATAN => unary_number(stack, |n| n.atan().to_degrees())?,
+        OP_SQRT => unary_number(stack, |n| n.sqrt())?,
+        OP_ABS | OP_ABS_REAL => unary_number(stack, |n| n.abs())?,
         OP_ATANT => return None,
-        _ => {
-            let right = stack.pop()?.number()?;
-            let left = stack.pop()?.number()?;
-            match operator {
-                OP_ADD => left + right,
-                OP_SUBTRACT => left - right,
-                OP_MULTIPLY => left * right,
-                OP_DIVIDE => left / right,
-                OP_POW if left != 0.0 || right > 0.0 => left.powf(right),
-                OP_MAX => left.max(right),
-                OP_MIN => left.min(right),
-                _ => return None,
-            }
-        }
+        _ => binary_number(operator, stack)?,
     };
-    if !value.is_finite() {
-        return None;
-    }
-    stack.push(Value::Number(value));
+    stack.push(value);
     Some(())
+}
+
+/// A non-finite result is a fault, not an abort: `IFTRUE` has already popped
+/// the branch it will not take, and that branch may be `360 / 0`.
+fn finite_number(value: f64) -> Value {
+    match value.is_finite() {
+        true => Value::Number(value),
+        false => Value::Fault,
+    }
+}
+
+fn unary_number(stack: &mut Vec<Value>, op: impl FnOnce(f64) -> f64) -> Option<Value> {
+    Some(match stack.pop()? {
+        Value::Number(n) => finite_number(op(n)),
+        Value::Unset => Value::Unset,
+        Value::Fault => Value::Fault,
+        _ => return None,
+    })
+}
+
+fn binary_number(operator: i32, stack: &mut Vec<Value>) -> Option<Value> {
+    let right = stack.pop()?;
+    let left = stack.pop()?;
+    let (left, right) = match (left, right) {
+        (Value::Fault, _) | (_, Value::Fault) => return Some(Value::Fault),
+        (Value::Unset, _) | (_, Value::Unset) => return Some(Value::Unset),
+        (Value::Number(left), Value::Number(right)) => (left, right),
+        _ => return None,
+    };
+    let value = match operator {
+        OP_ADD => left + right,
+        OP_SUBTRACT => left - right,
+        OP_MULTIPLY => left * right,
+        OP_DIVIDE => left / right,
+        OP_POW if left != 0.0 || right > 0.0 => left.powf(right),
+        OP_MAX => left.max(right),
+        OP_MIN => left.min(right),
+        _ => return None,
+    };
+    Some(finite_number(value))
 }
 
 /// `EQ` the way `exprlib/EXRCTL` (`core.dll` `0x51D3B32`) compares two reals.
@@ -866,40 +959,21 @@ fn parse_number(words: &[i32]) -> Option<(Step, usize)> {
     // The fourth word is zero throughout the sample. Reading a formula whose
     // meaning turns on a word this has never seen used would be a guess.
     match words {
-        [
-            OP_PUSH_NUMBER,
-            NUMBER_SHAPE,
-            first,
-            second,
-            third,
-            0,
-            end,
-            ..,
-        ] if NUMBER_ENDS.contains(end) => {
+        [OP_PUSH_NUMBER, NUMBER_SHAPE, first, second, third, 0, end, ..]
+            if NUMBER_ENDS.contains(end) =>
+        {
             let value = decode_number(*first, *second, *third)?;
             Some((Step::Number(value), NUMBER_WORDS))
         }
-        [
-            OP_PUSH_NUMBER,
-            NUMBER_WITH_UNIT_SHAPE,
-            first,
-            second,
-            third,
-            0,
-            unit @ ..,
-        ] if unit.len() >= 4 && unit[..3] == DISTANCE_UNIT && unit[3] == 0 => {
+        [OP_PUSH_NUMBER, NUMBER_WITH_UNIT_SHAPE, first, second, third, 0, unit @ ..]
+            if unit.len() >= 4 && unit[..3] == DISTANCE_UNIT && unit[3] == 0 =>
+        {
             let value = decode_number(*first, *second, *third)?;
             Some((Step::Number(value), NUMBER_WITH_UNIT_WORDS))
         }
-        [
-            OP_PUSH_NUMBER,
-            NUMBER_TYPED_SHAPE,
-            first,
-            second,
-            third,
-            0,
-            trailer @ ..,
-        ] if trailer.len() >= 2 && trailer[..2] == TYPED_TRAILER => {
+        [OP_PUSH_NUMBER, NUMBER_TYPED_SHAPE, first, second, third, 0, trailer @ ..]
+            if trailer.len() >= 2 && trailer[..2] == TYPED_TRAILER =>
+        {
             let value = decode_number(*first, *second, *third)?;
             Some((Step::Number(value), NUMBER_TYPED_WORDS))
         }
@@ -1053,20 +1127,8 @@ fn parse_owner_chain(words: &[i32]) -> Option<(Step, usize)> {
 /// [`PREVIOUS_ELEMENT`]; each is `[13, 1, 106, 2, <name>, 1, 1, 0, 1602, 3, 2,
 /// 10, 1701]` with `<name>` one of `LEAWID` / `LEAHEI` / `LBOR`.
 fn parse_previous_element_chain(words: &[i32]) -> Option<(Step, usize)> {
-    let [
-        OP_ATTRIBUTE,
-        ATTRIBUTE_SHAPE,
-        name,
-        1,
-        1,
-        0,
-        OP_OWNER_CHAIN,
-        3,
-        CHAIN_OPEN,
-        PREVIOUS_ELEMENT,
-        ATTRIBUTE_TERMINATOR,
-        ..,
-    ] = words
+    let [OP_ATTRIBUTE, ATTRIBUTE_SHAPE, name, 1, 1, 0, OP_OWNER_CHAIN, 3, CHAIN_OPEN, PREVIOUS_ELEMENT, ATTRIBUTE_TERMINATOR, ..] =
+        words
     else {
         return None;
     };
@@ -1137,6 +1199,7 @@ fn apply_binary(operator: i32, stack: &mut Vec<Term>) -> Option<()> {
         OP_EQUAL => ("EQ", PRECEDENCE_COMPARISON),
         OP_GREATER_THAN => ("GT", PRECEDENCE_COMPARISON),
         OP_LESS_THAN => ("LT", PRECEDENCE_COMPARISON),
+        OP_OR => ("OR", PRECEDENCE_COMPARISON),
         OP_GREATER_EQUAL => ("GE", PRECEDENCE_COMPARISON),
         OP_LESS_EQUAL => ("LE", PRECEDENCE_COMPARISON),
         _ => return None,
@@ -1275,8 +1338,8 @@ mod tests {
         // `/J2S4_EAV_PFI_PFI_003` NGMS NSEX (=2013287246/25848) PZ: `- PARA[1] - 1`, the 1 with its
         // unit — the rafter cutter starts 16 mm back (PARA[1] = 15).
         let cutter = [
-            29, 1, 101, 6, 1048576, 0, 1073742847, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 801,
-            101, 9, 1048576, 0, 1073742847, 0, 11, 1, 1, 0, 803,
+            29, 1, 101, 6, 1048576, 0, 1073742847, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701,
+            801, 101, 9, 1048576, 0, 1073742847, 0, 11, 1, 1, 0, 803,
         ];
         let env = MapParamEnv::new().set_attribute("PARA[1]", 15.0);
         assert_eq!(evaluate_words(&cutter, &env), Some(-16.0));
@@ -2106,13 +2169,13 @@ mod tests {
         ])));
         // Five constants on the stack before the first operator.
         assert!(!fast_path_eligible(&steps(&[
-            41, 1, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0,
-            6, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6, 802, 802, 802, 802,
+            41, 1, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6,
+            101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6, 802, 802, 802, 802,
         ])));
         // Four is still inside the five slots.
         assert!(fast_path_eligible(&steps(&[
-            33, 1, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0,
-            6, 101, 6, 16384, 0, 1, 0, 6, 802, 802, 802,
+            33, 1, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6, 101, 6, 16384, 0, 1, 0, 6,
+            101, 6, 16384, 0, 1, 0, 6, 802, 802, 802,
         ])));
     }
 
@@ -2294,7 +2357,16 @@ mod tests {
         // The plain `[1, 1]` shape reads a scalar UDA whole, and an array's
         // first entry the way `ATTRIB PARA` written `[1, 1]` does.
         let plain = [
-            10, 1, 106, 2, HXYSIZE_CATALOGUE_KEY as i32, 1, 1, 0, 1601, 1701,
+            10,
+            1,
+            106,
+            2,
+            HXYSIZE_CATALOGUE_KEY as i32,
+            1,
+            1,
+            0,
+            1601,
+            1701,
         ];
         assert_eq!(render(&plain).as_deref(), Some("( :0x17EF4B61 )"));
         let scalar = MapParamEnv::new().with_uda(HXYSIZE_CATALOGUE_KEY, [350.0]);
@@ -2311,7 +2383,10 @@ mod tests {
             attribute_name(0x2652_AB52),
             Some((":0x2652AB52".into(), Some(0x2652_AB52)))
         );
-        assert_eq!(attribute_name(SYSTEM_HASH_MAX as i32 + 1).map(|(_, key)| key), Some(Some(SYSTEM_HASH_MAX + 1)));
+        assert_eq!(
+            attribute_name(SYSTEM_HASH_MAX as i32 + 1).map(|(_, key)| key),
+            Some(Some(SYSTEM_HASH_MAX + 1))
+        );
         assert_eq!(attribute_name(564289), Some(("PARA".into(), None)));
         assert_eq!(attribute_name(0xFFF6_3EDCu32 as i32), None);
         assert_eq!(attribute_name(3), None);
@@ -2319,5 +2394,36 @@ mod tests {
             render(&[17, 1, 101, 6, 0, 0, 1073742848, 0, 6, 106, 2, -1, -1, -1, 0, 1601, 1701]),
             None
         );
+    }
+
+    /// acp7002 `15194/317` PTAX `ALLANG`. core.dll `sub_51B4976` case 1802 is
+    /// real `UNSET` (true only on GATPAR 223) and case 301 is logical `OR`.
+    /// The two stack readings that both balance collapse to the first:
+    /// `IFTRUE ( UNSET ( DESP[78] ) OR DESP[78] LT 1 , 1 , 360 / DESP[78] )`.
+    #[test]
+    fn evaluates_unset_or_in_the_allang_program() {
+        use crate::record::catalogue_eval::MapParamEnv;
+        let words = [
+            73, 1, 101, 6, 1277952, 0, 1073742853, 0, 0, 106, 2, 860359, -1, -1, 0, 1601, 1701,
+            1802, 101, 6, 1277952, 0, 1073742853, 0, 0, 106, 2, 860359, -1, -1, 0, 1601, 1701, 101,
+            6, 1048576, 0, 1073742847, 0, 0, 603, 301, 101, 6, 1048576, 0, 1073742847, 0, 0, 101,
+            6, 1474560, 0, 1073742855, 0, 0, 101, 6, 1277952, 0, 1073742853, 0, 0, 106, 2, 860359,
+            -1, -1, 0, 1601, 1701, 805, 1822,
+        ];
+        assert_eq!(
+            render(&words).as_deref(),
+            Some(
+                "( IFTRUE ( UNSET ( ATTRIB DESP[78 ] ) OR ATTRIB DESP[78 ] LT 1 , 1 , 360 / ATTRIB DESP[78 ] ) )"
+            )
+        );
+        // Missing DESP[78] is 223, so UNSET is true and the division is dropped.
+        assert_eq!(evaluate_words(&words, &MapParamEnv::new()), Some(1.0));
+        let at = |n: f64| MapParamEnv::new().set_attribute("DESP[78]", n);
+        // 0 is defined and < 1, so the result is still 1; 360/0 is not taken.
+        assert_eq!(evaluate_words(&words, &at(0.0)), Some(1.0));
+        assert_eq!(evaluate_words(&words, &at(0.5)), Some(1.0));
+        assert_eq!(evaluate_words(&words, &at(1.0)), Some(360.0));
+        assert_eq!(evaluate_words(&words, &at(4.0)), Some(90.0));
+        assert_eq!(evaluate_words(&words, &at(8.0)), Some(45.0));
     }
 }
