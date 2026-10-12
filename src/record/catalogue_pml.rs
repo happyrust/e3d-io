@@ -551,11 +551,23 @@ fn evaluate(words: &[i32], env: &dyn ParamEnv, fast_path: FastPath) -> Option<f6
                     {
                         0.0
                     }
-                    // Full path: GATPAR's 223 stays on the stack. The fast path
-                    // already turned the same miss into 0 above, and a program
-                    // `EXFAST` would run never contains `UNSET`.
+                    // Full path. 223 (the array is there, the index is not) stays
+                    // on the stack as `Unset`: `UNSET` turns it true and `OR`
+                    // counts it false. 202 (no array — a `FITT`'s `ODES`/`OPAR`
+                    // with no `SCTN`) is a fault, and `UNSET` does not clear it.
+                    // `fast_path_missing_parameter_is_zero` is that split: true
+                    // means 223. The fast path already returned 0 or `None`
+                    // above; a program `EXFAST` would run never contains `UNSET`.
                     None if !fast_path && is_parameter_array(&attribute.name) => {
-                        stack.push(Value::Unset);
+                        let out_of_range = env.fast_path_missing_parameter_is_zero(
+                            &attribute.name,
+                            subscript,
+                        );
+                        stack.push(if out_of_range {
+                            Value::Unset
+                        } else {
+                            Value::Fault
+                        });
                         continue;
                     }
                     None => return None,
@@ -606,8 +618,10 @@ const FAST_PATH_STACK: usize = 4;
 /// error and keeps the 0.0 `GATPAR` left on the stack** — the program finishes
 /// and its value is used. On the full path the same miss is [`Value::Unset`]
 /// (223 left on the stack). `UNSET` turns that into true and clears it; `OR`
-/// and `IFTRUE` drop an error on a side they do not take. A program that
-/// cannot absorb it still fails, and `YPARUN` then prints `unable to evaluate
+/// and `IFTRUE` drop an error on a side they do not take. A 202 (no array)
+/// is [`Value::Fault`] instead, so `UNSET` stays false and the error remains.
+/// A program that
+/// cannot absorb a 223 still fails, and `YPARUN` then prints `unable to evaluate`
 /// catalogue expression for attribute …` and takes 0 for the whole attribute.
 /// A miss that is not a parameter array is an immediate failure on either path.
 ///
@@ -2425,5 +2439,34 @@ mod tests {
         assert_eq!(evaluate_words(&words, &at(1.0)), Some(360.0));
         assert_eq!(evaluate_words(&words, &at(4.0)), Some(90.0));
         assert_eq!(evaluate_words(&words, &at(8.0)), Some(45.0));
+
+        // GATPAR 202 is not 223. `UNSET` is true only when the array exists
+        // and the index does not; a missing array stays a fault, so ALLANG
+        // does not resolve to 1.
+        struct MissingArray;
+        impl crate::record::catalogue_eval::ParamEnv for MissingArray {
+            fn param(&self, _: i32) -> Option<f64> {
+                None
+            }
+            fn iparam(&self, _: i32) -> Option<f64> {
+                None
+            }
+            fn design_dimension(&self, _: i32) -> Option<f64> {
+                None
+            }
+            fn attribute_number(
+                &self,
+                _: &crate::record::catalogue_eval::AttribRef<'_>,
+            ) -> Option<f64> {
+                None
+            }
+            fn fast_path_missing_parameter_is_zero(&self, _: &str, _: Option<f64>) -> bool {
+                false
+            }
+            fn direction_angle(&self, _: &[i32]) -> Option<f64> {
+                None
+            }
+        }
+        assert_eq!(evaluate_words(&words, &MissingArray), None);
     }
 }
