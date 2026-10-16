@@ -182,10 +182,17 @@ S6 只依赖 S1、S3，可与 S4、S5 并行。为了不打架：
   - `Found.path` 改 `Vec<FoundStep>`（每级 `row` + `index`），`Browse::reveal` 沿链 `fill` + `expand` 把命中填进懒加载树；`Trail`（上限 200 的带游标栈）与 Alt+← / Alt+→；`Workspace` 级面包屑（gpui-kit `Breadcrumb`）。
   - 测试 `cargo test -p e3d-studio --offline` 30 / 0；clippy e3d-studio 0、e3d-convert 3（基线）；doc 0。实跑 `=15240/1968` 展 6 层、`/SLH_Template_World`、Alt 往返、未命中与格式错误提示；证据 `docs/evidence/2026-10-09-e3d-studio-s4.md` 2026-10-10 节与截图 06–08。
   - 下一步 E（§2.3）。
-- 2026-10-16 **E 完成**（spec 3.4、3.5 打勾），`e3d-studio` 待提交。
+- 2026-10-16 **E 完成**（spec 3.4、3.5 打勾），`e3d-studio` `6b67a48`。
   - 3.4：`db/source_release.rs`——`ProjectReleases`（项目根 → release id，`project-releases.json` 存 App_Data_Dir；坏文件报错降级空表，未知 id 视为未选）、`project_root_of`（`xxx000` 归项目根）、`dab_tag_release`（`2_28_*`→2.1、`2_35_*`→3.1，e3dio001 等不算数）、`current_root`。`workspace.rs`：开项目/开库时 `want_release_prompt`（每根每运行一次，Esc/暂不选记已问；队列一次一个）；对话框三提示（DAB 标签+引擎映射、CRINFO、`Saving Meta Data.` 痕迹）不预选、未选禁「确定」；工具栏 `源版本` Select 改当前根；标题栏 `— 库名（源版本）`；属性面板未选显「请选择源版本」（`panels/attributes.rs` 从宏壳换成真面板）。
   - 3.5：`db/inventory.rs`——`ProjectInventory`（每项目根一扫描线程：`project_database_paths` 先占位、逐库 `describe` 三页头回填、30ms 节流、drop 取消）与 `OpenProjects` 全局；`sorted`/`filtered` 纯函数（缺值永排尾）。`panels/library.rs` 下半段 `DataTable` 八列（路径/类型/大小/会话/DAB/extent/核验/错误），排序、框过滤、双击或 Enter 打开行；核验列走 `SchemaPair::verifiable`。
   - 修了两个真错：排序比较子里 `None` 在降序时跑到最前（拆开缺失判定与方向）；`open_dialog` 在 Root 更新中嵌套调用 panic（`cannot read Root while it is already being updated`），改 `cx.defer_in` 延一帧。
   - 测试 `cargo test -p e3d-studio --offline` 37 / 0（+7）；`cargo test -p e3d-convert` 11 / 0 + 3 / 0（3 ignored）不变；clippy e3d-studio 0、e3d-convert 基线；doc 0。
   - 实跑 AvevaCatalogue（证据同上文件 2026-10-16 节与截图 09–12）：首开弹框三提示齐全不预选、确定禁用；radio+确定写 `project-releases.json`；暂不选后属性区显「请选择源版本」；清单 44 个库逐行出、过滤 `7001`、大小降序、双击 acp7320 开库；重启不再弹、下拉框显示已存值、核验列标「不在核验范围」。
   - 下一步 F（§2.4）。
+- 2026-10-16 **F 完成**（spec 3.9–3.11 打勾，S4 组 3 全勾），`e3d-studio` `fd2f0b4`。
+  - 3.9 核对即可：Property 1 `protocol.rs::only_the_newest_generation_of_each_class_is_accepted`、Property 2 `model.rs::lines_are_the_preorder_walk_of_expanded_elements`、Property 3 `protocol.rs` 三分 + refno 往返、Loader proptest `browse.rs::one_request_in_flight_reads_every_visible_slot` 全在库，无缺口。
+  - 3.10：`timing.rs` 打点（`E3D_STUDIO_TIMING=1`：open→answered / children→answered / inventory:done 三段，`arm` 挂 paint 标记对首个 Draw 帧）；`gpui-kit` 加 `profiler` feature + `gpui-fps` 路径依赖，`E3D_STUDIO_FPS=1` 挂 HUD。计时用 `log::info!` 而非原写的 `debug!`——打点只在 flag 开时才发，级别不影响默认输出。
+  - 用例修正一处：判据「8 200 个成员的 ZONE」在语料里不存在——`#[ignore]` 探针 `widest_elements`（BFS 五层每层最宽 16 + `E3D_WIDE_REFNO` 直查）坐实 ams7351_0001 最宽为 `=23735/166` CATA（1 788 成员）。改用 §5 C 记录过的 ams5052_0001 `=13244/218060` SECT（24 104 成员，约判据 3 倍），三次全新启动实测。
+  - 实测（Ryzen 9 7950X / 63.1 GB / RX590 GME / Win11 26200 / rustc 1.101.0-nightly，release 2m35s，热缓存各 3 次）：**ams7351_0001 开库画出 22.2 ms**（应答 2.8 ms；22.8/19.7/22.2）过 < 1 s 与 < 100 ms 目标；**24 104 成员展开画出 11.4 ms**（应答 1.0 ms；11.4/7.0/11.9）过 < 150 ms；**展开帧 draw 中位 5.3 ms**（5.3/4.5/6.3，全程最大 12.7）过 < 16 ms；**455 库清点中位 121.4 ms**（928.1/121.4/118.4，首跑为当日首扫偏冷）过 < 2 s。四项全过；Spec_Ledger「性能实测」四行已填，「选中到出属性表」行留 4.8。
+  - 3.11：test 37 / 0（1 ignored = 探针）、clippy e3d-studio 0 / e3d-convert 3 基线、doc 0、e3d-convert 11 / 0 + 3 / 0（3 ignored），与基线一致；「库」页签点选 / ✕ 关库实点通过；截图清单齐（树 03–05、搜索 06/08、面包屑 06–08、源版本 09–10、库清单 11–12、性能 13–14）。证据 `docs/evidence/2026-10-09-e3d-studio-s4.md` 2026-10-16 第二节。
+  - **S4 完成**。下一步 S5（§2.5）；S6 可按 §2.6 并行。
