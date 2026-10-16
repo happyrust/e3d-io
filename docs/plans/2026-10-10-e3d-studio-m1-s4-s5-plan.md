@@ -178,3 +178,14 @@ S6 只依赖 S1、S3，可与 S4、S5 并行。为了不打架：
   - 驱动注意事项（补 S3 证据那节）：这版 cua-driver 的 `click(pid, x, y)` 以客户区物理像素偏移计，不按截图比例换算；GPUI 不吃 PostMessage 点击，要 `delivery_mode: "foreground"`；`press_key(pid)` 的 PostMessage 按键能到；滚动要自己 `SetCursorPos` + `mouse_event(WHEEL)`；GPUI 的 UIA 提供者在窗口不在前台时常超时，截图用 `CopyFromScreen`。桌面坐标（`scope: "desktop"`）的点击会落到当时在前面的别的窗口，一次误击让 Chrome 下载了 `ams7351_0001` 的副本，已删。
   - 3.10 用得上的数：`ams5052_0001`（CATA，77 810 页）里成员最多的是 `SECT /CNPESPECGEN_DESCRIPTIONS/SDTE =13244/218060`（24 104 个成员，WORLD 第 33 个成员 `CATA /CNPESPECGEN-NI` 的第 1 个成员）；`acp7048_0001` 最多的是一个 TMPL 42 个。`ams7351_0001`（CATA，604 643 页）没扫。
   - 下一步 D（§2.2）。
+- 2026-10-10 **D 完成**（spec 3.7、3.8 打勾），`e3d-studio` `5558ba6`。（此条迟记，主计划 §5 已先行。）
+  - `Found.path` 改 `Vec<FoundStep>`（每级 `row` + `index`），`Browse::reveal` 沿链 `fill` + `expand` 把命中填进懒加载树；`Trail`（上限 200 的带游标栈）与 Alt+← / Alt+→；`Workspace` 级面包屑（gpui-kit `Breadcrumb`）。
+  - 测试 `cargo test -p e3d-studio --offline` 30 / 0；clippy e3d-studio 0、e3d-convert 3（基线）；doc 0。实跑 `=15240/1968` 展 6 层、`/SLH_Template_World`、Alt 往返、未命中与格式错误提示；证据 `docs/evidence/2026-10-09-e3d-studio-s4.md` 2026-10-10 节与截图 06–08。
+  - 下一步 E（§2.3）。
+- 2026-10-16 **E 完成**（spec 3.4、3.5 打勾），`e3d-studio` 待提交。
+  - 3.4：`db/source_release.rs`——`ProjectReleases`（项目根 → release id，`project-releases.json` 存 App_Data_Dir；坏文件报错降级空表，未知 id 视为未选）、`project_root_of`（`xxx000` 归项目根）、`dab_tag_release`（`2_28_*`→2.1、`2_35_*`→3.1，e3dio001 等不算数）、`current_root`。`workspace.rs`：开项目/开库时 `want_release_prompt`（每根每运行一次，Esc/暂不选记已问；队列一次一个）；对话框三提示（DAB 标签+引擎映射、CRINFO、`Saving Meta Data.` 痕迹）不预选、未选禁「确定」；工具栏 `源版本` Select 改当前根；标题栏 `— 库名（源版本）`；属性面板未选显「请选择源版本」（`panels/attributes.rs` 从宏壳换成真面板）。
+  - 3.5：`db/inventory.rs`——`ProjectInventory`（每项目根一扫描线程：`project_database_paths` 先占位、逐库 `describe` 三页头回填、30ms 节流、drop 取消）与 `OpenProjects` 全局；`sorted`/`filtered` 纯函数（缺值永排尾）。`panels/library.rs` 下半段 `DataTable` 八列（路径/类型/大小/会话/DAB/extent/核验/错误），排序、框过滤、双击或 Enter 打开行；核验列走 `SchemaPair::verifiable`。
+  - 修了两个真错：排序比较子里 `None` 在降序时跑到最前（拆开缺失判定与方向）；`open_dialog` 在 Root 更新中嵌套调用 panic（`cannot read Root while it is already being updated`），改 `cx.defer_in` 延一帧。
+  - 测试 `cargo test -p e3d-studio --offline` 37 / 0（+7）；`cargo test -p e3d-convert` 11 / 0 + 3 / 0（3 ignored）不变；clippy e3d-studio 0、e3d-convert 基线；doc 0。
+  - 实跑 AvevaCatalogue（证据同上文件 2026-10-16 节与截图 09–12）：首开弹框三提示齐全不预选、确定禁用；radio+确定写 `project-releases.json`；暂不选后属性区显「请选择源版本」；清单 44 个库逐行出、过滤 `7001`、大小降序、双击 acp7320 开库；重启不再弹、下拉框显示已存值、核验列标「不在核验范围」。
+  - 下一步 F（§2.4）。
