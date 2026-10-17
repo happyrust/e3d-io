@@ -351,6 +351,7 @@
     - 用户在 E3D 图形界面 `ADD` 一个 e3d-io 写的 BOX，确认 `LIMITS CE` 不报 (2,536)
     - 截图放 `docs/evidence/assets/`，记录写入 `docs/evidence/YYYY-MM-DD-e3d-spatial-gui-session.md`
     - 2026-10-06 尝试启动已安装的 `D:\AVEVA\Everything3D2.10\des.exe`：进程立即退出，Windows 返回 `0xE0434352`（CLR 未处理异常），没有可操作的图形窗口；未伪造 PASS，仍需在可用许可证/图形环境中由用户完成。
+    - 2026-10-17 TTY 等价探针（`D:\e3dio-gui-gate` scratch，12 s，L3-ALIVE/DONE 双标记，原始日志 `logs-limits/`）：裸 `LIMITS CE` 在 TTY 报 `(47,62) Incomplete command line`（GUI 侧命令由 `designviewLimits` 注册，故图形步仍只能走 GUI）；底层空间检查给出预测的正反对——`WITHIN VOLUME =16192/5` 返回 7 个 BOX 含自身、零错误，`WITHIN VOLUME =16192/4` 报 **`(2,536) Error getting volume for BOX /E3DIO-Q13-CONTROL`**；类型扫描 12 197 个 BOX、空间扫描 12 196 个，唯一差值即 --spatial off 的对照件（16192/5..8、10..14 全部可解）。探针未发 SAVEWORK，但 E3D 登录自身追加了会话 653「Saving Meta Data.」（user=dpc）——真 E3D 的开库内务写，scratch DB 现为 `4922E530…`。
     - _Requirements: 10.11_
   - [~] 10.6 Checkpoint - 第 10 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
@@ -533,7 +534,7 @@
 
 - [x] 装机样本再次漂移：无钉快照时 `ams8000_0001` 从 `3F8DED25` 漂到 `CD926F69`（mtime 2026-10-16 01:39，E3D 追加会话），5 个测试 crate 的 19 个 golden 用例按「样本漂移」守卫拒绝比对。`snapshot.ps1` 把四样本当前字节钉进 `D:\e3dio-fixtures\phase3`，`record.ps1` 在 `1002ac7` 上录两遍全过。键集只增不丢：`write_hashes` +2、`bucket_write` +2、`allocation_floor` +1、`off_compat` +1——均为此前录制时因「两遍不同/未跑满」剔除的键，本次稳定收进；任何文件未丢条目、未动退役条目。代价同 10-08：这批条目守「与当前 HEAD 输出逐字节相同」，不再重证各自历史字节等价。五个文件头均加 `rerecorded` 块。
 - [x] `regression.ps1 -OfflineOnly` 复跑 `offline_passed`：tests 855 / 0 / 35、skip ≤ 9 基线内，clippy/doc/Q13/Q14/Q15 全 PASS，AMS/TES/golden 目录前后不变。证据 `D:\e3dio-regression\20261017-231033-268a2f85`。仍是离线回归，不认证真 TTY。
-- [x] 10.5 图形门准备完成：`gui_gate_prepare.ps1` 在 `D:\e3dio-gui-gate` Scratch 副本上写入 `q13_control`（会话 651，无 SPAMAP 条目）与 `q13_boxes`（会话 652）——positive `/E3DIO-Q13-MAIN` = `=16192/5` 有 1 条 SPAMAP、negative `/E3DIO-Q13-CONTROL` = `=16192/4` 无条目，源 ams000 前后不变；`evidence/gui-gate.json` 记好会话内指令。只差 `gui_gate_launch.bat` 起真 E3D Design 由用户 `ADD` 后 `LIMITS CE`（正例不报 (2,536)、负例报）——10.5/10.6/14.7 仍待这一步。
+- [x] 10.5 图形门准备完成：`gui_gate_prepare.ps1` 在 `D:\e3dio-gui-gate` Scratch 副本上写入 `q13_control`（会话 651，无 SPAMAP 条目）与 `q13_boxes`（会话 652）——positive `/E3DIO-Q13-MAIN` = `=16192/5` 有 1 条 SPAMAP、negative `/E3DIO-Q13-CONTROL` = `=16192/4` 无条目，源 ams000 前后不变；`evidence/gui-gate.json` 记好会话内指令。同日晚间 TTY 探针已坐实底层判定：MAIN 体积搜索含自身零错误、CONTROL 报 (2,536) Error getting volume（见 10.5 的 2026-10-17 条）。只差 `gui_gate_launch.bat` 起真 E3D Design 由用户 `ADD` 后 `LIMITS CE`——10.5/10.6/14.7 仍待这一步。
 
 ### 决策
 
