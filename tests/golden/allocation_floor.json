@@ -1,302 +1,34 @@
 {
   "rerecorded": {
-    "on": "9c53a63fc5491fdf76ff56a9f8c2f3e12f4871cf",
-    "date": "2026-10-08",
-    "sample": { "ams8000_0001": { "len": 34037760, "sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "installed_last_write": "2026-10-06 02:52:32" } },
-    "entries": 1,
-    "reason": "The pinned sample 3CAB5D7D... is gone and the installed one moved; every entry not retired by another file was re-recorded on the current sample with tools/golden/record.ps1 (two runs agreed). Retired entries keep the hashes their retirements pin. The write code is that of 1b0bbf9 (one test-only change since), the last run that matched the 3CAB5D7D recordings."
+    "on": "1002ac7b273f4b525a5ccd50d542683dc0b76317",
+    "date": "2026-10-17",
+    "sample": { "ams8000_0001": { "len": 34177024, "sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "installed_last_write": "2026-10-16 01:39:54" } },
+    "entries": 17,
+    "reason": "The installed sample drifted again (3F8DED25 -> CD926F69 on 2026-10-16, E3D-appended sessions) while no pinned fixture existed, so golden copies made from it failed the sample-drift guard. snapshot.ps1 re-pinned the current bytes under E3DIO_WRITE_FIXTURES and every entry was re-recorded on them with record.ps1 (two runs agreed). No entry was dropped from any file; keys kept this time that earlier recordings dropped are additional coverage. These entries now pin byte-equality with the current HEAD's output on this sample, not with their original historical recordings."
   },
-  "parent": "aacdcf9",
+  "recorded_on": "1002ac7b273f4b525a5ccd50d542683dc0b76317",
+  "uncommitted_changes_under_src_or_tests": true,
+  "tests": ["write_stage6_transaction", "write_stage6_merge", "write_stage6_set_by_name"],
+  "samples": {
+    "ams8000_0001": { "len": 34177024, "sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "installed": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001", "installed_last_write": "2026-10-16 01:39:54" }
+  },
   "entries": {
-    "write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "5DDE06BB57C0D1CDB863090DF80815BDA859813BC6C23BB351F3F59F755B56E5",
-      "len": 34111488
-    },
-    "write_stage6_merge::a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "D1F45E0FC6851164FE64F5EEDB46DBD893EBD17AE54D5615386972268D3F2414",
-      "len": 34099200
-    },
-    "write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "C69D52F07B0980C915E45320E18B95E3CC6CBE5CEC9F1519E6F3C0457B326734",
-      "len": 34111488
-    },
-    "write_stage6_merge::a_writer_that_commits_between_staging_and_page_0_is_merged_over_once#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "B8BBE7A17C139B9CE61EA16F798DB1E0675E1B5333B178FBE080C29056267E9E",
-      "len": 34086912
-    },
-    "write_stage6_set_by_name::a_name_set_twice_in_one_transaction_files_the_last_one_only#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "FD10F815FC6E4DD714767945A82F0E7F92D0F92AA3422C37E76066E518A1A1FB",
-      "len": 34162688
-    },
-    "write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "D41CB987C6E42084EA09AEB913ABBB341B4ED1954C96EA5507AC821DFAECF77F",
-      "len": 34076672
-    },
-    "write_stage6_set_by_name::every_shape_set_by_name_reads_back_as_the_value_it_names#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "EFF053112046550085C5EBEF2EF6BE7E51DA90ECBE6E7F49ED5B5B759A4C273B",
-      "len": 34097152
-    },
-    "write_stage6_set_by_name::the_dictionary_holds_a_set_to_what_e3d_allows#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "19476A5EDED10EB2DB1851F622187D7A8F30F912034266A448CC8450E6D2E339",
-      "len": 34093056
-    },
-    "write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "A96A95BD927CB684500F39A6B5F6FA1610C3946D37088DCBB498758A07DF0DA6",
-      "len": 34062336
-    },
-    "write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "EA97053F05FBA7E33DB9ED91CB36E5FF5DBBD3C137EB5724BA218C472A16B98E",
-      "len": 34074624
-    },
-    "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "36D839AFF179D31BF29E6B3811FEF5AAE2A4E4F4C4E7612758EB439602A82ADA",
-      "len": 34056192
-    },
-    "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#1": {
-      "source": "ams8000_0001",
-      "source_sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342",
-      "sha256": "66199EF0D4242A6B7C386C6B73A50BBC480FE113095F026E4F5E43CB17E90E2F",
-      "len": 34056192
-    },
-    "write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "47ED670132D4D81BC7D1ADD214353CE9999DF3571CD873BDDA3601D1E4BBE380",
-      "len": 34074624
-    },
-    "write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "6F553DF8665320A4327F03A8DEC3661079B94D70F9DB4F5F53B306B75F4A7CB5",
-      "len": 34101248
-    },
-    "write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "DBC5440E2D6A3C05D73887C8DBDA61153039A906AAEC89AC5797C842DC127875",
-      "len": 34078720
-    },
-    "write_stage6_transaction::reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner#0": {
-      "source": "ams8000_0001",
-      "source_sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023",
-      "sha256": "B95576107F947BE6C8A6AF7A03691B7498DF3B8AC1E9F7712F0A4E693216C8A0",
-      "len": 34113536
-    }
-  },
-  "retired": [
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused#0",
-      "sha256": "5A68943B89DA46642CB732CFA07C17F153DAC65D5136D959AA89FC16EB53C0DA",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_merge::a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins#0",
-      "sha256": "58AFCDE912CFA8F34BF58B234358AB9A14279D5F6561995F881F49E857F0F9E7",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile#0",
-      "sha256": "3935777451CAAA1EF9FFB42251D286623E84B69E17F5E9C6427E7FA3C59BB252",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_merge::a_writer_that_commits_between_staging_and_page_0_is_merged_over_once#0",
-      "sha256": "0001BF3A67A0E757EE8F79D2A8399E41060D81395E28B36CA7ACB8C08F395E33",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_set_by_name::a_name_set_twice_in_one_transaction_files_the_last_one_only#0",
-      "sha256": "9696D90765327C8A31DB302876135B0A8174ADC1FAE77C0002BE21C34DF737AF",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back#0",
-      "sha256": "2AA35EB1545E2B1D7999C6DBE08A5E8F724EAA220F4516CF58FCB61B440ADB1A",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_set_by_name::every_shape_set_by_name_reads_back_as_the_value_it_names#0",
-      "sha256": "2061DA44ED6399676363DDEFD07F6B37C70BA941D8430275549500CFA65EFC51",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_set_by_name::the_dictionary_holds_a_set_to_what_e3d_allows#0",
-      "sha256": "FAADE1745F15D2279129994DE9C6B4566B669AAA27799D32CB3B76581287FF41",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing#0",
-      "sha256": "024C958EBDF348D52918AEE22EDA9EAA5B3E774FD289A30D73298E026B45F2A3",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership#0",
-      "sha256": "C53D3EFFD9E41A22A77CCE34709B26983924900665860CD6C619ED86A8C5962B",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#0",
-      "sha256": "4F4205C0BE9221D969D79F97DEDB1D268C57FB7452B4BEBB84207552A8D741BF",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#1",
-      "sha256": "4F4205C0BE9221D969D79F97DEDB1D268C57FB7452B4BEBB84207552A8D741BF",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner#0",
-      "sha256": "634CACB9A7E2F6B8DD0389AF66CA5C1D9C9F3FD232F372452BAC7D1EB7CE911D",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners#0",
-      "sha256": "8221F060152E2E81A850995FC159F274BDE7B15ED43C902FE6867EB3CE78411B",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else#0",
-      "sha256": "8A4D34679B5D23A10136FBCE2E0EA1D3916F7D4973800AD98EDD6C9FBB75C9AE",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "off_compat.json",
-      "key": "write_stage6_transaction::reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner#0",
-      "sha256": "CFA9D4F78C46EBD0602658F46758E708E40F365A0807CB923A4587D062DCBC1D",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused#0",
-      "sha256": "5A68943B89DA46642CB732CFA07C17F153DAC65D5136D959AA89FC16EB53C0DA",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_merge::a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins#0",
-      "sha256": "58AFCDE912CFA8F34BF58B234358AB9A14279D5F6561995F881F49E857F0F9E7",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile#0",
-      "sha256": "3935777451CAAA1EF9FFB42251D286623E84B69E17F5E9C6427E7FA3C59BB252",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_merge::a_writer_that_commits_between_staging_and_page_0_is_merged_over_once#0",
-      "sha256": "0001BF3A67A0E757EE8F79D2A8399E41060D81395E28B36CA7ACB8C08F395E33",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_set_by_name::a_name_set_twice_in_one_transaction_files_the_last_one_only#0",
-      "sha256": "9696D90765327C8A31DB302876135B0A8174ADC1FAE77C0002BE21C34DF737AF",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back#0",
-      "sha256": "2AA35EB1545E2B1D7999C6DBE08A5E8F724EAA220F4516CF58FCB61B440ADB1A",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_set_by_name::every_shape_set_by_name_reads_back_as_the_value_it_names#0",
-      "sha256": "2061DA44ED6399676363DDEFD07F6B37C70BA941D8430275549500CFA65EFC51",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_set_by_name::the_dictionary_holds_a_set_to_what_e3d_allows#0",
-      "sha256": "FAADE1745F15D2279129994DE9C6B4566B669AAA27799D32CB3B76581287FF41",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing#0",
-      "sha256": "024C958EBDF348D52918AEE22EDA9EAA5B3E774FD289A30D73298E026B45F2A3",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership#0",
-      "sha256": "C53D3EFFD9E41A22A77CCE34709B26983924900665860CD6C619ED86A8C5962B",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#0",
-      "sha256": "4F4205C0BE9221D969D79F97DEDB1D268C57FB7452B4BEBB84207552A8D741BF",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#1",
-      "sha256": "4F4205C0BE9221D969D79F97DEDB1D268C57FB7452B4BEBB84207552A8D741BF",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner#0",
-      "sha256": "634CACB9A7E2F6B8DD0389AF66CA5C1D9C9F3FD232F372452BAC7D1EB7CE911D",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners#0",
-      "sha256": "8221F060152E2E81A850995FC159F274BDE7B15ED43C902FE6867EB3CE78411B",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else#0",
-      "sha256": "8A4D34679B5D23A10136FBCE2E0EA1D3916F7D4973800AD98EDD6C9FBB75C9AE",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    },
-    {
-      "file": "write_hashes.json",
-      "key": "write_stage6_transaction::reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner#0",
-      "sha256": "CFA9D4F78C46EBD0602658F46758E708E40F365A0807CB923A4587D062DCBC1D",
-      "reason": "Requirement 11 NextAvailable floor changes dynamically minted refnos; requirement 15.3 keeps pre-minted batches."
-    }
-  ]
+    "write_stage6_merge::a_change_over_a_delete_a_delete_over_a_change_and_a_taken_name_are_refused#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "CFD1E2BF8243BFFD30F47F38668C35D13ADF9915475D533AC50FC96E918474A9", "len": 34250752 },
+    "write_stage6_merge::a_same_attribute_clash_is_refused_by_default_and_taken_under_writer_wins#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "6B282E9F19FC921026D4619178FAFB903A61EB26F5209423A48CE03AA533115C", "len": 34238464 },
+    "write_stage6_merge::a_transaction_opened_at_the_base_merges_onto_what_was_committed_meanwhile#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "0A3A7B569474A75ADA0EB2C13734DE46963EE4A2614FA540B1ECB2D38DCEFF80", "len": 34250752 },
+    "write_stage6_merge::a_writer_that_commits_between_staging_and_page_0_is_merged_over_once#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "16F49B7CC9C48C4B5D95BCE4EC5948561C99477AA7090568D218BC2DDC414ECF", "len": 34226176 },
+    "write_stage6_set_by_name::a_name_set_twice_in_one_transaction_files_the_last_one_only#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "EB49902FF1DDE8673A5C6679EC8C2B1B4B03150580ACD0FF0F65914517C3EDAF", "len": 34301952 },
+    "write_stage6_set_by_name::a_value_set_by_name_as_a_hunk_is_stored_out_of_the_record_and_reads_back#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "176F5B1578DD6BAAAA62AA1C395F6F17BDB49B3767A80ACDCBA6CABFC2F15DE1", "len": 34215936 },
+    "write_stage6_set_by_name::every_shape_set_by_name_reads_back_as_the_value_it_names#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "E8A434DE86E55564220078DFF79921CC8818F8A958951FB3B302EF08ECD54F96", "len": 34236416 },
+    "write_stage6_set_by_name::the_dictionary_holds_a_set_to_what_e3d_allows#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "1CD3A784457F916152DA18A9CA654B84D15D425110DD9875537DB57195868FE5", "len": 34232320 },
+    "write_stage6_set_by_name::what_cannot_be_read_is_refused_and_writes_nothing#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "FA9F134197437FA1A1659387289D74548CD779EC032ED20EFB5BC015AC0FFFCD", "len": 34201600 },
+    "write_stage6_transaction::a_facade_delete_drops_the_key_and_the_owner_membership#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "508A466F3C325A5B44F76FC7471315C9A0A60AB63D3711553411BCA6CE3F424B", "len": 34213888 },
+    "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "35DC22C9B970D45267C21428891B29C30ED7318A41665AC5E2A41FA8B15F2456", "len": 34195456 },
+    "write_stage6_transaction::a_facade_insert_equals_the_primitive_path_byte_for_byte#1": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "1AA136591C92F368F647D2F10A549DD8FA4D66C8B98255BD77903E5F8D8CE4A6", "len": 34195456 },
+    "write_stage6_transaction::a_facade_rename_moves_the_name_and_rewrites_the_record#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "FA340896EF89A0664814CF7F908CEFE7E48D24EDDD61092D7AE73F2C1203205E", "len": 34201600 },
+    "write_stage6_transaction::a_move_within_the_inserting_transaction_touches_only_the_final_owner#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "566467968126471D486FCD68FEC94F97B71324ED9E5EFE92192E89CE302391E5", "len": 34213888 },
+    "write_stage6_transaction::move_to_reparents_the_box_and_rewrites_exactly_both_owners#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "620536B639F30A6195E01F61C312679FA52EC9A3CDC182EF4C5194C57088EDE1", "len": 34240512 },
+    "write_stage6_transaction::reference_members_are_edited_on_the_group_and_nowhere_else#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "5FE1B670BBDC6BE78A520BFC78BA54269338A614FA7D94BA29D4DEC265A0B698", "len": 34217984 },
+    "write_stage6_transaction::reorder_moves_a_member_within_its_owner_and_rewrites_only_the_owner#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "30DBE43A337890638B3F88ACF279DB49BD169FAA253DF7FF44F1DBB15F8A8E9E", "len": 34252800 }
+  }
 }

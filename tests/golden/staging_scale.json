@@ -1,22 +1,22 @@
 {
   "rerecorded": {
-    "on": "9c53a63fc5491fdf76ff56a9f8c2f3e12f4871cf",
-    "date": "2026-10-08",
-    "sample": { "ams8000_0001": { "len": 34037760, "sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "installed_last_write": "2026-10-06 02:52:32" } },
+    "on": "1002ac7b273f4b525a5ccd50d542683dc0b76317",
+    "date": "2026-10-17",
+    "sample": { "ams8000_0001": { "len": 34177024, "sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "installed_last_write": "2026-10-16 01:39:54" } },
     "entries": 5,
-    "reason": "The pinned sample 3CAB5D7D... is gone and the installed one moved; every entry not retired by another file was re-recorded on the current sample with tools/golden/record.ps1 (two runs agreed). Retired entries keep the hashes their retirements pin. The write code is that of 1b0bbf9 (one test-only change since), the last run that matched the 3CAB5D7D recordings."
+    "reason": "The installed sample drifted again (3F8DED25 -> CD926F69 on 2026-10-16, E3D-appended sessions) while no pinned fixture existed, so golden copies made from it failed the sample-drift guard. snapshot.ps1 re-pinned the current bytes under E3DIO_WRITE_FIXTURES and every entry was re-recorded on them with record.ps1 (two runs agreed). No entry was dropped from any file; keys kept this time that earlier recordings dropped are additional coverage. These entries now pin byte-equality with the current HEAD's output on this sample, not with their original historical recordings."
   },
-  "recorded_on": "5548ad0fb6eff70e79cbe09ca8ad75c0b09f898c",
+  "recorded_on": "1002ac7b273f4b525a5ccd50d542683dc0b76317",
   "uncommitted_changes_under_src_or_tests": false,
   "tests": ["write_scale_golden"],
   "samples": {
-    "ams8000_0001": { "len": 34037760, "sha256": "3CAB5D7D2B2C40FDF0829B91C555D19D55C530DD49860A4665560E5C553FE023", "installed": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001", "installed_last_write": "2026-09-30 17:05:57" }
+    "ams8000_0001": { "len": 34177024, "sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "installed": "D:\\AVEVA\\Projects\\E3D3.1\\AvevaMarineSample\\ams000\\ams8000_0001", "installed_last_write": "2026-10-16 01:39:54" }
   },
   "entries": {
-    "write_scale_golden::deterministic_pre_minted_batches_read_back#0": { "source": "ams8000_0001", "source_sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "sha256": "FC37466F95AC4F2EE752C69D8B58A98E5426ACDC993487B337C12BBCE3AA5A6F", "len": 34062336 },
-    "write_scale_golden::deterministic_pre_minted_batches_read_back#1": { "source": "ams8000_0001", "source_sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "sha256": "42E11CB7514C218D8EFD058B7B43B14043CB7355018894AA9DD1A3C217373A21", "len": 34078720 },
-    "write_scale_golden::deterministic_pre_minted_batches_read_back#2": { "source": "ams8000_0001", "source_sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "sha256": "EB1B5902375E4360E7BD827C61C7F458AE44BD06CBA66ED95480EC307760F43C", "len": 34103296 },
-    "write_scale_golden::mixed_pre_minted_scale_batches_read_complete_member_order#0": { "source": "ams8000_0001", "source_sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "sha256": "23AE6A5F28CCDF251C6EEF19F6F0ADD9CD76E2C1FF6D8BDD332C8F02A1B809F8", "len": 36280320 },
-    "write_scale_golden::mixed_pre_minted_scale_batches_read_complete_member_order#1": { "source": "ams8000_0001", "source_sha256": "3F8DED2533EE9AFA106DB4873C680F651BA5D719DF3FD3A0A9AE12C29CE0A342", "sha256": "A0137037B733CA979166A1027BE26EDAAC6F56320391D86946426010B992C4E7", "len": 52660224 }
+    "write_scale_golden::deterministic_pre_minted_batches_read_back#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "1983AABF4939C8AAF99CC672B0BB7F4B7773D75194D5CA0BF2480061FE19FA9A", "len": 34201600 },
+    "write_scale_golden::deterministic_pre_minted_batches_read_back#1": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "932699CF17630D93A4B26D810498C6DEDF383F73B86648A1FBA0F50E952BC024", "len": 34217984 },
+    "write_scale_golden::deterministic_pre_minted_batches_read_back#2": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "768A1F765BBF31D7DE93D7A036B6238CC198AB435018D9F2FD3FA636C450D54A", "len": 34242560 },
+    "write_scale_golden::mixed_pre_minted_scale_batches_read_complete_member_order#0": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "074EFCD963AF8001CDA44475B1488209CEAFC8A282193364A0D93F7B1D1EED37", "len": 36419584 },
+    "write_scale_golden::mixed_pre_minted_scale_batches_read_complete_member_order#1": { "source": "ams8000_0001", "source_sha256": "CD926F697CC831633406463BD24C95D5A4D03397C4F114E101855A3C2C9F844A", "sha256": "7B56C8C84CEDC8F52D397B5BBB7A3ADD61192B2097822F358340671217CAB46E", "len": 52799488 }
   }
 }
