@@ -352,6 +352,7 @@
     - 截图放 `docs/evidence/assets/`，记录写入 `docs/evidence/YYYY-MM-DD-e3d-spatial-gui-session.md`
     - 2026-10-06 尝试启动已安装的 `D:\AVEVA\Everything3D2.10\des.exe`：进程立即退出，Windows 返回 `0xE0434352`（CLR 未处理异常），没有可操作的图形窗口；未伪造 PASS，仍需在可用许可证/图形环境中由用户完成。
     - 2026-10-17 TTY 等价探针（`D:\e3dio-gui-gate` scratch，12 s，L3-ALIVE/DONE 双标记，原始日志 `logs-limits/`）：裸 `LIMITS CE` 在 TTY 报 `(47,62) Incomplete command line`（GUI 侧命令由 `designviewLimits` 注册，故图形步仍只能走 GUI）；底层空间检查给出预测的正反对——`WITHIN VOLUME =16192/5` 返回 7 个 BOX 含自身、零错误，`WITHIN VOLUME =16192/4` 报 **`(2,536) Error getting volume for BOX /E3DIO-Q13-CONTROL`**；类型扫描 12 197 个 BOX、空间扫描 12 196 个，唯一差值即 --spatial off 的对照件（16192/5..8、10..14 全部可解）。探针未发 SAVEWORK，但 E3D 登录自身追加了会话 653「Saving Meta Data.」（user=dpc）——真 E3D 的开库内务写，scratch DB 现为 `4922E530…`。
+    - 2026-10-18 图形会话已执行（收口计划 Q2 方案 A，CLR 注入驱动真 GUI，scratch 项目、PID 46228）：`=16192/5` NAV/ADD/`!!volume`/`!!gphViews.limits`/`!!designViewLimits.execute(['CE'])`（即功能区 Limits CE 命令对象本体）全 OK、零 (2,536)；对照 `=16192/4` 的 `!!volume` 报 `(69,9) not in the spatial map`，且将其拉入 drawlist 后图形刷新命中 (69,9) 致会话 UI 拆解——负例在 GUI 侧同样真坏、错误码随 API 层不同。字面 `LIMITS CE` 报 `(47,62)`（该动词不注册在命令行语法），已如实记录。证据 `docs/evidence/2026-10-18-e3d-spatial-gui-session.md` + `assets/2026-10-18-spatial-gui/`；按收口计划交用户确认截图与命令原文后记 PASS。
     - _Requirements: 10.11_
   - [~] 10.6 Checkpoint - 第 10 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.

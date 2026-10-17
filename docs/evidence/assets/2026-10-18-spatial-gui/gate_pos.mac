@@ -1,0 +1,44 @@
+!t = ARRAY()
+!t.append('GATE105-POSITIVE')
+=16192/5
+handle any
+  !t.append('NAV ERR ' & !!error.text)
+elsehandle none
+  !t.append('NAV OK ce=' & !!ce.string() & ' type=' & !!ce.type)
+endhandle
+ADD =16192/5
+handle any
+  !t.append('ADD ERR ' & !!error.text)
+elsehandle none
+  !t.append('ADD OK')
+endhandle
+!v1 = !!volume(!!ce)
+handle any
+  !t.append('VOLUME ERR ' & !!error.text)
+elsehandle none
+  !t.append('VOLUME OK ' & !v1.string())
+endhandle
+!view = !!fmSys.currentDocument().view
+handle any
+  !t.append('VIEW ERR ' & !!error.text)
+elsehandle none
+  !t.append('VIEW OK type=' & !view.type())
+endhandle
+!!gphViews.limits(!view, !!ce)
+handle any
+  !t.append('LIMITS ERR ' & !!error.text)
+elsehandle none
+  !t.append('LIMITS OK')
+endhandle
+!a1 = ARRAY()
+!a1[0] = 'CE'
+!!designViewLimits.execute(!a1)
+handle any
+  !t.append('EXEC ERR ' & !!error.text)
+elsehandle none
+  !t.append('EXEC OK')
+endhandle
+!t.append('GATE105-POSITIVE-END')
+!r = object FILE('D:/e3dio-gui-gate/logs-limits/gui-gate-positive.txt')
+!r.writeFile('OVERWRITE', !t)
+return
