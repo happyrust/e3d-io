@@ -217,3 +217,4 @@ S6 只依赖 S1、S3，可与 S4、S5 并行。为了不打架：
   - 5.10：test e3d-studio 38/0（1 ignored）；clippy e3d-studio 0、e3d-convert 2 基线；doc 0。
   - **S6 完成**。下一步 S7 验收（spec 6.x）：语料全量转换 + SHA-256 前后比对 + 6.7 E3D 门（需用户时段）+ 6.8 用户确认。
 - 2026-10-17 **S7 验收跑完可算项**（spec 6.1–6.6 实测过）：6.3 语料 536 库 81 s 全转 `e3d-m1-out`，聚合计数与 F5 逐项相同、需确认恰 Held_8；6.4 字节不变 30.7 s 过；6.5 源 4595 文件 SHA-256 前后全同；6.6 取消 158.4 ms 零残留；6.1/6.2 复测达标。证据 `e3d-studio/docs/evidence/2026-10-17-e3d-studio-m1-acceptance.md`。剩 6.7 E3D 门（需用户时段）与 6.8 界面确认收口 M1。
+- 2026-10-17 **S7 E3D 门跑通，1.6 Q1 坐实**（spec 6.7、1.6 打勾）：`e3d-m1-q1` Scratch 副本上三趟 E3D 3.1 TTY，`=15240/1968`（SLADDR）10 项读回——8 项数值合 e3d31、FOOTRO 查询令 des.exe AV（3.1 布局确无此属性）、LABOFF 0mm；Q1：SLADDR「不一致」为真实存值差异。证据 `e3d-studio/docs/evidence/2026-10-17-e3d-studio-m1-acceptance.md` §6.7。剩 6.8 界面确认与 2.8 遗留收口 M1。
