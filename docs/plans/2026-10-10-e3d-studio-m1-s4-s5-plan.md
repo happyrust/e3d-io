@@ -207,3 +207,12 @@ S6 只依赖 S1、S3，可与 S4、S5 并行。为了不打架：
   - 4.9：test e3d-studio 38/0（1 ignored 探针）、e3d-convert 11/0 + corpus 4/0；clippy e3d-studio 0、e3d-convert 2 基线；doc 0。`cargo fmt --check` 全仓既有偏移（无 rustfmt 门禁），非本轮引入。证据 `docs/evidence/2026-10-16-e3d-studio-s5.md`。
   - 驱动备注：本轮桌面被用户自动化反复占屏，改用 UIA `ValuePattern`/`ExpandCollapse` + `PostMessage WM_KEYDOWN` 驱动（修饰键位 GPUI 读不到，Ctrl+D 用 windows-mcp 真实按键）；截图 `PrintWindow(PW_RENDERFULLCONTENT)`，窗口尺寸被外部反复改动，脚本内原子恢复+查坐标。
   - **S5 完成**。下一步 S6 转换向导（spec 5.x，§2.6 接口约束已就位：`OpenLibraries::current()`、`ProjectReleases`、`Browse::reveal`、`CompareRelease`）。
+
+- 2026-10-17 **S6 完成**（spec 5.1–5.10 打勾，组 5 全勾），`e3d-studio` `5f1187e`、`ac31ea9`（文档）。证据 `docs/evidence/2026-10-17-e3d-studio-s6.md`，截图 01–05。
+  - 根因修复：`open_dialog` 的 builder 是 `Fn`、每帧重跑——`ConvertWizard::new` 写进 builder 会让勾选/计划结果/排干任务逐帧蒸发；改为 `on_convert` 里只建一次实体、builder 只 `.child(wizard.clone())`。
+  - 5.1–5.7：向导两步（选库多选 + 计划检查行与汇总）→ `ConvertJobs::start` → `run_on_thread` → `convert_batch`；任务页签（阶段/进度/取消）+ 完成通知；报告页签（汇总卡 + `TextView::markdown` + 发现表 + 双击回对照 + 「接受并携带」二次确认 → `accept_on_thread` 落 `accepted:{by,at}`）。实测 acp7048_0001 需确认 → 接受 → `promoted:true`。
+  - 5.8（Property 5）：`examples/report-diff.rs`，`acp7048_0001` GUI vs CLI `run --accept --user dpc` —— `without_times` 后逐字段 EQUAL（8 checks、11 findings）。
+  - 5.4/5.9（Property 6）：`ams7351_0001`（1.24 GB）GUI 取消 → `cancelled` 报告、暂存清空、无目标残留；1 s 判据由库层测试保证（174 ms）。
+  - Q5：`ams7351_0001` `e3d-convert plan` 全程 306 ms（冷含模式解析）；热模式 `acp7048_0001` 53 ms。
+  - 5.10：test e3d-studio 38/0（1 ignored）；clippy e3d-studio 0、e3d-convert 2 基线；doc 0。
+  - **S6 完成**。下一步 S7 验收（spec 6.x）：语料全量转换 + SHA-256 前后比对 + 6.7 E3D 门（需用户时段）+ 6.8 用户确认。
