@@ -355,6 +355,7 @@
     - _Requirements: 10.11_
   - [~] 10.6 Checkpoint - 第 10 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
+    - 2026-10-17 全量回归 `mode=full tty_verified=True`（HEAD `7f304676`，证据 `D:\e3dio-regression\20261017-233056-21bca7c8`）：tests 855/0/35、clippy/doc、Q13/Q14/Q15 离线、write TTY 217.1 s（Q13 组 166.8 s + Q14 9.4 s）42 判决全过、alternate 5 轮 80.0 s、format0 9.8 s；AMS/TES/golden 三目录前后不变。自 2026-10-07 统一回归以来首个全绿全量跑——此前被 ams8000_0001 装机漂移卡死在 tests 段，重录钉板后放行。10.5/10.6/14.7 仍按本组惯例等人工图形门。
 
 - [x] 11. 发号下界与 Open_Fast_Path（需求 11；与第 3–10 组并行）
   - [x] 11.1 取证 Counter_Semantics 与索引键序
