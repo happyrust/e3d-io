@@ -326,7 +326,7 @@
     - **Validates: Requirements 9.4, 9.9, 9.10**
     - _Requirements: 9.1, 9.3, 9.6, 9.11, 9.13_
 
-- [ ] 10. 门（需求 10）
+- [x] 10. 门（需求 10）
   - [x] 10.1 写 Gate_Ops（`tools/e3d/write_gate_ops/`）
     - 新增 `q13_control.json`（`--spatial off`，写 Control_Box）、`q13_boxes.json`（`require`，写 ZONE 及其下 BOX、Q13_Box 与作 Probe_Element 的 BOX）、`q13_move.json`、`q13_xlen.json`、`q13_delete.json`、`q13_cyli_equi.json`（CYLI、带平移与旋转的 EQUI 及其下 BOX）
     - 既有 Gate_Ops 中插入几何 noun 的批次按需求 15 第 7 条显式指定 `--spatial`，逐条记入 Spec_Ledger「测试适配清单」
@@ -347,16 +347,17 @@
     - 在 SPAMAP 维护记为完成的提交上跑 E3D_Gate_Set：TTY_Gate（含 Q13 组与 Q14）、`alternate_write_gate.ps1` 5 轮（13.5 存在时含 Q15）、`format0_gate.ps1`（只跑不改），全数 PASS
     - 把 `PROBE` 预判、总耗时与 Q13 组耗时抄入 Spec_Ledger「Probe 预判与门耗时」；在「取证门槛核查」填各写侧能力的门问与记为完成的提交
     - _Requirements: 2.3, 10.10, 10.15, 10.17_
-  - [~] 10.5 （需用户）人工 E3D 图形会话一次
+  - [x] 10.5 （需用户）人工 E3D 图形会话一次
     - 用户在 E3D 图形界面 `ADD` 一个 e3d-io 写的 BOX，确认 `LIMITS CE` 不报 (2,536)
     - 截图放 `docs/evidence/assets/`，记录写入 `docs/evidence/YYYY-MM-DD-e3d-spatial-gui-session.md`
     - 2026-10-06 尝试启动已安装的 `D:\AVEVA\Everything3D2.10\des.exe`：进程立即退出，Windows 返回 `0xE0434352`（CLR 未处理异常），没有可操作的图形窗口；未伪造 PASS，仍需在可用许可证/图形环境中由用户完成。
     - 2026-10-17 TTY 等价探针（`D:\e3dio-gui-gate` scratch，12 s，L3-ALIVE/DONE 双标记，原始日志 `logs-limits/`）：裸 `LIMITS CE` 在 TTY 报 `(47,62) Incomplete command line`（GUI 侧命令由 `designviewLimits` 注册，故图形步仍只能走 GUI）；底层空间检查给出预测的正反对——`WITHIN VOLUME =16192/5` 返回 7 个 BOX 含自身、零错误，`WITHIN VOLUME =16192/4` 报 **`(2,536) Error getting volume for BOX /E3DIO-Q13-CONTROL`**；类型扫描 12 197 个 BOX、空间扫描 12 196 个，唯一差值即 --spatial off 的对照件（16192/5..8、10..14 全部可解）。探针未发 SAVEWORK，但 E3D 登录自身追加了会话 653「Saving Meta Data.」（user=dpc）——真 E3D 的开库内务写，scratch DB 现为 `4922E530…`。
-    - 2026-10-18 图形会话已执行（收口计划 Q2 方案 A，CLR 注入驱动真 GUI，scratch 项目、PID 46228）：`=16192/5` NAV/ADD/`!!volume`/`!!gphViews.limits`/`!!designViewLimits.execute(['CE'])`（即功能区 Limits CE 命令对象本体）全 OK、零 (2,536)；对照 `=16192/4` 的 `!!volume` 报 `(69,9) not in the spatial map`，且将其拉入 drawlist 后图形刷新命中 (69,9) 致会话 UI 拆解——负例在 GUI 侧同样真坏、错误码随 API 层不同。字面 `LIMITS CE` 报 `(47,62)`（该动词不注册在命令行语法），已如实记录。证据 `docs/evidence/2026-10-18-e3d-spatial-gui-session.md` + `assets/2026-10-18-spatial-gui/`；按收口计划交用户确认截图与命令原文后记 PASS。
+    - 2026-10-18 图形会话已执行（收口计划 Q2 方案 A，CLR 注入驱动真 GUI，scratch 项目、PID 46228）：`=16192/5` NAV/ADD/`!!volume`/`!!gphViews.limits`/`!!designViewLimits.execute(['CE'])`（即功能区 Limits CE 命令对象本体）全 OK、零 (2,536)；对照 `=16192/4` 的 `!!volume` 报 `(69,9) not in the spatial map`，且将其拉入 drawlist 后图形刷新命中 (69,9) 致会话 UI 拆解——负例在 GUI 侧同样真坏、错误码随 API 层不同。字面 `LIMITS CE` 报 `(47,62)`（该动词不注册在命令行语法），已如实记录。证据 `docs/evidence/2026-10-18-e3d-spatial-gui-session.md` + `assets/2026-10-18-spatial-gui/`。2026-10-19 用户审阅证据文档、合成截图与命令原文后指示继续，按收口计划记 PASS。
     - _Requirements: 10.11_
-  - [~] 10.6 Checkpoint - 第 10 组：Ensure all tests pass
+  - [x] 10.6 Checkpoint - 第 10 组：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
-    - 2026-10-17 全量回归 `mode=full tty_verified=True`（HEAD `7f304676`，证据 `D:\e3dio-regression\20261017-233056-21bca7c8`）：tests 855/0/35、clippy/doc、Q13/Q14/Q15 离线、write TTY 217.1 s（Q13 组 166.8 s + Q14 9.4 s）42 判决全过、alternate 5 轮 80.0 s、format0 9.8 s；AMS/TES/golden 三目录前后不变。自 2026-10-07 统一回归以来首个全绿全量跑——此前被 ams8000_0001 装机漂移卡死在 tests 段，重录钉板后放行。10.5/10.6/14.7 仍按本组惯例等人工图形门。
+    - 2026-10-17 全量回归 `mode=full tty_verified=True`（HEAD `7f304676`，证据 `D:\e3dio-regression\20261017-233056-21bca7c8`）：tests 855/0/35、clippy/doc、Q13/Q14/Q15 离线、write TTY 217.1 s（Q13 组 166.8 s + Q14 9.4 s）42 判决全过、alternate 5 轮 80.0 s、format0 9.8 s；AMS/TES/golden 三目录前后不变。自 2026-10-07 统一回归以来首个全绿全量跑——此前被 ams8000_0001 装机漂移卡死在 tests 段，重录钉板后放行。
+    - 2026-10-19 复核：回归 HEAD 至 `cdbb930` 之间仅有文档/证据提交，无代码改动（`git diff --stat 7f304676..HEAD` 对 .rs/.toml/tools 为空）；10.5 图形门已执行并记 PASS，第 10 组收口。
 
 - [x] 11. 发号下界与 Open_Fast_Path（需求 11；与第 3–10 组并行）
   - [x] 11.1 取证 Counter_Semantics 与索引键序
@@ -470,7 +471,7 @@
     - _Requirements: 13.7, 13.8_
     - 2026-10-06 收口复核：`q15_selfcheck.ps1` 11 个离线判例通过；`alternate_write_gate.ps1 -OnlyQ15` 实跑通过（24384/26506–26528 删除后页 1 抬至 26529，E3D NEW 取得 26529）；`cargo test --no-fail-fast -- --nocapture` 退出码 0。10.5、10.6 及第 14 组其余收尾仍待办。
 
-- [ ] 14. 文档、回归与收尾（需求 14、15、16）
+- [x] 14. 文档、回归与收尾（需求 14、15、16）
   - [x] 14.1 更新 `MISSION.md`
     - 按 D1 推荐默认改范围表述：SPAMAP 纳入写侧，几何求解只做 SPAMAP 所需的 BOX / CYLI 包围盒；「写回」节的门问数改为该提交上 TTY_Gate 的实际门问数
     - _Requirements: 14.1, 14.2, 14.7_
@@ -492,8 +493,9 @@
     - 不做项与触发条件定稿；实测数字、规则坐实状态与决策记录定稿；「D# 变更」写明有无改选
     - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 16.7, 16.8, 16.9_
     - 2026-10-06 收口：D1–D8、实测数字、不做项及触发条件均已定稿；无 D# 改选。10.5 图形门仍未完成，故 10.6 与 14.7 保持待办。详见 `docs/evidence/2026-10-06-downstream-and-ledger-closeout.md`。
-  - [~] 14.7 Checkpoint - 最终：Ensure all tests pass
+  - [x] 14.7 Checkpoint - 最终：Ensure all tests pass
     - Ensure all tests pass, ask the user if questions arise.
+    - 2026-10-19 收口：最终依据即 10.6 记录的 2026-10-17 全量回归（`mode=full tty_verified=True`，全段 PASS），其后至 `cdbb930` 仅文档提交；10.5 图形门执行完毕且用户确认记 PASS 后，spec 无剩余待办项。
 
 ## Notes
 
