@@ -112,14 +112,24 @@ fn the_mdb_dictionaries_declare_hxysize_twice_and_the_bran_stores_the_first() {
     assert_eq!(
         declared,
         vec![
-            (HXYSIZE_AMS_KEY, Some(HXYSIZE_AMS_OLD_KEY), RefNo::new(13_292, 123)),
-            (HXYSIZE_ACP_KEY, Some(HXYSIZE_ACP_OLD_KEY), RefNo::new(15_198, 55)),
+            (
+                HXYSIZE_AMS_KEY,
+                Some(HXYSIZE_AMS_OLD_KEY),
+                RefNo::new(13_292, 123)
+            ),
+            (
+                HXYSIZE_ACP_KEY,
+                Some(HXYSIZE_ACP_OLD_KEY),
+                RefNo::new(15_198, 55)
+            ),
         ],
         "one name, two Dictionaries, two keys"
     );
     // 目录表达式里的词是 acp7006 那条的 OLDKEY——字典按 OLDKEY 也认得出它。
     assert_eq!(
-        catalog.by_key(HXYSIZE_ACP_OLD_KEY).map(|definition| definition.refno),
+        catalog
+            .by_key(HXYSIZE_ACP_OLD_KEY)
+            .map(|definition| definition.refno),
         Some(RefNo::new(15_198, 55))
     );
     for definition in catalog.by_name("HXYsize") {
@@ -142,14 +152,18 @@ fn a_bran_reads_its_udas_by_name_the_way_q_prints_them() {
         Some(DescriptorValue::RealArray(vec![675.0, 600.0]))
     );
     assert_eq!(
-        bran.get_double_array(":hxysize").expect("case-insensitive like Q"),
+        bran.get_double_array(":hxysize")
+            .expect("case-insensitive like Q"),
         Some(vec![675.0, 600.0])
     );
     assert!(bran.has_attribute(":HXYsize").unwrap());
     // 同名的第二条（acp7006, 0x2C00D576）不再单独成行：一张表里只有一条 :HXYsize。
     let names = bran.attribute_names().unwrap();
     assert_eq!(
-        names.iter().filter(|name| name.eq_ignore_ascii_case(":HXYsize")).count(),
+        names
+            .iter()
+            .filter(|name| name.eq_ignore_ascii_case(":HXYsize"))
+            .count(),
         1,
         "{names:?}"
     );
@@ -194,7 +208,12 @@ fn a_bran_reads_its_udas_by_name_the_way_q_prints_them() {
 fn bran_member_that_is_not_a_bran(bran: &DbElement) -> DbElement {
     bran.members()
         .expect("members")
-        .find(|member| member.element_type().map(|noun| noun != "BRAN").unwrap_or(false))
+        .find(|member| {
+            member
+                .element_type()
+                .map(|noun| noun != "BRAN")
+                .unwrap_or(false)
+        })
         .expect("the branch has a non-BRAN member")
 }
 
@@ -217,7 +236,10 @@ fn a_bran_reads_its_udas_by_key_through_ukey_and_oldkey() {
     // 字典里没有的键：Err，不是 unset。
     assert!(matches!(
         bran.uda_by_key(0x2652_0000),
-        Err(DbElementError::Uda { key: 0x2652_0000, .. })
+        Err(DbElementError::Uda {
+            key: 0x2652_0000,
+            ..
+        })
     ));
     // 定义对 noun 无效：Err。
     let member = bran_member_that_is_not_a_bran(&bran);
@@ -245,16 +267,15 @@ fn a_bran_reads_its_udas_by_key_through_ukey_and_oldkey() {
 
 /// `/HRTUBE1-BOXI.PXLE = ( :HXYsize[2 ] )`，在支管 `/-CCV-S-2-L-1405` 上求值。
 ///
-/// 目录写下的键是 acp7006 那条 `HXYsize` 的 OLDKEY；支管的 `675 600` 存在 ams5100 那条
-/// 的键下。按键读到的是 acp 那条——对 BRAN 有效、值 unset——公式未解，与 E3D 对这 7 条
-/// 头槽位报的 `Catalogue error … unable to evaluate … PXLE` 同一个落点；同一支管上
-/// `Q :HXYsize` 却答 `675 600`。字典认得出键的名字，所以未解的公式印成 E3D 的写法。
+/// 目录写下的键是 acp7006 那条 `HXYsize` 的 OLDKEY。`uda_by_key` 对这把键仍是 unset
+/// （元素把 `675 600` 存在 ams5100 那条同名定义下）。表达式求值不再停在这一格：
+/// 同名定义按字典序取 `Q :HXYsize` 的那个数，所以挂上支管后 PXLE / PZLE 是 600 / 675。
+/// 不挂设计元素时目录件自己没有这个 UDA，公式仍未解。
 ///
-/// 把词里的键换成 ams5100 那条的当前键，同一条支管、同一个环境立刻求出 600 / 675：
-/// 按键那条链（DbSet 字典 → uda_by_key → ParamEnv::uda_number → PML）在真库上是通的，
-/// 落空的只是目录指向的那条定义。
+/// 把词里的键换成 ams5100 那条的当前键，同一条支管直接按键求出同样的数：按键那条链
+/// （DbSet 字典 → uda_by_key → ParamEnv::uda_number → PML）在真库上是通的。
 #[test]
-fn the_hrtube1_head_slot_expression_resolves_by_key_and_stays_unset_like_e3d() {
+fn the_hrtube1_head_slot_expression_uses_the_same_named_uda_when_the_catalogue_key_is_unset() {
     if common::missing(FIXTURES) {
         return;
     }
@@ -274,38 +295,57 @@ fn the_hrtube1_head_slot_expression_resolves_by_key_and_stays_unset_like_e3d() {
     let env = DbElementParamEnv::new(Some(bran.clone()), Some(boxi.clone()));
     assert_eq!(
         boxi.get_number("PXLE", &env).unwrap(),
-        AttributeNumber::Unresolved {
+        AttributeNumber::Evaluated {
+            value: 600.0,
             form: ExpressionForm::Pml,
-            text: Some("( :HXYsize[2 ] )".into()),
         }
     );
     assert_eq!(
         boxi.get_number("PZLE", &env).unwrap(),
-        AttributeNumber::Unresolved {
+        AttributeNumber::Evaluated {
+            value: 675.0,
             form: ExpressionForm::Pml,
-            text: Some("( :HXYsize[1 ] )".into()),
+        }
+    );
+    let tube = set
+        .find_named(HRTUBE1_BOXI_DBNO, "/HCTUBE-TUBE")
+        .expect("scan acp7002 names")
+        .into_iter()
+        .map(|refno| set.element(refno))
+        .next()
+        .expect("/HCTUBE-TUBE exists");
+    let bran_5302 = set.element(BRAN_5302);
+    assert_eq!(
+        tube.get_number(
+            "PDIA",
+            &DbElementParamEnv::new(Some(bran_5302), Some(tube.clone()))
+        )
+        .unwrap(),
+        AttributeNumber::Evaluated {
+            value: 350.0,
+            form: ExpressionForm::Pml,
         }
     );
     // 不挂设计元素（hvac_tube 今天的环境）：同样未解。
     assert!(matches!(
-        boxi.get_number("PXLE", &DbElementParamEnv::catalogue_only(boxi.clone())).unwrap(),
-        AttributeNumber::Unresolved { form: ExpressionForm::Pml, .. }
+        boxi.get_number("PXLE", &DbElementParamEnv::catalogue_only(boxi.clone()))
+            .unwrap(),
+        AttributeNumber::Unresolved {
+            form: ExpressionForm::Pml,
+            ..
+        }
     ));
 
     // 同一段程序、只把键换成本项目字典那条的当前键：按键那条链求得出值。
     let parsed = boxi.parsed().unwrap();
-    let pxle = e3d_io::record::descriptor::stored_expression_words(
-        &parsed,
-        e3d_attlib::db1_hash("PXLE"),
-    )
-    .expect("PXLE is a stored program")
-    .to_vec();
-    let pzle = e3d_io::record::descriptor::stored_expression_words(
-        &parsed,
-        e3d_attlib::db1_hash("PZLE"),
-    )
-    .expect("PZLE is a stored program")
-    .to_vec();
+    let pxle =
+        e3d_io::record::descriptor::stored_expression_words(&parsed, e3d_attlib::db1_hash("PXLE"))
+            .expect("PXLE is a stored program")
+            .to_vec();
+    let pzle =
+        e3d_io::record::descriptor::stored_expression_words(&parsed, e3d_attlib::db1_hash("PZLE"))
+            .expect("PZLE is a stored program")
+            .to_vec();
     assert_eq!(pxle[11], HXYSIZE_ACP_OLD_KEY as i32, "{pxle:?}");
     let rekey = |words: &[i32]| -> Vec<i32> {
         words
@@ -369,7 +409,10 @@ fn the_dictionary_survives_a_design_fork() {
     let next = Arc::new(
         old.fork_without(
             &HashSet::from([BRAN_1405.dbno()]),
-            Box::new(Pins(HashMap::from([(BRAN_1405.dbno(), pin(AMS7997, "DESI"))]))),
+            Box::new(Pins(HashMap::from([(
+                BRAN_1405.dbno(),
+                pin(AMS7997, "DESI"),
+            )]))),
         )
         .unwrap(),
     );

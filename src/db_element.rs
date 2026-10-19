@@ -1113,6 +1113,11 @@ impl DbElement {
         })
     }
 
+    /// 本元素所在池挂着的 UDA 字典。没挂是 `None`。
+    pub fn uda_catalog(&self) -> Option<&UdaCatalog> {
+        self.set.uda.as_deref()
+    }
+
     /// 一个 UDA 的文件自报值，**按键**读——目录表达式 `( :HXYsize[2] )` 存的不是名字，
     /// 是目录写下时 `HXYsize` 的 `UKEY`（[`crate::record::catalogue_pml`] 模块头）。
     ///
@@ -1146,7 +1151,10 @@ impl DbElement {
             ));
         };
         if !definition.applies_to(parsed.noun_hash) {
-            let detail = format!("字典定义 :{} 对 {noun} 无效（ELEL 不含它）", definition.name);
+            let detail = format!(
+                "字典定义 :{} 对 {noun} 无效（ELEL 不含它）",
+                definition.name
+            );
             return Err(uda_error(noun, detail));
         }
         let (_, value) = definition.value_for(&parsed.explicit_attributes);
@@ -1437,7 +1445,10 @@ impl DbElement {
             // 缓存进池子的是值本身，不是五个地址字。
             db.engine
                 .resolve_hunks(&mut parsed)
-                .map_err(|source| DbElementError::Extract { refno, source: ResolveError::Hunk(source) })?;
+                .map_err(|source| DbElementError::Extract {
+                    refno,
+                    source: ResolveError::Hunk(source),
+                })?;
             Ok(parsed)
         });
         crate::read_stats::note_parse_miss(started.elapsed());

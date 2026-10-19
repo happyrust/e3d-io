@@ -456,21 +456,16 @@ impl DbElementParamEnv {
 
     /// `ATTRIB RPRO <键>`：在目录件的设计表里按名字查一个量。
     ///
-    /// 目录件 `DTRE` → `DTSE`，逐个 `DATA` 成员比 `DKEY`。命中的那行由 `PURP`
+    /// 先查零件表 `PTDTRE`，再查共用表 `DTRE`。同一键两边都有时零件表赢。
+    /// 表是 `DTSE`，逐个 `DATA` 成员比 `DKEY`。命中的那行由 `PURP`
     /// 决定值从哪来，见 [`purpose`]。查不到、`PURP` 不认识、或值那一头是 unset
     /// 都返回 `None`——这张表本身就是「这个键的值在哪」的说明书，说明书没写的
     /// 地方不该由这里替它写。
     fn design_property(&self, key: &str) -> Option<f64> {
         self.nested(|| {
             let catalogue = self.catalogue.as_ref()?;
-            let table = catalogue.get_element("DTRE").ok().flatten()?;
-            for row in table.members().ok()? {
-                if word_text(&row, "DKEY").as_deref() != Some(key) {
-                    continue;
-                }
-                return self.design_property_row(&row, key);
-            }
-            None
+            let row = design_table_row(catalogue, key)?;
+            self.design_property_row(&row, key)
         })
     }
 
@@ -480,19 +475,10 @@ impl DbElementParamEnv {
         let Some(catalogue) = self.catalogue.as_ref() else {
             return false;
         };
-        let Some(table) = catalogue.get_element("DTRE").ok().flatten() else {
+        let Some(row) = design_table_row(catalogue, key) else {
             return false;
         };
-        let Ok(rows) = table.members() else {
-            return false;
-        };
-        for row in rows {
-            if word_text(&row, "DKEY").as_deref() != Some(key) {
-                continue;
-            }
-            return word_text(&row, "PTYP").as_deref() == Some("DIST");
-        }
-        false
+        word_text(&row, "PTYP").as_deref() == Some("DIST")
     }
 
     /// 设计表里命中的那一行怎么读成数。
@@ -742,6 +728,45 @@ fn related_array(name: &str) -> Option<ParamArray> {
     }
 }
 
+/// 目录件上的特性量。
+///
+/// 本元素声明了这个属性，就在本元素上求。没有，就顺着 `CMPR` 到特性元素上求，
+/// 求值环境里的目录件仍是本元素，所以公式里的 `ATTRIB RPRO` 读本元素的
+/// `PTDTRE`，没有再读 `DTRE`。特性元素自己身上没有设计表。
+impl DbElement {
+    pub fn catalogue_property_number(&self, name: &str) -> Result<AttributeNumber, DbElementError> {
+        let env = DbElementParamEnv::catalogue_only(self.clone());
+        if self.has_attribute(name)? {
+            return self.get_number(name, &env);
+        }
+        if self.has_attribute("CMPR")? {
+            if let Some(property) = self.get_element("CMPR")? {
+                return property.get_number(name, &env);
+            }
+        }
+        self.get_number(name, &env)
+    }
+}
+
+/// 零件设计表优先于共用设计表。Core 的 `getPropertyRefFromCatalog` 沿
+/// `PTDTRE` / `DTRE` 找 `DKEY`；同键时零件表覆盖共用表。
+fn design_table_row(catalogue: &DbElement, key: &str) -> Option<DbElement> {
+    for name in ["PTDTRE", "DTRE"] {
+        let Some(table) = catalogue.get_element(name).ok().flatten() else {
+            continue;
+        };
+        let Ok(rows) = table.members() else {
+            continue;
+        };
+        for row in rows {
+            if word_text(&row, "DKEY").as_deref() == Some(key) {
+                return Some(row);
+            }
+        }
+    }
+    None
+}
+
 /// 一个 word 属性的文本形态（`DKEY` / `PURP` 存的都是 `db1_hash` 词）。
 fn word_text(element: &DbElement, name: &str) -> Option<String> {
     match element.attribute(name) {
@@ -970,24 +995,22 @@ impl ParamEnv for DbElementParamEnv {
     /// `( :HXYsize[2] )`——按目录写下的键读一个 UDA，经宿主所在 `DbSet` 挂的字典
     /// （[`DbElement::uda_by_key`]）。宿主顺序同 [`Self::hosts`]：先设计构件再目录件。
     ///
-    /// 一个宿主的字典**认**这个键（对它的 noun 有效）就到此为止：有值取值，unset 就是
-    /// 答不上——不再去另一边找同键的值，那是另一个零件的尺寸。只有字典对这个宿主
-    /// 说「不认识 / 无效」才换下一个宿主。哪个宿主都不认（没挂字典、挂的字典里没有
-    /// 这个键）就是 `None`，公式按未解报出去，不猜。
+    /// 一个宿主的字典**认**这个键（对它的 noun 有效）就到此为止，不再换宿主。有值取值。
+    /// 这一格是 unset 时，不把公式停在未解：同一个名字在这份 MDB 里可能还有另一条定义
+    /// （`AvevaMarineSample /ALL` 上 `HXYsize` 在 ams5100 与 acp7006 各一条），按字典
+    /// 合并序取第一条存了值的，也就是 `Q :name` 打出来的那个数。目录写的键是它编译时
+    /// 对着的那本字典；元素上的值存在本项目那本的键下。只认目录那把键，公式就永远未解。
     ///
-    /// ams7997 的风管头槽位就停在「unset」这一格：`/HRTUBE1-BOXI.PXLE` 写的键是
-    /// `AvevaCatalogue` 字典（acp7006）那条 `HXYsize` 的 `OLDKEY`，BRAN 上的 `675 600`
-    /// 却存在本项目字典（ams5100）那条同名定义的键下——两条定义、一个名字，目录指的
-    /// 是设计元素没存值的那条。E3D 对这些槽位报的 `unable to evaluate … PXLE` 正是
-    /// 同一次落空（`catalogue_pml` 模块头）。
+    /// 字典对这个宿主说「不认识 / 无效」才换下一个宿主。哪个宿主都不认（没挂字典、
+    /// 挂的字典里没有这个键）就是 `None`，公式按未解报出去。同名那条也没有数，同样是
+    /// `None`，不拿默认值 0 充数。
     fn uda_number(&self, key: u32, subscript: Option<f64>) -> Option<f64> {
         for host in self.hosts() {
-            let value = match host.uda_by_key(key) {
-                Ok(Some(value)) => value,
-                Ok(None) => return None,
+            match host.uda_by_key(key) {
+                Ok(Some(value)) => return uda_value_number(&value, subscript),
+                Ok(None) => return same_name_uda_number(host, key, subscript),
                 Err(_) => continue,
-            };
-            return uda_value_number(&value, subscript);
+            }
         }
         None
     }
@@ -1053,6 +1076,25 @@ fn sole_design_property(program: &[i32]) -> Option<String> {
         return None;
     }
     Some(rest.to_string())
+}
+
+/// 目录键指到的定义在这个宿主上是 unset。按名字再找同名定义，取第一条能读成数的。
+fn same_name_uda_number(host: &DbElement, key: u32, subscript: Option<f64>) -> Option<f64> {
+    let catalog = host.uda_catalog()?;
+    let name = catalog.by_key(key)?.name.clone();
+    if name.is_empty() {
+        return None;
+    }
+    for definition in catalog.by_name(&name) {
+        if definition.answers_key(key) {
+            continue;
+        }
+        match host.uda_by_key(definition.key) {
+            Ok(Some(value)) => return uda_value_number(&value, subscript),
+            Ok(None) | Err(_) => continue,
+        }
+    }
+    None
 }
 
 /// 一个 UDA 值读成数：标量直接给（`[1]` 也算是它自己，与 `ATTRIB PARA` 写成 `[1, 1]`
@@ -1233,7 +1275,11 @@ mod tests {
         assert_eq!(uda_value_number(&sizes, Some(3.0)), None);
         assert_eq!(uda_value_number(&sizes, Some(0.0)), None);
         assert_eq!(uda_value_number(&sizes, Some(1.5)), None);
-        assert_eq!(uda_value_number(&sizes, None), None, "an array is not a number");
+        assert_eq!(
+            uda_value_number(&sizes, None),
+            None,
+            "an array is not a number"
+        );
         let scalar = DescriptorValue::Real(2800.0);
         assert_eq!(uda_value_number(&scalar, None), Some(2800.0));
         assert_eq!(uda_value_number(&scalar, Some(1.0)), Some(2800.0));
@@ -1243,7 +1289,10 @@ mod tests {
             uda_value_number(&DescriptorValue::IntArray(vec![3, 4]), Some(2.0)),
             Some(4.0)
         );
-        assert_eq!(uda_value_number(&DescriptorValue::Text("HP".into()), None), None);
+        assert_eq!(
+            uda_value_number(&DescriptorValue::Text("HP".into()), None),
+            None
+        );
         assert_eq!(uda_value_number(&DescriptorValue::Bool(true), None), None);
     }
 
