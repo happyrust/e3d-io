@@ -317,6 +317,10 @@ impl UdaCatalog {
     /// Indexed UDA-shaped records that could not form a complete definition.
     /// This commonly includes deleted/tombstone versions; it is exposed so a
     /// damaged live definition can never disappear silently.
+    pub fn definition_count(&self) -> usize {
+        self.definitions.len()
+    }
+
     pub fn issues(&self) -> &[UdaDefinitionIssue] {
         &self.issues
     }
@@ -779,7 +783,12 @@ mod tests {
         assert!(extraction.attributes.is_empty());
     }
 
-    fn real_array_definition(refno: RefNo, name: &str, key: u32, old_key: Option<u32>) -> UdaDefinition {
+    fn real_array_definition(
+        refno: RefNo,
+        name: &str,
+        key: u32,
+        old_key: Option<u32>,
+    ) -> UdaDefinition {
         UdaDefinition {
             refno,
             owner: RefNo::new(refno.word0, 0),
@@ -835,21 +844,44 @@ mod tests {
     fn the_first_dictionary_owns_a_name_declared_twice() {
         let catalog = UdaCatalog {
             definitions: vec![
-                real_array_definition(RefNo::new(13292, 123), "HXYsize", 0x2652_AB52, Some(0x18EF_4B61)),
-                real_array_definition(RefNo::new(15198, 55), "HXYsize", 0x2C00_D576, Some(0x17EF_4B61)),
+                real_array_definition(
+                    RefNo::new(13292, 123),
+                    "HXYsize",
+                    0x2652_AB52,
+                    Some(0x18EF_4B61),
+                ),
+                real_array_definition(
+                    RefNo::new(15198, 55),
+                    "HXYsize",
+                    0x2C00_D576,
+                    Some(0x17EF_4B61),
+                ),
             ],
             issues: Vec::new(),
         };
         let mut extraction = bran_extraction();
-        let explicit = [stored(0x2652_AB52, ExplicitValue::RealArray(vec![675.0, 600.0]))];
+        let explicit = [stored(
+            0x2652_AB52,
+            ExplicitValue::RealArray(vec![675.0, 600.0]),
+        )];
 
-        assert_eq!(catalog.materialize_for_element(&mut extraction, &explicit), 1);
-        let row = extraction.find_attribute(":hxysize").expect("one :HXYsize row");
+        assert_eq!(
+            catalog.materialize_for_element(&mut extraction, &explicit),
+            1
+        );
+        let row = extraction
+            .find_attribute(":hxysize")
+            .expect("one :HXYsize row");
         assert_eq!(row.hash, 0x2652_AB52);
         assert_eq!(row.status, AttributeExtractionStatus::DecodedExplicit);
-        assert_eq!(row.value, Some(DescriptorValue::RealArray(vec![675.0, 600.0])));
         assert_eq!(
-            catalog.by_key(0x2C00_D576).map(|definition| definition.refno),
+            row.value,
+            Some(DescriptorValue::RealArray(vec![675.0, 600.0]))
+        );
+        assert_eq!(
+            catalog
+                .by_key(0x2C00_D576)
+                .map(|definition| definition.refno),
             Some(RefNo::new(15198, 55)),
             "the shadowed definition is still reachable by its own key"
         );
@@ -860,8 +892,16 @@ mod tests {
     /// the current key so one lookup path serves both generations of element.
     #[test]
     fn a_value_stored_under_the_old_key_is_still_the_stored_value() {
-        let definition = real_array_definition(RefNo::new(13292, 123), "HXYsize", 0x2652_AB52, Some(0x18EF_4B61));
-        let under_old_key = [stored(0x18EF_4B61, ExplicitValue::RealArray(vec![350.0, 350.0]))];
+        let definition = real_array_definition(
+            RefNo::new(13292, 123),
+            "HXYsize",
+            0x2652_AB52,
+            Some(0x18EF_4B61),
+        );
+        let under_old_key = [stored(
+            0x18EF_4B61,
+            ExplicitValue::RealArray(vec![350.0, 350.0]),
+        )];
         assert!(definition.answers_key(0x2652_AB52));
         assert!(definition.answers_key(0x18EF_4B61));
         assert!(!definition.answers_key(0x17EE_2B61));
@@ -875,7 +915,10 @@ mod tests {
         // No stored value and a Dictionary with no usable text default: `unset`.
         assert_eq!(
             definition.value_for(&[]),
-            (AttributeExtractionStatus::CatalogDefault, DescriptorValue::Unset)
+            (
+                AttributeExtractionStatus::CatalogDefault,
+                DescriptorValue::Unset
+            )
         );
 
         let catalog = UdaCatalog {
@@ -883,7 +926,10 @@ mod tests {
             issues: Vec::new(),
         };
         let mut extraction = bran_extraction();
-        assert_eq!(catalog.materialize_for_element(&mut extraction, &under_old_key), 1);
+        assert_eq!(
+            catalog.materialize_for_element(&mut extraction, &under_old_key),
+            1
+        );
         assert_eq!(extraction.attributes[0].hash, 0x2652_AB52);
         assert_eq!(
             extraction.attributes[0].value,

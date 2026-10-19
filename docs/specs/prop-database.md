@@ -14,7 +14,7 @@
 
 - 槽里是双精度：三条接口都给数。
 - 常量公式：`attribute` 给原文，`get_double` 报类型不匹配，`get_number` 求值。
-- `ATTRIB RPRO`：`attribute` 给原文。`get_number` 在空环境、以及只把这只 `CMPD` 当目录件时，都是未解。不在这一步补设计表求值。
+- `ATTRIB RPRO`：在目录件上用 `catalogue_property_number`。它顺着 `CMPR` 读特性元素上的公式，键先查该目录件的 `PTDTRE`，没有再查 `DTRE`。只把这只 `CMPD` 自己当目录件时，它身上没有设计表，`get_number` 仍是未解。
 
 编辑和保存保持现状：界面发 PML 命令，引擎走已有的 `putAtt` 和 `SAVEWORK`。这一份规格不新写写回实现。
 
@@ -51,7 +51,7 @@
 
 ## 范围外
 
-- 不实现 `ATTRIB RPRO` / `DTRE` 设计表求值。
+- 不在没有目录件的时候猜一张设计表。只拿 `CMPD` 自己当目录件，`ATTRIB RPRO` 仍是未解。
 - 不改 PROP 库，不改 e3d-io 的写回。
 - 不打开活的 E3D 窗口，不编 3.1 的菜单名。
 - 不把 `CALLG MSAVEW` 断成 Design 的 `PMLUI\des\gen\msavew`。
