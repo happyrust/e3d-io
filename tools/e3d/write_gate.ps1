@@ -46,6 +46,7 @@ param(
     [string]$Scratch = 'D:\e3dio-gate',
     [string]$GenModel = 'D:\work\plant-code\old\gen-model',
     [string]$L3Exe = 'D:\Rust\target\debug\l3_suite.exe',
+    [string]$InstallDir = 'E:\reverse\e3d\shadow_e3d31_gen_model_test',
     [string]$DbRelative = 'ams000\ams8000_0001',
     [switch]$RefreshCopy
 )
@@ -61,6 +62,10 @@ if (-not (Test-Path $L3Exe)) {
     $fallback = @('D:\Rust\target-l3\debug\l3_suite.exe', 'D:\Rust\target\release\l3_suite.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
     if ($fallback) { Write-Output "l3_suite not at $L3Exe; using $fallback"; $L3Exe = $fallback }
 }
+# run_ams_c_entrymacro.bat defaults to the unverified e3d31-runtime install; its
+# E3DNativeFixup build pre-initialises Core3D at OpenProject and aborts TTY
+# sessions with 0xC0020001. Pin the verified shadow runtime unless overridden.
+if (-not $env:L3_E3D_INSTALL_DIR) { $env:L3_E3D_INSTALL_DIR = $InstallDir }
 $crate = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $copy = Join-Path $Scratch (Split-Path $Project -Leaf)
 $copyDb = Join-Path $copy $DbRelative
@@ -76,7 +81,7 @@ $zoneName = '/1RX03-MSUP'
 $siteName = '/1RX03-PIPEBJ'
 $bigMembers = 8200
 
-foreach ($required in @($Project, (Join-Path $Project $DbRelative), $GenModel, $L3Exe, $opsDir)) {
+foreach ($required in @($Project, (Join-Path $Project $DbRelative), $GenModel, $L3Exe, $opsDir, (Join-Path $env:L3_E3D_INSTALL_DIR 'des.exe'))) {
     if (-not (Test-Path $required)) { throw "missing: $required" }
 }
 $failures = 0

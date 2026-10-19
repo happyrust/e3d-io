@@ -6,6 +6,7 @@ param(
     [string]$TESProject='D:\AVEVA\Projects\E3D3.1\TEST',
     [string]$GenModel='D:\work\plant-code\old\gen-model',
     [string]$L3Exe='D:\Rust\target\debug\l3_suite.exe',
+    [string]$E3DInstallDir='E:\reverse\e3d\shadow_e3d31_gen_model_test',
     [string]$Format0Launcher='D:\work\plant-code\old\gen-model\scripts\e3d\run_ams_c_entrymacro.bat',
     [switch]$OfflineOnly
 )
@@ -98,7 +99,11 @@ try {
         if(Test-Path -LiteralPath $tool){$results.tools+=@{path=$tool;sha256=(Get-FileHash -LiteralPath $tool).Hash}}
     }
     if(-not $OfflineOnly) {
-        foreach($needed in @($GenModel,$L3Exe,$Format0Launcher)) { if(-not(Test-Path -LiteralPath $needed)){throw "Missing TTY dependency: $needed"} }
+        # run_ams_c_entrymacro.bat defaults to the unverified e3d31-runtime install; its
+        # E3DNativeFixup build pre-initialises Core3D at OpenProject and aborts TTY
+        # sessions with 0xC0020001. Pin the verified shadow runtime unless overridden.
+        if(-not $env:L3_E3D_INSTALL_DIR){$env:L3_E3D_INSTALL_DIR=$E3DInstallDir}
+        foreach($needed in @($GenModel,$L3Exe,$Format0Launcher,(Join-Path $env:L3_E3D_INSTALL_DIR 'des.exe'))) { if(-not(Test-Path -LiteralPath $needed)){throw "Missing TTY dependency: $needed"} }
         Invoke-RegressionStage 'write' 'pwsh' @('-NoProfile','-File',(Join-Path $PSScriptRoot 'write_gate.ps1'),'-Project',$AMSProject,'-Scratch',(Join-Path $run 'write'),'-GenModel',$GenModel,'-L3Exe',$L3Exe)
         Invoke-RegressionStage 'alternate' 'pwsh' @('-NoProfile','-File',(Join-Path $PSScriptRoot 'alternate_write_gate.ps1'),'-Rounds','5','-Project',$AMSProject,'-Scratch',(Join-Path $run 'alternate'),'-GenModel',$GenModel,'-L3Exe',$L3Exe)
         Invoke-RegressionStage 'format0' 'pwsh' @('-NoProfile','-File',(Join-Path $PSScriptRoot 'format0_gate.ps1'),'-Project',$TESProject,'-Scratch',(Join-Path $run 'format0'),'-Launcher',$Format0Launcher)

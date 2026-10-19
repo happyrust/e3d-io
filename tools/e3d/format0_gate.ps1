@@ -49,6 +49,7 @@ param(
     [string]$DbName = 'EQUIB/DESI_COMP',
     [string]$Scratch = 'D:\e3dio-tesgate',
     [string]$Launcher = 'D:\work\plant-code\old\gen-model\scripts\e3d\run_ams_c_entrymacro.bat',
+    [string]$InstallDir = 'E:\reverse\e3d\shadow_e3d31_gen_model_test',
     [int]$TimeoutSeconds = 300,
     [switch]$RefreshCopy
 )
@@ -65,7 +66,11 @@ $logDir = Join-Path $Scratch 'logs-format0'
 $opsFile = Join-Path $PSScriptRoot 'format0_gate_ops\10_text.json'
 $utf8 = New-Object Text.UTF8Encoding($false)
 
-foreach ($required in @($originalDb, (Join-Path $Project $evars), $Launcher, $opsFile)) {
+# run_ams_c_entrymacro.bat defaults to the unverified e3d31-runtime install; its
+# E3DNativeFixup build pre-initialises Core3D at OpenProject and aborts TTY
+# sessions with 0xC0020001. Pin the verified shadow runtime unless overridden.
+if (-not $env:L3_E3D_INSTALL_DIR) { $env:L3_E3D_INSTALL_DIR = $InstallDir }
+foreach ($required in @($originalDb, (Join-Path $Project $evars), $Launcher, $opsFile, (Join-Path $env:L3_E3D_INSTALL_DIR 'des.exe'))) {
     if (-not (Test-Path $required)) { throw "missing: $required" }
 }
 # e3d-descriptor prints UTF-8; Windows PowerShell would decode it in the console's code page.
