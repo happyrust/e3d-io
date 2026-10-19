@@ -446,7 +446,7 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
 /// pass on). [`OP_ATANT`] declines too — see [`apply_numeric`].
 ///
 /// One reading is E3D's rather than a guess of ours: a program the fast path
-/// [`fast_path_eligible`] would take reads a parameter-array entry the instance
+/// (`fast_path_eligible`) would take reads a parameter-array entry the instance
 /// does not have (`ATTRIB DESP[1 ]` on a valve with no `DESP`) as 0 and goes on,
 /// exactly as `exppdms/EXFAST` does. Everywhere else the same miss is `None`.
 ///

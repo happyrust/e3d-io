@@ -821,7 +821,7 @@ impl ParamEnv for DbElementParamEnv {
     ///
     /// `DESP` 越界也折成 0：元组形只有 `pplib/YPARUN` 的「四整数参数形」一条读法
     /// （Core3D `0x103C4BB4`），读不出就是整个属性值 0.0——没有 PML 形那条
-    /// 快路 / 全量之分（见 [`Self::design_parameter`]）。没有设计构件仍是 `None`。
+    /// 快路 / 全量之分（见 `Self::design_parameter`）。没有设计构件仍是 `None`。
     fn parameter(&self, array: ParamArray, n: i32) -> Option<f64> {
         match array {
             ParamArray::Para => self.param(n),
