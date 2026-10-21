@@ -1039,18 +1039,19 @@ impl ParamEnv for DbElementParamEnv {
     }
 
     fn direction_angle(&self, program: &[i32]) -> Option<f64> {
-        // Only wall-door `FITT`s. The same `PTYP DIST` turn also appears on
-        // FIXING `/Copy-of-R211-M01` (简图1-双开门, `ATTRIB RPRO G`); leaving
-        // that one on the segment-3 reading keeps it exact against B1.
-        // These doors' panel axis is `AXIS -Y ( ATTRIB RPRO H ) Z` and `H`
-        // is `PTYP DIST` (门开角度 stored as a distance). `DPEVAN` asks for
-        // degrees, the conversion fails, and `DPARAM` uses +Y — the panel
-        // stays in the wall. Reading 90 as degrees swings it out.
+        // Wall-door `FITT`s and wall `FIXING`s. These doors' panel axis is
+        // `AXIS -Y ( ATTRIB RPRO H ) Z` and `H` is `PTYP DIST` (门开角度 stored
+        // as a distance). `DPEVAN` asks for degrees, the conversion fails, and
+        // `DPARAM` uses +Y — the panel stays in the wall. Reading 90 as
+        // degrees swings it out. FIXING `/Copy-of-R211-M01` (简图1-双开门,
+        // `Y ( ATTRIB RPRO G ) Z`) is the same turn: E3D TTY logs `unable to
+        // evaluate catalogue expression for attribute PTCD` for its P8 / P12
+        // and `Q PDIR 8` answers the FIXING's own +Y.
         let fitting = self
             .design
             .as_ref()
             .and_then(|design| design.element_type().ok())
-            .is_some_and(|noun| noun == "FITT");
+            .is_some_and(|noun| noun == "FITT" || noun == "FIXING");
         if fitting {
             if let Some(key) = sole_design_property(program) {
                 if self.design_property_ptype_is_distance(&key) {
