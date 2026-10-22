@@ -436,6 +436,18 @@ pub fn evaluate_words(words: &[u32], env: &dyn ParamEnv) -> Option<f64> {
     evaluate(&decode(words)?, env)
 }
 
+/// One bare operand, evaluated the way a tuple's operand is. A named-angle axis
+/// (`Y PARAM 20 X`, `Y DESP 14 -Z`) stores its angle as such an operand
+/// ([`crate::record::axis_spec`]).
+pub(crate) fn operand_number(raw: i32, env: &dyn ParamEnv) -> Option<f64> {
+    operand_value(&Operand::decode(raw), env)
+}
+
+/// The text E3D prints for one bare operand: `PARAM 20`, `DESP 14`.
+pub(crate) fn operand_text(raw: i32) -> String {
+    Operand::decode(raw).to_string()
+}
+
 fn operand_value(operand: &Operand, env: &dyn ParamEnv) -> Option<f64> {
     match operand {
         Operand::Param {

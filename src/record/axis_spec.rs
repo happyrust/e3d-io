@@ -15,8 +15,12 @@
 //! A *positive* pair names its angle instead of stating it, and the pair reads
 //! the same way: `12` with `-4` prints `X DDANGLE Y`, `21` with `-4` prints
 //! `Y DDANGLE X`, and `64` with `20` prints `-Z PARAM 20-X`. `-4` is the only
-//! named angle any of the three catalogue databases holds, and the parameter
-//! number is printed as stored.
+//! negative named angle any catalogue database holds. A positive angle word is a
+//! `DECARG` operand, banded exactly like a catalogue tuple's
+//! ([`crate::record::catalogue_expr`]): 1..=50 is `PARAM n`, 51..=100 `DESP n`.
+//! acp7021's rectangular HVAC elbow `/DBS` turns `P2` and `P6` by `[26, 64]`,
+//! `Y DESP 14 -Z`, and keeps the elbow's angle in `DESP[14]`; read as `PARAM 64`
+//! against the component's four-entry `PARA` it came out 0 and the elbows straight.
 //!
 //! The kinds were recovered from the TTY sample; anything else returns `None`
 //! rather than a guess.
@@ -27,6 +31,7 @@
 //! and every one agrees with what this renders.
 
 use crate::record::catalogue_eval::ParamEnv;
+use crate::record::catalogue_expr::{operand_number, operand_text};
 
 const KIND_AXIS: u32 = 1;
 const KIND_NEGATED_AXIS: u32 = 2;
@@ -62,7 +67,7 @@ fn rotated_axes(kind: u32, angle: u32) -> Option<String> {
         // A negative pair states its angle in the second word.
         (pair, angle) if pair < 0 => (pair.checked_neg()?, degrees(angle)),
         (pair, DESIGN_ANGLE) if pair > 0 => (pair, " DDANGLE ".to_string()),
-        (pair, parameter) if pair > 0 && parameter > 0 => (pair, format!(" PARAM {parameter}")),
+        (pair, operand) if pair > 0 && operand > 0 => (pair, format!(" {}", operand_text(operand))),
         _ => return None,
     };
     let from = pair_axis(pair / 10)?;
@@ -118,10 +123,11 @@ fn render_payload(payload: &[u32]) -> Option<String> {
 /// `[-21, 4500]`). All of them are covered.
 ///
 /// `env` answers the two forms that name their angle instead of stating it:
-/// `DDANGLE` goes to [`ParamEnv::design_dimension`] and `PARAM n` to
-/// [`ParamEnv::param`]. `Pn` — an axis pointing at another P point — needs the
-/// whole point set rather than one attribute, so it is declined here and left
-/// to a caller that has the set.
+/// `DDANGLE` goes to [`ParamEnv::design_dimension`]; a positive angle word is a
+/// `DECARG` operand (`PARAM n`, `DESP n`, ...) and goes to
+/// [`ParamEnv::parameter`]. `Pn` — an axis pointing at another P point — needs
+/// the whole point set rather than one attribute, so it is declined here and
+/// left to a caller that has the set.
 pub fn direction(words: &[u32], env: &dyn ParamEnv) -> Option<[f64; 3]> {
     direction_payload(words, env).or_else(|| match words.split_first() {
         Some((count, rest)) if *count as usize == rest.len() => direction_payload(rest, env),
@@ -175,7 +181,7 @@ fn rotated_vector(kind: u32, value: u32, env: &dyn ParamEnv) -> Option<[f64; 3]>
     let (pair, degrees) = match (kind as i32, value as i32) {
         (pair, hundredths) if pair < 0 => (pair.checked_neg()?, f64::from(hundredths) / 100.0),
         (pair, DESIGN_ANGLE) if pair > 0 => (pair, env.design_dimension(DESIGN_ANGLE.abs())?),
-        (pair, parameter) if pair > 0 && parameter > 0 => (pair, env.param(parameter)?),
+        (pair, operand) if pair > 0 && operand > 0 => (pair, operand_number(operand, env)?),
         _ => return None,
     };
     let from = pair_vector(pair / 10)?;
@@ -258,6 +264,34 @@ mod tests {
         for (words, expected) in cases {
             assert_eq!(render(words).as_deref(), Some(*expected), "{words:?}");
         }
+    }
+
+    /// The angle word is a `DECARG` operand: 51..=100 is `DESP n`. acp7021's
+    /// rectangular HVAC elbow `/DBS` turns `P2` by `[26, 64]`, `Y DESP 14 -Z`;
+    /// aps7200 `23584/7314` has `DESP[14] = 90` and E3D draws its body as a 90°
+    /// `RectangularTorus`. The `PARAM` band reads as before.
+    #[test]
+    fn a_named_angle_reads_its_operand_band() {
+        use crate::record::catalogue_eval::MapParamEnv;
+
+        assert_eq!(render(&[26, 64]).as_deref(), Some("Y DESP 14-Z"));
+        let elbow =
+            MapParamEnv::new().with_desps((1..=19).map(|n| if n == 14 { 90.0 } else { 0.0 }));
+        let [x, y, z] = direction(&[26, 64], &elbow).expect("Y DESP 14 -Z");
+        assert!(
+            x.abs() < 1e-12 && y.abs() < 1e-12 && (z + 1.0).abs() < 1e-12,
+            "{:?}",
+            [x, y, z]
+        );
+
+        let params =
+            MapParamEnv::new().with_params((1..=20).map(|n| if n == 20 { 90.0 } else { 0.0 }));
+        let [x, y, z] = direction(&[61, 20], &params).expect("-Z PARAM 20 X");
+        assert!(
+            (x - 1.0).abs() < 1e-12 && y.abs() < 1e-12 && z.abs() < 1e-12,
+            "{:?}",
+            [x, y, z]
+        );
     }
 
     /// A count that does not match the words is not an axis specification at

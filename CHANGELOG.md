@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Named-angle axis specifications (`axis_spec::direction` / `render`) read a positive angle word as a `DECARG` operand, banded like a catalogue tuple's: 51..=100 is `DESP n`, not `PARAM n`. acp7021's rectangular HVAC elbows turn `P2` / `P6` by `Y DESP 14 -Z`; read as an out-of-range `PARAM 64` the angle was 0 and every such elbow came out straight (aps7200: 11 elbows without their body).
+
 ## 0.5.0 — 2026-10-19
 
 ### Added
