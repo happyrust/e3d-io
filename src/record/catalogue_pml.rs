@@ -247,8 +247,11 @@ const SIGN_BIT: u32 = 0x4000_0000;
 /// `23040 0 6` from the 44.999401 it stores as `23039 22720 6`.
 const SCALED_SHIFT: i32 = 15;
 const SCALED_FRACTION: f64 = (1u32 << SCALED_SHIFT) as f64;
-/// Word 2 of a scaled number is a small binary exponent. A larger one is not a
-/// shape this recognises.
+/// Word 2 of a scaled number is a small binary exponent, of either sign. A
+/// larger one is not a shape this recognises. A negative one sets every high
+/// bit, [`DOUBLE_FLAG`] included: the 0.25 aps7200's pipe clamps (catalogue
+/// `15195`) scale their U-bolt sleeves by is `16384 0 -1`, and read as a double
+/// it came out NaN.
 const MAX_SCALED_EXPONENT: i32 = 64;
 
 /// Loosest first, so a child of the same precedence needs no brackets on the
@@ -996,10 +999,12 @@ fn parse_number(words: &[i32]) -> Option<(Step, usize)> {
 }
 
 fn decode_number(first: i32, second: i32, third: i32) -> Option<f64> {
-    if third & DOUBLE_FLAG == 0 {
+    if third.unsigned_abs() < MAX_SCALED_EXPONENT.unsigned_abs() {
         let mantissa = f64::from(first) + f64::from(second as u32) / SCALED_FRACTION;
-        return (third.abs() < MAX_SCALED_EXPONENT)
-            .then(|| mantissa * f64::from(third - SCALED_SHIFT).exp2());
+        return Some(mantissa * f64::from(third - SCALED_SHIFT).exp2());
+    }
+    if third & DOUBLE_FLAG == 0 {
+        return None;
     }
     let sign = u64::from((first as u32 & SIGN_BIT) != 0);
     let exponent = u64::from(third as u32 & EXPONENT_MASK);
@@ -1336,6 +1341,34 @@ mod tests {
                 .set_attribute("DESP[15]", distance);
             assert_eq!(evaluate_words(&words, &env), Some(diameter));
         }
+    }
+
+    /// A scaled number with a negative exponent: aps7200's U-bolt clamp
+    /// (catalogue SCYL `15195/17376`) sizes its sleeve `0.25 * (…)`, the 0.25
+    /// stored as `16384 0 -1`. Its `-1` carries [`DOUBLE_FLAG`] like every
+    /// negative word, and read as a double the sleeve came out NaN and was not
+    /// drawn; E3D draws it.
+    #[test]
+    fn a_negative_scaled_exponent_is_not_a_double() {
+        let sleeve = [
+            81, 1, 101, 6, 16384, 0, -1, 0, 6, 101, 6, 16384, 0, 2, 0, 6, 101, 6, 18432, 0, 4, 0,
+            6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 804, 101, 6, 16384, 0, 2, 0, 6, 101, 6,
+            24576, 0, 2, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 804, 803, 101, 6, 24576, 0,
+            2, 0, 6, 101, 6, 16384, 0, 2, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 804, 802,
+            804,
+        ];
+        assert_eq!(
+            render(&sleeve).as_deref(),
+            Some("( 0.25 * ( 2 * ATTRIB PARA[9 ] - 2 * ATTRIB PARA[3 ] + 3 * ATTRIB PARA[2 ] ) )")
+        );
+        let env = MapParamEnv::new()
+            .set_attribute("PARA[2]", 10.0)
+            .set_attribute("PARA[3]", 20.0)
+            .set_attribute("PARA[9]", 50.0);
+        assert_eq!(evaluate_words(&sleeve, &env), Some(22.5));
+        // The doubles keep their flag: 0.75 is `524288 0 1073742846`.
+        assert_eq!(decode_number(524288, 0, 1_073_742_846), Some(0.75));
+        assert_eq!(decode_number(16384, 0, -2), Some(0.125));
     }
 
     #[test]
