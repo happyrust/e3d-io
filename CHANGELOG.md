@@ -5,6 +5,7 @@
 ### Fixed
 
 - Named-angle axis specifications (`axis_spec::direction` / `render`) read a positive angle word as a `DECARG` operand, banded like a catalogue tuple's: 51..=100 is `DESP n`, not `PARAM n`. acp7021's rectangular HVAC elbows turn `P2` / `P6` by `Y DESP 14 -Z`; read as an out-of-range `PARAM 64` the angle was 0 and every such elbow came out straight (aps7200: 11 elbows without their body).
+- Catalogue PML `ATANT ( a , b )` evaluates as `atan2(a, b)` in degrees (ordinate first, quadrant kept) instead of declining. acp7002 `/FORD` (round-to-rectangular duct transition) takes the offset direction of both body snouts from `P7` / `P8`, whose `PTCD` turns `-Y` through `ATANT ( ±DESP[10] - (DESP[4] - DESP[5]) / 2 , -DESP[11] )`; the declined angle fell back to the template `+Y` and aps7200 `TRNS /HVAC2-B1/ITEM8` leaned 375 mm the wrong way. Pinned against E3D's export: both snouts now lean along the component's X axis as E3D draws them.
 - Catalogue PML numbers (`catalogue_pml::decode_number`) read a scaled fixed-point value with a negative binary exponent as such. The exponent word `-1` sets every high bit, the double flag included, so `16384 0 -1` (0.25) decoded as a NaN double. aps7200's pipe-clamp catalogue sizes its U-bolt sleeves (`0.25 * (...)`) and one clamp profile with it; those primitives and one negative failed to evaluate and were skipped (12 hangers off or missing).
 
 ## 0.5.0 — 2026-10-19

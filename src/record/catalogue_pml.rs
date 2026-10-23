@@ -108,7 +108,8 @@ const OP_TAN: i32 = 903;
 const OP_ASIN: i32 = 904;
 /// Unary arctangent, used by SQRD PTCA.PTCD (P7 through P10).
 const OP_ATAN: i32 = 906;
-/// Two-argument arctangent. `PTCA.Ptcdirection` turns through one.
+/// Two-argument arctangent, `ATANT ( ordinate , abscissa )` in degrees — see
+/// [`binary_number`]. `PTCA.Ptcdirection` turns through one.
 const OP_ATANT: i32 = 907;
 /// E3D SQRT, captured in LSNO /SQRD-BODY1 POFF (=15194/4150).
 const OP_SQRT: i32 = 1001;
@@ -446,7 +447,7 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
 /// attribute, when the program is one [`parse`] declines, when the stack does
 /// not end on exactly one value, and when the arithmetic leaves the reals (a
 /// division by an unset parameter is a degenerate to report, not an infinity to
-/// pass on). [`OP_ATANT`] declines too — see [`apply_numeric`].
+/// pass on).
 ///
 /// One reading is E3D's rather than a guess of ours: a program the fast path
 /// (`fast_path_eligible`) would take reads a parameter-array entry the instance
@@ -803,13 +804,6 @@ fn apply_value(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
 }
 
 /// Apply one operator to the numeric stack.
-///
-/// `ATANT` is the one opcode with no numeric reading here. Its two arguments
-/// are an ordered pair and which one is the ordinate is not pinned against
-/// E3D; picking wrong does not fail, it returns the complementary angle, and
-/// a P point placed by it would sit at a plausible wrong spot. The census's
-/// `Pdistance` and `Px`/`Py`/`Pz` formulas never reach it, so declining costs
-/// nothing today and admits the gap.
 fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
     let value = match operator {
         OP_PI => Value::Number(std::f64::consts::PI),
@@ -821,7 +815,6 @@ fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
         OP_ATAN => unary_number(stack, |n| n.atan().to_degrees())?,
         OP_SQRT => unary_number(stack, |n| n.sqrt())?,
         OP_ABS | OP_ABS_REAL => unary_number(stack, |n| n.abs())?,
-        OP_ATANT => return None,
         _ => binary_number(operator, stack)?,
     };
     stack.push(value);
@@ -846,6 +839,20 @@ fn unary_number(stack: &mut Vec<Value>, op: impl FnOnce(f64) -> f64) -> Option<V
     })
 }
 
+/// `ATANT ( a , b )` is `atan2(a, b)` in degrees: the first argument is the
+/// ordinate, the second the abscissa, and the quadrant is kept. Pinned against
+/// E3D's TTY export of aps7200 `TRNS /HVAC2-B1/ITEM8` (acp7002 `/FORD`, a
+/// round-to-rectangular duct transition): its two offset snouts take `PBAX`
+/// from `P7` / `P8`, whose `PTCD` is `AXIS -Y ( ATANT ( ±DESP[10] - (DESP[4] -
+/// DESP[5]) / 2 , 0 - DESP[11] ) ) ∓X`. With `DESP[10] = 200`, `DESP[4] = 800`,
+/// `DESP[5] = 300`, `DESP[11] = 0` the angles are `atan2(-450, 0)` and
+/// `atan2(-50, 0)` = −90°, which turns `-Y` onto `+X` / `-X`: the snouts lean
+/// along the component's X axis (world −Y / +Y in the export), 450 and 50 mm.
+/// The other order gives 180° and leaves both on `-Y`; the template default
+/// `+Y` the failed evaluation used to fall back on put them 375 mm off. Read as
+/// `atan2(a, b)` both chains point at the stadium's half-circle centres
+/// `(DESP[10] ± (DESP[4] - DESP[5]) / 2, DESP[11])` for any offset, which is
+/// what the catalogue author wrote them for.
 fn binary_number(operator: i32, stack: &mut Vec<Value>) -> Option<Value> {
     let right = stack.pop()?;
     let left = stack.pop()?;
@@ -863,6 +870,7 @@ fn binary_number(operator: i32, stack: &mut Vec<Value>) -> Option<Value> {
         OP_POW if left != 0.0 || right > 0.0 => left.powf(right),
         OP_MAX => left.max(right),
         OP_MIN => left.min(right),
+        OP_ATANT => left.atan2(right).to_degrees(),
         _ => return None,
     };
     Some(finite_number(value))
@@ -2226,10 +2234,42 @@ mod tests {
         ])));
     }
 
-    /// `ATANT`'s argument order is not pinned, so it declines rather than
-    /// returning the angle's complement half the time.
+    /// `ATANT ( a , b )` is `atan2(a, b)` in degrees — ordinate first, quadrant
+    /// kept. acp7002 `/FORD` P7 (`=15194/4232`) stores `( ATANT ( 0 - ATTRIB
+    /// DESP[10 ] - ( ATTRIB DESP[4 ] - ATTRIB DESP[5 ] ) / 2 , 0 - ATTRIB
+    /// DESP[11 ] ) )` word for word as below; on aps7200 `TRNS /HVAC2-B1/ITEM8`
+    /// (`DESP[10] = 200`, `[4] = 800`, `[5] = 300`, `[11] = 0`) E3D turns `-Y`
+    /// through it onto `+X`, so the angle is −90°, not the 180° of the other
+    /// order. Both arguments non-zero keeps the quadrant: an offset of (0, 250)
+    /// is `atan2(-250, -250)` = −135°.
     #[test]
-    fn the_two_argument_arctangent_declines() {
+    fn the_two_argument_arctangent_is_atan2_ordinate_first() {
+        let words = &[
+            89, 1, 101, 6, 0, 0, 0, 0, 6, 101, 6, 20480, 0, 4, 0, 6, 106, 2, 860359, -1, -1, 0,
+            1601, 1701, 803, 101, 6, 16384, 0, 3, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701, 101,
+            6, 20480, 0, 3, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701, 803, 101, 6, 16384, 0, 2,
+            0, 6, 805, 803, 101, 6, 0, 0, 0, 0, 6, 101, 6, 22528, 0, 4, 0, 6, 106, 2, 860359, -1,
+            -1, 0, 1601, 1701, 803, 907,
+        ];
+        assert_eq!(
+            render(words).as_deref(),
+            Some(
+                "( ATANT ( 0 - ATTRIB DESP[10 ] - ( ATTRIB DESP[4 ] - ATTRIB DESP[5 ] ) / 2 , 0 - ATTRIB DESP[11 ] ) )"
+            )
+        );
+        let item8 = MapParamEnv::new()
+            .set_attribute("DESP[10]", 200.0)
+            .set_attribute("DESP[4]", 800.0)
+            .set_attribute("DESP[5]", 300.0)
+            .set_attribute("DESP[11]", 0.0);
+        assert_eq!(evaluate_words_full(words, &item8), Some(-90.0));
+        let leaning = MapParamEnv::new()
+            .set_attribute("DESP[10]", 0.0)
+            .set_attribute("DESP[4]", 800.0)
+            .set_attribute("DESP[5]", 300.0)
+            .set_attribute("DESP[11]", 250.0);
+        assert_eq!(evaluate_words_full(words, &leaning), Some(-135.0));
+        // `ATANT ( ATTRIB PARA[4 ] , ATTRIB PARA[2 ] + ATTRIB PARA[7 ] )`: 3 over 9.
         let words = &[
             49, 1, 101, 6, 1048576, 0, 1073742849, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701,
             101, 6, 0, 0, 1073742848, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 1835008,
@@ -2239,8 +2279,8 @@ mod tests {
             .set_attribute("PARA[4]", 3.0)
             .set_attribute("PARA[2]", 4.0)
             .set_attribute("PARA[7]", 5.0);
-        assert!(render(words).is_some(), "it prints");
-        assert_eq!(evaluate_words(words, &env), None, "but it does not number");
+        let got = evaluate_words(words, &env).expect("numbers");
+        assert!((got - 3.0_f64.atan2(9.0).to_degrees()).abs() < 1e-12, "{got}");
     }
 
     /// Dividing by an unset parameter is a degenerate to report, not an
