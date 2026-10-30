@@ -149,6 +149,24 @@ const OP_UNSET_REAL: i32 = 1802;
 /// pushes true when either side is true with a clear error; otherwise
 /// `exprlib/EXDEF` merges the errors. The printer at `0x51C19E4` spells ` OR `.
 const OP_OR: i32 = 301;
+/// `REAL ( x )`, the single-argument real cast. It is the last word of the
+/// hang-rod catalogue's `PTDI` programs: acp7320 `/MDS-PSL-HANG-CAT/G-226`
+/// (`23704/67846`) writes `PTDI = REAL ( ATTRIB HEIG )` as
+/// `106 2 675926 1 1 0 1601 1701 1011`, and the second cylinder of the same
+/// GMSE `23704/67847` writes `PTDI = REAL ( ATTRIB HEIG + 2 ATTRIB DESP )`
+/// as `… 106 2 675926 … 101 6 32768 0 1 0 6 106 2 860359 -1 -1 … 802 1011`.
+/// `core.dll`'s printer spells it `REAL ( . )` (`0xbaf400`, beside
+/// `SQRT ( . )` / `NINT ( . )`), and its function-name table at `0xe5c480`
+/// lists `REAL` in the same block as `SQRT` / `INT` / `NINT`.
+///
+/// Unread, both `PTDI`s are unresolved and E3D's three-cylinder HROD builds as
+/// the bare 16 mm threaded stub alone: 7326 `23710/69` draws cylinders 800 /
+/// 32 / 16 long centred at z = 400 / 816 / −8, while the generated one kept
+/// only the 16 mm stub. That is the whole of the HROD `off` family in the
+/// 2026-10-30 AMS comparison, 10 104 pieces across 7326 and 7327, every one
+/// `kind_match=true` and only the sizes wrong.
+const OP_REAL: i32 = 1011;
+
 /// `IFTRUE ( cond , a , b )` over reals. The `case 1822` arm of the same
 /// interpreter pops `b`, then `a`, then a **logical**, and pushes `a` when
 /// the logical is true and `b` when it is false. The sibling opcodes select the
@@ -346,7 +364,7 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_ABS_REAL
             | OP_MAX | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_LESS_THAN | OP_GREATER_EQUAL
             | OP_LESS_EQUAL | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING | OP_UNSET_REAL | OP_OR
-            | OP_IF_REAL => (Step::Operator(program[cursor]), 1),
+            | OP_IF_REAL | OP_REAL => (Step::Operator(program[cursor]), 1),
             // An opcode this has never seen used is a program it has not read.
             _ => return None,
         };
@@ -413,6 +431,7 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
             Step::Operator(OP_TRIM) => apply_function("TRIM", &mut stack)?,
             Step::Operator(OP_LOGICAL_STRING) => apply_function("STR", &mut stack)?,
             Step::Operator(OP_UNSET_REAL) => apply_function("UNSET", &mut stack)?,
+            Step::Operator(OP_REAL) => apply_function("REAL", &mut stack)?,
             Step::Operator(OP_ATANT) => apply_binary_function("ATANT", &mut stack)?,
             Step::Operator(OP_IF_REAL) => {
                 let otherwise = stack.pop()?;
@@ -814,6 +833,11 @@ fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
         OP_ASIN => unary_number(stack, |n| n.asin().to_degrees())?,
         OP_ATAN => unary_number(stack, |n| n.atan().to_degrees())?,
         OP_SQRT => unary_number(stack, |n| n.sqrt())?,
+        // REAL is a cast, not arithmetic: on a stack that already holds a real
+        // it is the identity, and it neither clears nor converts a fault. A
+        // text operand is a program this has misread, which `unary_number`
+        // reports as `None`.
+        OP_REAL => unary_number(stack, |n| n)?,
         OP_ABS | OP_ABS_REAL => unary_number(stack, |n| n.abs())?,
         _ => binary_number(operator, stack)?,
     };
@@ -1008,7 +1032,13 @@ fn parse_number(words: &[i32]) -> Option<(Step, usize)> {
 
 fn decode_number(first: i32, second: i32, third: i32) -> Option<f64> {
     if third.unsigned_abs() < MAX_SCALED_EXPONENT.unsigned_abs() {
-        let mantissa = f64::from(first) + f64::from(second as u32) / SCALED_FRACTION;
+        // Both words are signed: a negative value writes the sign into the
+        // fraction too. acp7320's PIHASA hanger `/MDS-PIHASA-HANG-CAT/G-2400-1A`
+        // (`23704/299829`) stores `0.2 * ATTRIB PARA[3 ]` as `13107 6560 -1`
+        // (both words positive, 0.2) and `3.6 * ATTRIB PARA[3 ]` as
+        // `-13107 -6560 0` — reading the second word unsigned turns that
+        // −0.4 into +3.6, which put the 7333 PCLA 2 900 mm up its Z axis.
+        let mantissa = f64::from(first) + f64::from(second) / SCALED_FRACTION;
         return Some(mantissa * f64::from(third - SCALED_SHIFT).exp2());
     }
     if third & DOUBLE_FLAG == 0 {
@@ -1532,6 +1562,73 @@ mod tests {
         ];
         assert_eq!(render(&max).as_deref(), Some("( MAX ( 2 , 5 ) )"));
         assert_eq!(evaluate_words(&max, &MapParamEnv::new()), Some(5.0));
+    }
+
+    /// The hang-rod catalogue's `PTDI` programs, read back from acp7320 on
+    /// 2026-10-30. Both cylinders of a GMSE end with `REAL` (1011), and the
+    /// second one takes its `DESP` subscript off the stack.
+    ///
+    /// 7326 `23704/67846` (GMSE `/MDS-PSL-HANG-CAT/G-226`) with `HEIG = 800`
+    /// and `DESP = [16, 32]`: E3D's RVM draws that HROD as three cylinders
+    /// 800 / 32 / 16 long, so the first is `[0, 800]` and the second
+    /// `[800, 832]`.
+    #[test]
+    fn hang_rod_ptdi_programs_use_the_real_cast() {
+        // `PTDI = ( REAL ( ATTRIB HEIG ) )`, the whole of LCYL 23704/67846.
+        let plain = [
+            11, 1, 106, 2, 675926, 1, 1, 0, 1601, 1701, 1011,
+        ];
+        assert_eq!(render(&plain).as_deref(), Some("( REAL ( ATTRIB HEIG ) )"));
+        let env = MapParamEnv::new().set_attribute("HEIG", 800.0);
+        assert_eq!(evaluate_words(&plain, &env), Some(800.0));
+
+        // `PTDI = ( REAL ( ATTRIB HEIG + 2 ATTRIB DESP ) )` from 23704/67847:
+        // the `2` is the subscript of `DESP`, so this is `HEIG + DESP[2]`.
+        let stacked = [
+            27, 1, 106, 2, 675926, 1, 1, 0, 1601, 1701, 1011, 101, 6, 32768, 0, 1, 0, 6, 106, 2,
+            860359, -1, -1, 0, 1601, 1701, 802,
+        ];
+        assert_eq!(
+            render(&stacked).as_deref(),
+            Some("( REAL ( ATTRIB HEIG ) + ATTRIB DESP[2 ] )")
+        );
+        let env = MapParamEnv::new()
+            .set_attribute("HEIG", 800.0)
+            .set_attribute("DESP[2]", 32.0);
+        assert_eq!(evaluate_words(&stacked, &env), Some(832.0));
+
+        // `PBDI` of the same cylinder is the bare cast, and 7327's rods take
+        // their rod-end length from `DESP[2] = 15.875` the same way.
+        let env = MapParamEnv::new()
+            .set_attribute("HEIG", 800.0)
+            .set_attribute("DESP[2]", 15.875);
+        assert_eq!(evaluate_words(&stacked, &env), Some(815.875));
+    }
+
+    /// A scaled number's fraction word is signed. acp7320's PIHASA hanger
+    /// `/MDS-PIHASA-HANG-CAT/G-2400-1A` (`23704/299829`) writes
+    /// `PZ = ( 3.6 * ATTRIB PARA[3 ] )` as `101 6 -13107 -6560 0 0 6` and the
+    /// neighbouring `PZLE = ( 0.2 * ATTRIB PARA[3 ] )` as `101 6 13107 6560 -1 0 6`.
+    /// Both are −0.4 and +0.2 of `PARA[3]`; reading the second word unsigned
+    /// made the first +1.8 instead, 2 900 mm up the 7333 clamp's Z axis.
+    #[test]
+    fn a_scaled_fraction_word_carries_the_sign() {
+        let words = |a: i32, b: i32, c: i32| [9, 1, 101, 6, a, b, c, 0, 6];
+        let value = |a: i32, b: i32, c: i32| evaluate_words(&words(a, b, c), &MapParamEnv::new()).unwrap();
+        // The stored fraction is exact to 2^-15, so compare to five places.
+        for (words, expected) in [
+            ((-13107, -6560, 0), -0.4),
+            ((13107, 6560, -1), 0.2),
+            ((13107, 6560, 0), 0.4),
+            ((-12288, 0, 0), -0.375),
+            ((12288, 0, 0), 0.375),
+        ] {
+            let got = value(words.0, words.1, words.2);
+            assert!(
+                (got - expected).abs() < 1e-6,
+                "{words:?} read as {got}, wanted {expected}"
+            );
+        }
     }
 
     #[test]
