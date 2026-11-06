@@ -67,6 +67,15 @@ use crate::uda_catalog::UdaCatalog;
 const PROGRAM_MARKER: i32 = 1;
 const OP_PUSH_NUMBER: i32 = 101;
 const OP_ATTRIBUTE: i32 = 106;
+/// A pseudo-attribute read without qualifier: `112 4 2 20 <name> 1701`.
+///
+/// The MDS ancillary catalogue writes the `PPRO` of every `PLOD` row this way
+/// (acp7320 `/ST59-DATA`, `/GT85-DATA`, `/GT86A-DATA`; ams7355 the same
+/// 1206 rows), always naming `POD`. Only that exact six-word shape is read; the
+/// longer `112 5 7 …` forms beside it in acp7320 are still declined.
+const OP_PSEUDO_ATTRIBUTE: i32 = 112;
+const PSEUDO_ATTRIBUTE_SHAPE: [i32; 3] = [4, 2, 20];
+const PSEUDO_ATTRIBUTE_WORDS: usize = 6;
 const OP_PUSH_TEXT: i32 = 118;
 /// The constant `PI`, an operand that takes no words of its own (0x6F; the
 /// earlier `parse-pdms-db` reader spelt the same code `PI`).
@@ -358,6 +367,7 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
         let (step, consumed) = match program[cursor] {
             OP_PUSH_NUMBER => parse_number(&program[cursor..])?,
             OP_ATTRIBUTE => parse_attribute(&program[cursor..])?,
+            OP_PSEUDO_ATTRIBUTE => parse_pseudo_attribute(&program[cursor..])?,
             OP_PUSH_TEXT => parse_text(&program[cursor..])?,
             OP_PI => (Step::Operator(OP_PI), 1),
             OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
@@ -1126,6 +1136,25 @@ fn parse_attribute(words: &[i32]) -> Option<(Step, usize)> {
     Some((Step::Attribute(attribute), ATTRIBUTE_WORDS))
 }
 
+/// See [`OP_PSEUDO_ATTRIBUTE`].
+fn parse_pseudo_attribute(words: &[i32]) -> Option<(Step, usize)> {
+    let [OP_PSEUDO_ATTRIBUTE, a, b, c, name, ATTRIBUTE_TERMINATOR, ..] = words else {
+        return None;
+    };
+    if [*a, *b, *c] != PSEUDO_ATTRIBUTE_SHAPE {
+        return None;
+    }
+    let attribute = Attribute {
+        name: name_of(*name)?,
+        uda_key: None,
+        subscript_from_stack: false,
+        inline_subscript: None,
+        qualifier: None,
+        owners: Vec::new(),
+    };
+    Some((Step::Attribute(attribute), PSEUDO_ATTRIBUTE_WORDS))
+}
+
 /// An attribute reached through its owners: `ATTRIB NAMN OF PSPE OF PIPE `.
 ///
 /// The chain is a counted run between [`CHAIN_OPEN`] and [`CHAIN_CLOSE`] whose
@@ -1330,6 +1359,17 @@ mod tests {
         let env = env.set_attribute("DESP[1]", 1.0);
         let value = evaluate_words(&words, &env).expect("other branch");
         assert!((value - 57.15).abs() < 1e-9, "{value}");
+    }
+
+    /// acp7320 `/ST59-DATA` row `PLOD`: `PPRO` is the bare pseudo-attribute `POD`.
+    #[test]
+    fn the_plod_row_reads_the_pod_pseudo_attribute() {
+        let words = [8, 1, 112, 4, 2, 20, 534778, 1701];
+        assert_eq!(render(&words).as_deref(), Some("( ATTRIB POD )"));
+        let env = MapParamEnv::new().set_attribute("POD", 273.05);
+        assert_eq!(evaluate_words(&words, &env), Some(273.05));
+        // Any other qualifier words are a shape not read.
+        assert_eq!(render(&[8, 1, 112, 4, 2, 21, 534778, 1701]), None);
     }
 
     /// `EQ` is not bit equality: `exprlib/EXRCTL` allows `1e-6 * max(|a|,|b|)`.

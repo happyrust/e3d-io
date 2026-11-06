@@ -95,6 +95,14 @@ const OWNER_DESIGN_PARAMS: &str = "ODES";
 /// `ATTRIB APAR[n]` / `ATTRIB ADES[n]`：**连接对象**（设计件 `CREF`）的参数。
 const ATTACHED_PARAMS: &str = "APAR";
 const ATTACHED_DESIGN_PARAMS: &str = "ADES";
+/// `ATTRIB POD`：构件离开端那根管的外径，MDS 附件目录 `PLOD` 行的 `PPRO`。
+///
+/// 取设计件 `LSTU → [SPCO → CATR]* → SCOM` 的 `PARA[2]`（与隐式管断面同一口径）。
+/// 链走不到（目录件不在本会话的库里）时是 0：23705/289 `/MDS-Standards-ST59-PS`
+/// 的 `LSTU` 落到 `/AAPA100VV`，它只在 acp7000 里，E3D 在 AMS 会话下打开的是
+/// ams7000——导出的支架 Web/flange 按 `PLOD = 0` 摆（z 到 200，而按同行
+/// `DPRO = PARA[2]` 的 273 会到 336.5）。
+const PIPE_OUTSIDE_DIAMETER: &str = "POD";
 /// 找属主截面时沿 owner 链最多爬几层。FIXING 到 GENSEC 是三层（PLDATU、JLDATU），
 /// 配件到 SCTN 是一两层；16 只是防环。
 const MAX_OWNER_CLIMB: usize = 16;
@@ -644,6 +652,15 @@ impl DbElementParamEnv {
         }
     }
 
+    /// See [`PIPE_OUTSIDE_DIAMETER`].
+    fn pipe_outside_diameter(&self) -> Option<f64> {
+        let component = component_via(self.design.as_ref()?, "LSTU")?;
+        real_array(&component, CATALOGUE_PARAM_ARRAY)?
+            .get(1)
+            .copied()
+            .filter(|value| value.is_finite() && *value > 0.0)
+    }
+
     /// [`Self::related_element`] 那个元素的参数数组：`*PAR` 取 `PARA`，`*DES` 取 `DESP`。
     ///
     /// DESPRE 对它调 `GATRAR` / `GATPAR`——与 `PARAM n` 同一口实例参数：`PARA` 在设计件上
@@ -694,7 +711,12 @@ fn owning_section(design: &DbElement) -> Option<DbElement> {
 /// 设计件的目录件：`catdblib/GATGOC@0x1035CFB0` 从 `SPRE` 起跳，落在 `SPCO` / `GPART` /
 /// `PRTELE` 上跟 `CATR`，落在 `TABITEM` 上跟 `PRTREF`，落在别的 noun 上就是它。
 fn component_of(design: &DbElement) -> Option<DbElement> {
-    let mut cursor = design.get_element("SPRE").ok()??;
+    component_via(design, "SPRE")
+}
+
+/// [`component_of`]，从任一规格引用起跳（`SPRE` / `LSTU` …）。
+fn component_via(design: &DbElement, start: &str) -> Option<DbElement> {
+    let mut cursor = design.get_element(start).ok()??;
     for _ in 0..MAX_COMPONENT_HOPS {
         let via = match cursor.element_type().ok()?.as_str() {
             "SPCO" | "GPART" | "PRTELE" => "CATR",
@@ -983,6 +1005,9 @@ impl ParamEnv for DbElementParamEnv {
                 DESIGN_PROPERTY => self.design_property(qualifier),
                 reference => self.through_reference(reference, qualifier),
             },
+            (None, None) if attribute.name == PIPE_OUTSIDE_DIAMETER => {
+                Some(self.pipe_outside_diameter().unwrap_or(0.0))
+            }
             (None, None) => self
                 .derived
                 .iter()
