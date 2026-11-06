@@ -175,6 +175,14 @@ const OP_OR: i32 = 301;
 /// 2026-10-30 AMS comparison, 10 104 pieces across 7326 and 7327, every one
 /// `kind_match=true` and only the sizes wrong.
 const OP_REAL: i32 = 1011;
+/// The other `REAL`. Opcode 1012's printer case (core.dll `0x55A41`) emits
+/// `REAL ( ` … ` )` from the format at `0xBB04F8`, one argument, and the
+/// evaluator calls `exprlib/EXPORE` (`0x61C4D`), which pops one double and
+/// copies it unchanged. On a number that is the same cast as [`OP_REAL`].
+/// acp7320's eight `PTCA.PY` programs (`23704/839136`–`839139`) are the only
+/// geometry consumers; the short form is
+/// `( ATTRIB DESP[3 ] - REAL ( ATTRIB RPRO PLOD ) / 2.8 ) / TAN ( ATTRIB DESP[5 ] )`.
+const OP_REAL_EXPORE: i32 = 1012;
 
 /// `IFTRUE ( cond , a , b )` over reals. The `case 1822` arm of the same
 /// interpreter pops `b`, then `a`, then a **logical**, and pushes `a` when
@@ -374,7 +382,7 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_ABS_REAL
             | OP_MAX | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_LESS_THAN | OP_GREATER_EQUAL
             | OP_LESS_EQUAL | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING | OP_UNSET_REAL | OP_OR
-            | OP_IF_REAL | OP_REAL => (Step::Operator(program[cursor]), 1),
+            | OP_IF_REAL | OP_REAL | OP_REAL_EXPORE => (Step::Operator(program[cursor]), 1),
             // An opcode this has never seen used is a program it has not read.
             _ => return None,
         };
@@ -441,7 +449,7 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
             Step::Operator(OP_TRIM) => apply_function("TRIM", &mut stack)?,
             Step::Operator(OP_LOGICAL_STRING) => apply_function("STR", &mut stack)?,
             Step::Operator(OP_UNSET_REAL) => apply_function("UNSET", &mut stack)?,
-            Step::Operator(OP_REAL) => apply_function("REAL", &mut stack)?,
+            Step::Operator(OP_REAL | OP_REAL_EXPORE) => apply_function("REAL", &mut stack)?,
             Step::Operator(OP_ATANT) => apply_binary_function("ATANT", &mut stack)?,
             Step::Operator(OP_IF_REAL) => {
                 let otherwise = stack.pop()?;
@@ -847,7 +855,7 @@ fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
         // it is the identity, and it neither clears nor converts a fault. A
         // text operand is a program this has misread, which `unary_number`
         // reports as `None`.
-        OP_REAL => unary_number(stack, |n| n)?,
+        OP_REAL | OP_REAL_EXPORE => unary_number(stack, |n| n)?,
         OP_ABS | OP_ABS_REAL => unary_number(stack, |n| n.abs())?,
         _ => binary_number(operator, stack)?,
     };
@@ -1643,6 +1651,47 @@ mod tests {
             .set_attribute("HEIG", 800.0)
             .set_attribute("DESP[2]", 15.875);
         assert_eq!(evaluate_words(&stacked, &env), Some(815.875));
+    }
+
+    /// Opcode 1012 is `exprlib/EXPORE`, which the printer spells `REAL` and
+    /// which copies one double unchanged. acp7320 `PTCA.PY` `23704/839138`
+    /// (52 words) and `23704/839136` (60 words, the same formula times −1).
+    /// With `DESP[3] = 10`, `RPRO PLOD = 2.8`, `DESP[5] = 45` the short form
+    /// is `(10 - 2.8 / 2.8) / TAN(45)` and the long form negates it.
+    #[test]
+    fn ptca_py_real_is_the_expore_cast() {
+        let short = [
+            52, 1, 101, 6, 524288, 0, 1073742848, 0, 0, 106, 2, 860359, -1, -1, 0, 1601, 1701,
+            106, 2, 840258, 1, 1, 621448, 1601, 1701, 1012, 101, 6, 419430, 1717986918,
+            1073742848, 0, 0, 805, 803, 101, 6, 1310720, 0, 1073742849, 0, 0, 106, 2, 860359,
+            -1, -1, 0, 1601, 1701, 903, 805,
+        ];
+        assert_eq!(
+            render(&short).as_deref(),
+            Some(
+                "( ( ATTRIB DESP[3 ] - REAL ( ATTRIB RPRO PLOD ) / 2.8 ) / TAN ( ATTRIB DESP[5 ] ) )"
+            )
+        );
+        let long = [
+            60, 1, 101, 6, 1074790400, 0, 1073742847, 0, 0, 101, 6, 524288, 0, 1073742848, 0, 0,
+            106, 2, 860359, -1, -1, 0, 1601, 1701, 106, 2, 840258, 1, 1, 621448, 1601, 1701,
+            1012, 101, 6, 419430, 1717986918, 1073742848, 0, 0, 805, 803, 804, 101, 6, 1310720,
+            0, 1073742849, 0, 0, 106, 2, 860359, -1, -1, 0, 1601, 1701, 903, 805,
+        ];
+        assert_eq!(
+            render(&long).as_deref(),
+            Some(
+                "( -1 * ( ATTRIB DESP[3 ] - REAL ( ATTRIB RPRO PLOD ) / 2.8 ) / TAN ( ATTRIB DESP[5 ] ) )"
+            )
+        );
+        let env = MapParamEnv::new()
+            .set_attribute("DESP[3]", 10.0)
+            .set_attribute("RPRO PLOD", 2.8)
+            .set_attribute("DESP[5]", 45.0);
+        let tangent = 45.0_f64.to_radians().tan();
+        let short_value = (10.0 - 2.8 / 2.8) / tangent;
+        assert_eq!(evaluate_words(&short, &env), Some(short_value));
+        assert_eq!(evaluate_words(&long, &env), Some(-short_value));
     }
 
     /// A scaled number's fraction word is signed. acp7320's PIHASA hanger
