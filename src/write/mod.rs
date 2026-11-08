@@ -51,6 +51,7 @@ pub use alloc::{AllocationBasis, CounterUse, ExtentAllocationBasis};
 pub(crate) mod claim;
 pub(crate) mod claim_cow;
 pub mod dictionary;
+pub mod group;
 pub(crate) mod index_cow;
 pub(crate) mod keyed_cow;
 pub mod merge;

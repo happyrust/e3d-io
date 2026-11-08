@@ -139,6 +139,18 @@ pub enum TransactionError {
     OwnerIsReferenceList { owner: RefNo },
     #[error("{owner} is not a reference-list noun: its members are its children (use move_to)")]
     NotAReferenceList { owner: RefNo },
+    /// A group writer ([`Transaction::insert_gpwl`] and friends) was handed a
+    /// parent whose noun is not the container it needs — a `GPSET` under
+    /// something that is not a `GPWL`, a `GPWL` under something that is not a
+    /// `WORL`. E3D would file the child anyway and the secondary hierarchy
+    /// would never reach it.
+    #[error("{refno} is a {found}, not the {expected} a {what} needs")]
+    NotAGroupContainer {
+        refno: RefNo,
+        what: &'static str,
+        expected: &'static str,
+        found: String,
+    },
     #[error("moving {refno} under {owner} would make it its own ancestor")]
     WouldOwnItself { refno: RefNo, owner: RefNo },
     #[error("{anchor} is not a member of {owner}, so nothing can be placed next to it")]
@@ -1294,7 +1306,7 @@ impl<'a> Transaction<'a> {
 
     /// A mutable pending draft for `refno`: the one already in the batch, or the
     /// base record read into a new update.
-    fn draft_mut(
+    pub(crate) fn draft_mut(
         &mut self,
         refno: RefNo,
         what: &'static str,
@@ -1458,6 +1470,29 @@ impl<'a> Transaction<'a> {
             .any(|op| matches!(op, MemberOp::Add { owner: o, member: m, .. } if *o == owner && *m == member))
     }
 
+    /// `owner`'s members as they will stand after this batch: the member list
+    /// the drafts and the base carry, plus the additions still queued in
+    /// `member_ops` (an element inserted in this batch reaches its owner only
+    /// through that queue, never through a draft's `members`).
+    ///
+    /// A group writer needs this to answer "is this target already in the set"
+    /// within one transaction — [`Self::members_of`] alone would miss the
+    /// `GPITEM` the same batch just created.
+    pub(crate) fn members_after_batch(
+        &mut self,
+        owner: RefNo,
+    ) -> Result<Vec<RefNo>, TransactionError> {
+        let mut members = self.members_of(owner)?;
+        for op in &self.member_ops {
+            if let MemberOp::Add { owner: at, member, .. } = op {
+                if *at == owner && !members.contains(member) {
+                    members.push(*member);
+                }
+            }
+        }
+        Ok(members)
+    }
+
     /// The owner an element has right now: the pending draft's, else the base
     /// record's. `None` when the element is nowhere.
     fn owner_of(&mut self, refno: RefNo) -> Result<Option<RefNo>, TransactionError> {
@@ -1475,7 +1510,7 @@ impl<'a> Transaction<'a> {
 
     /// The member list an element has right now: the pending draft's, else the
     /// base record's; empty when the element is nowhere.
-    fn members_of(&mut self, refno: RefNo) -> Result<Vec<RefNo>, TransactionError> {
+    pub(crate) fn members_of(&mut self, refno: RefNo) -> Result<Vec<RefNo>, TransactionError> {
         match self.writes.get(&refno) {
             Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => {
                 Ok(draft.members().to_vec())
@@ -1491,6 +1526,80 @@ impl<'a> Transaction<'a> {
                 )
                 .map_err(|detail| TransactionError::Parse { refno, detail })?;
                 Ok(parsed.members)
+            }
+        }
+    }
+
+    /// The noun hash an element has right now, pending or stored — what a
+    /// group writer checks a caller's `GPWL` / `GPSET` claim against.
+    pub(crate) fn noun_of(&mut self, refno: RefNo) -> Result<u32, TransactionError> {
+        self.draft_noun(refno, "read")
+    }
+
+    /// Refuse unless `refno`'s noun is `expected` (a noun name like `"GPWL"`).
+    ///
+    /// The group writer's guard: a `GPSET` filed under something that is not a
+    /// `GPWL` is invisible to E3D's secondary hierarchy, and nothing later in
+    /// the write path complains.
+    pub(crate) fn require_noun(
+        &mut self,
+        refno: RefNo,
+        expected: &'static str,
+        what: &'static str,
+    ) -> Result<(), TransactionError> {
+        let found = self.noun_of(refno)?;
+        let wanted = e3d_attlib::db1_hash(expected);
+        if found == wanted {
+            return Ok(());
+        }
+        Err(TransactionError::NotAGroupContainer {
+            refno,
+            what,
+            expected,
+            found: format!("noun {found:#x}"),
+        })
+    }
+
+    /// The explicit attribute `hash` of `refno` as it stands right now (the
+    /// pending draft's, else the base record's), or `None` when it carries
+    /// none. A group writer uses it to find a `GPITEM`'s `GPREF` without
+    /// re-reading the file.
+    ///
+    /// Read-only: an element that is only in the base is parsed here rather
+    /// than through [`Self::draft_mut`], which would register an update and
+    /// make every probe a write.
+    pub(crate) fn explicit_words_of(
+        &mut self,
+        refno: RefNo,
+        hash: u32,
+    ) -> Result<Option<Vec<u32>>, TransactionError> {
+        match self.writes.get(&refno) {
+            Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => {
+                Ok(draft.explicit_words(hash).map(|(_, data)| data))
+            }
+            Some(ElementWrite::Delete(_)) => Ok(None),
+            None => {
+                let Some(view) = self.engine.find_element(refno)? else {
+                    return Ok(None);
+                };
+                let parsed = crate::record::element::ParsedElement::parse_as(
+                    &view.raw_bytes,
+                    self.text_format,
+                )
+                .map_err(|detail| TransactionError::Parse { refno, detail })?;
+                Ok(parsed
+                    .explicit_attributes
+                    .iter()
+                    .find(|attr| attr.hash == hash)
+                    .and_then(|attr| match &attr.value {
+                        crate::record::explicit::ExplicitValue::RawWords(words) => {
+                            Some(words.clone())
+                        }
+                        crate::record::explicit::ExplicitValue::RefNo(target) => {
+                            Some(vec![target.word0, target.word1])
+                        }
+                        _ => None,
+                    }))
             }
         }
     }

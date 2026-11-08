@@ -59,6 +59,12 @@ pub const AMS251142: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaMarineSample\ams000\
 /// enough to copy per test.
 pub const TES023: &str = r"D:\AVEVA\Projects\E3D3.1\TEST\TES000\TES023";
 
+/// The Plant sample's group database: 305 KB, the one that holds `GPITEM`
+/// explicit groups (`docs/plans/2026-11-08-gpwl-gpset-group-nodes.md` §0).
+/// Small enough to copy per test, and it has a `WORL` plus elements in more
+/// than one database number — what the group-write cases need.
+pub const APS250218: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\aps000\aps250218_0001";
+
 /// A private copy of `source` to write on.
 pub struct DbCopy {
     _dir: TempDir,
