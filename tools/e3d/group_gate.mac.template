@@ -1,0 +1,119 @@
+-- e3d-io group gate: read back a GPWL / GPSET / GPITEM chain that e3d-io wrote, in a
+-- real E3D 3.1 Design TTY session. Read-only: no SAVEWORK, no QUIT -- the l3_suite
+-- driver's wrapper owns the session.
+--
+-- Rendered by tools/e3d/group_gate.ps1 from this template; the refnos come from
+-- `e3d-group-gate`'s JSON on the project copy.
+--
+-- The question this gate exists for is Q3: a GPSET whose members are GPITEMs carrying a
+-- GPREF must expand to the real elements. Measured on APS 250204 (2026-11-08): `Q MEM` on
+-- the GPSET prints the GPITEM itself (`1 GPITEM 1 =<ref>`), not the element its GPREF
+-- names. Q2 therefore asserts the GPITEM member line, and Q4 separately proves the GPREF
+-- target is a real design element E3D accepts.
+--
+-- One ALPHA LOG block per question: a block's log is written only at ALPHA LOG END, so an
+-- unhandled error loses that block's log and no other. Every navigation and every risky Q
+-- is followed by handle any.
+--
+-- The last block is the driver's own query log: `l3_suite --check-driver` reads
+-- `<macro name>.log` next to the macro, and reports the whole run as failed when that file
+-- is missing. It carries one line of summary, and it is written last so its presence also
+-- means every block above reached ALPHA LOG END.
+
+ALPHA LOG "{{LOGDIR}}/00_project.log" OVER
+$P GATE-00-BEGIN
+Q PROJ
+Q MDB
+$P GATE-00-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/10_gpwl.log" OVER
+$P GATE-10-BEGIN
+={{GPWL}}
+handle any
+  $P GATE-10-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q NAME
+  Q MEM
+endhandle
+$P GATE-10-END
+ALPHA LOG END
+
+ALPHA LOG "{{LOGDIR}}/20_gpset_items.log" OVER
+$P GATE-20-BEGIN
+={{GPSET_ITEMS}}
+handle any
+  $P GATE-20-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q NAME
+  Q MEM
+endhandle
+$P GATE-20-END
+ALPHA LOG END
+
+-- The GPITEM itself: what E3D thinks it is, and who owns it.
+--
+-- `Q GPREF` is NOT asked: measured on APS 250204, that question takes the whole session
+-- down (exit 0xC0000005) because GPREF is not in E3D's dictionary. `Q ATT` is the legal
+-- substitute; it prints Name/Type/Lock/Owner/Description/SItem and no GPREF, so the
+-- GPREF value is verified on the write side (e3d-io reads it back) and by Q4 below.
+ALPHA LOG "{{LOGDIR}}/30_gpitem.log" OVER
+$P GATE-30-BEGIN
+={{GPITEM_HERE}}
+handle any
+  $P GATE-30-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q ATT
+endhandle
+$P GATE-30-END
+ALPHA LOG END
+
+-- The real element the same-db GPITEM points at, so the gate can compare: this is what the
+-- GPSET's expansion should have printed.
+ALPHA LOG "{{LOGDIR}}/40_target.log" OVER
+$P GATE-40-BEGIN
+={{TARGET_HERE}}
+handle any
+  $P GATE-40-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q NAME
+  Q OWNER
+endhandle
+$P GATE-40-END
+ALPHA LOG END
+
+-- The rules set: its member list is the GPITEM written explicitly; the SCOSEL is what
+-- E3D would evaluate. `Q MEM` here is the explicit half only.
+ALPHA LOG "{{LOGDIR}}/50_gpset_rules.log" OVER
+$P GATE-50-BEGIN
+={{GPSET_RULES}}
+handle any
+  $P GATE-50-NAV-ERROR $!!error.text
+elsehandle none
+  Q REF
+  Q TYPE
+  Q OWNER
+  Q MEM
+endhandle
+$P GATE-50-END
+ALPHA LOG END
+
+-- The driver's query log (see the note at the top): `<macro name>.log`, written last.
+ALPHA LOG "{{QUERYLOG}}" OVER
+$P GATE-SUMMARY-BEGIN
+$P GATE-SUMMARY all six blocks reached ALPHA LOG END
+$P GATE-SUMMARY-END
+ALPHA LOG END
+
+$P GATE-DONE
