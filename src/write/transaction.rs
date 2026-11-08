@@ -1604,6 +1604,74 @@ impl<'a> Transaction<'a> {
         }
     }
 
+    /// The `width` words the element's **implicit** region holds at
+    /// `word_offset`. The read counterpart of
+    /// [`RecordDraft::set_implicit_words`], for attributes the noun's template
+    /// declares in the wide layout (`GPITEM`'s `GPREF` at offset 11).
+    pub(crate) fn implicit_words_of(
+        &mut self,
+        refno: RefNo,
+        word_offset: usize,
+        width: usize,
+    ) -> Result<Option<Vec<u32>>, TransactionError> {
+        match self.writes.get(&refno) {
+            Some(ElementWrite::Insert(draft) | ElementWrite::Update(draft)) => {
+                Ok(draft.implicit_words_at(word_offset, width))
+            }
+            Some(ElementWrite::Delete(_)) => Ok(None),
+            None => {
+                let Some(view) = self.engine.find_element(refno)? else {
+                    return Ok(None);
+                };
+                let parsed = crate::record::element::ParsedElement::parse_as(
+                    &view.raw_bytes,
+                    self.text_format,
+                )
+                .map_err(|detail| TransactionError::Parse { refno, detail })?;
+                let end = word_offset.saturating_add(width);
+                let words: Vec<u32> = parsed
+                    .implicit_data
+                    .chunks_exact(4)
+                    .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                    .collect();
+                Ok((end <= words.len()).then(|| words[word_offset..end].to_vec()))
+            }
+        }
+    }
+
+    /// `GPITEM` 模板把 `gpref` 摆在哪——`Some(offset)` 是隐式槽，`None` 表示模板
+    /// 没在 wide 区给它留位置（那才该走显式流）。
+    pub(crate) fn gpref_slot(
+        &mut self,
+        noun: u32,
+        gpref: u32,
+    ) -> Result<Option<usize>, TransactionError> {
+        Ok(self
+            .templates
+            .template_for(noun)?
+            .and_then(|template| {
+                template
+                    .attrs
+                    .iter()
+                    .find(|attr| attr.hash == gpref)
+                    .map(|attr| attr.wide.location.word_offset() as usize)
+            })
+            .filter(|offset| *offset != 0))
+    }
+
+    /// 按模板布局读 `GPITEM` 的 `GPREF` 隐式槽；模板没给槽时回 `None`。
+    pub(crate) fn gpref_implicit_words(
+        &mut self,
+        item: RefNo,
+        gpref: u32,
+    ) -> Result<Option<Vec<u32>>, TransactionError> {
+        let noun = self.noun_of(item)?;
+        let Some(offset) = self.gpref_slot(noun, gpref)? else {
+            return Ok(None);
+        };
+        self.implicit_words_of(item, offset, 2)
+    }
+
     fn member_list_is_referenced(&mut self, noun: u32) -> Result<bool, TransactionError> {
         Ok(match self.templates.template_for(noun)? {
             Some(template) => template.member_list_kind == MemberListKind::Referenced,

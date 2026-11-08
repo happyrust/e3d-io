@@ -92,8 +92,22 @@ impl<'a> Transaction<'a> {
         }
         let noun = db1_hash("GPITEM");
         let gpref = db1_hash(GPREF);
-        let item = self.insert(gpset, noun, None, move |draft, _template| {
-            draft.set_explicit_refno(gpref, target);
+        let item = self.insert(gpset, noun, None, move |draft, template| {
+            // `GPREF` 是**隐式**属性：`desvir.dat` 里 GPITEM 把它声明在 wide 区的
+            // 第 11 个词槽（两个词）。读侧按 wide 偏移从 implicit 取，所以写进
+            // 显式流的那一份永远读不回来——属性回落到模板默认 0，分组静默变空。
+            // 模板把它摆在隐式区就写隐式区；只有模板真声明成显式（wide 偏移 0）
+            // 时才走显式流。
+            let slot = template
+                .attrs
+                .iter()
+                .find(|attr| attr.hash == gpref)
+                .map(|attr| attr.wide.location.word_offset() as usize)
+                .filter(|offset| *offset != 0);
+            match slot {
+                Some(offset) => draft.set_implicit_refno(gpref, target, offset)?,
+                None => draft.set_explicit_refno(gpref, target),
+            }
             Ok(())
         })?;
         if at != MemberPosition::Last {
@@ -135,14 +149,32 @@ impl<'a> Transaction<'a> {
             if self.noun_of(member)? != item_noun {
                 continue;
             }
-            let Some(words) = self.explicit_words_of(member, gpref)? else {
-                continue;
-            };
-            if words.len() == 2 && RefNo::new(words[0], words[1]) == target {
+            // 读的口径必须与写的口径一致：`GPREF` 在 GPITEM 模板里是隐式槽，
+            // 只读显式流会永远读不到，去重随之失效（同一 target 会反复加 GPITEM）。
+            if self.gpref_of(member, gpref)? == Some(target) {
                 return Ok(Some(member));
             }
         }
         Ok(None)
+    }
+
+    /// `GPITEM` 的 `GPREF` 当前指向谁。隐式槽按模板布局读，显式流兜底——
+    /// 与 [`Self::insert_gpset_member`] 的写入口径对偶。
+    fn gpref_of(
+        &mut self,
+        item: RefNo,
+        gpref: u32,
+    ) -> Result<Option<RefNo>, TransactionError> {
+        let implicit = self.gpref_implicit_words(item, gpref)?;
+        if let Some(words) = implicit {
+            if words.len() == 2 && (words[0] != 0 || words[1] != 0) {
+                return Ok(Some(RefNo::new(words[0], words[1])));
+            }
+        }
+        let Some(words) = self.explicit_words_of(item, gpref)? else {
+            return Ok(None);
+        };
+        Ok((words.len() == 2).then(|| RefNo::new(words[0], words[1])))
     }
 }
 

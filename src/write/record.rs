@@ -111,6 +111,17 @@ pub enum RecordEncodeError {
     ExplicitTooLong { hash: u32, words: usize, max: usize },
     #[error("storage type {storage_type} is not a hunk type (20, 21, 22 or 23)")]
     NotAHunkType { storage_type: u16 },
+    #[error(
+        "implicit attribute {hash:#x}: slot {word_offset}..{} does not fit the {implicit_words}-word \
+         implicit region this draft was built with",
+        word_offset + width
+    )]
+    ImplicitSlotOutOfRange {
+        hash: u32,
+        word_offset: usize,
+        width: usize,
+        implicit_words: usize,
+    },
 }
 
 /// One element record to be written, in a form that is easy to change before
@@ -489,6 +500,58 @@ impl RecordDraft {
     /// [`REFERENCE_TYPE_CODE`], the two RefNo words as data.
     pub fn set_explicit_refno(&mut self, hash: u32, value: RefNo) {
         self.set_explicit_words(hash, REFERENCE_TYPE_CODE, vec![value.word0, value.word1]);
+    }
+
+    /// Set a reference attribute that lives in the **implicit** region, at the
+    /// word offset the noun's template gives it (`wide.location`, counted from
+    /// the start of the eleven-word header).
+    ///
+    /// [`Self::set_explicit_refno`] is the wrong door for these: the reader
+    /// takes them out of `implicit_data`, so a value written into the explicit
+    /// stream is never seen — the attribute reads back as the template default
+    /// and the caller gets a silently empty result. `GPITEM`'s `GPREF` is
+    /// exactly this case (`wide.word_offset = 11`, two words).
+    ///
+    /// Returns [`RecordEncodeError::ImplicitSlotOutOfRange`] when the offset
+    /// plus the value's width does not fit the implicit region the draft was
+    /// built with — a template that does not declare the slot is a caller bug,
+    /// not something to paper over.
+    pub fn set_implicit_refno(
+        &mut self,
+        hash: u32,
+        value: RefNo,
+        word_offset: usize,
+    ) -> Result<(), RecordEncodeError> {
+        self.set_implicit_words(hash, vec![value.word0, value.word1], word_offset)
+    }
+
+    /// [`Self::set_implicit_refno`] for a value of any width: writes `data`
+    /// into the implicit region at `word_offset`.
+    pub fn set_implicit_words(
+        &mut self,
+        hash: u32,
+        data: Vec<u32>,
+        word_offset: usize,
+    ) -> Result<(), RecordEncodeError> {
+        let end = word_offset + data.len();
+        if end > self.implicit.len() {
+            return Err(RecordEncodeError::ImplicitSlotOutOfRange {
+                hash,
+                word_offset,
+                width: data.len(),
+                implicit_words: self.implicit.len(),
+            });
+        }
+        self.implicit[word_offset..end].copy_from_slice(&data);
+        Ok(())
+    }
+
+    /// The `width` words the implicit region holds at `word_offset`, or `None`
+    /// when the slot runs past the region. The read counterpart of
+    /// [`Self::set_implicit_words`].
+    pub fn implicit_words_at(&self, word_offset: usize, width: usize) -> Option<Vec<u32>> {
+        let end = word_offset.checked_add(width)?;
+        (end <= self.implicit.len()).then(|| self.implicit[word_offset..end].to_vec())
     }
 
     /// Set a string-list attribute (storage type 19) inline: the
@@ -1571,6 +1634,93 @@ mod tests {
         assert_eq!(
             crate::record::attrs::read_f64(&parsed.implicit_data, 29),
             Some(310.0)
+        );
+    }
+
+    /// A reference the noun's template puts in the implicit region must be
+    /// written there. Written through `set_explicit_refno` it lands in the
+    /// explicit stream, the reader (which takes it out of `implicit_data`)
+    /// never sees it, and the caller gets the template default back — the
+    /// silent empty group `GPITEM`/`GPREF` hit.
+    ///
+    /// Offsets here are counted from the eleven-word header, matching
+    /// `wide.location.word_offset` in the templates.
+    #[test]
+    fn a_reference_in_an_implicit_slot_is_invisible_from_the_explicit_stream() {
+        let refno = RefNo::new(24_384, 30_000);
+        let owner = RefNo::new(24_384, 24_932);
+        let target = RefNo::new(2_013_286_654, 2_405);
+        // A twenty-word attribute region: the slot at 11..13 is the GPITEM
+        // GPREF shape (wide.word_offset = 11, two words).
+        let words = implicit(&[0u32; 20]);
+        let slot = 11;
+
+        let mut via_implicit =
+            RecordDraft::new(refno, 0x861E0, owner, words.clone(), vec![], vec![]).unwrap();
+        via_implicit.set_implicit_refno(0x3a78ff, target, slot).unwrap();
+
+        let mut via_explicit =
+            RecordDraft::new(refno, 0x861E0, owner, words.clone(), vec![], vec![]).unwrap();
+        via_explicit.set_explicit_refno(0x3a78ff, target);
+
+        let read_back = |draft: &RecordDraft| {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("ams1000_0001");
+            let mut file = File::create(&path).unwrap();
+            let mut page0 = vec![0u8; PAGE_WORDS * 4];
+            page0[0x34..0x38].copy_from_slice(&(PAGE_WORDS as u32).to_be_bytes());
+            file.write_all(&page0).unwrap();
+            let placed = draft.encode(1, 1, PageId::PRIMARY);
+            let mut page1 = vec![0u8; PAGE_WORDS * 4];
+            page1[0..4].copy_from_slice(&7u32.to_be_bytes());
+            page1[4..4 + placed.bytes.len()].copy_from_slice(&placed.bytes);
+            file.write_all(&page1).unwrap();
+            file.flush().unwrap();
+            let reader = PageReader::open(&path).unwrap();
+            let mut cache = PageCache::new(reader, 4);
+            let record =
+                read_record(&mut cache, PageId::primary(1), placed.word_offset * 2).unwrap();
+            ParsedElement::parse(&record.bytes).unwrap()
+        };
+
+        // The reader's door: implicit_data at the template offset.
+        let parsed = read_back(&via_implicit);
+        assert_eq!(
+            crate::record::attrs::read_refno(&parsed.implicit_data, slot as u32),
+            Some(target),
+            "the implicit slot is where the reader looks"
+        );
+
+        let parsed = read_back(&via_explicit);
+        assert_eq!(
+            crate::record::attrs::read_refno(&parsed.implicit_data, slot as u32),
+            Some(RefNo::new(0, 0)),
+            "the explicit stream leaves the slot at its template default"
+        );
+        assert_eq!(
+            parsed
+                .explicit_attributes
+                .iter()
+                .find(|a| a.hash == 0x3a78ff)
+                .map(|a| a.value.clone()),
+            Some(ExplicitValue::RefNo(target)),
+            "and the value it holds is the one the reader never asks for"
+        );
+
+        // A slot that runs past the region is a caller bug, not something to
+        // clamp silently.
+        let mut too_far =
+            RecordDraft::new(refno, 0x861E0, owner, implicit(&[0u32; 20]), vec![], vec![]).unwrap();
+        assert!(matches!(
+            too_far.set_implicit_refno(0x3a78ff, target, HEADER_WORDS + 20),
+            Err(RecordEncodeError::ImplicitSlotOutOfRange { word_offset, width, .. })
+                if word_offset == HEADER_WORDS + 20 && width == 2
+        ));
+        assert_eq!(too_far.implicit_words_at(HEADER_WORDS + 20, 2), None);
+        assert_eq!(
+            too_far.implicit_words_at(slot, 2),
+            Some(vec![0, 0]),
+            "and reading a slot inside the region still works"
         );
     }
 

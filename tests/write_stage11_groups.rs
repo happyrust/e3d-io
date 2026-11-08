@@ -102,6 +102,42 @@ fn explicit_of(path: &std::path::Path, refno: RefNo, hash: u32) -> Option<Explic
         .map(|attr| attr.value.clone())
 }
 
+/// `GPREF` read the way the read side reads it — from the template's implicit
+/// slot when the noun declares one, from the explicit stream otherwise.
+///
+/// `GPITEM`'s template puts `GPREF` in the implicit region (`wide.word_offset =
+/// 11`, two words), so a value written into the explicit stream is never seen:
+/// this helper is the reader's door, and the case below pins that the facade
+/// goes through it.
+fn gpref_of(path: &std::path::Path, item: RefNo) -> Option<RefNo> {
+    let gpref = db1_hash(attrs::GPREF);
+    let mut provider = provider();
+    let template = provider.template_for(db1_hash("GPITEM")).ok()??;
+    let slot = template
+        .attrs
+        .iter()
+        .find(|attr| attr.hash == gpref)
+        .map(|attr| attr.wide.location.word_offset())
+        .filter(|offset| *offset != 0);
+
+    let mut engine = ReadOnlyEngine::open(path).ok()?;
+    let view = engine.find_element(item).ok()??;
+    let mut parsed = ParsedElement::parse_as(&view.raw_bytes, engine.text_format()).ok()?;
+    engine.resolve_hunks(&mut parsed).ok()?;
+
+    if let Some(offset) = slot {
+        return e3d_io::record::attrs::read_refno(&parsed.implicit_data, offset);
+    }
+    parsed
+        .explicit_attributes
+        .iter()
+        .find(|attr| attr.hash == gpref)
+        .and_then(|attr| match &attr.value {
+            ExplicitValue::RefNo(target) => Some(*target),
+            _ => None,
+        })
+}
+
 fn members_of(path: &std::path::Path, refno: RefNo) -> Vec<RefNo> {
     let mut engine = ReadOnlyEngine::open(path).expect("open");
     let view = engine.find_element(refno).expect("read").expect("exists");
@@ -153,12 +189,11 @@ fn a_group_written_through_the_facade_reads_back_through_the_member_lists() {
     assert_eq!(members.len(), 1, "the GPSET holds exactly the one GPITEM");
     let item = members[0];
     assert_eq!(member.item(), item, "the facade reports the GPITEM it created");
-    match explicit_of(&copy.path, item, db1_hash(attrs::GPREF)) {
-        Some(ExplicitValue::RefNo(target)) => {
-            assert_eq!(target, sample.here, "GPREF reads back as the target")
-        }
-        other => panic!("GPREF reads back as {other:?}"),
-    }
+    assert_eq!(
+        gpref_of(&copy.path, item),
+        Some(sample.here),
+        "GPREF reads back as the target through the reader's own door"
+    );
 
     // And the session really is a new one: three inserts (GPWL, GPSET, GPITEM)
     // and one modify — the WORL. The GPWL's own member list is filled in at
@@ -243,13 +278,11 @@ fn a_cross_database_target_is_stored_as_its_own_refno() {
         member.item()
     };
 
-    match explicit_of(&copy.path, item, db1_hash(attrs::GPREF)) {
-        Some(ExplicitValue::RefNo(target)) => assert_eq!(
-            target, sample.elsewhere,
-            "the cross-database refno is stored whole, database number included"
-        ),
-        other => panic!("GPREF reads back as {other:?}"),
-    }
+    assert_eq!(
+        gpref_of(&copy.path, item),
+        Some(sample.elsewhere),
+        "the cross-database refno is stored whole, database number included"
+    );
 }
 
 /// `SCOSEL` written as an int array reads back as the same words.
