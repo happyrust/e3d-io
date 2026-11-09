@@ -43,6 +43,7 @@ use std::cell::Cell;
 use crate::db_element::{DbElement, DbElementError};
 use crate::record::catalogue_eval::{AttribRef, AttributeNumber, ParamArray, ParamEnv};
 use crate::record::descriptor::DescriptorValue;
+use crate::refno::RefNo;
 
 /// 属性求值的递归深度上限。
 ///
@@ -103,6 +104,46 @@ const ATTACHED_DESIGN_PARAMS: &str = "ADES";
 /// ams7000——导出的支架 Web/flange 按 `PLOD = 0` 摆（z 到 200，而按同行
 /// `DPRO = PARA[2]` 的 273 会到 336.5）。
 const PIPE_OUTSIDE_DIAMETER: &str = "POD";
+/// `COMPRE`：设计件指向自己那个**构件元素**的引用，`ANCI`（支撑件）这类没有 `LSTU`
+/// 的 noun 靠它接上目录件。
+///
+/// 两种形态（2026-11-10 在 `aps250104` / `aps250132` 上取证），**都支持**：
+///
+/// - **形态 A，目标自己有 `LSTU`**：`ANCI 2013286648/1256 → COMPRE = 2013286676/1759`，
+///   那只 `ELBO` 自己有 `LSTU = 15192/235104`，再走 `[SPCO → CATR]*` 到 `SCOM`。
+///   诊断里 `source` 是 `COMPRE.LSTU`。
+/// - **形态 B，目标是 `BRAN`，外径挂在 `HSTU` 上**：`ANCI 2013286648/1016 →
+///   COMPRE = 2013286676/1941` 是一只 `BRAN /300-A-42/B1`，它没有 `LSTU` /
+///   `SPRE` / `PARA`，`HBOR` / `TBOR` 都是 300.0（公称口径，不是外径）。实测链路：
+///
+///   ```text
+///   BRAN 2013286676/1941
+///     HSTU = 15192/229429
+///       → SPCO /A3B/PA300
+///         → CATR 15192/228639
+///           → SCOM /AAPA1A0WW  (GTYP = TUBE)
+///             PARA = [300.0, 323.85, 533486.0]
+///                             ↑ PARA[2] = 323.85 = DN300 外径
+///   ```
+///
+///   `0.5 × 323.85 = 161.925`，与实测 `dz = 161.92` 对得上；另一例
+///   `/PS-01-00217.4`（`COMPRE = 2013286676/1757`，`BRAN /100-A-18/B1`）的
+///   `dz = 57.15` 要的正是 `PARA[2] = 114.3`。诊断里 `source` 是 `COMPRE.HSTU`。
+///
+/// 两形态都走 [`component_via`]：`HSTU → SPCO → CATR → SCOM` 与 `LSTU` 那条同构，
+/// 只是入口属性名不同。
+const COMPONENT_REFERENCE: &str = "COMPRE";
+/// 管外径的合理上界（mm，与 `PARA` 的存储单位一致）。
+///
+/// `PARA[2]` 不总是尺寸。`aps250179` 的 `FTUB 2013286723/792` 走
+/// `LSTU = 15213/258024 → SCOM /SW5/SL3/150/V`，它的
+/// `PARA = [150, 726491, 150, 150, …]`——`726491` 落在「外径」这一格上，像是没解完的
+/// refno 编码，而不是 726 米的管子。只判 `> 0` 会把它当成合法外径放过去。
+///
+/// 10 m：E3D 的管径规格顶到 DN3000（3238.5 mm）就封顶，桥架 / 风管这类方形件的
+/// `PARA` 也只有几百到两千米，没有任何一个真实外径接近 10 m。定在这里能挡掉整类
+/// 「未解析编码恰好落进实数格」的垃圾，又离真实规格差三倍以上，不会误伤。
+const MAX_PIPE_OUTSIDE_DIAMETER: f64 = 10_000.0;
 /// 找属主截面时沿 owner 链最多爬几层。FIXING 到 GENSEC 是三层（PLDATU、JLDATU），
 /// 配件到 SCTN 是一两层；16 只是防环。
 const MAX_OWNER_CLIMB: usize = 16;
@@ -654,11 +695,77 @@ impl DbElementParamEnv {
 
     /// See [`PIPE_OUTSIDE_DIAMETER`].
     fn pipe_outside_diameter(&self) -> Option<f64> {
-        let component = component_via(self.design.as_ref()?, "LSTU")?;
-        real_array(&component, CATALOGUE_PARAM_ARRAY)?
-            .get(1)
-            .copied()
-            .filter(|value| value.is_finite() && *value > 0.0)
+        let component = self.catalogue_component()?;
+        outside_diameter(&component)
+    }
+
+    /// `POD` 这一格现在解析到哪儿——诊断用，**不改** [`Self::attribute_number`]
+    /// 里 `unwrap_or(0.0)` 的语义。
+    ///
+    /// `POD` 答不上来时那一条表达式静默按 0 求值，整件图元跟着平移，报告全绿。
+    /// 这个入口让诊断侧能把「走的是哪条链、原始值是多少、被上界挡掉了没有」问出来，
+    /// 而不是只看一个 0。设计件都没有时回 `None`——那是「不在实例上下文里」，不是
+    /// 「`POD` 取不到」。
+    pub fn pipe_outside_diameter_diagnostic(&self) -> Option<PipeOutsideDiameterTrace> {
+        self.catalogue_component_trace().map(|trace| {
+            let raw = trace
+                .component
+                .as_ref()
+                .and_then(|component| real_array(component, CATALOGUE_PARAM_ARRAY))
+                .and_then(|items| items.get(1).copied());
+            PipeOutsideDiameterTrace {
+                source: trace.source,
+                via: trace.via,
+                component: trace.component.as_ref().map(DbElement::refno),
+                raw,
+                accepted: raw.filter(|value| plausible_pipe_outside_diameter(*value)),
+            }
+        })
+    }
+
+    /// 设计件 → 它的目录件：`LSTU` 优先，`COMPRE` 回退；`COMPRE` 那一跳再按
+    /// **形态 A（`LSTU`）→ 形态 B（`HSTU`）** 的顺序试。
+    ///
+    /// `LSTU` 必须排在最前：形态 A 已经靠它修好的那批设计件，`COMPRE` 目标上也可能
+    /// 同时挂着 `HSTU`，先试 `HSTU` 会换掉已通过的取值。两形态的链路见
+    /// [`COMPONENT_REFERENCE`]。
+    fn catalogue_component(&self) -> Option<DbElement> {
+        self.catalogue_component_trace()
+            .and_then(|trace| trace.component)
+    }
+
+    /// [`Self::catalogue_component`] 连同「走的是哪一格、哪条属性」一起给。
+    ///
+    /// 外层 `None` = 连候选引用都拿不到（设计件没有 `LSTU`，`COMPRE` 也不存在或
+    /// `0/0`）。`component` 是 `None` = 引用拿到了，但那一跳到不了目录件（目标库
+    /// 没开、或目标既没有 `LSTU` 也没有 `HSTU`）——这两种在诊断里要分得开。
+    ///
+    /// 「目标既没 `LSTU` 也没 `HSTU`」**不提前 `?` 掉**：那要留在 `source` 有、
+    /// `component` 空的形态里，诊断才看得见「走到了 `COMPRE`，但那一跳是空的」。
+    fn catalogue_component_trace(&self) -> Option<ComponentTrace> {
+        let design = self.design.as_ref()?;
+        if let Some(component) = component_via(design, "LSTU") {
+            return Some(ComponentTrace {
+                source: "LSTU",
+                via: "LSTU",
+                component: Some(component),
+            });
+        }
+        let referenced = design.get_element(COMPONENT_REFERENCE).ok().flatten()?;
+        // 形态 A：目标元素自己有 `LSTU`（`ELBO` 这类）。
+        if let Some(component) = component_via(&referenced, "LSTU") {
+            return Some(ComponentTrace {
+                source: COMPONENT_REFERENCE,
+                via: "LSTU",
+                component: Some(component),
+            });
+        }
+        // 形态 B：目标是没有 `LSTU` 的 `BRAN`，外径挂在 `HSTU` 上。
+        Some(ComponentTrace {
+            source: COMPONENT_REFERENCE,
+            via: "HSTU",
+            component: component_via(&referenced, "HSTU"),
+        })
     }
 
     /// [`Self::related_element`] 那个元素的参数数组：`*PAR` 取 `PARA`，`*DES` 取 `DESP`。
@@ -726,6 +833,63 @@ fn component_via(design: &DbElement, start: &str) -> Option<DbElement> {
         cursor = cursor.get_element(via).ok()??;
     }
     None
+}
+
+/// `POD` 的一个候选值是否像一根管子的外径（见 [`MAX_PIPE_OUTSIDE_DIAMETER`]）。
+fn plausible_pipe_outside_diameter(value: f64) -> bool {
+    value.is_finite() && value > 0.0 && value < MAX_PIPE_OUTSIDE_DIAMETER
+}
+
+/// 目录件的 `PARA[2]`，按管外径的口径筛过。
+///
+/// 槽位是 `get(1)`（1 起的第 2 格），这一步**不动**：形态 A 的 `ELBO` 目录件
+/// `/AAEA200NN` 里 `PARA[2]` 是 `CENTRE TO FACE = 152.4`，真正的 `OUTSIDE DIAM` 是
+/// `PARA[4]`（`DTRE = 15192/174603` 的 `DPAR` 行）。换槽位是下一步的事，这一格先
+/// 只验证 `COMPRE` 链走通。
+fn outside_diameter(component: &DbElement) -> Option<f64> {
+    real_array(component, CATALOGUE_PARAM_ARRAY)?
+        .get(1)
+        .copied()
+        .filter(|value| plausible_pipe_outside_diameter(*value))
+}
+
+/// [`DbElementParamEnv::catalogue_component_trace`] 的结果：走的是哪一格、哪条属性、
+/// 落到了哪个目录件。
+///
+/// `source` 与 `via` 分开记，是因为 `COMPRE` 那一跳有**两种形态**：形态 A 在目标
+/// 元素自己的 `LSTU` 上接住（`source = "COMPRE"`、`via = "LSTU"`），形态 B 在目标的
+/// `HSTU` 上接住（`source = "COMPRE"`、`via = "HSTU"`）。设计件自己就有 `LSTU` 时
+/// `source = via = "LSTU"`。只用一个字段会把「形态 A 与形态 B」压成一档，诊断时
+/// 分不出外径是从哪条属性读来的。
+#[derive(Debug, Clone)]
+struct ComponentTrace {
+    /// `"LSTU"` 或 `COMPONENT_REFERENCE`：设计件的哪一格接上的目录件。
+    source: &'static str,
+    /// `"LSTU"` 或 `"HSTU"`：真正落地的入口属性。见 [`COMPONENT_REFERENCE`]。
+    via: &'static str,
+    /// 目录件。引用拿到了但那一跳没到目录件时是 `None`。
+    component: Option<DbElement>,
+}
+
+/// [`DbElementParamEnv::pipe_outside_diameter_diagnostic`] 的结果。
+///
+/// 三样东西分开给：走的哪条链（`LSTU` 还是 `COMPRE`）、落到了哪个目录件、原始值
+/// 与是否被上界挡掉。把 `raw` 与 `accepted` 并排放着，是为了让「库里存了 726491」
+/// 与「这个值不像外径」区分得开——两者在 `POD` 的最终取值上都是 `None`，但原因不同。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PipeOutsideDiameterTrace {
+    /// `LSTU` 或 `COMPRE`：设计件的哪一格接上的目录件。
+    pub source: &'static str,
+    /// `LSTU` 或 `HSTU`：`COMPRE` 那一跳真正走的入口属性。设计件自己有 `LSTU` 时
+    /// 与 `source` 同为 `"LSTU"`；`COMPRE` 的形态 A / 形态 B 靠它区分。
+    pub via: &'static str,
+    /// 目录件的 RefNo（`PARA` 是从它身上读的）。引用拿到了但那一跳没到目录件时是
+    /// `None`——与「链根本没走通」不是一回事，`source` 已经把两者分开了。
+    pub component: Option<RefNo>,
+    /// 目录件 `PARA[2]` 的原始值；没有 `PARA`、没有第 2 格都是 `None`。
+    pub raw: Option<f64>,
+    /// 通过合理性上界的值，即 `POD` 最终会取的那个数。
+    pub accepted: Option<f64>,
 }
 
 /// 一个实数数组属性（整数数组按值转）。
@@ -1334,5 +1498,336 @@ mod tests {
         env.depth.set(MAX_DEPTH - 1);
         assert_eq!(env.nested(|| Some(1.0)), Some(1.0));
         assert_eq!(env.depth.get(), MAX_DEPTH - 1);
+    }
+
+    // ---- `POD`：外径的合理性上界 -------------------------------------------
+
+    /// 外径的合理性上界挡掉的是「未解析编码落进实数格」，不是真实的粗管子。
+    ///
+    /// 语料里那一格真的会出现：`aps250179` 的 `SCOM /TUBI/150` 存着
+    /// `PARA = [150, 35, 726491, 100]`——`726491` 是没解完的 refno 编码，落在第 3 格
+    /// 只是运气。`PARA` 的哪一格是哪个尺寸由目录件自己的 `DTRE` 决定，换一只目录件
+    /// 就可能落到第 2 格（`POD` 读的那格）。只判 `> 0` 会把这类值当合法外径放过去，
+    /// `POD` 于是大出三个数量级，整件图元飞出模型。
+    #[test]
+    fn an_outside_diameter_is_bounded_above() {
+        // 真实规格：DN40 / DN100 / DN150 / DN200 / DN300 的外径，以及顶到 DN3000。
+        for value in [48.3, 114.3, 168.28, 219.08, 323.85, 3238.5] {
+            assert!(
+                plausible_pipe_outside_diameter(value),
+                "{value} 是一个真实外径"
+            );
+        }
+        // 垃圾：未解析编码、负数、零、非有限值，以及刚好卡在上界上的。
+        for value in [
+            726_491.0,
+            -114.3,
+            0.0,
+            f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            MAX_PIPE_OUTSIDE_DIAMETER,
+            MAX_PIPE_OUTSIDE_DIAMETER + 1.0,
+        ] {
+            assert!(
+                !plausible_pipe_outside_diameter(value),
+                "{value} 不该被当成管外径"
+            );
+        }
+    }
+
+    /// 没有设计件就没有 `POD` 的链：诊断回 `None`，表达式那一格照旧是 0。
+    #[test]
+    fn pod_has_no_chain_without_a_design_element() {
+        let env = DbElementParamEnv::new(None, None);
+        assert_eq!(env.pipe_outside_diameter(), None);
+        assert_eq!(env.pipe_outside_diameter_diagnostic(), None);
+        assert_eq!(
+            env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
+            Some(0.0),
+            "`POD` 答不上来时表达式按 0 继续，这条语义这一步不改"
+        );
+    }
+
+    // ---- `POD`：`LSTU` 优先、`COMPRE` 回退（真库）--------------------------
+
+    /// 设计件没有 `LSTU` 时，`COMPRE` 那一跳把 `POD` 接回目录件。
+    ///
+    /// 三只样本都在本机的 `aps250104` 上，`COMPRE` 的目标在 `aps250132`、目录件在
+    /// `acp7000`——**两个库都与设计件不同**，跨库那一跳正是这条回退的全部意义。
+    ///
+    /// 钉的数值是 `PARA[2]`（`get(1)`），不是外径：形态 A 的目录件
+    /// `/AAPA1A0NN` 里 `PARA[2] = 114.3` 是「端面到中心」，`OUTSIDE DIAM` 在
+    /// `PARA[4] = 100`。换槽位是下一步的事，这一步只证明链走通了。
+    #[test]
+    fn pod_falls_back_to_compre_when_the_design_has_no_lstu() {
+        let Some(set) = probe_set(&[("aps250104_0001", "DESI")]) else {
+            return;
+        };
+
+        // 形态 A：`ANCI /PS-01-00229.1` 没有 `LSTU`。
+        // `COMPRE = 2013286676/1759`（dbno 250132 的 `ELBO`）
+        //   → 那只 `ELBO` 的 `LSTU = 15192/235104`（`SPCO /A1A/PA100`）
+        //   → `CATR` → `SCOM /AAPA1A0NN`，`PARA = [100, 114.3, 533486]`。
+        let design = set.element(RefNo::new(2_013_286_648, 1256));
+        assert_eq!(design.element_type().unwrap(), "ANCI");
+        assert_eq!(
+            probe_ref(&design, "LSTU"),
+            None,
+            "ANCI 的模板里根本没有 LSTU（`has_attribute` 为假，不是 unset）"
+        );
+        assert_eq!(
+            design.get_ref(COMPONENT_REFERENCE).unwrap(),
+            Some(RefNo::new(2_013_286_676, 1759)),
+            "COMPRE 指向设计库 250132 里的那只 ELBO"
+        );
+
+        let env = DbElementParamEnv::new(Some(design), None);
+        assert_eq!(
+            env.pipe_outside_diameter(),
+            Some(114.3),
+            "COMPRE → ELBO → LSTU → SCOM /AAPA1A0NN 的 PARA[2]"
+        );
+        let trace = env
+            .pipe_outside_diameter_diagnostic()
+            .expect("设计件在，诊断就该给出一条链");
+        assert_eq!(trace.source, COMPONENT_REFERENCE, "走的是 COMPRE 不是 LSTU");
+        assert_eq!(trace.via, "LSTU", "形态 A 在目标自己的 LSTU 上接住");
+        assert_eq!(trace.component, Some(RefNo::new(15_192, 228_635)));
+        assert_eq!(trace.raw, Some(114.3));
+        assert_eq!(trace.accepted, Some(114.3));
+        assert_eq!(
+            env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
+            Some(114.3),
+            "`ATTRIB POD` 也走这条链"
+        );
+
+        // 形态 B：`COMPRE` 指向一只 `BRAN`，`BRAN` 没有 `LSTU`，外径挂在 `HSTU` 上。
+        // 细项由 `pod_falls_back_to_hstu_when_the_compre_target_is_a_bran` 钉住，
+        // 这里只确认两只样本不互相串味：形态 A 的 `via` 是 `LSTU`，形态 B 是 `HSTU`。
+        let branch = set.element(RefNo::new(2_013_286_648, 1016));
+        assert_eq!(branch.element_type().unwrap(), "ANCI");
+        assert_eq!(probe_ref(&branch, "LSTU"), None);
+        assert_eq!(
+            branch.get_ref(COMPONENT_REFERENCE).unwrap(),
+            Some(RefNo::new(2_013_286_676, 1941)),
+            "COMPRE 指向那只 BRAN /300-A-42/B1"
+        );
+        let env = DbElementParamEnv::new(Some(branch), None);
+        assert_eq!(
+            env.pipe_outside_diameter(),
+            Some(323.85),
+            "形态 B：BRAN → HSTU → SPCO → CATR → SCOM /AAPA1A0WW 的 PARA[2]"
+        );
+        let trace = env.pipe_outside_diameter_diagnostic().unwrap();
+        assert_eq!(trace.source, COMPONENT_REFERENCE);
+        assert_eq!(trace.via, "HSTU");
+    }
+
+    /// 形态 B：`COMPRE` 的目标是一只没有 `LSTU` 的 `BRAN`，外径挂在它的 `HSTU` 上。
+    ///
+    /// 实测链路（2026-11-10，`aps250104` / `aps250132` / `acp7000`）：
+    ///
+    /// ```text
+    /// ANCI 2013286648/1016  (/PS-01-00194.1)
+    ///   COMPRE = 2013286676/1941   BRAN /300-A-42/B1
+    ///     HBOR = 300.0  TBOR = 300.0     ← 公称口径，不是外径
+    ///     HSTU = 15192/229429
+    ///       → SPCO /A3B/PA300 → CATR 15192/228639
+    ///         → SCOM /AAPA1A0WW (GTYP = TUBE)
+    ///           PARA = [300.0, 323.85, 533486.0]   PARA[2] = 323.85 = DN300 外径
+    /// ```
+    ///
+    /// `0.5 × 323.85 = 161.925` 正是实测的 `dz = 161.92`；同库
+    /// `/PS-01-00217.4`（`COMPRE = 2013286676/1757`，`BRAN /100-A-18/B1`）的
+    /// `dz = 57.15` 要的则是 `PARA[2] = 114.3`。
+    ///
+    /// 钉的仍是 `get(1)`（第 2 格）——槽位这一步不动。
+    #[test]
+    fn pod_falls_back_to_hstu_when_the_compre_target_is_a_bran() {
+        let Some(set) = probe_set(&[("aps250104_0001", "DESI")]) else {
+            return;
+        };
+
+        let design = set.element(RefNo::new(2_013_286_648, 1016));
+        assert_eq!(design.element_type().unwrap(), "ANCI");
+        assert_eq!(probe_ref(&design, "LSTU"), None);
+        assert_eq!(
+            design.get_ref(COMPONENT_REFERENCE).unwrap(),
+            Some(RefNo::new(2_013_286_676, 1941)),
+            "COMPRE 指向那只 BRAN /300-A-42/B1"
+        );
+
+        // 目标那只 BRAN 确实没有 LSTU，外径只能从 HSTU 走——这就是形态 B 的前提。
+        let branch = set.element(RefNo::new(2_013_286_676, 1941));
+        assert_eq!(branch.element_type().unwrap(), "BRAN");
+        assert_eq!(
+            probe_ref(&branch, "LSTU"),
+            None,
+            "BRAN 的模板里没有 LSTU，形态 A 那条路在它身上走不通"
+        );
+        assert_eq!(
+            branch.get_ref("HSTU").unwrap(),
+            Some(RefNo::new(15_192, 229_429)),
+            "外径挂在 HSTU = 15192/229429 上"
+        );
+
+        let env = DbElementParamEnv::new(Some(design), None);
+        assert_eq!(
+            env.pipe_outside_diameter(),
+            Some(323.85),
+            "HSTU → SPCO /A3B/PA300 → CATR → SCOM /AAPA1A0WW 的 PARA[2] = DN300 外径"
+        );
+        let trace = env
+            .pipe_outside_diameter_diagnostic()
+            .expect("设计件在，诊断就该给出一条链");
+        assert_eq!(trace.source, COMPONENT_REFERENCE, "设计件自己没有 LSTU");
+        assert_eq!(trace.via, "HSTU", "形态 B 在目标的 HSTU 上接住");
+        assert_eq!(trace.component, Some(RefNo::new(15_192, 228_639)));
+        assert_eq!(trace.raw, Some(323.85));
+        assert_eq!(trace.accepted, Some(323.85));
+        assert_eq!(
+            env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
+            Some(323.85),
+            "`ATTRIB POD` 也走这条链"
+        );
+    }
+
+    /// 有 `LSTU` 的设计件照旧走 `LSTU`——接 `COMPRE` 不能把原来那条路改坏。
+    ///
+    /// `aps250179` 的 `FTUB 2013286723/792`：`LSTU = 15213/258024`
+    /// （`SPCO /VANTRUNK-SW5-SS/TUBI/150`）→ `CATR` → `SCOM /TUBI/150`，
+    /// `PARA = [150, 35, 726491, 100]`，`PARA[2] = 35`。
+    ///
+    /// 这只 `PARA` 里那个 `726491` 是没解完的 refno 编码：它这一格落在第 3 格，
+    /// 换一只目录件就可能落到第 2 格（`POD` 读的那格）。上界就是为它加的。
+    #[test]
+    fn a_design_with_lstu_still_uses_lstu() {
+        let Some(set) = probe_set(&[("aps250179_0001", "DESI")]) else {
+            return;
+        };
+        let design = set.element(RefNo::new(2_013_286_723, 792));
+        assert_eq!(design.element_type().unwrap(), "FTUB");
+        assert_eq!(
+            design.get_ref("LSTU").unwrap(),
+            Some(RefNo::new(15_213, 258_024))
+        );
+        let env = DbElementParamEnv::new(Some(design), None);
+        assert_eq!(env.pipe_outside_diameter(), Some(35.0));
+        let trace = env.pipe_outside_diameter_diagnostic().unwrap();
+        assert_eq!(trace.source, "LSTU");
+        assert_eq!(trace.via, "LSTU", "设计件自己就有 LSTU 时不走 COMPRE");
+        assert_eq!(trace.component, Some(RefNo::new(15_213, 214_166)));
+        assert_eq!(trace.raw, Some(35.0));
+        assert_eq!(
+            env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
+            Some(35.0)
+        );
+    }
+
+    /// 目录件的 `PARA[2]` 是垃圾值时，`POD` 答不上来（表达式里按 0），诊断里原始值
+    /// 与采纳值分开留着。
+    ///
+    /// 用的是上面那只 `FTUB` 的目录件 `SCOM /TUBI/150` 本身——它的
+    /// `PARA = [150, 35, 726491, 100]`，把 `PARA` 挪一位就是垃圾落在第 2 格的形态。
+    /// 这里不去改库，直接把「目录件 + 垃圾 PARA」这条判定用
+    /// [`plausible_pipe_outside_diameter`] 钉住；`outside_diameter` 只是它的调用点。
+    #[test]
+    fn a_junk_para_slot_is_not_an_outside_diameter() {
+        // 这只目录件真实存着的四个数：只有前两个与最后一个像尺寸。
+        let para = [150.0, 35.0, 726_491.0, 100.0];
+        assert_eq!(para.get(1).copied(), Some(35.0), "槽位仍是第 2 格");
+        assert!(plausible_pipe_outside_diameter(para[1]));
+        assert!(
+            !plausible_pipe_outside_diameter(para[2]),
+            "726491 不该被当成外径"
+        );
+        // 换一只目录件、垃圾落到第 2 格时，`POD` 就是答不上来，而不是 726491。
+        let junk_slot = [150.0, 726_491.0, 150.0, 150.0];
+        assert_eq!(junk_slot.get(1).copied(), Some(726_491.0));
+        assert_eq!(
+            junk_slot
+                .get(1)
+                .copied()
+                .filter(|value| plausible_pipe_outside_diameter(*value)),
+            None
+        );
+    }
+
+    /// 引用属性读成 `Option<RefNo>`，把「模板里没这个属性」与「属性 unset / Nulref」
+    /// 都折成 `None`。
+    ///
+    /// 真库上这两种情形都要处理：`ANCI` 的模板里**没有** `LSTU` 这个名字
+    /// （`noun_layout.json` 的 `ANCILLARY` 只声明 `COMPRE`），问它得到
+    /// `UnknownAttribute` 而不是 `Ok(None)`。生产路径里 `component_via` 用
+    /// `.ok()??` 同样把两者折成 `None`，所以这个辅助函数与那条路同口径。
+    fn probe_ref(element: &DbElement, name: &str) -> Option<RefNo> {
+        element.get_ref(name).ok().flatten()
+    }
+
+    /// 把一台安装里的库接进一个池子，给上面几条真库断言用。
+    ///
+    /// 夹具不在就跳过（与 `tests/common::missing` 同一口径）：报一个 skip，而不是让
+    /// 「没装库」与「链走错了」在测试输出里长得一样。
+    fn probe_set(wanted: &[(&str, &str)]) -> Option<std::sync::Arc<crate::db_element::DbSet>> {
+        const APS: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\aps000";
+        const ACP: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000";
+        const BIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/");
+        let missing: Vec<&str> = wanted
+            .iter()
+            .map(|(name, _)| *name)
+            .filter(|name| {
+                !std::path::Path::new(APS).join(name).is_file()
+                    && !std::path::Path::new(ACP).join(name).is_file()
+            })
+            .collect();
+        if !missing.is_empty() {
+            eprintln!("skipped: fixtures not installed: {}", missing.join(", "));
+            return None;
+        }
+        let set = std::sync::Arc::new(crate::db_element::DbSet::with_resolver(
+            std::sync::Arc::new(e3d_attlib::AttlibData::default()),
+            Box::new(ProbeResolver),
+        ));
+        for (name, db_type) in wanted {
+            let design = *db_type == "DESI";
+            let dir = if design { APS } else { ACP };
+            let template = if design { "desvir.dat" } else { "catvir.dat" };
+            set.add_db(crate::db_element::DbFilePin {
+                file: std::path::Path::new(dir).join(name),
+                template: std::path::Path::new(BIN).join(template),
+                db_type: Some((*db_type).to_string()),
+                sesno: None,
+            })
+            .expect("开库");
+        }
+        Some(set)
+    }
+
+    /// 按 `dbno` 在安装目录里找库文件（`aps<n>_0001` / `acp<n>_0001`），给
+    /// [`probe_set`] 之外那些跨库引用补开用。
+    struct ProbeResolver;
+
+    impl crate::db_element::DbFileResolver for ProbeResolver {
+        fn resolve(&self, dbno: u32) -> Option<crate::db_element::DbFilePin> {
+            const APS: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\aps000";
+            const ACP: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000";
+            const BIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/");
+            for (dir, prefix, db_type, template) in [
+                (APS, "aps", "DESI", "desvir.dat"),
+                (ACP, "acp", "CATA", "catvir.dat"),
+            ] {
+                let file = std::path::Path::new(dir).join(format!("{prefix}{dbno}_0001"));
+                if file.is_file() {
+                    return Some(crate::db_element::DbFilePin {
+                        file,
+                        template: std::path::Path::new(BIN).join(template),
+                        db_type: Some(db_type.to_string()),
+                        sesno: None,
+                    });
+                }
+            }
+            None
+        }
     }
 }
