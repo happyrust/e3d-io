@@ -90,6 +90,23 @@ pub fn template_file_for(template_dir: &Path, db_type: &str) -> Result<PathBuf, 
 /// 库定位器实现本 trait，即可复现 `DirectStore` 的跨库按需补开。
 pub trait DbFileResolver: Send + Sync {
     fn resolve(&self, dbno: u32) -> Option<DbFilePin>;
+
+    /// [`Self::resolve`] 给不出文件的这个库号，是不是**确知**不在这次会话的 MDB 里。
+    ///
+    /// 「给不出文件」有两种，后果相反，只有 resolver 分得清：
+    ///
+    /// - 库是 MDB 的成员，只是这边没读到（文件缺、目录没给全）——配置问题，调用方得报错，不能悄悄少画；
+    /// - 库根本不在 MDB 里——E3D 自己也读不到它，指过去的引用在 E3D 里是 `Unknown Ref`，与指到索引里
+    ///   没有的元素（[`DbElementError::NotFound`]）同一个结局。
+    ///
+    /// 只在**有依据**时答 `true`：手上有完整的成员清单（或者项目的库登记表），而这个号不在里面。分不清就答
+    /// `false`——调用方把 `false` 当「不知道」，照旧报错。缺省实现就是「不知道」，所以没实现这个方法的
+    /// resolver 行为与以前一字不差。
+    ///
+    /// 经 [`DbSet::outside_mdb`] 问，不直接调：池里已经开着的库不该再问 resolver。
+    fn outside_mdb(&self, _dbno: u32) -> bool {
+        false
+    }
 }
 
 /// 门面的错误。每条都说清是哪个库/哪个元素/哪个属性，静默失效是大忌。
@@ -674,6 +691,27 @@ impl DbSet {
             .read()
             .map(|map| map.keys().copied().collect())
             .unwrap_or_default()
+    }
+
+    /// `dbno` 是不是**确知**不在这次会话的 MDB 里（[`DbFileResolver::outside_mdb`]）。
+    ///
+    /// 给读到 [`DbElementError::DbNotRegistered`] 的调用方用，回答「这条错误是配置没给全，还是 E3D 自己也
+    /// 读不到这本库」：`true` = 后者，指过去的引用按悬空处理；`false` = 不知道，照旧当错误。
+    ///
+    /// 池里已经开着的库直接答 `false`、不问 resolver（开得出来就谈不上读不到）；没装 resolver 的池一律
+    /// `false`。不开库、不做 I/O，答案只取决于 resolver 建好时手上的清单，所以同一个池问多少遍都一样——
+    /// 全量生成与增量重建问的是同一个池，判据也就只有一份。
+    pub fn outside_mdb(&self, dbno: u32) -> bool {
+        let Some(resolver) = self.resolver.as_ref() else {
+            return false;
+        };
+        // 锁中毒时答不了「开没开」，按「不知道」走。
+        let open = self
+            .dbs
+            .read()
+            .map(|dbs| dbs.contains_key(&dbno))
+            .unwrap_or(true);
+        !open && resolver.outside_mdb(dbno)
     }
 
     /// Already-open source identities, without resolving or opening anything.
@@ -1718,6 +1756,41 @@ mod tests {
         let error = set.element(RefNo::new(16_191, 42)).parsed().unwrap_err();
         assert!(
             matches!(error, DbElementError::DbNotRegistered { dbno: 7999 }),
+            "{error}"
+        );
+        // 没实现 `outside_mdb` 的 resolver 就是「不知道」：调用方照旧把上面那条当错误。
+        assert!(!set.outside_mdb(7999));
+    }
+
+    /// 「这本库在不在 MDB 里」只有 resolver 说了算，池只是转述：没装 resolver 的池不知道；resolver 说在外面的
+    /// 才在外面，别的号照旧不知道。错误本身不变——读元素还是 `DbNotRegistered`，怎么处置由调用方拿这个答案去定。
+    #[test]
+    fn only_the_resolver_can_place_a_db_outside_the_mdb() {
+        struct Outside(u32);
+        impl DbFileResolver for Outside {
+            fn resolve(&self, _dbno: u32) -> Option<DbFilePin> {
+                None
+            }
+            fn outside_mdb(&self, dbno: u32) -> bool {
+                dbno == self.0
+            }
+        }
+        let bare = DbSet::new(Arc::new(e3d_attlib::AttlibData::default()));
+        assert!(!bare.outside_mdb(4350));
+
+        let set = Arc::new(DbSet::with_resolver(
+            Arc::new(e3d_attlib::AttlibData::default()),
+            Box::new(Outside(4350)),
+        ));
+        assert!(set.outside_mdb(4350));
+        assert!(!set.outside_mdb(4360));
+        // 20734 的低 13 位是 4350：指到那本库的引用，读起来仍是「库没注册」。
+        let error = set
+            .element(RefNo::new(20_734, 11_826))
+            .parsed()
+            .unwrap_err();
+        assert!(
+            matches!(error, DbElementError::DbNotRegistered { dbno: 4350 }),
             "{error}"
         );
     }
