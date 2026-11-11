@@ -104,6 +104,24 @@ const ATTACHED_DESIGN_PARAMS: &str = "ADES";
 /// ams7000——导出的支架 Web/flange 按 `PLOD = 0` 摆（z 到 200，而按同行
 /// `DPRO = PARA[2]` 的 273 会到 336.5）。
 const PIPE_OUTSIDE_DIAMETER: &str = "POD";
+/// `ATTRIB LOHE`：属主面板那只环的高度，也就是板厚。
+///
+/// 也不是属性，是 Core3D 现算的伪属性（`getattlib_des/DESPRE@0x10031CE0` 的 `636105` 支）：
+///
+/// ```text
+/// CLIMB(PANE)                     沿属主链爬到面板；爬不到 → 201
+/// DFINDI(FIRST, TYPE, PLOO)       面板名下第一只 PLOO；没有 → 201
+/// DGETR(HEIG)                     读它的 HEIG
+/// ```
+///
+/// 语料：面板开孔件 `/PEN/PFIT/PENH/FITT/RECT` 的正体只有一只 SBOX，
+/// `PZ = ( - ATTRIB LOHE )`——盒心相对开孔件原点退一个板厚。这一格答不上时 `PZ` 求不出，
+/// 整只 PFIT 没有形状，而 E3D 是画的：ams251183 的 `PFIT 2013287727/2222` 挂在板厚 5 的
+/// 面板上，E3D 导出的方框（166 × 91 × 100，通孔 150 × 75）盒心在开孔件自己的 Z 上 −5 处。
+const PANEL_LOOP_HEIGHT: &str = "LOHE";
+/// 面板，与它名下画轮廓的那只环。
+const PANEL: &str = "PANE";
+const PANEL_LOOP: &str = "PLOO";
 /// `COMPRE`：设计件指向自己那个**构件元素**的引用，`ANCI`（支撑件）这类没有 `LSTU`
 /// 的 noun 靠它接上目录件。
 ///
@@ -718,6 +736,21 @@ impl DbElementParamEnv {
         }
     }
 
+    /// See [`PANEL_LOOP_HEIGHT`].
+    ///
+    /// 爬不到面板、面板名下没有环，都是答不上（`DESPRE` 报 201）。环的 `HEIG` 没存也按答不上
+    /// 算：`DESPRE` 在那里不看 `DGETR` 的错，交出去的是什么没有取证，不拿 0 顶。设计件自己就是
+    /// 面板时 `CLIMB` 算不算爬到也没有取证，这里从属主起爬、不算。
+    fn panel_loop_height(&self) -> Option<f64> {
+        let panel = owner_of_type(self.design.as_ref()?, PANEL)?;
+        let ring = panel
+            .members()
+            .ok()?
+            .into_iter()
+            .find(|member| member.element_type().ok().as_deref() == Some(PANEL_LOOP))?;
+        stored_real(&ring, "HEIG").ok().flatten()
+    }
+
     /// See [`PIPE_OUTSIDE_DIAMETER`].
     fn pipe_outside_diameter(&self) -> Option<f64> {
         let component = self.catalogue_component()?;
@@ -829,10 +862,15 @@ fn owning_section(design: &DbElement) -> Option<DbElement> {
         "SUBJ" => return design.owner().ok().flatten(),
         _ => return None,
     };
-    let mut cursor = design.owner().ok()?;
+    owner_of_type(design, target)
+}
+
+/// 沿属主链往上，第一只 `noun` 类型的属主（不含元素自己）。
+fn owner_of_type(element: &DbElement, noun: &str) -> Option<DbElement> {
+    let mut cursor = element.owner().ok()?;
     for _ in 0..MAX_OWNER_CLIMB {
         let current = cursor?;
-        if current.element_type().ok()? == target {
+        if current.element_type().ok()? == noun {
             return Some(current);
         }
         cursor = current.owner().ok()?;
@@ -1222,6 +1260,7 @@ impl ParamEnv for DbElementParamEnv {
             (None, None) if attribute.name == PIPE_OUTSIDE_DIAMETER => {
                 Some(self.pipe_outside_diameter().unwrap_or(0.0))
             }
+            (None, None) if attribute.name == PANEL_LOOP_HEIGHT => self.panel_loop_height(),
             (None, None) => self
                 .derived
                 .iter()
@@ -1377,6 +1416,11 @@ mod tests {
         assert_eq!(env.iparam(1), None);
         assert_eq!(env.design_dimension(3), None);
         assert_eq!(env.attribute_number(&AttribRef::named("ANGL")), None);
+        // 板厚要爬到面板才问得到：没有设计件就爬不了，同样不是 0。
+        assert_eq!(
+            env.attribute_number(&AttribRef::named(PANEL_LOOP_HEIGHT)),
+            None
+        );
         assert_eq!(
             env.attribute_number(&AttribRef::subscripted("PARA", 1.0)),
             None
