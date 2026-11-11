@@ -1247,10 +1247,37 @@ impl DbElement {
     ///
     /// 属性不在模板里仍然是 `Err`（与 [`DbElement::attribute`] 同口径）；
     /// 求不出来是 [`AttributeNumber`] 的一个分支，带着原因，不是错误。
+    ///
+    /// PML 正文走 [`catalogue_pml::evaluate_words`]——`pplib/YPARUN` 的读法，形状够简单的
+    /// 程序先过 `EXFAST` 快路，实例没有的参数在那里读成 0。直接调全量求值器的读者用
+    /// [`DbElement::get_number_full`]。
     pub fn get_number(
         &self,
         name: &str,
         env: &dyn ParamEnv,
+    ) -> Result<AttributeNumber, DbElementError> {
+        self.number_by(name, env, catalogue_pml::evaluate_words)
+    }
+
+    /// [`DbElement::get_number`]，但 PML 正文直接交全量求值器
+    /// （[`catalogue_pml::evaluate_words_full`]）：实例没有的参数是错，不是 0。
+    ///
+    /// 给那些不经 `pplib/YPARUN`、自己调 `exprlib/EXEVRD` 的读者用——设计表 `DATA` 行的
+    /// `PPRO` / `DPRO` 就是（Core3D `desgetattlib/GATCPR`，`0x1001A448`）。元组形没有
+    /// 快路 / 全量之分，两个入口读法相同。
+    pub fn get_number_full(
+        &self,
+        name: &str,
+        env: &dyn ParamEnv,
+    ) -> Result<AttributeNumber, DbElementError> {
+        self.number_by(name, env, catalogue_pml::evaluate_words_full)
+    }
+
+    fn number_by(
+        &self,
+        name: &str,
+        env: &dyn ParamEnv,
+        evaluate_program: fn(&[i32], &dyn ParamEnv) -> Option<f64>,
     ) -> Result<AttributeNumber, DbElementError> {
         let extraction = self.extraction()?;
         let Some(attribute) = find_attribute(&extraction, name) else {
@@ -1265,7 +1292,7 @@ impl DbElement {
         if let Some(words) = stored_expression_words(&parsed, attribute.hash) {
             match explicit_body_shape(words) {
                 ExplicitBodyShape::Program => {
-                    return Ok(match catalogue_pml::evaluate_words(words, env) {
+                    return Ok(match evaluate_program(words, env) {
                         Some(value) => AttributeNumber::Evaluated {
                             value,
                             form: ExpressionForm::Pml,

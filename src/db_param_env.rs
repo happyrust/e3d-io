@@ -321,9 +321,10 @@ impl DbElementParamEnv {
         self.stored_design_parameter(index)
     }
 
-    /// Read an actually stored `DESP` slot. RPRO table selection reads this
-    /// directly: an absent design value selects the DATA row's `DPRO`
-    /// ([`Self::design_property_row`]), which is the one place `DPRO` has a say.
+    /// Read an actually stored `DESP` slot. An absent one is `None` here; what
+    /// that means is the caller's to say — 0 on the tuple path and the fast
+    /// path, a failed formula on the full path (which is what hands an RPRO
+    /// DATA row over to its `DPRO`, see [`Self::design_property_row`]).
     fn stored_design_parameter(&self, index: i32) -> Option<f64> {
         let slot = usize::try_from(index).ok()?.checked_sub(1)?;
         match self
@@ -532,34 +533,45 @@ impl DbElementParamEnv {
 
     /// 设计表里命中的那一行怎么读成数。
     ///
-    /// **先认 `PPRO`，再认 `PURP`，最后认 `DPRO`。** 这一行的 `PPRO` 往往把
-    /// `PURP` + `NUMB` 指的东西直接写成公式：`RADI` 行是 `PURP=DESP NUMB=1` 且
-    /// `PPRO = ( ATTRIB DESP[1 ] )`，`CTLF` 行是 `DESP` / `6` 且
-    /// `( ATTRIB DESP[6 ] )`，`APAR` 行是 `DATA` / `1` 且 `( ATTRIB PARA[1 ] )`
-    /// ——三行互相印证，也正是这三行让「`NUMB` 就是下标」这条读法立得住。既然
-    /// 目录自己写了公式，就用它的，别用我从三行样本里归纳出来的映射。
-    /// `PURP` 那条路留给 `PPRO` 是空的那些行（`HEIG` 行就是 `PURP=ATTR` 而
-    /// `PPRO` 空着）。声明的源都答不上时才轮到 `DPRO`，见 [`Self::row_default`]。
+    /// **`PPRO` 写了公式就用它；它求不出，取 `DPRO`。** 这是 Core3D
+    /// `desgetattlib/GATCPR`（`0x1001A448`，`getattlib_cat/CATPRE` 的 `RPRO` 支调它）的次序：
+    ///
+    /// ```text
+    /// DGETIA(-PPRO)                    这一行有没有 PPRO 的公式词
+    ///   有 → DGOTO(设计件)，EXEVRD 求
+    ///        出错且错误码不是 208 → 回到这一行 DGETIA(-DPRO)，有就 EXEVRD 再求一遍
+    ///   无 → DGETIA(-DPRO)，EXEVRD 求
+    /// ```
+    ///
+    /// `GATCPR` 调的是全量求值器 `EXEVRD`，**不经** `pplib/YPARUN` 的 `EXFAST` 快路。快路里
+    /// 实例没有的参数读成 0 接着算（见 [`crate::record::catalogue_pml::evaluate_words`]）；
+    /// 在这里那是错，于是轮到 `DPRO`。两处取证都落在这条上：
+    ///
+    /// - ams8000 桥架的 `CTLF` / `OUTA` / `OUTB` 行（`PPRO = ( ATTRIB DESP[n ] )`）：设计件
+    ///   没存那一格 `DESP` 的，取同行的 `DPRO`（见 [`Self::row_default`]）。
+    /// - 垫板 `/End_Pad_for_Angle_75x10` 挂在没有接梁（`CREF` 为空）的主关节上：`XOFF` /
+    ///   `YOFF` 行 `PPRO = ( ATTRIB APAR[4 ] )` / `[5 ]`、`DPRO = ( 28.200001 )`，`MWID` 行
+    ///   `PPRO = ( ( ATTRIB PARA[1 ] - ATTRIB APAR[1 ] ) * 0.5 )`、`DPRO = ( ATTRIB PARA[3 ] )`。
+    ///   `APAR` 是连接对象的参数，这里没有；E3D 导出的垫板偏 (−28.2, +28.2)、边距 10，
+    ///   三行都是 `DPRO` 的值。按快路把 `APAR[n]` 当 0 算出来的是偏 0、边距 37.5。
+    ///
+    /// 这一行的 `PPRO` 往往把 `PURP` + `NUMB` 指的东西直接写成公式：`RADI` 行是
+    /// `PURP=DESP NUMB=1` 且 `PPRO = ( ATTRIB DESP[1 ] )`，键叫 `APAR` 的那一行是 `DATA` / `1`
+    /// 且 `( ATTRIB PARA[1 ] )`。`PURP` 那条路（[`Self::design_property_source`]）只留给 `PPRO`
+    /// **没有公式**的行（`HEIG` 行就是 `PURP=ATTR` 而 `PPRO` 空着），排在 `DPRO` 前面。
+    /// `GATCPR` 里没有读 `PURP` 的地方——这一步是从样本归纳的，没有拿反编译核过。
+    ///
+    /// 没有对应分支的两处：`GATCPR` 先看这一行的 `RUSE`，不是 1 直接报 223；`PPRO` 求值的
+    /// 错误码是 208 时不退 `DPRO`。前者在样例项目的回归语料里没有碰到过（走到的行 `RUSE`
+    /// 都是 1），后者是哪种情形没有查明。
     fn design_property_row(&self, row: &DbElement, key: &str) -> Option<f64> {
-        // `PPRO=(ATTRIB DESP[n])` is the interactive value expression for a
-        // DATA row.  If the instance does not actually store that slot, Core
-        // selects DPRO.  Do not let the generic expression rule (a declared
-        // numeric DESP hole evaluates to 0) turn an absent OUTA/OUTB into the
-        // opposite application flag before the row default can be considered.
-        if word_text(row, "PURP").as_deref() == Some(purpose::DESIGN_PARAM) {
-            let index = whole_number(row, "NUMB")?;
-            if self.stored_design_parameter(index).is_none() {
-                return self.row_default(row);
-            }
-        }
-        // `PPRO` 挂在这一行上，但要在**外层**环境里求：它写的 `PARA[1]` 是目录件
-        // 的参数、`DESP[1]` 是设计构件的参数，都不是这一行自己的。
-        let stated = self.row_formula(row, "PPRO");
-        if let Some(value) = stated {
-            return Some(value);
-        }
-        self.design_property_source(row, key)
-            .or_else(|| self.row_default(row))
+        design_property_value(
+            // `PPRO` 挂在这一行上，但要在**外层**环境里求：它写的 `PARA[1]` 是目录件
+            // 的参数、`DESP[1]` 是设计构件的参数，都不是这一行自己的。
+            self.row_formula(row, "PPRO"),
+            || self.design_property_source(row, key),
+            || self.row_default(row),
+        )
     }
 
     /// `PURP` 指定的取值源。
@@ -576,7 +588,7 @@ impl DbElementParamEnv {
                     Err(_) => None,
                 })
             }
-            // 这一类行通常由 `PPRO` 定义，而它上面已经求过了。唯一已由真实
+            // 这一类行通常由 `PPRO` 定义，走不到这里。唯一已由真实
             // E3D/RVM 对拍钉住的空槽是 FTUB 的 TLEN：目录 BOARD 的
             // `PXLE := ATTRIB RPRO TLEN` 求得 1500，实例 HEIG 同为 1500。
             // Core 将它作为 FTUB 的派生 true length；这个映射必须同时受 noun
@@ -586,16 +598,26 @@ impl DbElementParamEnv {
         }
     }
 
-    /// 行上的一个公式属性（`PPRO` / `DPRO`），在**外层**环境里求。
-    fn row_formula(&self, row: &DbElement, name: &str) -> Option<f64> {
-        self.nested(|| match row.get_number(name, self) {
-            Ok(number) => number.value(),
-            Err(_) => None,
+    /// 行上的一个公式属性（`PPRO` / `DPRO`），在**外层**环境里用全量求值器求
+    /// （`GATCPR` 对两者调的都是 `EXEVRD`，见 [`Self::design_property_row`]）。
+    fn row_formula(&self, row: &DbElement, name: &str) -> RowFormula {
+        self.nested(|| {
+            Some(match row.get_number_full(name, self) {
+                Ok(AttributeNumber::Stored(value) | AttributeNumber::Evaluated { value, .. }) => {
+                    RowFormula::Value(value)
+                }
+                Ok(AttributeNumber::Unresolved { .. }) => RowFormula::Failed,
+                Ok(AttributeNumber::Unset | AttributeNumber::NotNumeric) | Err(_) => {
+                    RowFormula::Absent
+                }
+            })
         })
+        // 深度闸关上了：这一格答不上。
+        .unwrap_or(RowFormula::Failed)
     }
 
-    /// `DPRO`：这一行的默认值，声明的源（`PPRO` 公式、`PURP` 指的地方）都答不上
-    /// 时才用。
+    /// `DPRO`：这一行的默认值，`PPRO` 的公式求不出、或 `PPRO` 没有公式而 `PURP` 指的
+    /// 地方答不上时才用。
     ///
     /// 这一列不是猜的，是目录作者**专为「这台实例没给这个源」写的**。2026-08-31
     /// 在 ams8000 上把 PTCA 的 `PX`/`PY`/`PZ` 纳入普查后量出来的分界线严丝合缝：
@@ -606,13 +628,16 @@ impl DbElementParamEnv {
     /// `DPRO=( ATTRIB RPRO YA / 2 )` 还会再提 `RPRO`——所以与 `PPRO` 同一条求值
     /// 路、同一个深度闸。`DPRO` 自己也空或答不上，照旧 `None`。
     ///
-    /// `DPRO` 只替代 **RPRO DATA 行**里未存储的 `PURP=DESP` 值，不改变普通目录
-    /// 表达式的数值空槽语义。2026-09-06 的原生 E3D RVM/ATT 对拍显示，ams7999
-    /// `/1RCV071VP` 未存的 `DESP[1]/[2]` 在 PTRE 中按 0 求值，而不是取同行的
-    /// 230/184；而 AMS 8000 桥架的 OUTA/OUTB 在 RPRO 选择中必须回落到 DPRO=1。
-    /// 两条路径由 `stored_design_parameter` 与 `design_parameter` 明确分开。
+    /// `DPRO` 只在 **RPRO DATA 行**上有发言权，不改变普通目录表达式的数值空槽语义。
+    /// 2026-09-06 的原生 E3D RVM/ATT 对拍显示，ams7999 `/1RCV071VP` 未存的
+    /// `DESP[1]/[2]` 在 PTRE 中按 0 求值（那条公式直接写 `ATTRIB DESP[1 ]`，走
+    /// `YPARUN` 的快路），而不是取同行的 230/184；而 AMS 8000 桥架的 OUTA/OUTB 经
+    /// `ATTRIB RPRO` 取值，必须回落到 DPRO=1。
     fn row_default(&self, row: &DbElement) -> Option<f64> {
-        self.row_formula(row, "DPRO")
+        match self.row_formula(row, "DPRO") {
+            RowFormula::Value(value) => Some(value),
+            RowFormula::Absent | RowFormula::Failed => None,
+        }
     }
 
     /// Core/E3D 的 FTUB 派生设计量 `RPRO TLEN`。
@@ -931,6 +956,31 @@ impl DbElement {
             }
         }
         self.get_number(name, &env)
+    }
+}
+
+/// 设计表一行上的公式属性（`PPRO` / `DPRO`）求下来的三种结局。
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum RowFormula {
+    /// 这一格没有公式。
+    Absent,
+    /// 公式求出了数。
+    Value(f64),
+    /// 有公式，求不出。
+    Failed,
+}
+
+/// `GATCPR` 的取值次序（见 [`DbElementParamEnv::design_property_row`]）：`PPRO` 求出了数就是它；
+/// 有公式而求不出，直接取 `DPRO`；没有公式，先问 `PURP` 指的源，再取 `DPRO`。
+fn design_property_value(
+    stated: RowFormula,
+    source: impl FnOnce() -> Option<f64>,
+    default: impl FnOnce() -> Option<f64>,
+) -> Option<f64> {
+    match stated {
+        RowFormula::Value(value) => Some(value),
+        RowFormula::Failed => default(),
+        RowFormula::Absent => source().or_else(default),
     }
 }
 
@@ -1311,6 +1361,8 @@ fn uda_value_number(value: &DescriptorValue, subscript: Option<f64>) -> Option<f
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::record::catalogue_eval::MapParamEnv;
+    use crate::record::catalogue_pml::{evaluate_words, evaluate_words_full, render};
 
     /// 没有宿主时，每一条路都得答「不知道」。
     ///
@@ -1498,6 +1550,108 @@ mod tests {
         env.depth.set(MAX_DEPTH - 1);
         assert_eq!(env.nested(|| Some(1.0)), Some(1.0));
         assert_eq!(env.depth.get(), MAX_DEPTH - 1);
+    }
+
+    // ---- `RPRO`：`PPRO` 求不出取 `DPRO` ------------------------------------
+
+    /// `( ATTRIB APAR[4 ] )`：垫板 `/End_Pad_for_Angle_75x10` 的 `XOFF` 行（886897 是 `APAR`）。
+    const XOFF_PPRO: [i32; 17] = [
+        17, 1, 101, 6, 32768, 0, 2, 0, 6, 106, 2, 886897, -1, -1, 0, 1601, 1701,
+    ];
+    /// `( ( ATTRIB PARA[1 ] - ATTRIB APAR[1 ] ) * 0.5 )`：同一张表的 `MWID` 行。
+    const MWID_PPRO: [i32; 41] = [
+        41, 1, 101, 6, 16384, 0, 1, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 16384, 0,
+        1, 0, 6, 106, 2, 886897, -1, -1, 0, 1601, 1701, 803, 101, 6, 8192, 0, 1, 0, 6, 804,
+    ];
+
+    /// 行上的公式在夹具环境里求下来的结局，口径同 [`DbElementParamEnv::row_formula`]：
+    /// 全量求值器，求不出就是 `Failed`。
+    fn worked_out(words: &[i32], env: &MapParamEnv) -> RowFormula {
+        match evaluate_words_full(words, env) {
+            Some(value) => RowFormula::Value(value),
+            None => RowFormula::Failed,
+        }
+    }
+
+    /// `PPRO` 写了公式而求不出，取同行的 `DPRO`——Core3D `desgetattlib/GATCPR` 的次序。
+    ///
+    /// 垫板挂在没有接梁的主关节上（`CREF` 为空），连接对象的参数 `APAR` 没有。`GATCPR` 调的是
+    /// 全量求值器，取不到的参数是错；走 `YPARUN` 的快路它会读成 0，公式照样出数，`DPRO`
+    /// 就轮不到了——E3D 画出来的是 `DPRO` 的 28.2 与 `PARA[3]` 的 10，不是 0 与 37.5。
+    #[test]
+    fn a_stated_formula_that_cannot_be_worked_out_takes_the_row_default() {
+        assert_eq!(render(&XOFF_PPRO).as_deref(), Some("( ATTRIB APAR[4 ] )"));
+        assert_eq!(
+            render(&MWID_PPRO).as_deref(),
+            Some("( ( ATTRIB PARA[1 ] - ATTRIB APAR[1 ] ) * 0.5 )")
+        );
+        // 目录件 `PARA[1] = 75`、`PARA[3] = 10`；没有 `APAR`。
+        let env = MapParamEnv::new()
+            .set_attribute("PARA[1]", 75.0)
+            .set_attribute("PARA[3]", 10.0);
+
+        // 快路上的读法：正是原来顶在 `DPRO` 前面的那两个数。
+        assert_eq!(evaluate_words(&XOFF_PPRO, &env), Some(0.0));
+        assert_eq!(evaluate_words(&MWID_PPRO, &env), Some(37.5));
+        // `GATCPR` 的读法：求不出。
+        assert_eq!(worked_out(&XOFF_PPRO, &env), RowFormula::Failed);
+        assert_eq!(worked_out(&MWID_PPRO, &env), RowFormula::Failed);
+
+        // 求不出就取 `DPRO`；这一行有公式，`PURP` 指的源不问。
+        let never = || -> Option<f64> { panic!("有公式的行不问 PURP 的源") };
+        assert_eq!(
+            design_property_value(RowFormula::Failed, never, || Some(28.200001)),
+            Some(28.200001)
+        );
+        // `DPRO` 也答不上，这个键就没有值——不拿 0 充数。
+        assert_eq!(
+            design_property_value(RowFormula::Failed, never, || None),
+            None
+        );
+    }
+
+    /// `PPRO` 求得出时就是它，`DPRO` 与 `PURP` 的源都不看。
+    #[test]
+    fn a_stated_formula_that_works_out_never_reads_the_default() {
+        // 同一只垫板接上了梁，`APAR` 有了（数是夹具里随手取的）。
+        let env = MapParamEnv::new()
+            .set_attribute("PARA[1]", 75.0)
+            .set_attribute("APAR[1]", 55.0)
+            .set_attribute("APAR[4]", 15.5);
+        assert_eq!(worked_out(&XOFF_PPRO, &env), RowFormula::Value(15.5));
+        assert_eq!(worked_out(&MWID_PPRO, &env), RowFormula::Value(10.0));
+
+        let never = || -> Option<f64> { panic!("PPRO 求出来了，别的都不该问") };
+        assert_eq!(
+            design_property_value(RowFormula::Value(15.5), never, never),
+            Some(15.5)
+        );
+        // 求出来的 0 也是值，不是「没求出」。
+        assert_eq!(
+            design_property_value(RowFormula::Value(0.0), never, never),
+            Some(0.0)
+        );
+    }
+
+    /// `PPRO` 没有公式的行：先问 `PURP` 指的源，源答不上才取 `DPRO`。
+    #[test]
+    fn a_row_without_a_formula_asks_its_source_before_the_default() {
+        assert_eq!(
+            design_property_value(
+                RowFormula::Absent,
+                || Some(1500.0),
+                || panic!("源答上了，不该再看 DPRO")
+            ),
+            Some(1500.0)
+        );
+        assert_eq!(
+            design_property_value(RowFormula::Absent, || None, || Some(230.0)),
+            Some(230.0)
+        );
+        assert_eq!(
+            design_property_value(RowFormula::Absent, || None, || None),
+            None
+        );
     }
 
     // ---- `POD`：外径的合理性上界 -------------------------------------------
