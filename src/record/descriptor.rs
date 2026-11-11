@@ -28,6 +28,39 @@ fn is_unset_word(word: u32) -> bool {
     UNSET_SENTINELS.contains(&word)
 }
 
+/// Whether `word`, the first word of an implicit slot, marks the slot unset.
+///
+/// Either sentinel does — except `0x8000_0000` at the head of a lone `f64`.
+/// A wide record keeps a double low word first ([`attrs::read_f64`]), so the
+/// word looked at is the low half of the value, and `0x8000_0000` is an
+/// ordinary low half: every double that was once an `f32` whose mantissa ends
+/// in binary `100` has it. `42.3f32` widened is `0x40452666_80000000`,
+/// `1306.2495f32` is `0x409468FF_80000000`. Such values are common in
+/// databases upgraded from single precision.
+///
+/// E3D reads them as the numbers they are. Twenty-eight scalar reals across
+/// fifteen design databases of the two AVEVA sample projects (550 000
+/// elements) start with `0x8000_0000`: 27 `SNOD.ZDIS` and one `FITT.ZDIS`,
+/// each followed by a plausible high word. E3D 3.1 draws each of those
+/// secondary nodes `ZDIS` along its section — 42.3, 50.8, 162.0, 225.0,
+/// 1270.94, 1306.25 mm from the start, read off its RVM export — where the
+/// unset default would put all of them at 0. No slot of any other storage
+/// type in those databases starts with either sentinel, and none starts with
+/// `0x8000_0001`: this exception gives up nothing that was observed.
+///
+/// `0x8000_0001`, the word `core.dll` writes to unset a value, still marks a
+/// double unset — no `f32` widens to it. A compact record keeps a real in one
+/// word, where `0x8000_0000` is `-0.0f32`; that case is left as it was.
+fn marks_slot_unset(word: u32, descriptor: &TemplateAttr, layout: StorageLayout) -> bool {
+    let low_half_of_a_double = layout == StorageLayout::Wide
+        && StorageShape::of(descriptor.storage_type_code) == Some(StorageShape::Real)
+        && !descriptor_is_array(descriptor);
+    if low_half_of_a_double && word == UNSET_SENTINELS[0] {
+        return false;
+    }
+    is_unset_word(word)
+}
+
 /// How one element of a storage type is laid out.
 ///
 /// `core.dll` sizes every value through `dbl_6453DF8[storage_type_code]`, a
@@ -509,7 +542,9 @@ pub fn extract_attribute(
     // A packed bit is the one storage that has no word of its own to mark, so
     // the sentinel check starts here. For an array the marked word is the
     // count; for a scalar it is the value itself.
-    if read_u32(&parsed.implicit_data, offset).is_some_and(is_unset_word) {
+    if read_u32(&parsed.implicit_data, offset)
+        .is_some_and(|word| marks_slot_unset(word, descriptor, layout))
+    {
         result.status = AttributeExtractionStatus::DefaultRequired;
         return result;
     }
@@ -1203,6 +1238,67 @@ mod tests {
                 "0x{sentinel:08X}"
             );
             assert_eq!(got.value, None);
+        }
+    }
+
+    /// A wide record keeps a double low word first, so `0x8000_0000` at the
+    /// head of a lone real is the low half of a number, not the unset marker:
+    /// `SNOD.ZDIS = 1306.2495` (once an `f32`) is stored `80000000 409468FF`,
+    /// and E3D places the node 1306.25 mm along its section. `0x8000_0001`,
+    /// which no widened `f32` ends in, still unsets the slot; so does either
+    /// sentinel in the one-word real of a compact record, and at the count
+    /// word of a real array.
+    #[test]
+    fn a_double_whose_low_word_is_the_first_sentinel_is_a_value() {
+        let real = |words: [u32; 2], layout| {
+            let mut slot = [0u32; 16];
+            slot[11..13].copy_from_slice(&words);
+            let d = descriptor(2, 1, 11, 2);
+            extract_attribute(&parsed(&slot), &d, None, layout, "ZDIS".into())
+        };
+        for (words, value) in [
+            ([0x8000_0000, 0x4094_68FF], 1306.249_511_718_75),
+            ([0x8000_0000, 0x4045_2666], 42.300_003_051_757_81),
+            ([0x0000_0000, 0x4085_B000], 694.0),
+        ] {
+            let got = real(words, StorageLayout::Wide);
+            assert_eq!(
+                got.status,
+                AttributeExtractionStatus::Decoded,
+                "{words:08X?}"
+            );
+            assert_eq!(
+                got.value,
+                Some(DescriptorValue::Real(value)),
+                "{words:08X?}"
+            );
+        }
+
+        let unset = real([0x8000_0001, 0x4094_68FF], StorageLayout::Wide);
+        assert_eq!(unset.status, AttributeExtractionStatus::DefaultRequired);
+        assert_eq!(unset.value, None);
+        for sentinel in UNSET_SENTINELS {
+            let compact = real([sentinel, 0], StorageLayout::Compact);
+            assert_eq!(
+                compact.status,
+                AttributeExtractionStatus::DefaultRequired,
+                "0x{sentinel:08X}"
+            );
+            let mut slot = [0u32; 24];
+            slot[11] = sentinel;
+            let array = descriptor(6, 3, 11, 7);
+            let got = extract_attribute(
+                &parsed(&slot),
+                &array,
+                None,
+                StorageLayout::Wide,
+                "POS".into(),
+            );
+            assert_eq!(
+                got.status,
+                AttributeExtractionStatus::DefaultRequired,
+                "0x{sentinel:08X}"
+            );
         }
     }
 
