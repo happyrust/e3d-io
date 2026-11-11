@@ -165,7 +165,7 @@ const MAX_PIPE_OUTSIDE_DIAMETER: f64 = 10_000.0;
 /// 找属主截面时沿 owner 链最多爬几层。FIXING 到 GENSEC 是三层（PLDATU、JLDATU），
 /// 配件到 SCTN 是一两层；16 只是防环。
 const MAX_OWNER_CLIMB: usize = 16;
-/// 设计件 `SPRE` 到目录件最多跳几次（`SPCO`/`GPART`/`PRTELE` 跟 `CATR`、`TABITEM` 跟 `PRTREF`）。
+/// 设计件 `SPRE` 到目录件最多跳几次（`SPCO`/`GPART`/`PRTELE` 跟 `CATR`、`TABITE` 跟 `PRTREF`）。
 const MAX_COMPONENT_HOPS: usize = 8;
 /// `UNIPAR`: the per-entry unit/type words that go with `DESP`.
 const DESIGN_PARAM_UNITS: &str = "UNIPAR";
@@ -879,18 +879,21 @@ fn owner_of_type(element: &DbElement, noun: &str) -> Option<DbElement> {
 }
 
 /// 设计件的目录件：`catdblib/GATGOC@0x1035CFB0` 从 `SPRE` 起跳，落在 `SPCO` / `GPART` /
-/// `PRTELE` 上跟 `CATR`，落在 `TABITEM` 上跟 `PRTREF`，落在别的 noun 上就是它。
+/// `PRTELE` 上跟 `CATR`，落在 `TABITE` 上跟 `PRTREF`，落在别的 noun 上就是它。
 fn component_of(design: &DbElement) -> Option<DbElement> {
     component_via(design, "SPRE")
 }
 
 /// [`component_of`]，从任一规格引用起跳（`SPRE` / `LSTU` …）。
+///
+/// noun 用的是库里的名字，最长六个字：表项是 `TABITE`（E3D 里打出来的全称是 `TABITEM`）。这一臂原来写的是
+/// 全称，从没命中过——链走到表项就停在表项上，把它当成了目录件。
 fn component_via(design: &DbElement, start: &str) -> Option<DbElement> {
     let mut cursor = design.get_element(start).ok()??;
     for _ in 0..MAX_COMPONENT_HOPS {
         let via = match cursor.element_type().ok()?.as_str() {
             "SPCO" | "GPART" | "PRTELE" => "CATR",
-            "TABITEM" => "PRTREF",
+            "TABITE" => "PRTREF",
             _ => return Some(cursor),
         };
         cursor = cursor.get_element(via).ok()??;
@@ -1745,6 +1748,34 @@ mod tests {
             Some(0.0),
             "`POD` 答不上来时表达式按 0 继续，这条语义这一步不改"
         );
+    }
+
+    /// 规格引用落在表项上时，跟着 `PRTREF` 走到零件、再跟 `CATR` 走到目录件，不停在表项上。
+    ///
+    /// `aps250176` 带规格的路由节点 `/CWAY-AREA03-POWER_B1-RNODE-002`：
+    ///
+    /// ```text
+    /// RNODE 2013286720/368
+    ///   SPRE = 15213/473536   TABITE /CABLEWAY_REPRESENTATION.MAIN_TABITE
+    ///     PRTREF → 15213/473530   GPART /CABLEWAY_REPRE_MAIN_GPART
+    ///       CATR → 15213/473525   SCOM /CABLEWAY_REPRESENTATION.MAIN_SCOM
+    /// ```
+    ///
+    /// 表项的 noun 在库里是六个字的 `TABITE`。这一臂写成全称 `TABITEM` 的时候从没命中，
+    /// 链停在表项上、把表项当成了目录件。
+    #[test]
+    fn a_table_item_is_followed_through_to_the_catalogue_component() {
+        let Some(set) = probe_set(&[("aps250176_0001", "DESI")]) else {
+            return;
+        };
+        let node = set.element(RefNo::new(2_013_286_720, 368));
+        assert_eq!(node.element_type().unwrap(), "RNODE");
+        let spec = node.get_element("SPRE").unwrap().expect("这只节点带 SPRE");
+        assert_eq!(spec.element_type().unwrap(), "TABITE");
+
+        let component = component_of(&node).expect("表项 → 零件 → 目录件");
+        assert_eq!(component.element_type().unwrap(), "SCOM");
+        assert_eq!(component.refno(), RefNo::new(15_213, 473_525));
     }
 
     // ---- `POD`：`LSTU` 优先、`COMPRE` 回退（真库）--------------------------
