@@ -102,9 +102,13 @@ const ATTACHED_DESIGN_PARAMS: &str = "ADES";
 /// 取设计件 `LSTU → [SPCO → CATR]* → SCOM` 的 `PARA[2]`（与隐式管断面同一口径）；支撑件
 /// 没有 `LSTU`，经 [`COMPONENT_REFERENCE`] 去被支撑的构件上取。
 ///
-/// **管取不到时答什么，看设计件是什么**——Core3D `getattlib_des/DESPRE`（`0x10031CE0`）的
-/// `POD` 支先用 `desgetattlib/GTPBOR`（`0x100178CA`）取这只 P 点的口径，再交
-/// `pplib/PPOD`（`0x103BEB30`）换成外径，`PPOD` 按 noun 分支：
+/// **管取不到时答什么，看设计件是什么**——Core3D `getattlib_des/DESPRE`（`0x10031CE0`）里
+/// 离开端外径（`LOD`）那一支：`pplib/XPLEAV`（`0x103BE774`）读设计件的 `LEAV` 得到离开 P 点的
+/// 编号，`desgetattlib/GTPBOR`（`0x100178CA`）取这只 P 点的口径，再交 `pplib/PPOD`
+/// （`0x103BEB30`）换成外径。目录里写的 `PL OD` 走的就是这一支，不是 E3D 自己那个也叫 `POD`、
+/// 要另给 P 点号的属性：夹在桥架托盘上的支撑件 `Q POD` 是 0，`Q LOD` 与 `Q PROP PLOD` 是 150
+/// （600 那一种规格三个量是 0 / 600 / 600）。
+/// `PPOD` 按 noun 分支：
 ///
 /// - **支撑件（`ANCI`）**：读 `COMPRE`；读不出、是空引用、去不了（悬空）、目标身上取不到管的
 ///   `PARA[2]`——四种都是**外径 = 口径**，即离开 P 点的 `PBOR`。APS 支撑区三处对得上：
