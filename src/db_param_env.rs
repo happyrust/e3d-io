@@ -38,7 +38,7 @@
 //! ——ams7997 的 129 只 DAMP、43 只 MESH 此前全按 `PARAM 52` 去问一格长的 `PARA`，
 //! 体箱整只丢掉。两条读法互不矛盾：`PARAM n` 仍是 `PARA[n]`，只是 52 不是 `PARAM`。
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use crate::db_element::{DbElement, DbElementError};
 use crate::record::catalogue_eval::{AttribRef, AttributeNumber, ParamArray, ParamEnv};
@@ -96,14 +96,39 @@ const OWNER_DESIGN_PARAMS: &str = "ODES";
 /// `ATTRIB APAR[n]` / `ATTRIB ADES[n]`：**连接对象**（设计件 `CREF`）的参数。
 const ATTACHED_PARAMS: &str = "APAR";
 const ATTACHED_DESIGN_PARAMS: &str = "ADES";
-/// `ATTRIB POD`：构件离开端那根管的外径，MDS 附件目录 `PLOD` 行的 `PPRO`。
+/// `ATTRIB POD`：构件离开端那根管的外径，MDS 附件目录 `PLOD` 行的 `PPRO`（E3D 里打出来是
+/// `( PL OD )`）。
 ///
-/// 取设计件 `LSTU → [SPCO → CATR]* → SCOM` 的 `PARA[2]`（与隐式管断面同一口径）。
-/// 链走不到（目录件不在本会话的库里）时是 0：23705/289 `/MDS-Standards-ST59-PS`
-/// 的 `LSTU` 落到 `/AAPA100VV`，它只在 acp7000 里，E3D 在 AMS 会话下打开的是
-/// ams7000——导出的支架 Web/flange 按 `PLOD = 0` 摆（z 到 200，而按同行
-/// `DPRO = PARA[2]` 的 273 会到 336.5）。
+/// 取设计件 `LSTU → [SPCO → CATR]* → SCOM` 的 `PARA[2]`（与隐式管断面同一口径）；支撑件
+/// 没有 `LSTU`，经 [`COMPONENT_REFERENCE`] 去被支撑的构件上取。
+///
+/// **管取不到时答什么，看设计件是什么**——Core3D `getattlib_des/DESPRE`（`0x10031CE0`）的
+/// `POD` 支先用 `desgetattlib/GTPBOR`（`0x100178CA`）取这只 P 点的口径，再交
+/// `pplib/PPOD`（`0x103BEB30`）换成外径，`PPOD` 按 noun 分支：
+///
+/// - **支撑件（`ANCI`）**：读 `COMPRE`；读不出、是空引用、去不了（悬空）、目标身上取不到管的
+///   `PARA[2]`——四种都是**外径 = 口径**，即离开 P 点的 `PBOR`。APS 支撑区三处对得上：
+///   夹在桥架托盘上的 `RACK-REST-150mm` / `-600mm`，E3D 里 `Q PROP PLOD` 是 150 / 600
+///   （就是 `Q LBOR`）；`COMPRE` 清空或悬空的 `AN02-300mm`，E3D 导出的下沿按 300 摆
+///   （目录件 `PARA = [300, 324, …]`，P 点口径是 `PARAM 1`）；`GT06-100mm` 清空后整件沿 −Z
+///   挪 50，即 `0.5 × 100`。
+/// - **管件**：自己的管取不到是 **0**。23705/289 `/MDS-Standards-ST59-PS`（`ATTA`）的 `LSTU`
+///   落到 `/AAPA100VV`，它只在 acp7000 里，E3D 在 AMS 会话下打开的是 ams7000——导出的支架
+///   Web/flange 按 `PLOD = 0` 摆（z 到 200，而按同行 `DPRO = PARA[2]` 的 273 会到 336.5）。
+///
+/// `PPOD` 另有三支没有接：`SSREFE` 与 `ANCI` 同一支、只是先上到属主再读 `COMPRE`；风管件
+/// 外径 = 口径；到达点 / 别的 P 点去前一只 / `PCREF` 那头取。手上没有它们问 `POD` 的样本。
+/// 没取到的每一次都留一笔 [`PipeOutsideDiameterMiss`]，不让它在结果里和「取到了」长得一样。
 const PIPE_OUTSIDE_DIAMETER: &str = "POD";
+/// 支撑件：`PPOD` 里管取不到时拿离开 P 点口径顶上的那一类。
+const SUPPORT_ANCILLARY: &str = "ANCI";
+/// 设计件离开 P 点的编号。
+const LEAVE_POINT: &str = "LEAV";
+/// 目录件的点集，点自己的编号与口径（`pplib/SAPPOI`，`0x103BAFC8`：进 `PTRE`，找 `NUMB`
+/// 相等的那只点）。
+const POINT_SET_REFERENCE: &str = "PTRE";
+const POINT_NUMBER: &str = "NUMB";
+const POINT_BORE: &str = "PBOR";
 /// `ATTRIB LOHE`：属主面板那只环的高度，也就是板厚。
 ///
 /// 也不是属性，是 Core3D 现算的伪属性（`getattlib_des/DESPRE@0x10031CE0` 的 `636105` 支）：
@@ -148,8 +173,12 @@ const PANEL_LOOP: &str = "PLOO";
 ///   `/PS-01-00217.4`（`COMPRE = 2013286676/1757`，`BRAN /100-A-18/B1`）的
 ///   `dz = 57.15` 要的正是 `PARA[2] = 114.3`。诊断里 `source` 是 `COMPRE.HSTU`。
 ///
-/// 两形态都走 [`component_via`]：`HSTU → SPCO → CATR → SCOM` 与 `LSTU` 那条同构，
+/// 两形态都走 [`walk_to_component`]：`HSTU → SPCO → CATR → SCOM` 与 `LSTU` 那条同构，
 /// 只是入口属性名不同。
+///
+/// 两形态都接不上的也有：目标是电缆桥架托盘（`ANCI 2013286648/629 → COMPRE =
+/// 2013286726/53`，`CTRAY`，`LSTU` / `HSTU` 都没有），或者 `COMPRE` 是空的、指着的元素被删了。
+/// 这时不是 0，见 [`PIPE_OUTSIDE_DIAMETER`]。
 const COMPONENT_REFERENCE: &str = "COMPRE";
 /// 管外径的合理上界（mm，与 `PARA` 的存储单位一致）。
 ///
@@ -220,6 +249,8 @@ pub struct DbElementParamEnv {
     /// 调用方现算好交进来的伪属性（[`Self::with_derived`]）。
     derived: Vec<(&'static str, f64)>,
     depth: Cell<u32>,
+    /// 表达式问过 `POD`、管却没取到时留下的那一笔（[`Self::pipe_outside_diameter_miss`]）。
+    outside_diameter_miss: RefCell<Option<PipeOutsideDiameterMiss>>,
 }
 
 impl std::fmt::Debug for DbElementParamEnv {
@@ -240,6 +271,7 @@ impl DbElementParamEnv {
             insulation: true,
             derived: Vec::new(),
             depth: Cell::new(0),
+            outside_diameter_miss: RefCell::new(None),
         }
     }
 
@@ -751,78 +783,188 @@ impl DbElementParamEnv {
         stored_real(&ring, "HEIG").ok().flatten()
     }
 
-    /// See [`PIPE_OUTSIDE_DIAMETER`].
+    /// 管的外径：[`Self::tube_component`] 落到的目录件的 `PARA[2]`。取不到是 `None`——
+    /// `ATTRIB POD` 那一格拿什么顶，见 [`Self::outside_diameter_answer`]。
+    #[cfg(test)]
     fn pipe_outside_diameter(&self) -> Option<f64> {
-        let component = self.catalogue_component()?;
-        outside_diameter(&component)
+        self.tube_outside_diameter(self.design.as_ref()?)
+            .ok()
+            .map(|trace| trace.value)
     }
 
-    /// `POD` 这一格现在解析到哪儿——诊断用，**不改** [`Self::attribute_number`]
-    /// 里 `unwrap_or(0.0)` 的语义。
+    /// `POD` 这一格现在怎么答——诊断用，不记账（记账的是表达式真问到的那一次，见
+    /// [`Self::pipe_outside_diameter_miss`]）。
     ///
-    /// `POD` 答不上来时那一条表达式静默按 0 求值，整件图元跟着平移，报告全绿。
-    /// 这个入口让诊断侧能把「走的是哪条链、原始值是多少、被上界挡掉了没有」问出来，
-    /// 而不是只看一个 0。设计件都没有时回 `None`——那是「不在实例上下文里」，不是
-    /// 「`POD` 取不到」。
-    pub fn pipe_outside_diameter_diagnostic(&self) -> Option<PipeOutsideDiameterTrace> {
-        self.catalogue_component_trace().map(|trace| {
-            let raw = trace
-                .component
-                .as_ref()
-                .and_then(|component| real_array(component, CATALOGUE_PARAM_ARRAY))
-                .and_then(|items| items.get(1).copied());
-            PipeOutsideDiameterTrace {
-                source: trace.source,
-                via: trace.via,
-                component: trace.component.as_ref().map(DbElement::refno),
-                raw,
-                accepted: raw.filter(|value| plausible_pipe_outside_diameter(*value)),
-            }
+    /// 管取到了，给走的哪条链、落到哪个目录件、取的数；没取到，给断在哪一步、拿什么顶的。
+    /// 设计件都没有时回 `None`——那是「不在实例上下文里」，不是「`POD` 取不到」。
+    pub fn pipe_outside_diameter_diagnostic(&self) -> Option<PipeOutsideDiameterAnswer> {
+        let design = self.design.as_ref()?;
+        Some(match self.tube_outside_diameter(design) {
+            Ok(trace) => PipeOutsideDiameterAnswer::Tube(trace),
+            Err(broke_at) => PipeOutsideDiameterAnswer::Missed(self.stand_in(design, broke_at)),
         })
     }
 
-    /// 设计件 → 它的目录件：`LSTU` 优先，`COMPRE` 回退；`COMPRE` 那一跳再按
-    /// **形态 A（`LSTU`）→ 形态 B（`HSTU`）** 的顺序试。
+    /// 这只件的表达式问过 `POD`、管却没取到时留下的那一笔：断在哪一步，拿什么顶的。
+    ///
+    /// 没问过、或者问到了，都是 `None`。同一只件问多少次都是同一个答案，只留一笔。
+    pub fn pipe_outside_diameter_miss(&self) -> Option<PipeOutsideDiameterMiss> {
+        self.outside_diameter_miss.borrow().clone()
+    }
+
+    /// `ATTRIB POD` 答的数（见 [`PIPE_OUTSIDE_DIAMETER`]）。管没取到就记一笔。
+    fn outside_diameter_answer(&self) -> f64 {
+        let Some(design) = self.design.as_ref() else {
+            return 0.0;
+        };
+        match self.tube_outside_diameter(design) {
+            Ok(trace) => trace.value,
+            Err(broke_at) => {
+                let miss = self.stand_in(design, broke_at);
+                let value = miss.value;
+                self.outside_diameter_miss.replace(Some(miss));
+                value
+            }
+        }
+    }
+
+    /// 管没取到时拿什么顶：支撑件是离开 P 点的口径，别的是 0。
+    ///
+    /// 支撑件的离开点口径也答不上（没有 `LEAV`、目录件的点集里没有这只点、`PBOR` 求不出）时照旧
+    /// 是 0：`GTPBOR` 在那里报错、`POD` 整格没有值，表达式怎么收场没有样本，不改原来的做法。
+    fn stand_in(
+        &self,
+        design: &DbElement,
+        broke_at: PipeOutsideDiameterBreak,
+    ) -> PipeOutsideDiameterMiss {
+        let leave_bore = (design.element_type().ok().as_deref() == Some(SUPPORT_ANCILLARY))
+            .then(|| self.leave_point_bore(design))
+            .flatten();
+        match leave_bore {
+            Some((point, bore)) => PipeOutsideDiameterMiss {
+                broke_at,
+                stand_in: PipeOutsideDiameterStandIn::LeaveBore { point },
+                value: bore,
+            },
+            None => PipeOutsideDiameterMiss {
+                broke_at,
+                stand_in: PipeOutsideDiameterStandIn::Zero,
+                value: 0.0,
+            },
+        }
+    }
+
+    /// 设计件离开 P 点的编号与口径：目录件点集里 `NUMB` 等于设计件 `LEAV` 的那只点的 `PBOR`，
+    /// 在这只件的环境里求（`pplib/XSPPOI` → `SAPPOI`）。
+    fn leave_point_bore(&self, design: &DbElement) -> Option<(u32, f64)> {
+        let number = whole_number(design, LEAVE_POINT)
+            .and_then(|number| u32::try_from(number).ok())
+            .filter(|number| *number > 0)?;
+        let points = self
+            .catalogue
+            .as_ref()?
+            .get_element(POINT_SET_REFERENCE)
+            .ok()??;
+        let point = points.members().ok()?.into_iter().find(|point| {
+            whole_number(point, POINT_NUMBER).and_then(|found| u32::try_from(found).ok())
+                == Some(number)
+        })?;
+        let bore = self.nested(|| point.get_number(POINT_BORE, self).ok()?.value())?;
+        Some((number, bore))
+    }
+
+    /// 管的目录件与它的 `PARA[2]`，或者断在哪一步。
+    fn tube_outside_diameter(
+        &self,
+        design: &DbElement,
+    ) -> Result<PipeOutsideDiameterTrace, PipeOutsideDiameterBreak> {
+        let trace = self.tube_component(design)?;
+        let component = trace.component.refno();
+        let raw = real_array(&trace.component, CATALOGUE_PARAM_ARRAY)
+            .and_then(|items| items.get(1).copied());
+        match raw {
+            None => Err(PipeOutsideDiameterBreak::NoSecondParameter { component }),
+            Some(raw) if !plausible_pipe_outside_diameter(raw) => {
+                Err(PipeOutsideDiameterBreak::Implausible { component, raw })
+            }
+            Some(value) => Ok(PipeOutsideDiameterTrace {
+                source: trace.source,
+                via: trace.via,
+                component,
+                value,
+            }),
+        }
+    }
+
+    /// 设计件 → 管的目录件：`LSTU` 优先，`COMPRE` 回退；`COMPRE` 那一跳再按
+    /// **形态 A（`LSTU`）→ 形态 B（`HSTU`）** 的顺序试。每一处接不上各有一个
+    /// [`PipeOutsideDiameterBreak`]。
     ///
     /// `LSTU` 必须排在最前：形态 A 已经靠它修好的那批设计件，`COMPRE` 目标上也可能
     /// 同时挂着 `HSTU`，先试 `HSTU` 会换掉已通过的取值。两形态的链路见
     /// [`COMPONENT_REFERENCE`]。
-    fn catalogue_component(&self) -> Option<DbElement> {
-        self.catalogue_component_trace()
-            .and_then(|trace| trace.component)
-    }
-
-    /// [`Self::catalogue_component`] 连同「走的是哪一格、哪条属性」一起给。
     ///
-    /// 外层 `None` = 连候选引用都拿不到（设计件没有 `LSTU`，`COMPRE` 也不存在或
-    /// `0/0`）。`component` 是 `None` = 引用拿到了，但那一跳到不了目录件（目标库
-    /// 没开、或目标既没有 `LSTU` 也没有 `HSTU`）——这两种在诊断里要分得开。
-    ///
-    /// 「目标既没 `LSTU` 也没 `HSTU`」**不提前 `?` 掉**：那要留在 `source` 有、
-    /// `component` 空的形态里，诊断才看得见「走到了 `COMPRE`，但那一跳是空的」。
-    fn catalogue_component_trace(&self) -> Option<ComponentTrace> {
-        let design = self.design.as_ref()?;
-        if let Some(component) = component_via(design, "LSTU") {
-            return Some(ComponentTrace {
-                source: "LSTU",
-                via: "LSTU",
-                component: Some(component),
-            });
+    /// 设计件自己的 `LSTU` 走不到目录件时还要看 `COMPRE`；两头都没接上，报的是先断的那一处
+    /// （`LSTU` 那条链），「什么引用都没有」只留给两格都没有的件。
+    fn tube_component(
+        &self,
+        design: &DbElement,
+    ) -> Result<ComponentTrace, PipeOutsideDiameterBreak> {
+        let own = match spec_reference(design, "LSTU") {
+            Some(spec) => match walk_to_component(spec.clone()) {
+                Some(component) => {
+                    return Ok(ComponentTrace {
+                        source: "LSTU",
+                        via: "LSTU",
+                        component,
+                    });
+                }
+                None => Some(PipeOutsideDiameterBreak::ChainBroken {
+                    holder: design.refno(),
+                    attribute: "LSTU",
+                    spec: spec.refno(),
+                }),
+            },
+            None => None,
+        };
+        let target = match design.get_element(COMPONENT_REFERENCE) {
+            Ok(Some(target)) => target,
+            Ok(None) => return Err(own.unwrap_or(PipeOutsideDiameterBreak::ReferenceNull)),
+            Err(_) => return Err(own.unwrap_or(PipeOutsideDiameterBreak::NoReference)),
+        };
+        // 形态 A：目标元素自己有 `LSTU`（`ELBO` 这类）；形态 B：目标是没有 `LSTU` 的 `BRAN`，
+        // 外径挂在 `HSTU` 上。
+        let mut broken = None;
+        for attribute in ["LSTU", "HSTU"] {
+            let Some(spec) = spec_reference(&target, attribute) else {
+                continue;
+            };
+            match walk_to_component(spec.clone()) {
+                Some(component) => {
+                    return Ok(ComponentTrace {
+                        source: COMPONENT_REFERENCE,
+                        via: attribute,
+                        component,
+                    });
+                }
+                None => {
+                    broken.get_or_insert(PipeOutsideDiameterBreak::ChainBroken {
+                        holder: target.refno(),
+                        attribute,
+                        spec: spec.refno(),
+                    });
+                }
+            }
         }
-        let referenced = design.get_element(COMPONENT_REFERENCE).ok().flatten()?;
-        // 形态 A：目标元素自己有 `LSTU`（`ELBO` 这类）。
-        if let Some(component) = component_via(&referenced, "LSTU") {
-            return Some(ComponentTrace {
-                source: COMPONENT_REFERENCE,
-                via: "LSTU",
-                component: Some(component),
-            });
-        }
-        // 形态 B：目标是没有 `LSTU` 的 `BRAN`，外径挂在 `HSTU` 上。
-        Some(ComponentTrace {
-            source: COMPONENT_REFERENCE,
-            via: "HSTU",
-            component: component_via(&referenced, "HSTU"),
+        // 两格都没接上，才问目标还在不在：接上了的不多读这一次索引。
+        let target_ref = target.refno();
+        Err(match target.exists() {
+            Ok(true) => broken.unwrap_or_else(|| PipeOutsideDiameterBreak::TargetHasNoTube {
+                target: target_ref,
+                noun: target.element_type().unwrap_or_default(),
+            }),
+            Ok(false) => PipeOutsideDiameterBreak::ReferenceDangling { target: target_ref },
+            Err(_) => PipeOutsideDiameterBreak::ReferenceOutOfSession { target: target_ref },
         })
     }
 
@@ -881,15 +1023,19 @@ fn owner_of_type(element: &DbElement, noun: &str) -> Option<DbElement> {
 /// 设计件的目录件：`catdblib/GATGOC@0x1035CFB0` 从 `SPRE` 起跳，落在 `SPCO` / `GPART` /
 /// `PRTELE` 上跟 `CATR`，落在 `TABITE` 上跟 `PRTREF`，落在别的 noun 上就是它。
 fn component_of(design: &DbElement) -> Option<DbElement> {
-    component_via(design, "SPRE")
+    walk_to_component(spec_reference(design, "SPRE")?)
 }
 
-/// [`component_of`]，从任一规格引用起跳（`SPRE` / `LSTU` …）。
+/// 元素上一格规格引用指着的元素；模板里没有这一格、读不出、是空引用都是 `None`。
+fn spec_reference(element: &DbElement, name: &str) -> Option<DbElement> {
+    element.get_element(name).ok()?
+}
+
+/// 从规格引用落到的那个元素起，一路走到目录件。
 ///
 /// noun 用的是库里的名字，最长六个字：表项是 `TABITE`（E3D 里打出来的全称是 `TABITEM`）。这一臂原来写的是
 /// 全称，从没命中过——链走到表项就停在表项上，把它当成了目录件。
-fn component_via(design: &DbElement, start: &str) -> Option<DbElement> {
-    let mut cursor = design.get_element(start).ok()??;
+fn walk_to_component(mut cursor: DbElement) -> Option<DbElement> {
     for _ in 0..MAX_COMPONENT_HOPS {
         let via = match cursor.element_type().ok()?.as_str() {
             "SPCO" | "GPART" | "PRTELE" => "CATR",
@@ -906,20 +1052,7 @@ fn plausible_pipe_outside_diameter(value: f64) -> bool {
     value.is_finite() && value > 0.0 && value < MAX_PIPE_OUTSIDE_DIAMETER
 }
 
-/// 目录件的 `PARA[2]`，按管外径的口径筛过。
-///
-/// 槽位是 `get(1)`（1 起的第 2 格），这一步**不动**：形态 A 的 `ELBO` 目录件
-/// `/AAEA200NN` 里 `PARA[2]` 是 `CENTRE TO FACE = 152.4`，真正的 `OUTSIDE DIAM` 是
-/// `PARA[4]`（`DTRE = 15192/174603` 的 `DPAR` 行）。换槽位是下一步的事，这一格先
-/// 只验证 `COMPRE` 链走通。
-fn outside_diameter(component: &DbElement) -> Option<f64> {
-    real_array(component, CATALOGUE_PARAM_ARRAY)?
-        .get(1)
-        .copied()
-        .filter(|value| plausible_pipe_outside_diameter(*value))
-}
-
-/// [`DbElementParamEnv::catalogue_component_trace`] 的结果：走的是哪一格、哪条属性、
+/// [`DbElementParamEnv::tube_component`] 的结果：走的是哪一格、哪条属性、
 /// 落到了哪个目录件。
 ///
 /// `source` 与 `via` 分开记，是因为 `COMPRE` 那一跳有**两种形态**：形态 A 在目标
@@ -933,15 +1066,14 @@ struct ComponentTrace {
     source: &'static str,
     /// `"LSTU"` 或 `"HSTU"`：真正落地的入口属性。见 [`COMPONENT_REFERENCE`]。
     via: &'static str,
-    /// 目录件。引用拿到了但那一跳没到目录件时是 `None`。
-    component: Option<DbElement>,
+    /// 目录件。
+    component: DbElement,
 }
 
-/// [`DbElementParamEnv::pipe_outside_diameter_diagnostic`] 的结果。
+/// 管的外径取到了：走的哪条链、落到哪个目录件、取的数。
 ///
-/// 三样东西分开给：走的哪条链（`LSTU` 还是 `COMPRE`）、落到了哪个目录件、原始值
-/// 与是否被上界挡掉。把 `raw` 与 `accepted` 并排放着，是为了让「库里存了 726491」
-/// 与「这个值不像外径」区分得开——两者在 `POD` 的最终取值上都是 `None`，但原因不同。
+/// 槽位是目录件的 `PARA[2]`：`pplib/CGETOD`（`0x103BF7AC`）与 `PPOD` 的支撑件那一支问的都是
+/// `GATREA(…, TUBI, PARA, 2, 2)`。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PipeOutsideDiameterTrace {
     /// `LSTU` 或 `COMPRE`：设计件的哪一格接上的目录件。
@@ -949,13 +1081,108 @@ pub struct PipeOutsideDiameterTrace {
     /// `LSTU` 或 `HSTU`：`COMPRE` 那一跳真正走的入口属性。设计件自己有 `LSTU` 时
     /// 与 `source` 同为 `"LSTU"`；`COMPRE` 的形态 A / 形态 B 靠它区分。
     pub via: &'static str,
-    /// 目录件的 RefNo（`PARA` 是从它身上读的）。引用拿到了但那一跳没到目录件时是
-    /// `None`——与「链根本没走通」不是一回事，`source` 已经把两者分开了。
-    pub component: Option<RefNo>,
-    /// 目录件 `PARA[2]` 的原始值；没有 `PARA`、没有第 2 格都是 `None`。
-    pub raw: Option<f64>,
-    /// 通过合理性上界的值，即 `POD` 最终会取的那个数。
-    pub accepted: Option<f64>,
+    /// 目录件的 RefNo（`PARA` 是从它身上读的）。
+    pub component: RefNo,
+    /// 目录件的 `PARA[2]`，也就是 `POD` 答的数。
+    pub value: f64,
+}
+
+/// 管的外径没取到时，链断在哪一步。
+///
+/// 每一种在 `POD` 的取值上都只是「没有」，原因却不同：有的 E3D 自己也取不到，有的是这里少接了
+/// 一条链。分开记，结果上才看得出来。
+#[derive(Debug, Clone, PartialEq)]
+pub enum PipeOutsideDiameterBreak {
+    /// 设计件上一格可走的引用都没有：没有 `LSTU`（或是空的），模板里也没有 `COMPRE`。
+    NoReference,
+    /// `COMPRE` 是空引用。
+    ReferenceNull,
+    /// `COMPRE` 指着的元素不在它那本库的索引里（悬空：被删了）。
+    ReferenceDangling { target: RefNo },
+    /// `COMPRE` 指着的元素所在的库读不了（不在这次打开的库里）。
+    ReferenceOutOfSession { target: RefNo },
+    /// `COMPRE` 的目标在，但它既没有 `LSTU` 也没有 `HSTU`（电缆桥架托盘就是）。
+    TargetHasNoTube { target: RefNo, noun: String },
+    /// 规格引用有，顺着它却走不到目录件（目录件在没打开的库里、`SPCO` 没有 `CATR` …）。
+    /// `holder` 是带这格引用的元素：设计件自己，或 `COMPRE` 的目标。
+    ChainBroken {
+        holder: RefNo,
+        attribute: &'static str,
+        spec: RefNo,
+    },
+    /// 走到了目录件，它没有 `PARA[2]`。
+    NoSecondParameter { component: RefNo },
+    /// 目录件的 `PARA[2]` 不像外径：不大于 0，或不小于 [`MAX_PIPE_OUTSIDE_DIAMETER`]。
+    Implausible { component: RefNo, raw: f64 },
+}
+
+/// 管的外径没取到时，`POD` 拿什么顶（见 [`PIPE_OUTSIDE_DIAMETER`]）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PipeOutsideDiameterStandIn {
+    /// 按 0。
+    Zero,
+    /// 支撑件：设计件离开 P 点（这个编号）的口径。
+    LeaveBore { point: u32 },
+}
+
+/// 管的外径没取到的一笔：断在哪一步、拿什么顶的、顶上去的数。
+#[derive(Debug, Clone, PartialEq)]
+pub struct PipeOutsideDiameterMiss {
+    pub broke_at: PipeOutsideDiameterBreak,
+    pub stand_in: PipeOutsideDiameterStandIn,
+    /// `POD` 最后答的数。
+    pub value: f64,
+}
+
+impl std::fmt::Display for PipeOutsideDiameterBreak {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoReference => write!(f, "设计件没有 LSTU，也没有 COMPRE"),
+            Self::ReferenceNull => write!(f, "COMPRE 为空"),
+            Self::ReferenceDangling { target } => {
+                write!(f, "COMPRE 指着的 {target} 不存在（悬空）")
+            }
+            Self::ReferenceOutOfSession { target } => {
+                write!(f, "COMPRE 指着的 {target} 所在的库没打开")
+            }
+            Self::TargetHasNoTube { target, noun } => {
+                write!(f, "COMPRE 的目标 {target}（{noun}）没有 LSTU 也没有 HSTU")
+            }
+            Self::ChainBroken {
+                holder,
+                attribute,
+                spec,
+            } => write!(f, "{holder} 的 {attribute} {spec} 走不到目录件"),
+            Self::NoSecondParameter { component } => {
+                write!(f, "目录件 {component} 没有 PARA[2]")
+            }
+            Self::Implausible { component, raw } => {
+                write!(f, "目录件 {component} 的 PARA[2] = {raw} 不像外径")
+            }
+        }
+    }
+}
+
+/// 报告里的那一句：断在哪一步，拿什么顶的。
+impl std::fmt::Display for PipeOutsideDiameterMiss {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "管外径（POD）没取到：{}；", self.broke_at)?;
+        match self.stand_in {
+            PipeOutsideDiameterStandIn::Zero => write!(f, "按 0 求值"),
+            PipeOutsideDiameterStandIn::LeaveBore { point } => {
+                write!(f, "取离开点 P{point} 的口径 {}", self.value)
+            }
+        }
+    }
+}
+
+/// [`DbElementParamEnv::pipe_outside_diameter_diagnostic`] 的结果。
+#[derive(Debug, Clone, PartialEq)]
+pub enum PipeOutsideDiameterAnswer {
+    /// 管取到了。
+    Tube(PipeOutsideDiameterTrace),
+    /// 管没取到。
+    Missed(PipeOutsideDiameterMiss),
 }
 
 /// 一个实数数组属性（整数数组按值转）。
@@ -1261,7 +1488,7 @@ impl ParamEnv for DbElementParamEnv {
                 reference => self.through_reference(reference, qualifier),
             },
             (None, None) if attribute.name == PIPE_OUTSIDE_DIAMETER => {
-                Some(self.pipe_outside_diameter().unwrap_or(0.0))
+                Some(self.outside_diameter_answer())
             }
             (None, None) if attribute.name == PANEL_LOOP_HEIGHT => self.panel_loop_height(),
             (None, None) => self
@@ -1743,10 +1970,16 @@ mod tests {
         let env = DbElementParamEnv::new(None, None);
         assert_eq!(env.pipe_outside_diameter(), None);
         assert_eq!(env.pipe_outside_diameter_diagnostic(), None);
+        assert_eq!(env.pipe_outside_diameter_miss(), None);
         assert_eq!(
             env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
             Some(0.0),
-            "`POD` 答不上来时表达式按 0 继续，这条语义这一步不改"
+            "不在实例上下文里，表达式按 0 继续"
+        );
+        assert_eq!(
+            env.pipe_outside_diameter_miss(),
+            None,
+            "没有设计件不是「管没取到」，不记账"
         );
     }
 
@@ -1817,14 +2050,11 @@ mod tests {
             Some(114.3),
             "COMPRE → ELBO → LSTU → SCOM /AAPA1A0NN 的 PARA[2]"
         );
-        let trace = env
-            .pipe_outside_diameter_diagnostic()
-            .expect("设计件在，诊断就该给出一条链");
+        let trace = tube_of(&env);
         assert_eq!(trace.source, COMPONENT_REFERENCE, "走的是 COMPRE 不是 LSTU");
         assert_eq!(trace.via, "LSTU", "形态 A 在目标自己的 LSTU 上接住");
-        assert_eq!(trace.component, Some(RefNo::new(15_192, 228_635)));
-        assert_eq!(trace.raw, Some(114.3));
-        assert_eq!(trace.accepted, Some(114.3));
+        assert_eq!(trace.component, RefNo::new(15_192, 228_635));
+        assert_eq!(trace.value, 114.3);
         assert_eq!(
             env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
             Some(114.3),
@@ -1848,7 +2078,7 @@ mod tests {
             Some(323.85),
             "形态 B：BRAN → HSTU → SPCO → CATR → SCOM /AAPA1A0WW 的 PARA[2]"
         );
-        let trace = env.pipe_outside_diameter_diagnostic().unwrap();
+        let trace = tube_of(&env);
         assert_eq!(trace.source, COMPONENT_REFERENCE);
         assert_eq!(trace.via, "HSTU");
     }
@@ -1907,14 +2137,11 @@ mod tests {
             Some(323.85),
             "HSTU → SPCO /A3B/PA300 → CATR → SCOM /AAPA1A0WW 的 PARA[2] = DN300 外径"
         );
-        let trace = env
-            .pipe_outside_diameter_diagnostic()
-            .expect("设计件在，诊断就该给出一条链");
+        let trace = tube_of(&env);
         assert_eq!(trace.source, COMPONENT_REFERENCE, "设计件自己没有 LSTU");
         assert_eq!(trace.via, "HSTU", "形态 B 在目标的 HSTU 上接住");
-        assert_eq!(trace.component, Some(RefNo::new(15_192, 228_639)));
-        assert_eq!(trace.raw, Some(323.85));
-        assert_eq!(trace.accepted, Some(323.85));
+        assert_eq!(trace.component, RefNo::new(15_192, 228_639));
+        assert_eq!(trace.value, 323.85);
         assert_eq!(
             env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
             Some(323.85),
@@ -1943,24 +2170,23 @@ mod tests {
         );
         let env = DbElementParamEnv::new(Some(design), None);
         assert_eq!(env.pipe_outside_diameter(), Some(35.0));
-        let trace = env.pipe_outside_diameter_diagnostic().unwrap();
+        let trace = tube_of(&env);
         assert_eq!(trace.source, "LSTU");
         assert_eq!(trace.via, "LSTU", "设计件自己就有 LSTU 时不走 COMPRE");
-        assert_eq!(trace.component, Some(RefNo::new(15_213, 214_166)));
-        assert_eq!(trace.raw, Some(35.0));
+        assert_eq!(trace.component, RefNo::new(15_213, 214_166));
+        assert_eq!(trace.value, 35.0);
         assert_eq!(
             env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
             Some(35.0)
         );
     }
 
-    /// 目录件的 `PARA[2]` 是垃圾值时，`POD` 答不上来（表达式里按 0），诊断里原始值
-    /// 与采纳值分开留着。
+    /// 目录件的 `PARA[2]` 是垃圾值时，管的外径算没取到（断点里留着原始值）。
     ///
     /// 用的是上面那只 `FTUB` 的目录件 `SCOM /TUBI/150` 本身——它的
     /// `PARA = [150, 35, 726491, 100]`，把 `PARA` 挪一位就是垃圾落在第 2 格的形态。
     /// 这里不去改库，直接把「目录件 + 垃圾 PARA」这条判定用
-    /// [`plausible_pipe_outside_diameter`] 钉住；`outside_diameter` 只是它的调用点。
+    /// [`plausible_pipe_outside_diameter`] 钉住；`tube_outside_diameter` 只是它的调用点。
     #[test]
     fn a_junk_para_slot_is_not_an_outside_diameter() {
         // 这只目录件真实存着的四个数：只有前两个与最后一个像尺寸。
@@ -1983,13 +2209,162 @@ mod tests {
         );
     }
 
+    // ---- `POD`：管没取到时拿什么顶、断在哪一步（真库）----------------------
+
+    /// 支撑件夹在电缆桥架托盘上：托盘既没有 `LSTU` 也没有 `HSTU`，管取不到，`POD` 是离开 P 点的口径。
+    ///
+    /// `aps250104` 的 `ANCI 2013286648/629`（规格 `RACK-REST-150mm`）与 `2013286648/732`
+    /// （`RACK-REST-600mm`），`COMPRE` 指着 `aps250182` 的托盘。E3D 里这两种件 `Q PROP PLOD` 是
+    /// 150 / 600，`Q LBOR` 也是 150 / 600；点集里离开点（`LEAV = 2`）的口径写的是 `PARAM 1`。
+    #[test]
+    fn a_support_on_a_cable_tray_takes_its_leave_bore() {
+        let Some(set) = probe_set(&[("aps250104_0001", "DESI")]) else {
+            return;
+        };
+        for (design, bore) in [
+            (RefNo::new(2_013_286_648, 629), 150.0),
+            (RefNo::new(2_013_286_648, 732), 600.0),
+        ] {
+            let design = set.element(design);
+            assert_eq!(design.element_type().unwrap(), "ANCI");
+            let target = design
+                .get_element(COMPONENT_REFERENCE)
+                .unwrap()
+                .expect("COMPRE 指着托盘");
+            let tray = target.refno();
+            assert_eq!(tray.dbno(), 250_182);
+            assert_eq!(target.element_type().unwrap(), "CTRAY");
+            assert_eq!(probe_ref(&target, "LSTU"), None);
+            assert_eq!(probe_ref(&target, "HSTU"), None);
+
+            let catalogue = component_of(&design).expect("支撑件自己的目录件");
+            let env = DbElementParamEnv::new(Some(design), Some(catalogue));
+            assert_eq!(env.pipe_outside_diameter(), None, "管取不到");
+            let expected = PipeOutsideDiameterMiss {
+                broke_at: PipeOutsideDiameterBreak::TargetHasNoTube {
+                    target: tray,
+                    noun: "CTRAY".to_string(),
+                },
+                stand_in: PipeOutsideDiameterStandIn::LeaveBore { point: 2 },
+                value: bore,
+            };
+            assert_eq!(
+                env.pipe_outside_diameter_diagnostic(),
+                Some(PipeOutsideDiameterAnswer::Missed(expected.clone()))
+            );
+            assert_eq!(
+                env.pipe_outside_diameter_miss(),
+                None,
+                "诊断口不记账：表达式没问过就没有这一笔"
+            );
+            assert_eq!(
+                env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
+                Some(bore),
+                "`ATTRIB POD` 答离开 P 点的口径，不是 0"
+            );
+            assert_eq!(env.pipe_outside_diameter_miss(), Some(expected));
+        }
+    }
+
+    /// 支撑件的 `COMPRE` 去不了：`POD` 也是离开 P 点的口径，断点另记。
+    ///
+    /// 还是 `/PS-01-00194.1`（规格 `AN02-300mm`），这回只开支撑库和目录库、不开被支撑的支管所在的
+    /// `aps250132`——`COMPRE` 指着的元素读不到，与它被删掉之后是同一支（`PPOD` 里 `DGOTO` 失败）。
+    /// E3D 在 `COMPRE` 悬空 / 清空的状态下把这只件的下沿摆在 −250，即按 300 算；300 是目录件
+    /// `/AN02-12.300` 的 `PARA[1]`，离开点的口径写的就是 `PARAM 1`。管取得到时是 323.85。
+    #[test]
+    fn a_support_whose_target_cannot_be_reached_takes_its_leave_bore() {
+        let Some(set) = probe_set_with(&[("aps250104_0001", "DESI")], Box::new(CatalogueResolver))
+        else {
+            return;
+        };
+        let design = set.element(RefNo::new(2_013_286_648, 1016));
+        let target = RefNo::new(2_013_286_676, 1941);
+        assert_eq!(design.get_ref(COMPONENT_REFERENCE).unwrap(), Some(target));
+        let catalogue = component_of(&design).expect("支撑件自己的目录件");
+        assert_eq!(
+            real_array(&catalogue, CATALOGUE_PARAM_ARRAY).unwrap()[..2],
+            [300.0, 324.0]
+        );
+
+        let env = DbElementParamEnv::new(Some(design), Some(catalogue));
+        assert_eq!(
+            env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
+            Some(300.0)
+        );
+        assert_eq!(
+            env.pipe_outside_diameter_miss(),
+            Some(PipeOutsideDiameterMiss {
+                broke_at: PipeOutsideDiameterBreak::ReferenceOutOfSession { target },
+                stand_in: PipeOutsideDiameterStandIn::LeaveBore { point: 2 },
+                value: 300.0,
+            })
+        );
+    }
+
+    /// 管件自己的 `LSTU` 走不到目录件、又没有 `COMPRE`：`POD` 是 0，断点记的是 `LSTU` 那条链，
+    /// 不和「什么引用都没有」混在一起。
+    ///
+    /// 上面那只 `FTUB`，这回不开目录库——与 AMS 的 `ATTA 23705/289`（`LSTU` 落到的目录件只在
+    /// 没打开的 acp7000 里，E3D 按 `PLOD = 0` 摆支架）是同一种断法。
+    #[test]
+    fn a_pipe_component_whose_tube_is_out_of_session_answers_zero() {
+        let Some(set) = probe_set_with(&[("aps250179_0001", "DESI")], Box::new(NoResolver)) else {
+            return;
+        };
+        let design = set.element(RefNo::new(2_013_286_723, 792));
+        assert_eq!(design.element_type().unwrap(), "FTUB");
+        let refno = design.refno();
+        let env = DbElementParamEnv::new(Some(design), None);
+        assert_eq!(
+            env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
+            Some(0.0)
+        );
+        assert_eq!(
+            env.pipe_outside_diameter_miss(),
+            Some(PipeOutsideDiameterMiss {
+                broke_at: PipeOutsideDiameterBreak::ChainBroken {
+                    holder: refno,
+                    attribute: "LSTU",
+                    spec: RefNo::new(15_213, 258_024),
+                },
+                stand_in: PipeOutsideDiameterStandIn::Zero,
+                value: 0.0,
+            })
+        );
+    }
+
+    /// 管取到了就没有那一笔。
+    #[test]
+    fn a_resolved_outside_diameter_leaves_no_miss() {
+        let Some(set) = probe_set(&[("aps250104_0001", "DESI")]) else {
+            return;
+        };
+        let design = set.element(RefNo::new(2_013_286_648, 1016));
+        let catalogue = component_of(&design).expect("支撑件自己的目录件");
+        let env = DbElementParamEnv::new(Some(design), Some(catalogue));
+        assert_eq!(
+            env.attribute_number(&AttribRef::named(PIPE_OUTSIDE_DIAMETER)),
+            Some(323.85)
+        );
+        assert_eq!(env.pipe_outside_diameter_miss(), None);
+    }
+
+    /// 诊断口里「管取到了」的那一支。
+    fn tube_of(env: &DbElementParamEnv) -> PipeOutsideDiameterTrace {
+        match env.pipe_outside_diameter_diagnostic() {
+            Some(PipeOutsideDiameterAnswer::Tube(trace)) => trace,
+            other => panic!("管应当取得到，得到 {other:?}"),
+        }
+    }
+
     /// 引用属性读成 `Option<RefNo>`，把「模板里没这个属性」与「属性 unset / Nulref」
     /// 都折成 `None`。
     ///
     /// 真库上这两种情形都要处理：`ANCI` 的模板里**没有** `LSTU` 这个名字
     /// （`noun_layout.json` 的 `ANCILLARY` 只声明 `COMPRE`），问它得到
-    /// `UnknownAttribute` 而不是 `Ok(None)`。生产路径里 `component_via` 用
-    /// `.ok()??` 同样把两者折成 `None`，所以这个辅助函数与那条路同口径。
+    /// `UnknownAttribute` 而不是 `Ok(None)`。生产路径里 `spec_reference` 用
+    /// `.ok()?` 同样把两者折成 `None`，所以这个辅助函数与那条路同口径。
     fn probe_ref(element: &DbElement, name: &str) -> Option<RefNo> {
         element.get_ref(name).ok().flatten()
     }
@@ -1999,6 +2374,14 @@ mod tests {
     /// 夹具不在就跳过（与 `tests/common::missing` 同一口径）：报一个 skip，而不是让
     /// 「没装库」与「链走错了」在测试输出里长得一样。
     fn probe_set(wanted: &[(&str, &str)]) -> Option<std::sync::Arc<crate::db_element::DbSet>> {
+        probe_set_with(wanted, Box::new(ProbeResolver))
+    }
+
+    /// [`probe_set`]，跨库引用怎么补开由调用方定——用来摆出「那本库没打开」的情形。
+    fn probe_set_with(
+        wanted: &[(&str, &str)],
+        resolver: Box<dyn crate::db_element::DbFileResolver>,
+    ) -> Option<std::sync::Arc<crate::db_element::DbSet>> {
         const APS: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaPlantSample\aps000";
         const ACP: &str = r"D:\AVEVA\Projects\E3D3.1\AvevaCatalogue\acp000";
         const BIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/e3d31/binaries/");
@@ -2016,7 +2399,7 @@ mod tests {
         }
         let set = std::sync::Arc::new(crate::db_element::DbSet::with_resolver(
             std::sync::Arc::new(e3d_attlib::AttlibData::default()),
-            Box::new(ProbeResolver),
+            resolver,
         ));
         for (name, db_type) in wanted {
             let design = *db_type == "DESI";
@@ -2036,6 +2419,26 @@ mod tests {
     /// 按 `dbno` 在安装目录里找库文件（`aps<n>_0001` / `acp<n>_0001`），给
     /// [`probe_set`] 之外那些跨库引用补开用。
     struct ProbeResolver;
+
+    /// 只补开目录库：设计库之间的引用读不到。
+    struct CatalogueResolver;
+
+    /// 什么都不补开。
+    struct NoResolver;
+
+    impl crate::db_element::DbFileResolver for CatalogueResolver {
+        fn resolve(&self, dbno: u32) -> Option<crate::db_element::DbFilePin> {
+            ProbeResolver
+                .resolve(dbno)
+                .filter(|pin| pin.db_type.as_deref() == Some("CATA"))
+        }
+    }
+
+    impl crate::db_element::DbFileResolver for NoResolver {
+        fn resolve(&self, _dbno: u32) -> Option<crate::db_element::DbFilePin> {
+            None
+        }
+    }
 
     impl crate::db_element::DbFileResolver for ProbeResolver {
         fn resolve(&self, dbno: u32) -> Option<crate::db_element::DbFilePin> {
