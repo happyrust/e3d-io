@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `DbElementParamEnv::with_host_section(host)`: when a host is being cut, `OPAR` / `ODES` that find no owning section up the GTOREF table read the host instead. Only the host-cut side passes it; positive geometry keeps declining. A door `FITT` on a straight wall (`STWALL`) climbs to no `SCTN`, so its frame `SEXT`s still fail as in E3D's export, while the door's opening `NSBO` (`PZLE = ( ATTRIB ODES[1 ] )`) cuts through the wall the way E3D's baseline volumes require (ams1112 `/1RS-WF04-W-C-R4405`, ams7997 `/1RX-ARCHHB`; e3d-model #59).
+
 ### Fixed
 
 - Named-angle axis specifications (`axis_spec::direction` / `render`) read a positive angle word as a `DECARG` operand, banded like a catalogue tuple's: 51..=100 is `DESP n`, not `PARAM n`. acp7021's rectangular HVAC elbows turn `P2` / `P6` by `Y DESP 14 -Z`; read as an out-of-range `PARAM 64` the angle was 0 and every such elbow came out straight (aps7200: 11 elbows without their body).

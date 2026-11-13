@@ -252,6 +252,8 @@ pub struct DbElementParamEnv {
     insulation: bool,
     /// 调用方现算好交进来的伪属性（[`Self::with_derived`]）。
     derived: Vec<(&'static str, f64)>,
+    /// 给宿主开孔时被切的那只宿主（[`Self::with_host_section`]）。
+    host_section: Option<DbElement>,
     depth: Cell<u32>,
     /// 表达式问过 `POD`、管却没取到时留下的那一笔（[`Self::pipe_outside_diameter_miss`]）。
     outside_diameter_miss: RefCell<Option<PipeOutsideDiameterMiss>>,
@@ -262,6 +264,10 @@ impl std::fmt::Debug for DbElementParamEnv {
         f.debug_struct("DbElementParamEnv")
             .field("design", &self.design.as_ref().map(DbElement::refno))
             .field("catalogue", &self.catalogue.as_ref().map(DbElement::refno))
+            .field(
+                "host_section",
+                &self.host_section.as_ref().map(DbElement::refno),
+            )
             .finish()
     }
 }
@@ -274,6 +280,7 @@ impl DbElementParamEnv {
             catalogue,
             insulation: true,
             derived: Vec::new(),
+            host_section: None,
             depth: Cell::new(0),
             outside_diameter_miss: RefCell::new(None),
         }
@@ -292,6 +299,19 @@ impl DbElementParamEnv {
     /// SPINE 路径，读库这一层都没有。算得出来的一方把值交进来；没交的名字照旧按存储读。
     pub fn with_derived(mut self, name: &'static str, value: f64) -> Self {
         self.derived.push((name, value));
+        self
+    }
+
+    /// 给宿主开孔时，`OPAR` / `ODES` 按 GTOREF 表爬不到属主截面，就改问被切的这只宿主。
+    ///
+    /// 只交给宿主开孔那一侧（e3d-model `catalogue_host_cuts`），正体不交：直墙 `STWALL` 名下的门
+    /// `FITT` 往上爬不到 `SCTN`，门框正体的 `SEXT` 读 `ODES[1]` 照旧答不上、被跳过（E3D 导出的门
+    /// 只有门扇，见 `fast_path_missing_parameter_is_zero`）；可同一只门目录件 `NGMR` 里的洞口
+    /// `NSBO`（`PZLE = ( ATTRIB ODES[1 ] )`）在 E3D 里切穿了墙——ams1112 `/1RS-WF04-W-C-R4405`、
+    /// ams7997 `/1RX-ARCHHB` 的直墙，E3D 基准的体积只对得上按宿主墙 `DESP` 求出的洞（e3d-model
+    /// #59）。爬得到属主截面的（SCTN 上的 `FITT`、GENSEC 上的 `FIXING`）照旧用爬到的那只。
+    pub fn with_host_section(mut self, host: DbElement) -> Self {
+        self.host_section = Some(host);
         self
     }
 
@@ -757,7 +777,8 @@ impl DbElementParamEnv {
     /// - `OPAR` / `ODES`：属主截面。设计件是 FIXING、它的属主是 `ENDATU` 时取那只 ENDATU 的
     ///   `OWNREF`；其余走 `desgetattlib/GTOREF@0x10018BC0` 的表——FIXING 沿 owner 链爬到
     ///   `GENSEC`，`SJOI` / `SCOJ` / `CMFI` / `FITT` / `SBFI` / `SNOD` 爬到 `SCTN`，`SUBJ` 取
-    ///   `OWNER`；表外的 noun 没有属主截面。
+    ///   `OWNER`；表外的 noun 没有属主截面。爬不到时，给宿主开孔的求值改问交进来的宿主
+    ///   （[`Self::with_host_section`]）。
     ///
     /// 语料：aps250110 柱底板 SFIT `/F1_SQR_PFI_6H_003` 的负体 NSBO 写
     /// `PXLE = ( ATTRIB OPAR[2 ] )`、`PZLE = ( ATTRIB OPAR[1 ] )`，FIXING 挂在柱 GENSEC 的
@@ -767,7 +788,9 @@ impl DbElementParamEnv {
         let design = self.design.as_ref()?;
         match array {
             ParamArray::APar | ParamArray::ADes => design.get_element("CREF").ok().flatten(),
-            ParamArray::OPar | ParamArray::ODes => owning_section(design),
+            ParamArray::OPar | ParamArray::ODes => {
+                owning_section(design).or_else(|| self.host_section.clone())
+            }
             ParamArray::Para | ParamArray::Desp | ParamArray::IPar => None,
         }
     }
