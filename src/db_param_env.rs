@@ -789,7 +789,13 @@ impl DbElementParamEnv {
 
     /// 管的外径：[`Self::tube_component`] 落到的目录件的 `PARA[2]`。取不到是 `None`——
     /// `ATTRIB POD` 那一格拿什么顶，见 [`Self::outside_diameter_answer`]。
-    #[cfg(test)]
+    ///
+    /// 只有测试调用它。**不要给它加测试条件属性**（那个属性写出来会在这条注释之前形成
+    /// 一个截断点）：读取集合的扫描器按「文件里第一次出现那个测试条件属性」截断
+    /// （`output/gen_read_set.py` 与 `model_impact` 的护栏逐字照抄这条规则），一旦在
+    /// 生产代码中间出现，文件后半截的读点（`CMPR`、`DKEY`）会被当成测试代码整段跳掉，
+    /// 护栏随即报「名字变了」。要压制未使用告警请用 `cfg_attr` 那类不改变截断语义的写法。
+    #[cfg_attr(not(test), allow(dead_code))]
     fn pipe_outside_diameter(&self) -> Option<f64> {
         self.tube_outside_diameter(self.design.as_ref()?)
             .ok()
