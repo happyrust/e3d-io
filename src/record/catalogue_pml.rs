@@ -124,18 +124,25 @@ const OP_ATANT: i32 = 907;
 const OP_SQRT: i32 = 1001;
 /// Native /CFLEX-BODY and /CFLEX-AEXT3 programs, verified by E3D TTY.
 const OP_POW: i32 = 1002;
-/// Absolute value. AMS cable-tray rung programs use it while distributing
-/// rungs over a variable straight length.
-const OP_ABS: i32 = 1005;
-/// The other `ABS` Core writes. CADC HVAC `/RBREECH-NGAP` and `NLPYRAMID 2 of
-/// /RBREECH-BODY1` store `PCTP = ( ATTRIB DESP[42 ] + ABS ( ATTRIB DESP[11 ] ) )`
-/// as `… 106 [DESP 11] 1007 802`, and E3D's own `Q PCTP` prints that 1007 as
+/// Truncation toward zero (`INT ( x )`).
+///
+/// `core.dll`'s printer emits `"INT ( "` for `1005` (`0x3ED`) and its evaluator
+/// runs `cvttsd2si` (`n.trunc()`); `1006` is `NINT` and `1007` (`0x3EF`) is
+/// [`OP_ABS_REAL`]. Cable-tray rung/slot programs (`/SW5/SL3/STRAIGHT-VAR-GMSE`,
+/// `/VANTRUNK-CT-CATA`, `/CABLOFIL-CF*`) and support/hanger count formulas use
+/// `1005` to truncate quotients like `HEIG / PARA[12]`. Previously misread as
+/// `ABS`, which left fractional quotients un-truncated and shifted non-multiple
+/// cable-tray rungs by `50–250 mm`.
+const OP_INT: i32 = 1005;
+/// `ABS ( x )`. `core.dll` opcode `1007` (`0x3EF`); CADC HVAC `/RBREECH-NGAP`
+/// and `NLPYRAMID 2 of /RBREECH-BODY1` store
+/// `PCTP = ( ATTRIB DESP[42 ] + ABS ( ATTRIB DESP[11 ] ) )` as
+/// `… 106 [DESP 11] 1007 802`, and E3D's own `Q PCTP` prints that 1007 as
 /// `ABS` (2026-09-19, ams7997 `THREEWAY 1 of BRANCH /-CUP-S-3-M-1405`, seg15 §26.12).
-/// 1005 was only ever seen with integer literals underneath; 1007 sits on a real
-/// attribute — the two typed arms of the same function. Unread, the whole program
-/// is unreadable and the two V-notch cutters of the breeches piece were dropped
-/// ("skipped by Core-style local failure"), leaving the notch unfilled or, with
-/// the filler `GAP` inverted, cut to the filler's outline instead of the cutter's.
+/// Unread, the whole program is unreadable and the two V-notch cutters of the
+/// breeches piece were dropped ("skipped by Core-style local failure"), leaving
+/// the notch unfilled or, with the filler `GAP` inverted, cut to the filler's
+/// outline instead of the cutter's.
 const OP_ABS_REAL: i32 = 1007;
 /// Maximum. The same rung programs clamp repeated spacing calculations with
 /// it; Core's function-name table places MAX immediately before MIN.
@@ -379,7 +386,7 @@ fn parse(words: &[i32]) -> Option<Vec<Step>> {
             OP_PUSH_TEXT => parse_text(&program[cursor..])?,
             OP_PI => (Step::Operator(OP_PI), 1),
             OP_NEGATE | OP_ADD | OP_SUBTRACT | OP_MULTIPLY | OP_DIVIDE | OP_SIN | OP_COS
-            | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_ABS | OP_ABS_REAL
+            | OP_TAN | OP_ASIN | OP_ATAN | OP_ATANT | OP_SQRT | OP_POW | OP_INT | OP_ABS_REAL
             | OP_MAX | OP_MIN | OP_EQUAL | OP_GREATER_THAN | OP_LESS_THAN | OP_GREATER_EQUAL
             | OP_LESS_EQUAL | OP_MATCH | OP_TRIM | OP_LOGICAL_STRING | OP_UNSET_REAL | OP_OR
             | OP_IF_REAL | OP_REAL | OP_REAL_EXPORE => (Step::Operator(program[cursor]), 1),
@@ -442,7 +449,8 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
             Step::Operator(OP_ATAN) => apply_function("ATAN", &mut stack)?,
             Step::Operator(OP_SQRT) => apply_function("SQRT", &mut stack)?,
             Step::Operator(OP_POW) => apply_binary_function("POW", &mut stack)?,
-            Step::Operator(OP_ABS | OP_ABS_REAL) => apply_function("ABS", &mut stack)?,
+            Step::Operator(OP_INT) => apply_function("INT", &mut stack)?,
+            Step::Operator(OP_ABS_REAL) => apply_function("ABS", &mut stack)?,
             Step::Operator(OP_MAX) => apply_binary_function("MAX", &mut stack)?,
             Step::Operator(OP_MIN) => apply_binary_function("MIN", &mut stack)?,
             Step::Operator(OP_MATCH) => apply_binary_function("MAT", &mut stack)?,
@@ -856,7 +864,8 @@ fn apply_numeric(operator: i32, stack: &mut Vec<Value>) -> Option<()> {
         // text operand is a program this has misread, which `unary_number`
         // reports as `None`.
         OP_REAL | OP_REAL_EXPORE => unary_number(stack, |n| n)?,
-        OP_ABS | OP_ABS_REAL => unary_number(stack, |n| n.abs())?,
+        OP_INT => unary_number(stack, |n| n.trunc())?,
+        OP_ABS_REAL => unary_number(stack, |n| n.abs())?,
         _ => binary_number(operator, stack)?,
     };
     stack.push(value);
@@ -1596,14 +1605,97 @@ mod tests {
     }
 
     #[test]
-    fn cable_tray_rung_programs_use_native_abs_and_max() {
-        // Core's built-in function table maps 1005=ABS and 1008=MAX. Both
-        // occur in AMS /SW5/SL3/STRAIGHT-VAR-GMSE rung PY programs.
-        let abs = [
+    fn cable_tray_rung_programs_use_native_int_and_max() {
+        // Core's built-in function table maps 1005=INT, 1007=ABS, and 1008=MAX.
+        // Cable-tray rung PY programs use 1005 (INT) and 1008 (MAX).
+        let int_sub = [
             18, 1, 101, 6, 0, 0, 1073742848, 0, 6, 101, 6, 1310720, 0, 1073742849, 0, 6, 803, 1005,
         ];
-        assert_eq!(render(&abs).as_deref(), Some("( ABS ( 2 - 5 ) )"));
-        assert_eq!(evaluate_words(&abs, &MapParamEnv::new()), Some(3.0));
+        assert_eq!(render(&int_sub).as_deref(), Some("( INT ( 2 - 5 ) )"));
+        assert_eq!(evaluate_words(&int_sub, &MapParamEnv::new()), Some(-3.0));
+
+        // Same subtraction fed to 1007 (ABS) yields +3.
+        let abs_sub = [
+            18, 1, 101, 6, 0, 0, 1073742848, 0, 6, 101, 6, 1310720, 0, 1073742849, 0, 6, 803, 1007,
+        ];
+        assert_eq!(render(&abs_sub).as_deref(), Some("( ABS ( 2 - 5 ) )"));
+        assert_eq!(evaluate_words(&abs_sub, &MapParamEnv::new()), Some(3.0));
+
+        // INT truncates toward zero for both positive and negative fractions:
+        // `INT ( DESP[1] / 2 )` with 5.8 -> 2.0, -5.8 -> -2.0.
+        let int_div = [
+            26, 1, 101, 6, 32768, 0, 0, 0, 6, 106, 2, 860359, -1, -1, 0, 1601, 1701, 101, 6, 0, 0,
+            1073742848, 0, 6, 805, 1005,
+        ];
+        assert_eq!(
+            render(&int_div).as_deref(),
+            Some("( INT ( ATTRIB DESP[1 ] / 2 ) )")
+        );
+        assert_eq!(
+            evaluate_words(&int_div, &MapParamEnv::new().set_attribute("DESP[1]", 5.8)),
+            Some(2.0)
+        );
+        assert_eq!(
+            evaluate_words(&int_div, &MapParamEnv::new().set_attribute("DESP[1]", -5.8)),
+            Some(-2.0)
+        );
+
+        // Real `/SW4/SL3/STRAIGHT-VAR-GMSE-RUNG1` PY (acp7021 15213/215132):
+        // non-300-multiple HEIG=1950 with PARA[12]=300, RPRO DISP=0 places rung 1
+        // at 300 mm (INT(6.5)=6), whereas ABS gave 150 mm.
+        let rung1_py = [
+            227, 1, 106, 2, 840258, 1, 1, 860467, 1601, 1701, 801, 101, 6, 524288, 0, 1073742850,
+            0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 101, 6, 0, 0, 1073742848, 0, 0, 805, 803,
+            106, 2, 675926, 1, 1, 0, 1601, 1701, 106, 2, 675926, 1, 1, 0, 1601, 1701, 101, 6,
+            524288, 0, 1073742850, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 805, 1005, 101, 6,
+            1048576, 0, 1073742847, 0, 0, 803, 101, 6, 0, 0, 1073741824, 0, 0, 1008, 101, 6,
+            524288, 0, 1073742850, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 804, 803, 106, 2,
+            675926, 1, 1, 0, 1601, 1701, 106, 2, 675926, 1, 1, 0, 1601, 1701, 101, 6, 524288, 0,
+            1073742850, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 805, 1005, 101, 6, 1048576,
+            0, 1073742847, 0, 0, 803, 101, 6, 0, 0, 1073741824, 0, 0, 1008, 101, 6, 524288, 0,
+            1073742850, 0, 0, 106, 2, 564289, -1, -1, 0, 1601, 1701, 804, 803, 106, 2, 675926, 1,
+            1, 0, 1601, 1701, 101, 6, 524288, 0, 1073742850, 0, 0, 106, 2, 564289, -1, -1, 0, 1601,
+            1701, 805, 1005, 101, 6, 1048576, 0, 1073742847, 0, 0, 803, 101, 6, 0, 0, 1073741824,
+            0, 0, 1008, 101, 6, 524288, 0, 1073742850, 0, 0, 106, 2, 564289, -1, -1, 0, 1601,
+            1701, 804, 802, 1009, 802,
+        ];
+        assert!(render(&rung1_py).unwrap().contains("INT ( ATTRIB HEIG / ATTRIB PARA[12 ] )"));
+        let env = MapParamEnv::new()
+            .set_attribute("HEIG", 1950.0)
+            .set_attribute("PARA[12]", 300.0)
+            .set_attribute("RPRO DISP", 0.0);
+        assert_eq!(evaluate_words(&rung1_py, &env), Some(300.0));
+
+        // Real `/XB-CSSH-C58H-A-EXPR-CHFB` (ams6890 23274/16076) pairs 1005=INT and 1007=ABS:
+        // `INT(VAFB / PARA[22]) - INT(ABS(VAFB / PARA[22] - 1))`.
+        let mixed = [
+            62, 1, 106, 2, 840258, 1, 1, 575230, 1601, 1701, 101, 6, 22528, 0, 5, 0, 6, 106, 2,
+            564289, -1, -1, 0, 1601, 1701, 805, 1005, 106, 2, 840258, 1, 1, 575230, 1601, 1701,
+            101, 6, 22528, 0, 5, 0, 6, 106, 2, 564289, -1, -1, 0, 1601, 1701, 805, 101, 6, 16384,
+            0, 1, 0, 6, 803, 1007, 1005, 803,
+        ];
+        assert_eq!(
+            render(&mixed).as_deref(),
+            Some("( INT ( ATTRIB RPRO VAFB / ATTRIB PARA[22 ] ) - INT ( ABS ( ATTRIB RPRO VAFB / ATTRIB PARA[22 ] - 1 ) ) )")
+        );
+        assert_eq!(
+            evaluate_words(
+                &mixed,
+                &MapParamEnv::new()
+                    .set_attribute("RPRO VAFB", 20.0)
+                    .set_attribute("PARA[22]", 100.0),
+            ),
+            Some(0.0)
+        );
+        assert_eq!(
+            evaluate_words(
+                &mixed,
+                &MapParamEnv::new()
+                    .set_attribute("RPRO VAFB", 250.0)
+                    .set_attribute("PARA[22]", 100.0),
+            ),
+            Some(1.0)
+        );
 
         let max = [
             17, 1, 101, 6, 0, 0, 1073742848, 0, 6, 101, 6, 1310720, 0, 1073742849, 0, 6, 1008,
