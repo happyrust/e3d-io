@@ -210,22 +210,23 @@ const NUMBER_SHAPE: i32 = 6;
 /// PTCD programs use both forms (`... 0 6` for angles, `... 0 0` for DESP[n]).
 const NUMBER_ENDS: [i32; 2] = [0, NUMBER_SHAPE];
 const NUMBER_WORDS: usize = 7;
-/// A number stored with a unit: `101 9 <four words of number> 11 1 1 0`. The
+/// A number stored with a unit: `101 9 <four words of number> 11 <unit> 1 0`. The
 /// word after `101` counts the record from itself — 6 for the plain number, 9
 /// for this one — and the three extra words are the unit a literal typed as a
-/// distance carries. The value is the same four-word number, in millimetres.
+/// distance carries. The value is the same four-word number, in that unit.
 ///
 /// aps250110's column base plate SFIT `/F1_SQR_PFI_6H_003` sizes its plate as
 /// `OPAR[2]` plus one such 20 (`SBOX.PXLE`), and E3D's TTY RVM draws that plate
 /// 329.2 wide on a 309.2 column; the eaves haunch JOIN `/J2S4_EAV_PFI_PFI_003`
 /// extrudes its rafter cutter `PARA[1]` plus one such 1, the 16 mm the rafters
-/// end short of the column in the same RVM. Only the trailer seen there is read.
+/// end short of the column in the same RVM. Only the trailers seen are read:
+/// [`DIMENSION_DISTANCE`], one of the two units below it, then [`UNIT_ONCE`].
 const NUMBER_WITH_UNIT_SHAPE: i32 = 9;
 const NUMBER_WITH_UNIT_WORDS: usize = 10;
-const DISTANCE_UNIT: [i32; 3] = [11, 1, 1];
-/// A typed number without the unit words: `101 7 <four words of number> 11 1`. The
-/// same four-word payload, the same `11 1` the distance form opens its trailer with,
-/// and nothing after it — the count word says 7, so the record ends there.
+/// A typed number without the unit's last two words: `101 7 <four words of number>
+/// 11 <unit>`. The same four-word payload, the same `11 <unit>` the distance form
+/// opens its trailer with, and nothing after it — the count word says 7, so the
+/// record ends there.
 ///
 /// aps250110's door SFIT `/IS-SRO-NS/900x2045` (15193/25228) writes every whole-number
 /// literal of its jamb and head profiles this way: `SVER 15193/25272 PY` is
@@ -235,10 +236,49 @@ const DISTANCE_UNIT: [i32; 3] = [11, 1, 1];
 /// every one of those vertices fell back to the all-zero tuple and the 95 × 61 jamb with
 /// its 5 mm fillet built as the 35 × 10 door stop alone; E3D's TTY RVM draws
 /// `FITTING 1 of STWALL 5 of CWALL /B01_LEV01_INT_WALLS` with the full 61 (900 − 806 − 2
-/// halved, plus 15) and the arc from (56, −95) to (61, −90). Only this trailer is read.
+/// halved, plus 15) and the arc from (56, −95) to (61, −90). Only the trailers seen are
+/// read: [`DIMENSION_DISTANCE`] and one of the two units below it.
 const NUMBER_TYPED_SHAPE: i32 = 7;
 const NUMBER_TYPED_WORDS: usize = 8;
-const TYPED_TRAILER: [i32; 2] = [11, 1];
+/// What the words after the number's four mean, from the routine core.dll reads
+/// every `101` with: `vallib/VLVSTU` (`0x51F11CE`), which the fast path
+/// `exppdms/EXFAST` and the full evaluator both reach through `vallib/VLEVST`
+/// (`0x51F0F80`). The first is the number's dimension. 0 is none and so are 6 and
+/// 7 (0 and 6 are the [`NUMBER_ENDS`] pair); 11 is the row `uomlib/INDXDM`
+/// (`0x5279547`) names `DIST`. The next is the unit, a row of the table
+/// `uomlib/INDXUN` (`0x527BD0C`) searches. `VLVSTU` multiplies the number by the
+/// unit's size in metres (`uomlib/UNTOSI`, `0x527F863`) and by the dimension's own
+/// factor, 1000 for `DIST`: a distance is millimetres whatever unit it was typed in.
+const DIMENSION_DISTANCE: i32 = 11;
+/// The two words that close a [`NUMBER_WITH_UNIT_SHAPE`] record: the unit's power,
+/// then a power of ten on it. Every sampled distance has the unit once and
+/// unscaled; any other pair is a squared or prefixed unit, as the areas have
+/// (the `DPRO` of acp250700's DATA `2013287244/193100` closes `12 1 2 0`, square
+/// millimetres), and is not read. A [`NUMBER_TYPED_SHAPE`] record leaves the two
+/// out and `VLVSTU` supplies the same: the power a distance has in its own
+/// dimension, 1, and no power of ten.
+const UNIT_ONCE: [i32; 2] = [1, 0];
+/// Millimetres, the unit of every sample the two unit forms were first read from.
+/// `UNTOSI` has it as 0.001 m, so the number is its own value.
+const UNIT_MILLIMETRE: i32 = 1;
+/// Inches: 0.0254 m in `UNTOSI`'s table, and `in` in the table `uomlib/GTUNSI`
+/// (`0x527C56E`) names units from.
+///
+/// acp7320's geometry set `/MDS-GRINNEL-HANG-CAT/GMSE-ALL-TYPE-E-COUP` has two
+/// negative cylinders across its tube (NLCY `23704/270530` and `270531`), and each
+/// takes `PDIA` from `101 7 8192 0 -1 0 11 3`: an eighth of an inch. Unread, the
+/// diameter fell back to 0 and both cutters were skipped. E3D's RVM for ams7327 has
+/// the holes: `=23711/42757` is 66590.464 mm³ there, and came to 66726.254 without
+/// them, more by four walls, 4.7625 thick, of a 3.175 octagon (7.128 mm²). acp7047's
+/// PTCA `23431/35080` has the unit in a [`NUMBER_WITH_UNIT_SHAPE`] record: its `PY`
+/// is two and a half inches.
+///
+/// The same table holds ten more distance units (2 metres, 4 feet, 160 feet and
+/// inches, 161 centimetres, 162 miles, 163 yards, 164 microns, 165 thou, 166
+/// ångströms, 167 kilometres). None is read: no program of the 21 catalogue
+/// databases sampled stops on one.
+const UNIT_INCH: i32 = 3;
+const MILLIMETRES_PER_INCH: f64 = 25.4;
 /// `106` is followed by this word, a name, three words of qualifier and two
 /// closing words.
 const ATTRIBUTE_SHAPE: i32 = 2;
@@ -343,6 +383,9 @@ impl Term {
 #[derive(Debug, Clone, PartialEq)]
 enum Step {
     Number(f64),
+    /// A distance typed in inches, as written. One typed in millimetres is a
+    /// plain [`Step::Number`].
+    Inches(f64),
     Text(String),
     Attribute(Attribute),
     Operator(i32),
@@ -420,6 +463,14 @@ pub fn render_with_dictionary(words: &[i32], dictionary: Option<&UdaCatalog>) ->
                 text: format_number(value),
                 precedence: PRECEDENCE_ATOM,
                 number: Some(value),
+            }),
+            // Millimetres print bare here, so inches have to say what they are:
+            // the number, a blank and the unit's name, the way E3D's own printer
+            // (`vallib/VLRTXT`, `0x51F0514`) writes a distance.
+            Step::Inches(value) => stack.push(Term {
+                text: format!("{} in", format_number(value)),
+                precedence: PRECEDENCE_ATOM,
+                number: Some(value * MILLIMETRES_PER_INCH),
             }),
             Step::Text(value) => stack.push(Term::atom(format!("'{value}'"))),
             Step::Attribute(mut attribute) => {
@@ -542,6 +593,7 @@ fn evaluate(words: &[i32], env: &dyn ParamEnv, fast_path: FastPath) -> Option<f6
     for step in steps {
         match step {
             Step::Number(value) => stack.push(Value::Number(value)),
+            Step::Inches(value) => stack.push(Value::Number(value * MILLIMETRES_PER_INCH)),
             Step::Text(value) => stack.push(Value::Text(value)),
             Step::Attribute(attribute) => {
                 let subscript = match attribute.subscript_from_stack {
@@ -690,7 +742,7 @@ fn fast_path_eligible(steps: &[Step]) -> bool {
     let mut depth = 0usize;
     for step in steps {
         match step {
-            Step::Number(_) => depth += 1,
+            Step::Number(_) | Step::Inches(_) => depth += 1,
             Step::Attribute(attribute) => {
                 // The owner-chain shape ends in `1602`, not `1601 1701`.
                 if !attribute.owners.is_empty() {
@@ -1032,8 +1084,9 @@ fn parse_text(words: &[i32]) -> Option<(Step, usize)> {
 }
 
 fn parse_number(words: &[i32]) -> Option<(Step, usize)> {
-    // The fourth word is zero throughout the sample. Reading a formula whose
-    // meaning turns on a word this has never seen used would be a guess.
+    // The fourth word is a power of ten on the number (`vallib/VLVSTU` multiplies
+    // by ten to it). Only zero is read: acp7021's PTCA `15213/768341` writes -15
+    // there, and nothing that E3D draws has yet been checked against such a number.
     match words {
         [OP_PUSH_NUMBER, NUMBER_SHAPE, first, second, third, 0, end, ..]
             if NUMBER_ENDS.contains(end) =>
@@ -1041,18 +1094,33 @@ fn parse_number(words: &[i32]) -> Option<(Step, usize)> {
             let value = decode_number(*first, *second, *third)?;
             Some((Step::Number(value), NUMBER_WORDS))
         }
-        [OP_PUSH_NUMBER, NUMBER_WITH_UNIT_SHAPE, first, second, third, 0, unit @ ..]
-            if unit.len() >= 4 && unit[..3] == DISTANCE_UNIT && unit[3] == 0 =>
-        {
+        [OP_PUSH_NUMBER, NUMBER_WITH_UNIT_SHAPE, first, second, third, 0, trailer @ ..] => {
+            let [DIMENSION_DISTANCE, unit, power, scale, ..] = trailer else {
+                return None;
+            };
+            if [*power, *scale] != UNIT_ONCE {
+                return None;
+            }
             let value = decode_number(*first, *second, *third)?;
-            Some((Step::Number(value), NUMBER_WITH_UNIT_WORDS))
+            Some((distance(value, *unit)?, NUMBER_WITH_UNIT_WORDS))
         }
-        [OP_PUSH_NUMBER, NUMBER_TYPED_SHAPE, first, second, third, 0, trailer @ ..]
-            if trailer.len() >= 2 && trailer[..2] == TYPED_TRAILER =>
-        {
+        [OP_PUSH_NUMBER, NUMBER_TYPED_SHAPE, first, second, third, 0, trailer @ ..] => {
+            let [DIMENSION_DISTANCE, unit, ..] = trailer else {
+                return None;
+            };
             let value = decode_number(*first, *second, *third)?;
-            Some((Step::Number(value), NUMBER_TYPED_WORDS))
+            Some((distance(value, *unit)?, NUMBER_TYPED_WORDS))
         }
+        _ => None,
+    }
+}
+
+/// The step a distance of `value` typed in `unit` is, for the two units the corpus
+/// types distances in.
+fn distance(value: f64, unit: i32) -> Option<Step> {
+    match unit {
+        UNIT_MILLIMETRE => Some(Step::Number(value)),
+        UNIT_INCH => Some(Step::Inches(value)),
         _ => None,
     }
 }
@@ -1529,6 +1597,39 @@ mod tests {
         let mut other = fillet;
         other[9] = 2;
         assert_eq!(evaluate_words(&other, &env), None);
+    }
+
+    #[test]
+    fn a_distance_typed_in_inches_reads_in_millimetres() {
+        // acp7320 NLCY `23704/270530` PDIA (geometry set
+        // `/MDS-GRINNEL-HANG-CAT/GMSE-ALL-TYPE-E-COUP`): an eighth of an inch, the 3.175
+        // holes E3D's RVM has across the ams7327 tubes.
+        let drilling = [10, 1, 101, 7, 8192, 0, -1, 0, 11, 3];
+        assert_eq!(render(&drilling).as_deref(), Some("( 0.125 in )"));
+        let env = MapParamEnv::new();
+        assert_eq!(evaluate_words(&drilling, &env), Some(3.175));
+        assert_eq!(evaluate_words_full(&drilling, &env), Some(3.175));
+        // acp7047 PTCA `23431/35080` PY: the same unit in a `101 9` record.
+        let offset = [12, 1, 101, 9, 262144, 0, 1073742848, 0, 11, 3, 1, 0];
+        assert_eq!(render(&offset).as_deref(), Some("( 2.5 in )"));
+        assert_eq!(evaluate_words(&offset, &env), Some(63.5));
+        // Another distance unit stays unread: 4 is feet, which no sampled program
+        // stops on.
+        let mut feet = drilling;
+        feet[9] = 4;
+        assert_eq!(render(&feet), None);
+        assert_eq!(evaluate_words(&feet, &env), None);
+        // So does a unit that is not taken once: `11 3 2 0` has the inch squared.
+        let mut squared = offset;
+        squared[10] = 2;
+        assert_eq!(evaluate_words(&squared, &env), None);
+        // And a dimension that is not a distance. acp250700 PLIN `2013287244/192512` PX
+        // opens with 15 typed as an angle in degrees (`35 120 1 0`).
+        let angle = [
+            30, 1, 101, 9, 917504, 0, 1073742850, 0, 35, 120, 1, 0, 902, 106, 2, 840258, 1, 1,
+            703921, 1601, 1701, 804, 101, 6, 0, 0, 1073742848, 0, 0, 805,
+        ];
+        assert_eq!(render(&angle), None);
     }
 
     #[test]
