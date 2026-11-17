@@ -138,18 +138,37 @@ const POINT_BORE: &str = "PBOR";
 /// 也不是属性，是 Core3D 现算的伪属性（`getattlib_des/DESPRE@0x10031CE0` 的 `636105` 支）：
 ///
 /// ```text
-/// CLIMB(PANE)                     沿属主链爬到面板；爬不到 → 201
+/// CLIMB(PANE)                     从当前元素起沿属主链找面板；找不到 → 201
 /// DFINDI(FIRST, TYPE, PLOO)       面板名下第一只 PLOO；没有 → 201
 /// DGETR(HEIG)                     读它的 HEIG
 /// ```
 ///
-/// 语料：面板开孔件 `/PEN/PFIT/PENH/FITT/RECT` 的正体只有一只 SBOX，
-/// `PZ = ( - ATTRIB LOHE )`——盒心相对开孔件原点退一个板厚。这一格答不上时 `PZ` 求不出，
-/// 整只 PFIT 没有形状，而 E3D 是画的：ams251183 的 `PFIT 2013287727/2222` 挂在板厚 5 的
-/// 面板上，E3D 导出的方框（166 × 91 × 100，通孔 150 × 75）盒心在开孔件自己的 Z 上 −5 处。
+/// `CLIMB`（core.dll `dbgenlib/CLIMB@0x53953CC`）每一级先 `DGETI(TYPE)`：当前元素的类型就是要找的
+/// 那个就停，所以先比的是当前元素自己；不是，而要找的类型又可能是它的祖先
+/// （`DB_Noun::isPossibleAncestor`），才 `CRETUR` 到属主接着比，否则报错。它比的 `TYPE` 是硬类型：
+/// 内核的类型记录里 `TYPE` 与 `SOFTYPE` 是分开的两格（`sub_5AB6020`），元素自己的 noun 在
+/// `SOFTYPE` 那一格（`DB_Element::setType@0x594DA20` 拿它建类型，`DB_Noun::hardType@0x58D9780`
+/// 再从 noun 定义里取硬类型）。所以楼板、墙、找平层名下的开孔件 `CLIMB(PANE)` 停在它们身上，
+/// 名单见 [`PANEL_HARD_NOUNS`]。
+///
+/// 语料：
+///
+/// - 面板开孔件 `/PEN/PFIT/PENH/FITT/RECT` 的正体只有一只 SBOX，`PZ = ( - ATTRIB LOHE )`——盒心
+///   相对开孔件原点退一个板厚。这一格答不上时 `PZ` 求不出，整只 PFIT 没有形状，而 E3D 是画的：
+///   ams251183 的 `PFIT 2013287727/2222` 挂在板厚 5 的面板上，E3D 导出的方框（166 × 91 × 100，
+///   通孔 150 × 75）盒心在开孔件自己的 Z 上 −5 处。
+/// - 楼板开孔件 `/HM-FIXI/TYPE-HR/SFIT` 给宿主开洞的 NSEX 高 `( ATTRIB RPRO PHEI )`，数据集里
+///   `DKEY PHEI` 那一行是 `PPRO ( ATTRIB LOHE )`、`DPRO ( 0 )`。这一格答不上时按 `GATCPR` 的次序
+///   退到 `DPRO`，刀高 0、建不出来，也不报错；E3D 导出的楼板上是切穿整厚的洞：aps250110 的
+///   `PFIT 2013286654/1059` 挂在板厚 20 的 FLOOR `2013286654/1058` 上，洞 400 × 200、四角 R25
+///   （e3d-model #80）。
 const PANEL_LOOP_HEIGHT: &str = "LOHE";
-/// 面板，与它名下画轮廓的那只环。
-const PANEL: &str = "PANE";
+/// 硬类型是 PANEL 的 noun：面板自己，和楼板、墙、找平层（E3D 3.1 的 noun 目录，
+/// `schema/e3d31/catalog/noun_layout.json` 的 `hard` 字段，一共这四个）。[`PANEL_LOOP_HEIGHT`]
+/// 找面板时认的是硬类型。AMS、APS 两个样例项目里读 `LOHE` 的件只挂在面板与楼板名下：墙名下的开孔件
+/// （AMS 149 只）用的目录件不读它，找平层一只都没有（普查是 e3d-model 的 `panel_fitting_census`）。
+const PANEL_HARD_NOUNS: [&str; 4] = ["PANE", "FLOOR", "GWALL", "SCREED"];
+/// 面板名下画轮廓的那只环（硬类型是 PLOOP 的 noun 只有它自己）。
 const PANEL_LOOP: &str = "PLOO";
 /// `COMPRE`：设计件指向自己那个**构件元素**的引用，`ANCI`（支撑件）这类没有 `LSTU`
 /// 的 noun 靠它接上目录件。
@@ -797,11 +816,10 @@ impl DbElementParamEnv {
 
     /// See [`PANEL_LOOP_HEIGHT`].
     ///
-    /// 爬不到面板、面板名下没有环，都是答不上（`DESPRE` 报 201）。环的 `HEIG` 没存也按答不上
-    /// 算：`DESPRE` 在那里不看 `DGETR` 的错，交出去的是什么没有取证，不拿 0 顶。设计件自己就是
-    /// 面板时 `CLIMB` 算不算爬到也没有取证，这里从属主起爬、不算。
+    /// 找不到面板、面板名下没有环，都是答不上（`DESPRE` 报 201）。环的 `HEIG` 没存也按答不上
+    /// 算：`DESPRE` 在那里不看 `DGETR` 的错，交出去的是什么没有取证，不拿 0 顶。
     fn panel_loop_height(&self) -> Option<f64> {
-        let panel = owner_of_type(self.design.as_ref()?, PANEL)?;
+        let panel = nearest_of_types(self.design.as_ref()?, &PANEL_HARD_NOUNS)?;
         let ring = panel
             .members()
             .ok()?
@@ -1049,6 +1067,20 @@ fn owner_of_type(element: &DbElement, noun: &str) -> Option<DbElement> {
             return Some(current);
         }
         cursor = current.owner().ok()?;
+    }
+    None
+}
+
+/// 元素自己、或者沿属主链往上，第一只 noun 在 `nouns` 里的——`CLIMB` 的次序：先比当前元素，
+/// 再往属主走（见 [`PANEL_LOOP_HEIGHT`]）。`CLIMB` 在要找的类型不可能是当前类型的祖先时提前
+/// 报错，这里一直爬到顶：库合乎 schema 时两者找到的是同一只，找不到时都是答不上。
+fn nearest_of_types(element: &DbElement, nouns: &[&str]) -> Option<DbElement> {
+    let mut current = element.clone();
+    for _ in 0..=MAX_OWNER_CLIMB {
+        if nouns.contains(&current.element_type().ok()?.as_str()) {
+            return Some(current);
+        }
+        current = current.owner().ok()??;
     }
     None
 }
@@ -1697,6 +1729,37 @@ mod tests {
             }),
             None
         );
+    }
+
+    /// 板厚认的面板名单与 noun 目录对得上：硬类型是 PANEL 的 noun 就是 [`PANEL_HARD_NOUNS`] 这几个，
+    /// 硬类型是 PLOOP 的只有 [`PANEL_LOOP`]。名字按 `element_type()` 交出来的写法比（由 noun 的散列
+    /// 解出来），因为爬属主链时比的就是它。目录换版本、多出一个硬类型是 PANEL 的 noun 时这条会红。
+    #[test]
+    fn the_panels_lohe_stops_at_are_the_nouns_whose_hard_type_is_panel() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/schema/e3d31/catalog/noun_layout.json"
+        );
+        let text = std::fs::read_to_string(path).expect("the schema pack's noun layout reads");
+        let nouns: Vec<serde_json::Value> =
+            serde_json::from_str(&text).expect("the noun layout is a list of nouns");
+        let with_hard_type = |hard: &str| {
+            let mut names: Vec<String> = nouns
+                .iter()
+                .filter(|noun| noun["hard"] == hard)
+                .map(|noun| {
+                    let hash = noun["hash"].as_u64().expect("a noun carries its hash");
+                    crate::db_element::noun_name(u32::try_from(hash).expect("a 32-bit hash"))
+                })
+                .collect();
+            names.sort();
+            names
+        };
+
+        let mut panels = PANEL_HARD_NOUNS.map(str::to_string).to_vec();
+        panels.sort();
+        assert_eq!(with_hard_type("PANEL"), panels);
+        assert_eq!(with_hard_type("PLOOP"), [PANEL_LOOP]);
     }
 
     /// `PARAM n` 是 1 起的，0 和负数不是「第一个」。
