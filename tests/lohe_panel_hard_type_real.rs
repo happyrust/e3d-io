@@ -71,8 +71,9 @@ fn a_fitting_under_a_floor_reads_the_floors_thickness() {
 }
 
 /// `CLIMB` 先比当前元素：面板自己问，答的是自己那只环。这一条的依据是反编译出来的次序
-/// （`dbgenlib/CLIMB@0x53953CC`），没有 E3D 导出的样本印证——面板自己不挂目录件，没有公式会在
-/// 它身上问 `LOHE`。
+/// （`dbgenlib/CLIMB@0x53953CC`），没有 E3D 导出的样本印证——AMS、APS 两个样例项目里自己带 `SPRE`
+/// 的面板类元素（AMS 584 只 PANE、125 只 GWALL，APS 32 只 PANE、16 只 FLOOR），`SPRE` 链要么走不到
+/// 目录件，要么走到的目录件不读 `LOHE`，没有公式在面板身上问它。
 #[test]
 fn a_floor_asked_directly_answers_its_own_loop() {
     if common::missing(&[APS250110, common::ATTLIB, common::DESVIR]) {
